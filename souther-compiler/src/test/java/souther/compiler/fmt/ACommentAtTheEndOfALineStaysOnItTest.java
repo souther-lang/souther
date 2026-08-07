@@ -81,6 +81,106 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 """, below);
     }
 
+    /** A sum's cases are identifiers rather than nodes, so a case cannot be named the way a field
+     * can. The comment is held against where the identifier is instead. The last case is the
+     * exception: the declaration ends where it does, and what ends on a line is what the line was
+     * about. */
+    @Test
+    void onTheSumCaseItWasWrittenAfter() {
+        String formatted = Formatter.format("""
+                module m
+                data A
+                data B
+                data C
+                data S = A   // about A
+                    | B
+                    | C
+                """);
+
+        assertEquals("""
+                module m
+
+                data A
+
+                data B
+
+                data C
+
+                data S = A // about A
+                    | B
+                    | C
+                """, formatted);
+    }
+
+    /** A comment above an attempt's departure, and above a pipeline's stage. Both are written one to
+     * a line, and neither was asked for its comments. */
+    @Test
+    void aboveADepartureAndAboveAStage() {
+        String departures = Formatter.format("""
+                module m
+                data Amount = Int
+                    invariant value > 0
+                data O = { n: Int }
+                behavior f : (n: Int) -> O | Amount constructs O, Amount
+                let f (n) = {
+                    guard Amount(n) as a else
+                        // why this arm
+                        | value -> Amount(1)
+                    O { n = a.value }
+                }
+                """);
+        String stages = Formatter.format("""
+                module m exposing ( p )
+                data A = { n: Int }
+                data B = { n: Int }
+                behavior one : (a: A) -> B constructs B
+                behavior p =
+                    one
+                    // why this stage
+                    >-> one
+                """);
+
+        assertEquals("""
+                module m
+
+                data Amount = Int
+                    invariant value > 0
+
+                data O =
+                    { n: Int
+                    }
+
+                behavior f : (n: Int) -> O | Amount
+                    constructs O, Amount
+
+                let f (n) = {
+                    guard Amount(n) as a else
+                        // why this arm
+                        | value -> Amount(1)
+                    O { n = a.value }
+                }
+                """, departures);
+        assertEquals("""
+                module m exposing ( p )
+
+                data A =
+                    { n: Int
+                    }
+
+                data B =
+                    { n: Int
+                    }
+
+                behavior one : (a: A) -> B
+                    constructs B
+
+                behavior p =
+                    one
+                    // why this stage
+                    >-> one
+                """, stages);
+    }
+
     @Test
     void onTheFieldItWasWrittenAfter() {
         String formatted = Formatter.format("""

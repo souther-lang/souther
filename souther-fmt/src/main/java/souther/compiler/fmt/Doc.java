@@ -19,6 +19,12 @@ public sealed interface Doc {
     Doc SOFTLINE = new Line("");     // nothing when flat, a newline when broken
     Doc HARDLINE = new Hard();       // always a newline; forces the enclosing group to break
 
+    /** Writes nothing, and the group holding it is never laid out flat. A comment cannot share the
+     * line after it, so a construct holding one breaks even where its own content would have fitted
+     * — and where the break itself is the enclosing construct's to write, as the brackets of a list
+     * whose only content is a comment. */
+    Doc MUST_BREAK = new MustBreak();
+
     record Nil() implements Doc {}
     record Text(String s) implements Doc {}
     record Line(String flat) implements Doc {}
@@ -33,6 +39,8 @@ public sealed interface Doc {
      * line after it, so a group holding one cannot be laid out flat.
      */
     record Trailing(String s) implements Doc {}
+
+    record MustBreak() implements Doc {}
 
     static Doc text(String s) {
         return new Text(s);
@@ -115,6 +123,7 @@ public sealed interface Doc {
                     sb.append(' ').append(t.s());
                     col += t.s().length() + 1;
                 }
+                case MustBreak _ -> { }
             }
         }
         return sb.toString();
@@ -173,6 +182,9 @@ public sealed interface Doc {
                     // the same, and for the same reason: whatever follows starts a new line, so it
                     // is measured against that line rather than this one, and the comment's own
                     // width is measured against nothing.
+                    return it.mode != Mode.FLAT;
+                }
+                case MustBreak _ -> {
                     return it.mode != Mode.FLAT;
                 }
             }

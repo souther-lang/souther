@@ -49,16 +49,9 @@ public final class Formatter {
      * formats one file, so this lives as long as that. */
     private final java.util.Set<Integer> consumedComments = new java.util.HashSet<>();
 
-    /** {@link #commentsBefore} per parent, computed once. It is asked for every member of a parent,
-     * and answering means walking that parent's children, so without this a construct with n members
-     * walks them n times. One instance formats one file, so the cache lives exactly as long as the
-     * tree it describes. */
-    private final Map<SyntaxNode, ParentComments> commentsByParent = new IdentityHashMap<>();
-
-    /** The comments written at the end of a line of code, by the construct that line belongs to.
-     * Computed once for the file: which of the two a comment is depends on the whitespace before it,
-     * which is a fact about the token stream rather than about any one parent. */
-    private Map<SyntaxNode, List<SyntaxToken>> trailing = new IdentityHashMap<>();
+    /** Where each of the file's comments goes, decided once before any of it is written. One
+     * instance formats one file, so this lives exactly as long as the tree it describes. */
+    private Attachments comments = Attachments.empty();
 
     private Formatter() {
     }
@@ -217,7 +210,7 @@ public final class Formatter {
     // --- top level ---
 
     private Doc file(SyntaxNode file) {
-        trailing = scanTrailing(file);
+        comments = attach(file);
         List<Doc> parts = new ArrayList<>();
         SyntaxKind prev = null;
         for (SyntaxNode item : file.childNodes()) {
@@ -227,29 +220,19 @@ public final class Formatter {
             // A top-level item's comments are read the same way a member's are, and marked written
             // the same way: an `example`'s comment is the item's leading trivia here and the first
             // row's from inside, and it belongs to whichever asks first.
-            List<SyntaxToken> lead = new ArrayList<>(
-                    commentsBefore(file).getOrDefault(item, List.of()));
-            lead.addAll(leadingDeep(item));
+            Doc lead = aboveOf(item);
             if (prev != null) {
                 parts.add(HARDLINE);
                 if (blankBetween(prev, item.kind())) {
                     parts.add(HARDLINE);
                 }
             }
-            for (Doc c : unwritten(lead)) {
-                parts.add(c);
-                parts.add(HARDLINE);
-            }
+            parts.add(lead);
             parts.add(item(item));
-            for (Doc c : trailingOf(item)) {
-                parts.add(c);
-            }
+            parts.add(afterOf(item));
             prev = item.kind();
         }
-        for (Doc c : unwritten(trailingComments(file))) {
-            parts.add(HARDLINE);
-            parts.add(c);
-        }
+        parts.add(endOf(file));
         parts.add(HARDLINE);   // files end with a single newline
         return concat(parts);
     }
@@ -294,10 +277,10 @@ public final class Formatter {
         String target = ids.size() >= 2 ? ids.get(1).text() : "";
         List<Doc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
-            rows.add(concat(HARDLINE, withComments(n, row, exampleRow(row)),
-                    concat(trailingOf(row))));
+            rows.add(concat(HARDLINE, concat(aboveOf(row), exampleRow(row)),
+                    afterOf(row)));
         }
-        rows.add(endComments(n));
+        rows.add(endOf(n));
         return concat(text("example "), text(target), nest(INDENT, concat(rows)));
     }
 
@@ -308,18 +291,18 @@ public final class Formatter {
      * which part was which.
      */
     private Doc exampleRow(SyntaxNode n) {
-        List<Doc> args = new ArrayList<>();
-        for (SyntaxNode a : n.child(SyntaxKind.ARG_LIST).map(this::exprChildren).orElse(List.of())) {
-            args.add(expr(a));
-        }
-        Doc input = delimited("(", SOFTLINE, plain(args), ")");
+        Doc input = n.child(SyntaxKind.ARG_LIST)
+                .map(a -> delimited("(", SOFTLINE, exprDocs(a), ")"))
+                .orElse(text("()"));
         var with = n.child(SyntaxKind.WITH_CLAUSE);
         if (with.isPresent()) {
-            List<Doc> binds = new ArrayList<>();
+            List<Member> binds = new ArrayList<>();
             for (SyntaxNode b : childNodes(with.get(), SyntaxKind.WITH_BINDING)) {
-                binds.add(concat(text(firstIdent(b)), text(" = "), expr(firstExprChildOpt(b).orElseThrow())));
+                binds.add(member(b, concat(text(firstIdent(b)), text(" = "),
+                        expr(firstExprChildOpt(b).orElseThrow()))));
             }
-            input = concat(input, text(" with "), group(nest(INDENT, separated(plain(binds)))));
+            input = concat(input, text(" with "),
+                    group(nest(INDENT, separated(withEndComments(with.get(), binds)))));
         }
 
         List<Segment> segs = new ArrayList<>();
@@ -341,9 +324,9 @@ public final class Formatter {
         String target = ids.size() >= 2 ? ids.get(1).text() : "";
         List<Doc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
-            rows.add(concat(HARDLINE, withComments(n, row, fakeRow(row)), concat(trailingOf(row))));
+            rows.add(concat(HARDLINE, concat(aboveOf(row), fakeRow(row)), afterOf(row)));
         }
-        rows.add(endComments(n));
+        rows.add(endOf(n));
         return concat(text("fake "), text(target), nest(INDENT, concat(rows)));
     }
 
@@ -351,11 +334,7 @@ public final class Formatter {
         var args = n.child(SyntaxKind.ARG_LIST);
         Doc input;
         if (args.isPresent()) {
-            List<Doc> as = new ArrayList<>();
-            for (SyntaxNode a : exprChildren(args.get())) {
-                as.add(expr(a));
-            }
-            input = delimited("(", SOFTLINE, plain(as), ")");
+            input = delimited("(", SOFTLINE, exprDocs(args.get()), ")");
         } else {
             input = text("_");   // the default row
         }
@@ -375,7 +354,7 @@ public final class Formatter {
         List<Member> entries = new ArrayList<>();
         for (SyntaxNode e : childNodes(clause, SyntaxKind.EXPOSED_ENTRY)) {
             Doc name = qualifiedName(e.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
-            entries.add(member(clause, e, e.child(SyntaxKind.RET_TYPE)
+            entries.add(member(e, e.child(SyntaxKind.RET_TYPE)
                     .map(rt -> concat(name, text(" : "), retType(rt)))
                     .orElse(name)));
         }
@@ -409,8 +388,8 @@ public final class Formatter {
             String label = inv.token(SyntaxKind.ASSIGN).isPresent()
                     ? firstIdent(inv) + " = " : "";
             invariants.add(concat(HARDLINE,
-                    withComments(n, inv, concat(text("invariant " + label), expr(onlyExpr(inv)))),
-                    concat(trailingOf(inv))));
+                    concat(aboveOf(inv), text("invariant " + label), expr(onlyExpr(inv))),
+                    afterOf(inv)));
         }
 
         var product = n.child(SyntaxKind.PRODUCT_BODY);
@@ -420,28 +399,28 @@ public final class Formatter {
         }
         var sum = n.child(SyntaxKind.SUM_BODY);
         if (sum.isPresent()) {
-            // A sum's cases are bare idents, not nodes, so the comments between them are picked up
-            // from the token stream rather than from a member node.
-            List<Doc> pending = new ArrayList<>();
+            // A sum's cases are bare idents, not nodes, so a case's comments are held against where
+            // its identifier is rather than against a member node.
             Doc head = null;
-            List<Doc> headComments = List.of();
+            List<Doc> headComments = new ArrayList<>();
             List<Segment> cases = new ArrayList<>();
             for (SyntaxElement e : sum.get().children()) {
-                if (!(e instanceof SyntaxToken t)) {
+                if (!(e instanceof SyntaxToken t) || t.kind() != SyntaxKind.IDENT) {
                     continue;
                 }
-                if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                    for (Doc c : unwritten(List.of(t))) {
-                        pending.add(concat(c, HARDLINE));
+                Doc body = concat(text(t.text()), afterCase(t));
+                if (head == null) {
+                    head = body;
+                    headComments = new ArrayList<>();
+                    for (Doc c : aboveCase(t)) {
+                        headComments.add(concat(c, HARDLINE));
                     }
-                } else if (t.kind() == SyntaxKind.IDENT) {
-                    if (head == null) {
-                        head = text(t.text());
-                        headComments = List.copyOf(pending);
-                    } else {
-                        cases.add(new Segment("| ", text(t.text()), concat(pending)));
+                } else {
+                    List<Doc> lead = new ArrayList<>();
+                    for (Doc c : aboveCase(t)) {
+                        lead.add(concat(c, HARDLINE));
                     }
-                    pending.clear();
+                    cases.add(new Segment("| ", body, concat(lead)));
                 }
             }
             Doc chain = chained(head, cases);
@@ -477,11 +456,11 @@ public final class Formatter {
             // a comment written after it would leave the member starting a line of its own, at the
             // block's indent rather than after the comma the rest of the block is written with.
             boolean first = lines.isEmpty();
-            Doc line = concat(withComments(body, m, concat(text(first ? "{ " : ", "), member)),
-                    concat(trailingOf(m)));
+            Doc line = concat(concat(aboveOf(m), text(first ? "{ " : ", "), member),
+                    afterOf(m));
             lines.add(first ? line : concat(HARDLINE, line));
         }
-        lines.add(endComments(body));
+        lines.add(endOf(body));
         lines.add(concat(HARDLINE, text("}")));
         return concat(lines);
     }
@@ -504,12 +483,12 @@ public final class Formatter {
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
                     clauses.add(concat(HARDLINE,
-                            withComments(s, c, concat(text("constructs "), nameList(c, 0))),
-                            concat(trailingOf(c))));
+                            concat(aboveOf(c), text("constructs "), nameList(c, 0)),
+                            afterOf(c)));
                 } else if (c.kind() == SyntaxKind.DEPENDS_CLAUSE) {
                     clauses.add(concat(HARDLINE,
-                            withComments(s, c, concat(text("depends on "), nameList(c, 1))),
-                            concat(trailingOf(c))));
+                            concat(aboveOf(c), text("depends on "), nameList(c, 1)),
+                            afterOf(c)));
                 }
             }
             return concat(text("behavior "), text(name), text(" : "), params, text(" -> "), ret,
@@ -519,9 +498,11 @@ public final class Formatter {
         List<SyntaxNode> stages = childNodes(pipe, SyntaxKind.STAGE);
         List<Doc> tail = new ArrayList<>();
         for (int i = 1; i < stages.size(); i++) {
-            tail.add(concat(LINE, text(">-> "), stage(stages.get(i))));
+            SyntaxNode st = stages.get(i);
+            tail.add(concat(LINE, aboveOf(st), text(">-> "), stage(st), afterOf(st)));
         }
-        Doc body = group(nest(INDENT, concat(LINE, stage(stages.get(0)), concat(tail))));
+        Doc body = group(nest(INDENT, concat(LINE, aboveOf(stages.get(0)),
+                stage(stages.get(0)), afterOf(stages.get(0)), concat(tail))));
         Doc declaredOut = pipe.child(SyntaxKind.RET_TYPE)
                 .map(rt -> concat(text(" -> "), retType(rt))).orElse(Doc.NIL);
         return concat(text("behavior "), text(name), text(" ="), body, declaredOut);
@@ -530,7 +511,7 @@ public final class Formatter {
     private Doc paramList(SyntaxNode n) {
         List<Member> params = new ArrayList<>();
         for (SyntaxNode p : childNodes(n, SyntaxKind.PARAM)) {
-            params.add(member(n, p, concat(text(firstIdent(p)), text(": "),
+            params.add(member(p, concat(text(firstIdent(p)), text(": "),
                     retType(p.child(SyntaxKind.RET_TYPE).orElseThrow()))));
         }
         return delimited("(", SOFTLINE, withEndComments(n, params), ")");
@@ -639,7 +620,7 @@ public final class Formatter {
     }
 
     private Doc fnParamList(SyntaxNode n) {
-        List<Doc> params = new ArrayList<>();
+        List<Member> params = new ArrayList<>();
         for (SyntaxNode p : childNodes(n, SyntaxKind.FN_PARAM)) {
             SyntaxNode pat = optionalPatternChild(p);
             Doc d = pat == null ? text(firstIdent(p)) : pattern(pat);
@@ -647,9 +628,9 @@ public final class Formatter {
             if (rt.isPresent()) {
                 d = concat(d, text(": "), retType(rt.get()));
             }
-            params.add(d);
+            params.add(member(p, d));
         }
-        return delimited("(", SOFTLINE, plain(params), ")");
+        return delimited("(", SOFTLINE, withEndComments(n, params), ")");
     }
 
     // --- types ---
@@ -763,13 +744,14 @@ public final class Formatter {
     /** The bracketed argument list of a call or an application. */
     private Doc arguments(SyntaxNode n) {
         List<SyntaxNode> args = n.child(SyntaxKind.ARG_LIST).map(this::exprChildren).orElse(List.of());
+        SyntaxNode argList = n.child(SyntaxKind.ARG_LIST).orElse(null);
         if (args.isEmpty()) {
-            return text("()");
+            List<Member> only = argList == null ? List.of() : withEndComments(argList, List.of());
+            return only.isEmpty() ? text("()") : delimited("(", SOFTLINE, only, ")");
         }
-        SyntaxNode argList = n.child(SyntaxKind.ARG_LIST).orElseThrow();
         List<Member> argDocs = new ArrayList<>();
         for (SyntaxNode a : args) {
-            argDocs.add(member(argList, a, expr(a)));
+            argDocs.add(member(a, expr(a)));
         }
         return delimited("(", SOFTLINE, withEndComments(argList, argDocs), ")");
     }
@@ -848,7 +830,7 @@ public final class Formatter {
     private Doc list(SyntaxNode n) {
         List<Member> elems = exprDocs(n);
         if (elems.isEmpty()) {
-            return text("[]");
+            return text("[]");   // exprDocs has already asked for what was written inside
         }
         return delimited("[", SOFTLINE, elems, "]");
     }
@@ -880,8 +862,10 @@ public final class Formatter {
         }
         List<Doc> lines = new ArrayList<>();
         for (SyntaxNode arm : childNodes(arms.get(), SyntaxKind.ELSE_ARM)) {
-            lines.add(concat(HARDLINE, text("| " + firstIdent(arm) + " -> "), expr(onlyExpr(arm))));
+            lines.add(concat(HARDLINE, aboveOf(arm), text("| " + firstIdent(arm) + " -> "),
+                    expr(onlyExpr(arm)), afterOf(arm)));
         }
+        lines.add(endOf(arms.get()));
         return nest(INDENT, concat(lines));
     }
 
@@ -904,9 +888,9 @@ public final class Formatter {
         SyntaxNode scrutinee = exprChildren(n).get(0);
         List<Doc> cases = new ArrayList<>();
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
-            cases.add(concat(HARDLINE, withComments(n, c, matchCase(c)), concat(trailingOf(c))));
+            cases.add(concat(HARDLINE, concat(aboveOf(c), matchCase(c)), afterOf(c)));
         }
-        cases.add(endComments(n));
+        cases.add(endOf(n));
         return concat(text("match "), expr(scrutinee), text(" with"), nest(INDENT, concat(cases)));
     }
 
@@ -968,10 +952,12 @@ public final class Formatter {
             // A member's leading comments come before it, each on its own line. The HARDLINE forces
             // the enclosing group to break, which is what a literal with a comment in it wants
             // anyway: a `//` on a line the group had collapsed would swallow the rest of it.
-            members.add(member(n, c, member));
+            members.add(member(c, member));
         }
         if (members.isEmpty()) {
-            return concat(text(typeName), text(" {}"));
+            List<Member> only = withEndComments(n, List.of());
+            return only.isEmpty() ? concat(text(typeName), text(" {}"))
+                    : concat(text(typeName), text(" "), delimited("{", LINE, only, "}"));
         }
         return concat(text(typeName), text(" "),
                 delimited("{", LINE, withEndComments(n, members), "}"));
@@ -983,12 +969,7 @@ public final class Formatter {
             // A statement inside a block carries its leading comments the same way a top-level item
             // does. Walking only the child nodes dropped them, so a comment explaining a step was
             // lost on the first format.
-            for (Doc comment : unwritten(commentsBefore(n).getOrDefault(c, List.of()))) {
-                lines.add(concat(HARDLINE, comment));
-            }
-            for (Doc comment : unwritten(leadingDeep(c))) {
-                lines.add(concat(HARDLINE, comment));
-            }
+            Doc lead = aboveOf(c);
             Doc d = switch (c.kind()) {
                 case LET_STMT -> concat(text("let "), text(firstIdent(c)), writtenType(c),
                         text(" = "), expr(onlyExpr(c)));
@@ -997,9 +978,9 @@ public final class Formatter {
                 case GUARD_STMT -> guardStmt(c);
                 default -> expr(c);   // the result expression
             };
-            lines.add(concat(HARDLINE, d, concat(trailingOf(c))));
+            lines.add(concat(HARDLINE, lead, d, afterOf(c)));
         }
-        lines.add(endComments(n));
+        lines.add(endOf(n));
         return concat(text("{"), nest(INDENT, concat(lines)), HARDLINE, text("}"));
     }
 
@@ -1074,176 +1055,61 @@ public final class Formatter {
                 text(" else "), expr(exprs.get(1)));
     }
 
-    // --- comments / blank lines ---
+    // --- comments ---
+    //
+    // Where a comment goes is decided once, for the file, and in two steps. What it was written
+    // about is read off the token stream: a comment with a newline between it and the code before it
+    // was written above the line that follows, and one without was written at the end of the line
+    // before. That is a fact about the source and it is in the tree, since whitespace is kept.
+    //
+    // Where it is written back is a second question, and the answer is not always the construct it
+    // was written about. Only a construct the layout gives a line of its own can carry a comment: put
+    // anywhere else, the rest of that line would be written inside it, which changes what the code
+    // says rather than how it reads. So the anchor moves up to the nearest construct that has a
+    // line, and a comment written after the condition of an `if` is written at the end of the
+    // declaration that holds it. It travels further than it was written; the alternative is dropping
+    // it.
 
-    /**
-     * A member with the comments written above it in front of it, each on its own line.
-     *
-     * <p>Where a comment lands in the tree is the parser's business and it is not uniform: a comment
-     * above a record-literal field becomes that field's own leading trivia, while one above a match
-     * arm becomes a child of the enclosing {@code MATCH_EXPR}, sitting between the scrutinee and the
-     * first arm. Asking each member for its leading trivia therefore finds some comments and not
-     * others — which is why a comment survived in three constructs and disappeared in eight.
-     *
-     * <p>So the question is asked of the parent instead: walk its children in document order and the
-     * comments fall between the members they were written above, wherever the parser attached them.
-     * A member's own leading trivia is added to that, since the two are disjoint — a token belongs to
-     * one node.
-     *
-     * <p>The {@link Doc#HARDLINE} after each comment forces the enclosing group to break. That is not
-     * a preference: a {@code //} on a line the group had collapsed would swallow everything after it.
-     */
-    private Doc withComments(SyntaxNode parent, SyntaxNode member, Doc d) {
-        List<SyntaxToken> comments = new ArrayList<>(commentsBefore(parent).getOrDefault(member, List.of()));
-        comments.addAll(leadingDeep(member));
-        List<Doc> parts = new ArrayList<>();
-        for (Doc comment : unwritten(comments)) {
-            parts.add(concat(comment, HARDLINE));
-        }
-        if (parts.isEmpty()) {
-            return d;
-        }
-        parts.add(d);
-        return concat(parts);
-    }
+    /** Where the comments of a file go, decided before any of it is written. */
+    private record Attachments(
+            /** Above the line the node opens. */
+            Map<SyntaxNode, List<SyntaxToken>> above,
+            /** At the end of the line the node ends. */
+            Map<SyntaxNode, List<SyntaxToken>> after,
+            /** Inside the node, under its last member and before it closes. */
+            Map<SyntaxNode, List<SyntaxToken>> atEnd,
+            /** Against a bare token rather than a node — a sum's cases, which are identifiers.
+             * Keyed by where the identifier starts, since a token has no identity of its own. */
+            Map<Integer, List<SyntaxToken>> aboveCase,
+            Map<Integer, List<SyntaxToken>> afterCase) {
 
-    /**
-     * The comments at the front of a member's own text. {@link #leading} reads only the node's direct
-     * children and stops at its first child node, but a parser may put the member's first token a
-     * level or two down — an {@code exposing} entry's name is a {@code QUALIFIED_NAME}, and the
-     * comment above the entry becomes *that* node's leading trivia. What is written above a member is
-     * at the front of its text however deep the front is, so the walk follows the leftmost spine.
-     */
-    private List<SyntaxToken> leadingDeep(SyntaxNode member) {
-        List<SyntaxToken> comments = new ArrayList<>();
-        for (SyntaxElement e : member.children()) {
-            if (e instanceof SyntaxToken t) {
-                if (t.kind() == SyntaxKind.WHITESPACE) {
-                    continue;
-                }
-                if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                    comments.add(t);
-                    continue;
-                }
-                break;                      // a real token: the front of the text is here
-            }
-            if (e instanceof SyntaxNode first) {
-                comments.addAll(leadingDeep(first));
-                break;                      // only the leftmost child is the front
-            }
+        static Attachments empty() {
+            return new Attachments(new IdentityHashMap<>(), new IdentityHashMap<>(),
+                    new IdentityHashMap<>(), new java.util.HashMap<>(), new java.util.HashMap<>());
         }
-        return comments;
     }
 
     /**
-     * A parent's comments, by the member each run was written above. {@link #atEnd} is the run after
-     * the last member: it was written above nothing, and a walk that only hands a run to the next
-     * member it meets never hands that one to anybody. Dropping it is how a comment written at the
-     * end of a list disappeared, so it is kept apart rather than left in the walk's state.
+     * Every comment of {@code file}, against where it will be written. One pass over the tokens: a
+     * comment is read as written above the code that follows it or at the end of the code before it,
+     * and then given to whichever construct has the line that code is on.
      */
-    private record ParentComments(Map<SyntaxNode, List<SyntaxToken>> above, List<SyntaxToken> atEnd) {}
-
-    /** Each of {@code parent}'s child nodes against the comment lines written above it — the comments
-     * that sit in the parent's own child list rather than on the member. */
-    private Map<SyntaxNode, List<SyntaxToken>> commentsBefore(SyntaxNode parent) {
-        return comments(parent).above();
-    }
-
-    private ParentComments comments(SyntaxNode parent) {
-        return commentsByParent.computeIfAbsent(parent, Formatter::scanComments);
-    }
-
-    private static ParentComments scanComments(SyntaxNode parent) {
-        Map<SyntaxNode, List<SyntaxToken>> above = new IdentityHashMap<>();
-        List<SyntaxToken> pending = new ArrayList<>();
-        for (SyntaxElement e : parent.children()) {
-            if (e instanceof SyntaxToken t) {
-                if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                    pending.add(t);
-                }
-            } else if (e instanceof SyntaxNode n && !pending.isEmpty()) {
-                above.put(n, List.copyOf(pending));
-                pending.clear();
-            }
-        }
-        return new ParentComments(above, List.copyOf(pending));
-    }
-
-    /** The comments of {@code run} that have not been written yet, one document each. A comment is
-     * reachable from a parent's child list and from the front of a member's own subtree, so which
-     * ones are already written is remembered rather than derived. */
-    private List<Doc> unwritten(List<SyntaxToken> run) {
-        List<Doc> out = new ArrayList<>();
-        for (SyntaxToken c : run) {
-            if (consumedComments.add(c.start())) {
-                out.add(text(c.text().stripTrailing()));
-            }
-        }
-        return out;
-    }
-
-    /** The comments written after {@code parent}'s last member, each opening a line of its own. They
-     * stay inside the construct, under the member they were written under. */
-    private Doc endComments(SyntaxNode parent) {
-        List<Doc> parts = new ArrayList<>();
-        for (Doc c : unwritten(comments(parent).atEnd())) {
-            parts.add(concat(HARDLINE, c));
-        }
-        return concat(parts);
-    }
-
-    /** {@code members} with {@code parent}'s end comments under the last of them — for a construct
-     * whose members are joined rather than written a line at a time, where there is no line to add
-     * one to except the last member's own document. */
-    private List<Member> withEndComments(SyntaxNode parent, List<Member> members) {
-        List<Doc> lines = unwritten(comments(parent).atEnd());
-        if (lines.isEmpty() || members.isEmpty()) {
-            return members;
-        }
-        List<Member> out = new ArrayList<>(members);
-        Member last = out.get(out.size() - 1);
-        Doc doc = last.doc();
-        for (Doc c : lines) {
-            doc = concat(doc, HARDLINE, c);
-        }
-        out.set(out.size() - 1, new Member(doc, last.trailing()));
-        return out;
-    }
-
-    /** A member with the comments written above its line in front of it, and the one written at the
-     * end of that line kept apart, since what the enclosing construct writes between this member and
-     * the next goes between them. */
-    private Member member(SyntaxNode parent, SyntaxNode node, Doc d) {
-        return new Member(withComments(parent, node, d), concat(trailingOf(node)));
-    }
-
-    /**
-     * Every comment written after code on the same line, by the construct that code ends. Whether a
-     * comment was written above a line or at the end of one is in the tree — the whitespace before a
-     * comment on its own line carries the newline that ended the line before it, and the whitespace
-     * before a trailing comment does not — so this reads it rather than guessing from position.
-     */
-    private static Map<SyntaxNode, List<SyntaxToken>> scanTrailing(SyntaxNode file) {
-        Map<SyntaxNode, List<SyntaxToken>> out = new IdentityHashMap<>();
+    private static Attachments attach(SyntaxNode file) {
+        Attachments out = Attachments.empty();
+        List<SyntaxToken> all = tokens(file);
         List<SyntaxToken> code = new ArrayList<>();   // the tokens that were not trivia
-        boolean lineEnded = true;            // nothing precedes the first token on its line
-        for (SyntaxToken t : tokens(file)) {
+        boolean lineEnded = true;                     // nothing precedes the first token of a file
+        for (int i = 0; i < all.size(); i++) {
+            SyntaxToken t = all.get(i);
             if (t.kind() == SyntaxKind.WHITESPACE) {
                 lineEnded |= t.text().indexOf('\n') >= 0;
             } else if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                // a comma is the enclosing construct's, so a comment after one was written about
-                // the member the comma closed rather than about the comma
-                int i = code.size() - 1;
-                while (i >= 0 && code.get(i).kind() == SyntaxKind.COMMA) {
-                    i--;
+                if (lineEnded) {
+                    above(out, nextCode(all, i), t, file);
+                } else {
+                    after(out, lastCode(code), t);
                 }
-                if (!lineEnded && i >= 0) {
-                    SyntaxNode o = onItsOwnLine(owner(code.get(i)));
-                    if (o != null) {
-                        out.computeIfAbsent(o, _ -> new ArrayList<>()).add(t);
-                    }
-                }
-                lineEnded = true;            // a line comment runs to the end of its line
+                lineEnded = true;                     // a line comment runs to the end of its line
             } else {
                 code.add(t);
                 lineEnded = false;
@@ -1253,29 +1119,103 @@ public final class Formatter {
     }
 
     /**
-     * The construct a comment written after {@code code} was written about: the outermost one that
-     * ends where {@code code} does. {@code data D = A | B   // c} is about the declaration and not
-     * about {@code B}, and {@code , f: T   // c} is about the field and not about the block, and the
-     * two are the same rule — what ends on that line is what the line was about.
+     * What separates one member of a construct from the next. It belongs to the construct rather
+     * than to either member, so it is not what a comment was written about in either direction: a
+     * comment before a {@code |} was written about the case after it, and one after a {@code ,} about
+     * the member the comma closed.
      */
-    private static SyntaxNode owner(SyntaxToken code) {
-        SyntaxNode node = code.parent();
-        while (node.parent() != null && node.parent().parent() != null
-                && node.parent().end() == code.end()) {
-            node = node.parent();
+    private static boolean separates(SyntaxToken t) {
+        return switch (t.kind()) {
+            case COMMA, PIPE, PIPEFWD, VPIPE -> true;
+            default -> false;
+        };
+    }
+
+    /** What opens a construct. It is the construct's too, so a comment written above it was written
+     * above the first member rather than above the bracket — which is also what keeps the answer
+     * the same on a second formatting, when the bracket has moved onto the member's line. */
+    private static boolean opens(SyntaxToken t) {
+        return switch (t.kind()) {
+            case LBRACE, LPAREN, LBRACKET -> true;
+            default -> false;
+        };
+    }
+
+    /** The code the comment at {@code i} was written above, or null where the file ends first. */
+    private static SyntaxToken nextCode(List<SyntaxToken> all, int i) {
+        for (int j = i + 1; j < all.size(); j++) {
+            SyntaxToken t = all.get(j);
+            if (t.isTrivia() || separates(t) || opens(t)) {
+                continue;
+            }
+            return t.kind() == SyntaxKind.EOF ? null : t;
         }
-        return node;
+        return null;
+    }
+
+    /** The code a comment was written after. */
+    private static SyntaxToken lastCode(List<SyntaxToken> code) {
+        for (int i = code.size() - 1; i >= 0; i--) {
+            if (!separates(code.get(i))) {
+                return code.get(i);
+            }
+        }
+        return null;
+    }
+
+    private static void above(Attachments out, SyntaxToken next, SyntaxToken comment, SyntaxNode file) {
+        if (next == null) {
+            add(out.atEnd(), file, comment);          // nothing follows: it closes the file
+        } else if (isCase(next)) {
+            out.aboveCase().computeIfAbsent(next.start(), _ -> new ArrayList<>()).add(comment);
+        } else if (closes(next)) {
+            add(out.atEnd(), next.parent(), comment);
+        } else {
+            SyntaxNode owner = hasALine(next);
+            add(owner == null ? out.atEnd() : out.above(), owner == null ? file : owner, comment);
+        }
+    }
+
+    private static void after(Attachments out, SyntaxToken code, SyntaxToken comment) {
+        if (code == null) {
+            return;                                   // a comment with no code before it is above
+        }
+        // A case is only its own line's owner while something follows it. The last case of a sum
+        // ends where the declaration does, and what ends on that line is the declaration.
+        if (isCase(code) && code.end() != code.parent().end()) {
+            out.afterCase().computeIfAbsent(code.end(), _ -> new ArrayList<>()).add(comment);
+            return;
+        }
+        SyntaxNode owner = hasALine(code);
+        if (owner != null) {
+            add(out.after(), owner, comment);
+        }
+    }
+
+    private static void add(Map<SyntaxNode, List<SyntaxToken>> to, SyntaxNode key, SyntaxToken c) {
+        to.computeIfAbsent(key, _ -> new ArrayList<>()).add(c);
+    }
+
+    /** A case of a sum, which the grammar writes as a bare identifier rather than as a node. */
+    private static boolean isCase(SyntaxToken t) {
+        return t.kind() == SyntaxKind.IDENT && t.parent().kind() == SyntaxKind.SUM_BODY;
+    }
+
+    /** Whether {@code t} is what closes a construct whose members take a line each — the place a
+     * comment written under the last member goes. */
+    private static boolean closes(SyntaxToken t) {
+        return switch (t.kind()) {
+            case RBRACE, RPAREN, RBRACKET -> holdsLines(t.parent().kind());
+            default -> false;
+        };
     }
 
     /**
-     * The construct whose line a comment can be written at the end of, at or above {@code n}. Only a
-     * construct the layout gives a line of its own can carry one: a comment put after part of a line
-     * would have the rest of that line written inside it, which is a change to what the code says
-     * rather than to how it reads. So the owner moves up until it reaches one, and a comment written
-     * after the condition of an {@code if} is written at the end of the declaration that holds it.
+     * The construct whose line {@code t} is on: the nearest one at or above it that the layout gives
+     * a line of its own.
      */
-    private static SyntaxNode onItsOwnLine(SyntaxNode n) {
-        for (SyntaxNode c = n; c != null && c.parent() != null; c = c.parent()) {
+    private static SyntaxNode hasALine(SyntaxToken t) {
+        for (SyntaxNode c = t.parent(); c != null && c.parent() != null; c = c.parent()) {
             if (takesALineOf(c.parent().kind(), c.kind())) {
                 return c;
             }
@@ -1284,9 +1224,8 @@ public final class Formatter {
     }
 
     /** Whether a {@code child} of {@code parent} is written on a line of its own. These are the
-     * places a member's comments are asked for; a construct added to one of these lists without
-     * being asked is what the count of comments consumed against the comments the tree holds is
-     * there to catch. */
+     * places a construct is asked for its comments; one added to a list here without being asked is
+     * what counting the comments consumed against the comments the tree holds is there to catch. */
     private static boolean takesALineOf(SyntaxKind parent, SyntaxKind child) {
         return switch (parent) {
             case SOURCE_FILE -> isTopLevel(child);
@@ -1298,24 +1237,123 @@ public final class Formatter {
             case FAKE_DEF -> child == SyntaxKind.FAKE_ROW;
             case EXPOSING_CLAUSE -> child == SyntaxKind.EXPOSED_ENTRY;
             case PARAM_LIST -> child == SyntaxKind.PARAM;
+            case FN_PARAM_LIST -> child == SyntaxKind.FN_PARAM;
+            case WITH_CLAUSE -> child == SyntaxKind.WITH_BINDING;
+            case ELSE_ARMS -> child == SyntaxKind.ELSE_ARM;
+            case PIPE_BEHAVIOR -> child == SyntaxKind.STAGE;
             case DATA_DEF -> child == SyntaxKind.INVARIANT_CLAUSE;
             case BEHAVIOR_SIG -> child == SyntaxKind.CONSTRUCTS_CLAUSE
                     || child == SyntaxKind.DEPENDS_CLAUSE;
             case BLOCK_EXPR -> true;
-            case ARG_LIST, LIST_EXPR, TUPLE_EXPR -> isExprKind(child);
+            case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> isExprKind(child);
             default -> false;
         };
     }
 
-    /** {@code n}'s trailing comments, marked consumed. Empty where it has none, or where they have
-     * been written already. */
-    private List<Doc> trailingOf(SyntaxNode n) {
+    /** Whether a construct writes its members one to a line, so that its closer opens a line a
+     * comment can be written on. */
+    private static boolean holdsLines(SyntaxKind k) {
+        return switch (k) {
+            case PRODUCT_BODY, NEW_DATA_EXPR, EXPOSING_CLAUSE, PARAM_LIST, FN_PARAM_LIST, ARG_LIST,
+                 LIST_EXPR, TUPLE_EXPR, LIST_COMP, BLOCK_EXPR -> true;
+            default -> false;
+        };
+    }
+
+    // --- writing them back ---
+
+    /** {@code run} as documents, each marked consumed as it is taken. A comment is taken once. */
+    private List<Doc> unwritten(List<SyntaxToken> run) {
         List<Doc> out = new ArrayList<>();
-        for (SyntaxToken c : trailing.getOrDefault(n, List.of())) {
+        for (SyntaxToken c : run) {
             if (consumedComments.add(c.start())) {
-                out.add(Doc.trailing(c.text().stripTrailing()));
+                out.add(text(c.text().stripTrailing()));
             }
         }
+        return out;
+    }
+
+    /** The comments written above {@code n}, each on its own line in front of it. The
+     * {@link Doc#HARDLINE} after each forces the enclosing group to break: a {@code //} on a line the
+     * group had collapsed would swallow everything after it. */
+    private Doc aboveOf(SyntaxNode n) {
+        List<Doc> parts = new ArrayList<>();
+        for (Doc c : unwritten(comments.above().getOrDefault(n, List.of()))) {
+            parts.add(concat(c, HARDLINE));
+        }
+        return concat(parts);
+    }
+
+    /** The comment written at the end of {@code n}'s line. */
+    private Doc afterOf(SyntaxNode n) {
+        List<Doc> parts = new ArrayList<>();
+        for (SyntaxToken c : comments.after().getOrDefault(n, List.of())) {
+            if (consumedComments.add(c.start())) {
+                parts.add(Doc.trailing(c.text().stripTrailing()));
+            }
+        }
+        return concat(parts);
+    }
+
+    /** The comments written inside {@code n} under its last member, each opening a line. */
+    private Doc endOf(SyntaxNode n) {
+        List<Doc> parts = new ArrayList<>();
+        for (Doc c : endLines(n)) {
+            parts.add(concat(HARDLINE, c));
+        }
+        return concat(parts);
+    }
+
+    private List<Doc> endLines(SyntaxNode n) {
+        return unwritten(comments.atEnd().getOrDefault(n, List.of()));
+    }
+
+    /** The comments written above a sum's case, which is an identifier and not a node. */
+    private List<Doc> aboveCase(SyntaxToken ident) {
+        return unwritten(comments.aboveCase().getOrDefault(ident.start(), List.of()));
+    }
+
+    /** The comment written at the end of a sum case's line. */
+    private Doc afterCase(SyntaxToken ident) {
+        List<Doc> parts = new ArrayList<>();
+        for (SyntaxToken c : comments.afterCase().getOrDefault(ident.end(), List.of())) {
+            if (consumedComments.add(c.start())) {
+                parts.add(Doc.trailing(c.text().stripTrailing()));
+            }
+        }
+        return concat(parts);
+    }
+
+    /** A member: what is written above its line, the member, and what ends that line — the last kept
+     * apart because whatever the enclosing construct writes between this member and the next belongs
+     * on this line, before the comment. */
+    private Member member(SyntaxNode node, Doc d) {
+        return new Member(concat(aboveOf(node), d), afterOf(node));
+    }
+
+    /** {@code members} of {@code parent} with the comments written under the last of them. A
+     * construct with no members at all still has somewhere to put them: between its brackets, which
+     * is where they were written. */
+    private List<Member> withEndComments(SyntaxNode parent, List<Member> members) {
+        List<Doc> end = endLines(parent);
+        if (end.isEmpty()) {
+            return members;
+        }
+        List<Doc> lines = new ArrayList<>();
+        for (Doc c : end) {
+            lines.add(concat(HARDLINE, c));
+        }
+        List<Member> out = new ArrayList<>(members);
+        if (out.isEmpty()) {
+            // a construct with no members still has between its brackets, which is where they were
+            // written; the comments stand where a member would have, so they bring no line of their
+            // own — the brackets already open and close one
+            out.add(new Member(concat(Doc.MUST_BREAK, Doc.join(HARDLINE, end)), Doc.NIL));
+            return out;
+        }
+        Member last = out.get(out.size() - 1);
+        out.set(out.size() - 1,
+                new Member(concat(last.doc(), last.trailing(), concat(lines)), Doc.NIL));
         return out;
     }
 
@@ -1332,22 +1370,6 @@ public final class Formatter {
         return out;
     }
 
-    private List<SyntaxToken> trailingComments(SyntaxNode file) {
-        List<SyntaxToken> out = new ArrayList<>();
-        int lastNode = -1;
-        List<SyntaxElement> es = file.children();
-        for (int i = 0; i < es.size(); i++) {
-            if (es.get(i) instanceof SyntaxNode) {
-                lastNode = i;
-            }
-        }
-        for (int i = lastNode + 1; i < es.size(); i++) {
-            if (es.get(i) instanceof SyntaxToken t && t.kind() == SyntaxKind.LINE_COMMENT) {
-                out.add(t);
-            }
-        }
-        return out;
-    }
 
     // --- CST navigation ---
 
@@ -1365,7 +1387,7 @@ public final class Formatter {
     private List<Member> exprDocs(SyntaxNode n) {
         List<Member> out = new ArrayList<>();
         for (SyntaxNode c : exprChildren(n)) {
-            out.add(member(n, c, expr(c)));
+            out.add(member(c, expr(c)));
         }
         return withEndComments(n, out);
     }

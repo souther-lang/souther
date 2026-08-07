@@ -10,7 +10,6 @@ import souther.compiler.cst.SyntaxToken;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -19,25 +18,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The places are found rather than listed. {@link CommentSurvivalTest} lists them, and a list is
  * the formatter's own idea of where a comment goes written down a second time: the places it omits
  * are exactly the places the formatter drops a comment, which is how an {@code invariant} clause and
- * the end of a member list went unnoticed. So this walks a fixture's whitespace, writes a probe
- * comment into each gap between two tokens, and requires the probe back — once — from every variant
- * that still parses.
+ * the end of a member list went unnoticed. So a probe comment is written into every boundary between
+ * two of a fixture's tokens, and required back from every variant that still parses.
  *
- * <p>Only comments written on a line of their own are swept. One written at the end of a line of
- * code is a second question — which construct it belongs to, and where that construct's line ends
- * once the layout has been re-derived — and it is asked where that is decided.
+ * <p>Required back as a comment, not as text. Counting {@code // probe} in the output says it
+ * survived when it was written into another comment's line, where it is no longer a comment and a
+ * reader has lost it. So the output is parsed and its {@code LINE_COMMENT} tokens compared against
+ * the input's.
  *
- * <p>What the probe is attached to is not asserted here either. That needs an expected owner, and
- * deriving one from the insertion point would be the classifier under test written twice; it is
- * asked of hand-written cases instead.
+ * <p>Boundaries, not existing whitespace: a comment goes between two tokens whether or not anything
+ * was written between them already, so {@code f(a)} admits one after its {@code (} as much as
+ * between two statements. And several fixtures, because a construct's empty form takes a different
+ * path through the formatter than its occupied one — an {@code exposing} clause with no entries has
+ * no member to hang a comment on and is exactly where one went missing.
  */
 class EveryCommentTheGrammarAdmitsSurvivesTest {
 
     private static final String PROBE = "// probe";
 
-    /** One of everything a module can be written with, since a gap only exists where the fixture put
-     * two tokens. Kept in canonical form, so a variant differs from it only by the probe. */
-    private static final String FIXTURE = """
+    /** One of everything a module can be written with. Kept in canonical form, so a variant differs
+     * from it only by the probe. */
+    private static final String WHOLE_MODULE = """
             module m exposing ( A, B, S, run, value )
             import other.mod ( Thing )
 
@@ -82,122 +83,157 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
 
             fake helper
                 | (2) -> 4
+            """;
 
-            data Wide =
-                { alphaMeasurement: Int
-                , betaMeasurement: Int
-                , gammaMeasurement: Int
-                , deltaMeasurement: Int
+    /** The forms the whole module has no room for: an attempt's departures, a pipeline's stages, an
+     * example's bindings, a comprehension, and the empty forms of the bracketed constructs. */
+    private static final String THE_OTHER_FORMS = """
+            module m exposing (  )
+            import other.mod
+
+            data Amount = Int
+                invariant value > 0
+
+            data In =
+                { n: Int
                 }
 
-            behavior widen : (
-                alphaMeasurement: Int,
-                betaMeasurement: Int,
-                gammaMeasurement: Int,
-                deltaMeasurement: Int
-            ) -> Wide
-                constructs Wide
-
-            let widen (alphaMeasurement, betaMeasurement, gammaMeasurement, deltaMeasurement) =
-                Wide {
-                    alphaMeasurement = alphaMeasurement,
-                    betaMeasurement = betaMeasurement,
-                    gammaMeasurement = gammaMeasurement,
-                    deltaMeasurement = deltaMeasurement
+            data Out =
+                { n: Int
                 }
 
-            let manyNumbers =
-                [1000000000, 2000000000, 3000000000, 4000000000, 5000000000, 6000000000, 7000000000]
+            behavior make : (n: Int) -> Out | Amount
+                constructs Out, Amount
+
+            behavior through : (i: In) -> Out
+                constructs Out
+
+            behavior piped = through >-> through
+
+            let empty = Out {}
+
+            let none () = 1
+
+            let make (n) = {
+                guard Amount(n) as a else
+                    | value -> Amount(1)
+                let evens = [x | x > 0]
+                Out { n = a.value }
+            }
+
+            let through (i) = if i.n > 0 then Out { n = 1 } else Out { n = 0 }
+
+            example make
+                | "it makes" : (2) with n = 2 -> Out { n = 2 }
             """;
 
     @Test
-    void theFixtureIsInCanonicalFormAndHasGaps() {
-        assertEquals(FIXTURE, Formatter.format(FIXTURE), "the fixture is not in canonical form");
-        assertTrue(gaps(FIXTURE, true).size() + gaps(FIXTURE, false).size() > 100,
-                "too few gaps to be a useful sweep");
+    void theFixturesAreInCanonicalForm() {
+        for (String fixture : List.of(WHOLE_MODULE, THE_OTHER_FORMS)) {
+            org.junit.jupiter.api.Assertions.assertEquals(fixture, Formatter.format(fixture),
+                    "a fixture is not in canonical form");
+        }
     }
 
     @Test
     void aProbeOnALineOfItsOwnComesBackExactlyOnce() {
-        sweep(gaps(FIXTURE, true));
+        sweep(true);
     }
 
     @Test
     void aProbeAtTheEndOfALineComesBackExactlyOnce() {
-        sweep(gaps(FIXTURE, false));
+        sweep(false);
     }
 
-    private static void sweep(List<String> variants) {
+    private static void sweep(boolean onItsOwnLine) {
         List<String> lost = new ArrayList<>();
-        List<String> duplicated = new ArrayList<>();
+        List<String> refused = new ArrayList<>();
         int checked = 0;
-        for (String variant : variants) {
-            if (!CstParser.parse(variant).errors().isEmpty()) {
-                continue;   // the probe made this one unparseable; nothing to ask of it
-            }
-            checked++;
-            int n = occurrences(Formatter.format(variant), PROBE);
-            if (n == 0) {
-                lost.add(context(variant));
-            } else if (n > 1) {
-                duplicated.add(context(variant));
+        for (String fixture : List.of(WHOLE_MODULE, THE_OTHER_FORMS)) {
+            List<String> expected = commentsOf(fixture);
+            for (String variant : variants(fixture, onItsOwnLine)) {
+                if (!CstParser.parse(variant).errors().isEmpty()) {
+                    continue;   // the probe made this one unparseable; nothing to ask of it
+                }
+                checked++;
+                List<String> want = new ArrayList<>(expected);
+                want.add(PROBE);
+                want.sort(null);
+                String formatted;
+                try {
+                    formatted = Formatter.format(variant);
+                } catch (RuntimeException e) {
+                    refused.add(context(variant) + "  " + e.getMessage());
+                    continue;
+                }
+                List<String> got = commentsOf(formatted);
+                got.sort(null);
+                if (!want.equals(got)) {
+                    lost.add(context(variant) + "  gave " + got);
+                }
             }
         }
 
-        assertTrue(checked > 20, "only " + checked + " variants parsed; the sweep found nothing");
-        assertTrue(lost.isEmpty() && duplicated.isEmpty(),
-                "the probe was dropped in " + lost.size() + " gaps and written twice in "
-                        + duplicated.size() + ", of " + checked + " swept.\ndropped after:\n"
-                        + String.join("\n", lost) + "\nduplicated after:\n"
-                        + String.join("\n", duplicated));
+        assertTrue(checked > 150, "only " + checked + " variants parsed; the sweep found nothing");
+        assertTrue(lost.isEmpty() && refused.isEmpty(),
+                "of " + checked + " swept, " + lost.size() + " came back with the comments changed"
+                        + " and " + refused.size() + " were refused.\nchanged after:\n"
+                        + String.join("\n", lost) + "\nrefused after:\n"
+                        + String.join("\n", refused));
     }
 
-    /**
-     * {@code source} with a probe comment written into one gap between two tokens, one variant per
-     * gap. The two ways a comment is written are swept separately, because they are separate
-     * questions: {@code onItsOwnLine} takes the gaps that already span a line and writes the probe
-     * as a line between them, and the rest take it at the end of the line they are inside.
-     */
-    private static List<String> gaps(String source, boolean onItsOwnLine) {
+    /** {@code source} with a probe comment written into one boundary between two of its tokens, one
+     * variant per boundary. A comment is written either on a line of its own or at the end of the
+     * line it is inside, and the two are separate questions, so a sweep asks one of them. */
+    private static List<String> variants(String source, boolean onItsOwnLine) {
         List<String> out = new ArrayList<>();
-        for (SyntaxToken w : whitespace(CstParser.parse(source).root())) {
-            String text = w.text();
-            int nl = text.indexOf('\n');
-            if ((nl >= 0) != onItsOwnLine) {
-                continue;
-            }
-            String replacement = nl < 0
-                    ? " " + PROBE + "\n" + text
-                    : text.substring(0, nl + 1) + PROBE + text.substring(nl);
-            out.add(source.substring(0, w.start()) + replacement + source.substring(w.end()));
+        for (int at : boundaries(source)) {
+            String written = onItsOwnLine ? "\n" + PROBE + "\n" : " " + PROBE + "\n";
+            out.add(source.substring(0, at) + written + source.substring(at));
         }
         return out;
     }
 
-    private static List<SyntaxToken> whitespace(SyntaxNode n) {
+    /** Where a comment can go: after each token that is not trivia. Trivia is skipped when the
+     * parser looks for its next token, so a boundary exists whether or not anything was written at
+     * it. */
+    private static List<Integer> boundaries(String source) {
+        List<Integer> out = new ArrayList<>();
+        for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
+            if (!t.isTrivia() && t.kind() != SyntaxKind.EOF && !out.contains(t.end())) {
+                out.add(t.end());
+            }
+        }
+        return out;
+    }
+
+    /** The comments {@code source} holds, read back as comments rather than as text. */
+    private static List<String> commentsOf(String source) {
+        List<String> out = new ArrayList<>();
+        for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
+            if (t.kind() == SyntaxKind.LINE_COMMENT) {
+                out.add(t.text().stripTrailing());
+            }
+        }
+        return out;
+    }
+
+    private static List<SyntaxToken> tokens(SyntaxNode n) {
         List<SyntaxToken> out = new ArrayList<>();
         for (SyntaxElement e : n.children()) {
             if (e instanceof SyntaxNode c) {
-                out.addAll(whitespace(c));
-            } else if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.WHITESPACE) {
+                out.addAll(tokens(c));
+            } else if (e instanceof SyntaxToken t) {
                 out.add(t);
             }
         }
         return out;
     }
 
-    /** The words the probe was written after, so a failure names the gap rather than an offset. */
+    /** The words the probe was written after, so a failure names the boundary rather than an offset. */
     private static String context(String variant) {
         int at = variant.indexOf(PROBE);
         int from = Math.max(0, at - 40);
         return "    ..." + variant.substring(from, at).replace("\n", "\\n") + "[probe]";
-    }
-
-    private static int occurrences(String haystack, String needle) {
-        int n = 0;
-        for (int i = haystack.indexOf(needle); i >= 0; i = haystack.indexOf(needle, i + needle.length())) {
-            n++;
-        }
-        return n;
     }
 }
