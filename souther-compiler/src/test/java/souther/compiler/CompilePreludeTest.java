@@ -9,10 +9,10 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The shipped prelude (ADR-0028) auto-imports {@code souther.bool.not} into every user module, so a
- * model may call {@code not(b)} with no import. {@code not} is the first self-hosted stdlib function
- * — written in Souther as {@code if b then false else true} and, being non-recursive, expanded
- * inline at the call site rather than lowered to a class.
+ * {@code souther.bool.not} is the first self-hosted stdlib function — written in Souther as
+ * {@code if b then false else true} and, being non-recursive, expanded inline at the call site
+ * rather than lowered to a class. A module reaches it as {@code Bool.not}, or imports the name and
+ * writes it bare, as this one does.
  */
 class CompilePreludeTest {
 
@@ -37,16 +37,16 @@ class CompilePreludeTest {
     }
 
     @Test
-    void autoImportedNotNegatesTrue() throws Exception {
+    void theImportedNotNegatesTrue() throws Exception {
         assertEquals(false, flip(true), "not(true) is false");
     }
 
     @Test
-    void autoImportedNotNegatesFalse() throws Exception {
+    void theImportedNotNegatesFalse() throws Exception {
         assertEquals(true, flip(false), "not(false) is true");
     }
 
-    /** The prefix `!` is gone now that `not` covers negation (ADR-0028). */
+    /** The prefix `!` is gone now that `not` covers negation. */
     @Test
     void thePrefixBangNoLongerParses() {
         String src = MODULE.replace("not(i.flag)", "!i.flag");

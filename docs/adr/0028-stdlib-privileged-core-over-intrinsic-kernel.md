@@ -97,6 +97,12 @@ which is left for later.
 > its derived codecs traverse it — so ADR-0038 returns recursion to user helpers, lowering a
 > recursive helper to a method. The generics/monomorphization privilege of `core` is unchanged.
 
+> **Superseded in part by ADR-0099.** This ADR ties the privilege to a reserved namespace the
+> compiler ships *and auto-imports*, so a library name resolved bare with nothing written to bring
+> it in. The namespace and every privilege it carries stand; the auto-import does not. Since
+> 2026-07-18 a library name is reached through its module's qualifier (`Bool.not`) or by importing
+> the name (`import Bool ( not )`), and a bare one is refused.
+
 ## References
 
 - Specification: `[#stdlib]`, `[#stdlib-list]`, `[#stdlib-string]`, `[#stdlib-map]`,
