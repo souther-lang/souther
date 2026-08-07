@@ -81,7 +81,11 @@ final class Predicates {
                 Map.of(q.predicate().params().get(0).id(), element));
         List<Quantified> nested = new ArrayList<>();
         quantifiedBy(stated, at, true, nested);
-        return assume(obligations(stated, k, at, false), k).and(nested);
+        // A quantifier is recorded by a guard and by a type's invariant alike, and carries no record
+        // of which recorded it, so what it gives an element is taken as the path's. That is the
+        // weaker of the two readings: a violation it decides is reported as one the values alone did
+        // not decide, which holds either way. It is why nothing downstream says a guard decided it.
+        return assume(obligations(stated, k, at, false), k, Known.Held.ON_THE_PATH).and(nested);
     }
 
     /** What {@code e}, asserted with polarity {@code positive}, says of every element of a container.
@@ -280,7 +284,9 @@ final class Predicates {
         List<Constraint> known = new ArrayList<>();
         sizeFacts(cond, at, known);
         for (Constraint c : known) {
-            out = out.with(out.numbers().assume(c.form(), c.rel()));
+            // A size is never negative whether or not the condition holds, so this holds of the value
+            // and not of the path — the condition is only where the container got named.
+            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE);
         }
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
@@ -288,7 +294,7 @@ final class Predicates {
             LinearForm la = eff == null ? null : terms.affineOf(b.left(), at, out);
             LinearForm ra = eff == null ? null : terms.affineOf(b.right(), at, out);
             if (la != null && ra != null) {
-                out = out.with(out.numbers().assume(la.minus(ra), eff));
+                out = out.taking(la.minus(ra), eff, Known.Held.ON_THE_PATH);
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
@@ -303,7 +309,7 @@ final class Predicates {
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
         String key = terms.bodyKey(polar.expr(), at);
-        return key == null ? out : out.with(out.facts().assume(key, polar.positive()));
+        return key == null ? out : out.taking(key, polar.positive(), Known.Held.ON_THE_PATH);
     }
 
     /** The terms one side of a compared pair names: the expression itself, and each atom of the form it
@@ -365,25 +371,28 @@ final class Predicates {
     }
 
 
-    /** {@code k} with everything {@code owed} states taken as holding. What a clause owes at a
-     * construction is what it guarantees where it is already established, so the two read the same
-     * clauses through the same rule and differ only in direction. */
-    Known assume(List<Clause> owed, Known k) {
+    /** {@code k} with everything {@code owed} states taken as holding, as far as {@code held}
+     * reaches. What a clause owes at a construction is what it guarantees where it is already
+     * established, so the two read the same clauses through the same rule and differ only in
+     * direction. */
+    Known assume(List<Clause> owed, Known k, Known.Held held) {
         if (owed == null) {
             return k;
         }
         Known out = k;
         for (Clause c : owed) {
             for (Constraint known : c.known()) {
-                out = out.with(out.numbers().assume(known.form(), known.rel()));
+                // What is known of a size holds of the container itself, whatever established the
+                // clause it was read out of.
+                out = out.taking(known.form(), known.rel(), Known.Held.OF_THE_VALUE);
             }
             if (c.numeric() != null) {
-                out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
+                out = out.taking(c.numeric().form(), c.numeric().rel(), held);
             }
             if (c.fact() != null) {
                 // What is guaranteed is guaranteed of the term as written; a container built from it
                 // is another term, and reads the rules where it is constructed rather than here.
-                out = out.with(out.facts().assume(c.fact().keys().get(0), c.fact().positive()));
+                out = out.taking(c.fact().keys().get(0), c.fact().positive(), held);
             }
         }
         return out;
