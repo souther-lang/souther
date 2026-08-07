@@ -379,7 +379,7 @@ public final class DataChecker {
                 Ast.Def caseDef = symbols.get(v.caseType().denotes());
                 if (!dispatchable.contains(v.caseType().denotes())) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.notcase").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.notcase")
                                     .at(v.pos()).args(v.caseType().written(), sum.name()).build(),
                             "variant `" + v.caseType().written() + "` is not a case of `" + sum.name() + "`");
                 }
@@ -390,7 +390,7 @@ public final class DataChecker {
                         || (caseDef instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!caseDecodes) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.needdecoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.needdecoder")
                                     .at(v.pos()).args(v.caseType().written()).build(),
                             "variant `" + v.caseType().written() + "` needs a decoder");
                 }
@@ -404,7 +404,7 @@ public final class DataChecker {
                     Type.ref(symbols.own(sum.name())), enc.key(), symbols);
             if (carrying != null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.case.discriminatorfield").title("check.codec.title")
+                        Diagnostic.of(DiagnosticCode.E1010, "check.case.discriminatorfield")
                                 .at(sum.pos()).args(carrying.name(), enc.key(), sum.name())
                                 .hint("check.case.discriminatorfield.hint", enc.key()).build(),
                         "`" + carrying.name() + "` is a case of `" + sum.name() + "` and declares a"
@@ -416,7 +416,7 @@ public final class DataChecker {
             for (Ast.EncVariant v : enc.variants()) {
                 if (!encodable.contains(v.caseType().denotes())) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.notcase").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.notcase")
                                     .at(v.pos()).args(v.caseType().written(), sum.name()).build(),
                             "`" + v.caseType().written() + "` is not a case of `" + sum.name() + "`");
                 }
@@ -426,7 +426,7 @@ public final class DataChecker {
                         || (caseDef instanceof Ast.SumData s && s.encoder().isPresent());
                 if (!caseEncodes) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.needencoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.needencoder")
                                     .at(v.pos()).args(v.caseType().written()).build(),
                             "case `" + v.caseType().written() + "` needs an encoder");
                 }
@@ -435,7 +435,7 @@ public final class DataChecker {
             for (TypeName caseName : encodable) {
                 if (!covered.contains(caseName)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.missingcase").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.missingcase")
                                     .at(enc.pos()).args(sum.name(), caseName.name()).build(),
                             "encoder for `" + sum.name() + "` is missing case `" + caseName.name() + "`");
                 }
@@ -498,7 +498,7 @@ public final class DataChecker {
         // to have named `Option` is an ordinary named data here.
         if (ctx.data().newtype() && fields.get("value") instanceof Type.OptionOf o) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.newtype.optional").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1009, "check.newtype.optional")
                             .at(fieldRegion(ctx.data(), "value"))
                             .args(ctx.data().name(), Type.show(o.element()))
                             .hint("check.newtype.optional.hint", ctx.data().name()).build(),
@@ -522,7 +522,7 @@ public final class DataChecker {
             }
             if (TypeOps.withoutExternalForm(e.getValue(), ctx.symbols()) instanceof Type.TupleOf) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.field.tuple").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1311, "check.field.tuple")
                                 .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name(), e.getKey()).build(),
                         "a tuple cannot be a data field (`" + ctx.data().name() + "." + e.getKey()
@@ -534,7 +534,7 @@ public final class DataChecker {
             Type badKey = TypeOps.nonBoundaryMapKey(e.getValue(), ctx.symbols());
             if (badKey != null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.map.key.field").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
                                 .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name() + "." + e.getKey(), Type.show(badKey))
                                 .hint("check.map.key.field.hint").build(),
@@ -618,7 +618,7 @@ public final class DataChecker {
                         || (def instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!hasDecoder) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.nodecoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2202, "check.codec.nodecoder")
                                     .at(d.pos()).args(d.typeName().written()).build(),
                             "`" + d.typeName().written() + "` has no decoder to call `"
                                     + d.typeName().written() + ".decoder`");
@@ -636,7 +636,7 @@ public final class DataChecker {
                                        Scope env) {
         if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.codec.mustconstruct").title("check.codec.title")
+                    Diagnostic.of(DiagnosticCode.E2201, "check.codec.mustconstruct")
                             .at(c.pos()).args(ctx.data().name(), c.typeName().written()).build(),
                     "decoder for `" + ctx.data().name() + "` must construct `" + ctx.data().name()
                             + "`, but constructs `" + c.typeName().written() + "`");
@@ -778,7 +778,7 @@ public final class DataChecker {
                 Type at = Elaborator.typeOf(t.arg(), env, ctx);
                 if (at != Type.DATE && at != Type.DATETIME) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.iso").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.iso")
                                     .at(t.pos()).args(Type.show(at)).build(),
                             "ISO text encoder expects Date or DateTime, got " + at);
                 }
@@ -787,7 +787,7 @@ public final class DataChecker {
                 Type at = Elaborator.typeOf(o.access(), env, ctx);
                 if (!(at instanceof Type.OptionOf oo)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.option").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.option")
                                     .at(o.pos()).args(Type.show(at)).build(),
                             "optional encoder expects an Option, got " + at);
                 }
@@ -804,7 +804,7 @@ public final class DataChecker {
                         || (encDef instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!hasEncoder) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.noencoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2202, "check.codec.noencoder")
                                     .at(e.pos()).args(e.typeName().written()).build(),
                             "`" + e.typeName().written() + "` has no encoder to call `"
                                     + e.typeName().written() + ".encode`");
@@ -816,7 +816,7 @@ public final class DataChecker {
                 Type st = Elaborator.typeOf(le.source(), env, ctx);
                 if (!(st instanceof Type.ListOf lo)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.listsource").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.listsource")
                                     .at(le.pos()).args(Type.show(st)).build(),
                             "list(...) source must be a List, got " + st);
                 }
@@ -826,7 +826,7 @@ public final class DataChecker {
                 Type st = Elaborator.typeOf(se.source(), env, ctx);
                 if (!(st instanceof Type.SetOf so)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.setsource").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.setsource")
                                     .at(se.pos()).args(Type.show(st)).build(),
                             "set encoder source must be a Set, got " + st);
                 }
@@ -836,7 +836,7 @@ public final class DataChecker {
                 Type st = Elaborator.typeOf(me.source(), env, ctx);
                 if (!(st instanceof Type.MapOf mo)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.codec.mapsource").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.mapsource")
                                     .at(me.pos()).args(Type.show(st)).build(),
                             "map encoder source must be a Map, got " + st);
                 }
@@ -888,7 +888,7 @@ public final class DataChecker {
      * encoder by the type it encodes (`String`, `商品ID`, `List`), the element by {@link Type#show}. */
     private static CompileException elemEncMismatch(String encoder, Type elemType, SourcePos pos) {
         return CompileException.of(
-                Diagnostic.uncoded("check.codec.elemenc").title("check.codec.title")
+                Diagnostic.of(DiagnosticCode.E2201, "check.codec.elemenc")
                         .at(pos).args("`" + encoder + "`", Type.show(elemType)).build(),
                 "element encoder `" + encoder + "` does not match " + Type.show(elemType));
     }

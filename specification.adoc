@@ -460,6 +460,14 @@ What a text MUST be for the compiler to read it is stated with each construct, a
 [#external-representation]
 == External representation
 
+What crosses a decoder/encoder boundary is decided by representation, and five obligations fall out of it:
+
+* [[what-crosses-the-boundary-has-an-external-representation]]a value that crosses MUST have an external representation. A tuple has none and neither does a function, so neither can be a behavior's parameter or output, a data's field, or anything a codec would be derived from;
+* [[a-parameter-names-one-type]]a parameter MUST name a single type. An anonymous union is the shape of one behavior's answer and nobody names it (<<union-member>>), so it is written on an output and not taken as an input;
+* [[a-behavior-does-not-output-an-optional]]a behavior MUST NOT answer with an optional. Absence a caller is handed is a case the model owns and names (<<optional>>), not a value that may not be there;
+* [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, `+Date+`, `+DateTime+`. The boundary writes a key as text, and a key with no text is a key nothing can address;
+* [[a-collection-member-supports-equality]]a `+Set+`'s element and a `+Map+`'s key MUST support equality. Both ask whether two of them are the same, and a function has no value to compare (<<equality>>).
+
 The external representation handled by Decoders and Encoders is not Souther's own types but the neutral value model of the boundary library Raoh (a tree of scalar / List / Map). Souther owns the domain's types, invariants, and behaviors; the external representation and its parsing and generation are delegated to the peripheral library Raoh (<<separate-representation>>, <<decoder>>).
 
 From a data's shape, Souther derives the decode side per input source (bare values / Map = raoh-core, JSON `+JsonNode+` = raoh-json, jOOQ `+Record+` = raoh-jooq) and the encode side to a neutral Map (raoh-core). The decode skeleton (fields, keys, discriminator) is common across sources; only the terminal field access varies per source. JSON output serializes the Map at the boundary (`+objectMapper.valueToTree+`, etc.; <<codec-generation>>).
@@ -882,7 +890,7 @@ Souther has union types. They appear in three forms.
 An anonymous union appears *only in a behavior's output*. An anonymous union MUST NOT be written in an input (parameter) type. To pass a sum, make a named data (<<unmarked-output>>); naming it makes it sealed, with exhaustiveness checking and a JVM type (<<jvm-sum>>). Where the spec DSL writes `+(A OR B)+` in an input, the sum is named as a `+data+` and then referenced. A JVM type is generated for an output anonymous union (<<jvm-anonymous-union>>).
 
 [#union-member]
-A member of an anonymous union MUST be nominal and MUST tell itself apart from the other members at run time, and it MUST have a form a `+match+` arm can write. The primitives (`+Int+` / `+Bool+` / `+Decimal+` / `+String+` / `+Date+` / `+DateTime+`) and named data types meet both, a data whether this module declares it or imports it. A collection meets neither: its type argument is erased, so `+List<Order>+` and `+List<Item>+` are one type at run time and no arm could choose between them, and no arm form names one. `+Option+` and a function type are outside for the same reason. What a member may be does not depend on where the union came from — a union written as a behavior's output and one a `+>->+` composition arrived at (<<type-routing>>) are the same union.
+[[a-union-member-is-nameable-in-an-arm]]A member of an anonymous union MUST be nominal and MUST tell itself apart from the other members at run time, and it MUST have a form a `+match+` arm can write. The primitives (`+Int+` / `+Bool+` / `+Decimal+` / `+String+` / `+Date+` / `+DateTime+`) and named data types meet both, a data whether this module declares it or imports it. A collection meets neither: its type argument is erased, so `+List<Order>+` and `+List<Item>+` are one type at run time and no arm could choose between them, and no arm form names one. `+Option+` and a function type are outside for the same reason. What a member may be does not depend on where the union came from — a union written as a behavior's output and one a `+>->+` composition arrived at (<<type-routing>>) are the same union.
 
 A named sum member contributes its cases and not itself, as it does in an external representation (<<sum-discrimination>>). The members a union is checked and generated from are therefore its *effective* members: every member written, with each named sum expanded to its leaves.
 
@@ -894,6 +902,8 @@ Structural intersection types (`+A & B+`, a type operator for "a value that is b
 === newtype (`+data X = Y+`)
 
 When the right-hand side is a single type rather than a `+{ ... }+` product or a `+|+` sum, `+X+` is a newtype wrapping that type `+Y+`.
+
+[[newtype-wraps-a-value-that-is-always-there]]What a newtype wraps MUST be there. A newtype is one value under another name and takes that value's representation, so an optional leaves it nothing to be when the value is absent; the absence belongs to the field that holds the newtype (<<optional>>).
 
 [[newtype-wraps-an-external-representation]]What a newtype wraps MUST have an external representation of its own, since the newtype takes it as its own (<<external-representation>>). A tuple has none and neither does a function, so neither can be wrapped; a named data can be.
 
@@ -1371,7 +1381,7 @@ Folding is done because only the leaf identifies the value. Tagging a direct cas
 A case's contents are decided by the case's shape. A product case lays fields flatly in the same Object as `+"type"+` (`+{"type":"Submitted", "applicant":…, …}+`). A unit case writes only `+"type"+` (`+{"type":"Staff"}+`). A newtype case (`+data X = Y+`; <<newtype>>) cannot place `+"type"+` on a bare scalar, so it puts the contents under the `+"value"+` key.
 
 [#discriminator-field]
-Because a product case lays its fields there, a case MUST NOT declare a field named `+"type"+` — the field and the tag would want one key, and whichever was written second would be all that was left. This is a compile error where the case is declared, not a value quietly written over where it is encoded. It holds of a member of a behavior's output union for the same reason (<<union-encoder>>), and of a field a case takes in by spread as much as one it writes. A data that is neither a case nor a union member may have the field: nothing writes a discriminator beside it.
+[[a-case-does-not-declare-the-discriminator-field]]Because a product case lays its fields there, a case MUST NOT declare a field named `+"type"+` — the field and the tag would want one key, and whichever was written second would be all that was left. This is a compile error where the case is declared, not a value quietly written over where it is encoded. It holds of a member of a behavior's output union for the same reason (<<union-encoder>>), and of a field a case takes in by spread as much as one it writes. A data that is neither a case nor a union member may have the field: nothing writes a discriminator beside it.
 
 [,text]
 ----
@@ -1389,6 +1399,10 @@ When the discriminator key or tag is business-specific (reading `+"status"+` and
 
 [#custom-codec]
 === Custom boundary codec
+
+[[a-custom-codec-agrees-with-its-type]]A codec written by hand MUST be a codec for the type it is declared on: a decoder for `+T+` constructs a `+T+`, an encoder for a sum writes every case, an element encoder matches the element type, and a source-shaped encoder is given that shape. What is derived agrees with the type because it was read off it; what is written has to be checked against it.
+
+[[a-codec-reached-for-exists]]`+T.decoder+` and `+T.encode+` MAY be written only where `+T+` has one. A type whose representation was never derived and never given has neither to reach for.
 
 When the default derivation is insufficient (a different key name, normalization, default filling, a business-specific discriminator, persistence version branching), write a Decoder on the Java side that assembles the external representation and calls the data's (invariant-checking) construction. The `+JdbcFindMember+` calling `+Member.decoder()+` in <<java-example>> is this form. External-representation conversion stays confined to the boundary and is not brought into domain definitions.
 
@@ -3534,6 +3548,28 @@ written without a body.
 
 Reported at a `+data+` whose body is written and holds nothing (<<unit-data-is-written-without-a-body>>). The declaration means what a unit data means, and a unit data has one spelling.
 
+[#e1009]
+=== A newtype wraps an optional
+
+[,text]
+----
+`Approver` wraps `EmployeeId?`, but a newtype wraps one value and takes its representation, so there
+is nothing for it to be when the value is absent.
+----
+
+Reported at a `+data X = Y?+` (<<newtype-wraps-a-value-that-is-always-there>>). The absence belongs to the field that holds the newtype — `+approver: Approver?+` — where a reader can see it; inside the newtype it would be a value that is sometimes not one.
+
+[#e1010]
+=== A case declares the discriminator as a field
+
+[,text]
+----
+`Manager` is a case of `Rank` and declares a field `type`, which is the discriminator its sum writes
+beside the fields.
+----
+
+Reported at the field (<<a-case-does-not-declare-the-discriminator-field>>). A product case lays its fields where the tag goes, so the two would want one key and whichever was written second would be what a reader got back.
+
 [#e1101]
 === Invariant type mismatch
 
@@ -3658,6 +3694,60 @@ years cannot precede the age of thirty"`.
 ----
 
 Reported at an `+unreachable+` written with nothing after it (<<unreachable-states-its-reason>>). The reason is what a reader is shown when a row reaches the point (<<e1911>>), and it is the only thing the declaration says that the position does not.
+
+[#e1311]
+=== A value that cannot cross the boundary is written where one has to
+
+[,text]
+----
+parameter `range` is a tuple; a tuple has no external representation and cannot cross the boundary,
+so a behavior's input must be a named data.
+----
+
+Reported wherever a value with no external representation is written where one crosses (<<what-crosses-the-boundary-has-an-external-representation>>): a behavior's parameter or output, a data's field, or a type a codec would be derived from. A tuple and a function are the two, and the message says which position it was in — the position is what the author changes.
+
+[#e1312]
+=== A parameter is written as an anonymous union
+
+[,text]
+----
+parameter `outcome` has an anonymous union type `Allocated | OutOfStock`; a parameter type must be a
+single named type — declare `data ... = Allocated | OutOfStock` and take that.
+----
+
+Reported at the parameter (<<a-parameter-names-one-type>>). An anonymous union is the shape of one behavior's answer and introduces no name (<<union-member>>); an input is a type the caller names, so it takes a declared one.
+
+[#e1313]
+=== A behavior outputs an optional
+
+[,text]
+----
+Behavior `findMember` outputs an optional (`Member?`).
+----
+
+Reported at the behavior (<<a-behavior-does-not-output-an-optional>>). Absence a caller is handed is part of the model's vocabulary: declare the case it is — `+Member | NotFound+` — so the caller matches on a name rather than unwrapping.
+
+[#e1314]
+=== A Map that crosses the boundary has a key that cannot be written
+
+[,text]
+----
+`inventory` crosses the boundary, so the Map it holds must be keyed by String, a String-backed
+newtype (`data X = String`), Date, DateTime.
+----
+
+Reported at the field, parameter or output holding the Map (<<a-map-that-crosses-is-keyed-by-a-text-key>>). The boundary writes a key as text and reads it back the same way, so a key with no text form is one nothing outside can address.
+
+[#e1315]
+=== A collection would have to compare something that cannot be compared
+
+[,text]
+----
+This collection would have to compare (Int) -> Int as its key, and a function has no value to
+compare.
+----
+
+Reported at the collection (<<a-collection-member-supports-equality>>). A `+Set+` asks whether two elements are the same and a `+Map+` whether two keys are; the message says which of the two asked, because that is what the author is holding.
 
 [#e1401]
 === Arbitrary Java calls
@@ -3813,6 +3903,17 @@ behavior that calls or composes it does.
 ----
 
 Reported where a behavior with no `+let+` writes a `+depends on+` clause (<<an-injection-target-declares-no-depends-on>>). It is the thing being supplied, and what a dependency is supplied to is the behavior that reaches it.
+
+[#e1613]
+=== A union member cannot be named in an arm
+
+[,text]
+----
+`(Int, Int)` cannot be a union member: a member is a type a `match` arm can name — one of the
+primitives, or a data type declared here or imported.
+----
+
+Reported at the member (<<a-union-member-is-nameable-in-an-arm>>). A union is read by matching on it, so a member an arm cannot write is a case nothing can handle. The same code says when one spelling stands for two members' types, which leaves an arm naming one of them and no way to say which.
 
 [#e1701]
 === behavior composition type mismatch
@@ -4402,6 +4503,26 @@ flatten it.
 ----
 
 Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). Every pass descends the same text the same way, so this is not one pass's limit; it is reported wherever the descent is made, including by the formatter, which reads sources it cannot compile.
+
+[#e2201]
+=== A written codec does not agree with its type
+
+[,text]
+----
+The decoder for `Amount` must construct `Amount`, but constructs `Level`.
+----
+
+Reported where a hand-written codec is not a codec for the type it is declared on (<<a-custom-codec-agrees-with-its-type>>): a decoder constructing something else, an encoder missing a case of its sum, an element encoder against a different element type, a source-shaped encoder given another shape. A derived codec agrees because it was read off the type; a written one is held to the same agreement.
+
+[#e2202]
+=== A codec is reached for where there is none
+
+[,text]
+----
+`Wide` has no decoder, so `Wide.decoder` cannot be called.
+----
+
+Reported at the reference (<<a-codec-reached-for-exists>>). Derivation covers what has an external representation (<<external-representation>>), and where it did not run and nothing was written by hand there is nothing to name.
 
 [#e2301]
 === A declaration is not written in its form

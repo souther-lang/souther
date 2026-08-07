@@ -204,7 +204,7 @@ public final class TypeOps {
             TypeName name = memberName(m);
             if (name == null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.union.members").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1613, "check.union.members")
                                 .at(ret.pos()).args(Type.show(m)).build(),
                         "`" + Type.show(m) + "` cannot be a union member: a member is a type that is"
                                 + " nominal, tells itself apart at run time, and can be written as a"
@@ -1375,7 +1375,7 @@ public final class TypeOps {
                                         String message) {
         if (!supportsEquality(t, symbols)) {
             throw CompileException.of(
-                    Diagnostic.uncoded(key).title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1315, key)
                             .at(at.pos()).args(Type.show(t)).build(),
                     message + ": " + Type.show(t));
         }

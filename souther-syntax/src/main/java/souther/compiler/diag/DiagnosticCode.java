@@ -33,6 +33,8 @@ public enum DiagnosticCode {
     E1006("constructs-no-overdeclaration", "e1006.title"),
     E1007("newtype-wraps-an-external-representation", "parse.title"),
     E1008("unit-data-is-written-without-a-body", "check.data.invalid.title"),
+    E1009("newtype-wraps-a-value-that-is-always-there", "check.boundary.title"),
+    E1010("a-case-does-not-declare-the-discriminator-field", "check.boundary.title"),
     E1101("invariant-expression-is-bool", "e1101.title"),
     E1102("invariant-needs-a-value-to-constrain", "check.invariant.invalid.title"),
     E1103("invariant-clause-names-are-distinct", "check.invariant.invalid.title"),
@@ -46,6 +48,11 @@ public enum DiagnosticCode {
     E1307("unreachable-stands-where-a-type-is-stated", "check.type.mismatch.title"),
     E1308("optional-marks-one-type", "parse.title"),
     E1310("unreachable-states-its-reason", "parse.title"),
+    E1311("what-crosses-the-boundary-has-an-external-representation", "check.boundary.title"),
+    E1312("a-parameter-names-one-type", "check.boundary.title"),
+    E1313("a-behavior-does-not-output-an-optional", "check.boundary.title"),
+    E1314("a-map-that-crosses-is-keyed-by-a-text-key", "check.boundary.title"),
+    E1315("a-collection-member-supports-equality", "check.boundary.title"),
     E1401("no-arbitrary-jvm-calls", "e1401.title"),
     E1402("core-privileges-stay-in-the-core", "parse.title"),
 
@@ -69,6 +76,7 @@ public enum DiagnosticCode {
     E1610("exposing-is-type-granular", "check.module.title"),
     E1611("an-exposed-signature-names-only-exposed-types", "check.module.title"),
     E1612("an-injection-target-declares-no-depends-on", "check.module.title"),
+    E1613("a-union-member-is-nameable-in-an-arm", "check.boundary.title"),
     E1701("composition-stages-type-route", "e1701.title"),
 
     // --- examples ---
@@ -112,6 +120,10 @@ public enum DiagnosticCode {
     E2102("generated-methods-fit-jvm-code-size", "e2102.title"),
     E2103("generated-classes-fit-jvm-constant-pool", "e2103.title"),
     E2104("source-nesting-is-bounded", "e2104.title"),
+
+    // --- the external representation ---
+    E2201("a-custom-codec-agrees-with-its-type", "check.codec.title"),
+    E2202("a-codec-reached-for-exists", "check.codec.title"),
 
     // --- the text as written ---
     E2301("declaration-syntax", "parse.title"),

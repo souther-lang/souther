@@ -428,7 +428,7 @@ public final class SpecChecker {
                         .map(SpecChecker::termName)
                         .collect(java.util.stream.Collectors.joining(" | "));
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.param.union").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1312, "check.param.union")
                                 .at(p.written().region()).args(p.name(), union).build(),
                         "parameter `" + p.name() + "` has an anonymous union type `" + union
                                 + "`; a parameter type must be a single named type — declare `data ... = "
@@ -445,7 +445,7 @@ public final class SpecChecker {
             for (Ast.TypeTerm c : p.type().cases()) {
                 if (carriesTuple(c, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.param.tuple").title("check.boundary.title")
+                            Diagnostic.of(DiagnosticCode.E1311, "check.param.tuple")
                                     .at(p.written().region()).args(p.name()).build(),
                             "parameter `" + p.name() + "` is a tuple; a tuple has no external"
                                     + " representation and cannot cross the boundary, so a behavior's"
@@ -456,7 +456,7 @@ public final class SpecChecker {
         for (Ast.TypeTerm c : spec.ret().cases()) {
             if (carriesTuple(c, symbols)) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.output.tuple").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1311, "check.output.tuple")
                                 .at(spec.pos()).args(spec.name()).build(),
                         "behavior `" + spec.name() + "` outputs a tuple; a tuple cannot cross the"
                                 + " boundary, so a behavior's output must be a named data or a sum of"
@@ -485,7 +485,7 @@ public final class SpecChecker {
                 continue;
             }
             throw CompileException.of(
-                    Diagnostic.uncoded("check.union.samename").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1613, "check.union.samename")
                             .at(b.pos()).args(clash[1].name(), clash[0].module(), clash[1].module())
                             .hint("check.union.samename.hint").build(),
                     "the output of `" + b.name() + "` has two members written `" + clash[1].name()
@@ -510,7 +510,7 @@ public final class SpecChecker {
                 continue;
             }
             throw CompileException.of(
-                    Diagnostic.uncoded("check.member.discriminatorfield").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1010, "check.member.discriminatorfield")
                             .at(b.pos()).args(carrying.name(), DISCRIMINATOR, b.name())
                             .hint("check.case.discriminatorfield.hint", DISCRIMINATOR).build(),
                     "`" + carrying.name() + "` is a member of the output of `" + b.name() + "` and"
@@ -533,7 +533,7 @@ public final class SpecChecker {
             Type t = TypeOps.successType(p.type(), symbols);
             if (!TypeOps.hasExternalForm(t, symbols)) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.param.function").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1311, "check.param.function")
                                 .at(p.written().region()).args(p.name(), Type.show(t)).build(),
                         "parameter `" + p.name() + "` carries a function (" + Type.show(t)
                                 + "); a function has no external representation, so it cannot cross"
@@ -543,7 +543,7 @@ public final class SpecChecker {
         Type out = TypeOps.successType(spec.ret(), symbols);
         if (!TypeOps.hasExternalForm(out, symbols)) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.output.function").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1311, "check.output.function")
                             .at(spec.pos()).args(spec.name(), Type.show(out)).build(),
                     "behavior `" + spec.name() + "` outputs a function (" + Type.show(out)
                             + "); a function has no external representation, so it cannot cross the"
@@ -569,7 +569,7 @@ public final class SpecChecker {
         }
         String element = Type.show(opt.element());
         throw CompileException.of(
-                Diagnostic.uncoded("check.output.optional").title("check.boundary.title")
+                Diagnostic.of(DiagnosticCode.E1313, "check.output.optional")
                         .at(spec.pos()).args(spec.name(), Type.show(opt))
                         .hint("check.output.optional.hint", element).build(),
                 "behavior `" + spec.name() + "` outputs an optional (" + Type.show(opt)
@@ -585,7 +585,7 @@ public final class SpecChecker {
             Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(p.type(), symbols), symbols);
             if (bad != null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.map.key.param").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1314, "check.map.key.param")
                                 .at(p.written().region()).args(p.name(), Type.show(bad))
                                 .hint("check.map.key.param.hint").build(),
                         "parameter `" + p.name() + "` carries a Map keyed by " + Type.show(bad)
@@ -597,7 +597,7 @@ public final class SpecChecker {
         Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(spec.ret(), symbols), symbols);
         if (bad != null) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.map.key.output").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1314, "check.map.key.output")
                             .at(spec.pos()).args(spec.name(), Type.show(bad))
                             .hint("check.map.key.output.hint").build(),
                     "behavior `" + spec.name() + "` outputs a Map keyed by " + Type.show(bad)

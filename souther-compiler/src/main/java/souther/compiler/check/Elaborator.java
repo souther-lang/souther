@@ -84,7 +84,7 @@ public final class Elaborator {
                 ? "check.map.key.function" : "check.set.function";
         String what = bad instanceof TypeOps.UncomparableIn.MapKey ? "key" : "element";
         throw CompileException.of(
-                Diagnostic.uncoded(key).title("check.boundary.title")
+                Diagnostic.of(DiagnosticCode.E1315, key)
                         .at(c.pos()).args(Type.show(bad.type())).build(),
                 "this collection would have to compare " + Type.show(bad.type()) + " as its " + what
                         + ", and a function has no value to compare");
