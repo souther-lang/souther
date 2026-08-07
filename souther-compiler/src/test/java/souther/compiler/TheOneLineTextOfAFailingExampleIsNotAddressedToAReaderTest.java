@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 /**
  * The one-line text a failing example is thrown with is the English catalog text, and stays it.
  *
- * <p>That text is what {@code getMessage()} answers. No surface prints it — the exception carries a
+ * <p>That text is the body {@code getMessage()} is built from, under the position and code it puts
+ * in front. No surface prints it — the exception carries a
  * diagnostic per failing row, and the CLI, the annotation processor and the LSP all render those —
  * so what reads it is a caller holding the exception: a test, or something embedding the compiler.
  * Which is why it is not the reader's language: there is no reader here to have one.

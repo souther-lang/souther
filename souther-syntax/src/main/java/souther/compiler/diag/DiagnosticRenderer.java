@@ -41,7 +41,8 @@ public interface DiagnosticRenderer {
     }
 
     /**
-     * The one-line text a {@code CompileException} carries for {@code getMessage()}.
+     * The body a {@code CompileException} builds its {@code getMessage()} from — that text with
+     * the position and the code put in front of it.
      *
      * <p>There is no language to pass. An adapter prints that text only for an exception carrying no
      * diagnostic, and the two sites that build this always supply one, so nothing rendering for a
@@ -56,6 +57,7 @@ public interface DiagnosticRenderer {
 
     /** The message body, from the catalog key or the compatibility literal. */
     static String body(Diagnostic d, Locale locale) {
+        java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
         if (d.literalMessage() != null) {
             return d.literalMessage();
         }

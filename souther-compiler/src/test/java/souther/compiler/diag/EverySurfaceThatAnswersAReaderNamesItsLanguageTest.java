@@ -7,8 +7,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,21 +35,30 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * The layer offers the resolution; naming which surface uses it is the surface's own line. This test
  * is where they are enumerated, so a new one is a line here rather than a fact nobody wrote down.
  *
- * <p>A tripwire and not a proof, like the machine-locale test next door: it reads the sources, and a
- * helper in between defeats it. What it does hold is the reading that would have to be added first.
+ * <p>A tripwire and not a proof, like the machine-locale test next door. What it reads is the source
+ * text, so a locale arriving through a helper, a field of another class, or a method parameter is
+ * invisible to it — what it holds is the spelling that would have to be written first, at the file
+ * where it would be written. The rest is held by the shape of the API: a message lookup refuses a
+ * null locale, so there is no way to be answered in a language without naming one.
  */
 class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
 
-    /** The ways a source picks a language for a diagnostic. {@code Locale.ROOT} is not one of them:
-     *  it is case folding, which is about the bytes and not about a reader. */
-    private static final List<String> PICKING = List.of(
-            "Messages.resolveLocale(",
-            "Messages.defaultLocale()",
-            "Locale.ENGLISH",
-            "Locale.JAPANESE",
-            "Locale.JAPAN",
-            "Locale.forLanguageTag(",
-            "Locale.of(");
+    /**
+     * The ways a source picks a language for a diagnostic: the resolution, and every way a
+     * {@link Locale} is produced — any of the constants, either factory, and the constructors.
+     *
+     * <p>Named as a shape rather than as a list of the ones in use, because a list is only as
+     * complete as whoever wrote it: {@code Locale.US} is as direct a choice as {@code Locale.ENGLISH}
+     * and would have to be thought of to be listed.
+     *
+     * <p>{@code Locale.ROOT} is not one of them. It is case folding, which is about the bytes and
+     * not about a reader.
+     */
+    private static final Pattern PICKING = Pattern.compile(
+            "Messages\\.resolveLocale\\(|Messages\\.defaultLocale\\(\\)"
+                    + "|new Locale(?:\\.Builder)?\\b"
+                    + "|Locale\\.of\\(|Locale\\.forLanguageTag\\("
+                    + "|Locale\\.(?!ROOT\\b)[A-Z][A-Z_]+");
 
     /** The resolution itself lives here, so this file names languages as its subject matter. */
     private static final String RESOLVER = "souther/compiler/diag/Messages.java";
@@ -79,13 +93,13 @@ class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
                 continue;
             }
             String text = Files.readString(source, StandardCharsets.UTF_8);
-            for (String picking : PICKING) {
-                int count = occurrences(text, picking);
-                if (count > 0) {
-                    picks.add(path + " picks " + picking
-                            + (count == 1 ? "" : " (" + count + " times)"));
-                }
+            Map<String, Integer> counts = new TreeMap<>();
+            Matcher found = PICKING.matcher(text);
+            while (found.find()) {
+                counts.merge(found.group(), 1, Integer::sum);
             }
+            counts.forEach((spelling, count) -> picks.add(path + " picks " + spelling
+                    + (count == 1 ? "" : " (" + count + " times)")));
         }
 
         assertEquals(new TreeSet<>(NAMED), picks,
@@ -93,13 +107,5 @@ class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
                         + " that names one picks it more than once. A surface answers a reader and"
                         + " says which reader, in one place; everything else is handed the language"
                         + " rather than choosing it.");
-    }
-
-    private static int occurrences(String text, String needle) {
-        int count = 0;
-        for (int at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + needle.length())) {
-            count++;
-        }
-        return count;
     }
 }

@@ -146,8 +146,8 @@ public final class ExampleVerifier {
                 : failures.size() + " examples do not hold; " + legacyOf(first);
     }
 
-    /** A one-line message for a failing example: what {@code getMessage()} answers on the exception
-     * these are thrown in. No surface prints it — the CLI, the annotation processor and the LSP all
+    /** A one-line message for a failing example: the body {@code getMessage()} is built from on the
+     * exception these are thrown in. No surface prints it — the CLI, the annotation processor and the LSP all
      * render the diagnostics, which this exception carries — so what reads it is a caller holding
      * the exception, and it takes no language for the same reason
      * {@link DiagnosticRenderer#legacyBody} does not. */

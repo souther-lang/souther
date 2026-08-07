@@ -83,7 +83,7 @@ the adapter's own option, and a layer holding the list would know every adapter 
 question each of them can answer for itself. What the layer does hold is that each surface answers
 once — a surface picking a language twice has no policy, only two sites that happened to agree.
 
-The one-line text a `CompileException` carries for `getMessage()` is not one of them and takes no
+The one-line body a `CompileException` builds its `getMessage()` from is not one of them and takes no
 language at all. No adapter prints it while the exception carries a diagnostic, and the sites that
 build it always supply one, so it is read by callers holding the exception rather than by anyone it
 is written for. What it has to do is not change when the language a reader is answered in is decided
@@ -92,6 +92,13 @@ to *which language when nobody named one*, so a text that reads it moves wheneve
 again, and the text of a failing example was Japanese for that reason and no other. `legacyBody` now
 builds it and takes no locale, and `defaultLocale()` is private — the resolution's own last step,
 reachable only from the resolution.
+
+Which means no locale has to stop meaning the default one. A message lookup used to read a null
+locale as the default, which is the same reach spelled so that nothing looking for a locale being
+chosen would see it: a site with no reader to resolve for passes nothing and is answered out of the
+language chosen for readers who named none. So `Messages.get`, `Messages.has` and
+`DiagnosticRenderer.body` refuse a null locale. A caller has either resolved a language for a reader
+or is building a text that has no reader, and there is a way to say each.
 
 ## Context
 
