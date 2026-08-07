@@ -190,7 +190,7 @@ final class HelperParams {
                                     p.pos()),
                             p.typeFromPattern()));
         }
-        return new Ast.FnDef(h.written(), params, h.declaredReturn(), h.body(),
+        return new Ast.FnDef(h.written(), h.declaredIn(), params, h.declaredReturn(), h.body(),
                 h.modifiers(), h.pos());
     }
 

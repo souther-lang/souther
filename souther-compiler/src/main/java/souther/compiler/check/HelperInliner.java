@@ -276,7 +276,7 @@ public final class HelperInliner {
         }
         forEachExampleExpr(module, e -> collectHelperCalls(e, named));
         for (String name : graph.reachedFrom(named)) {
-            if (graph.recurses(name) && !table.declares(name)) {
+            if (graph.recurses(name) && !table.holds(name)) {
                 referencedPreludeRecursive.add(name);
             }
         }
@@ -366,12 +366,11 @@ public final class HelperInliner {
     public Map<String, Ast.FnDef> injectedExampleHelpers() {
         Map<String, Ast.FnDef> out = new java.util.LinkedHashMap<>();
         for (String name : exampleHelpers) {
-            if (table.declares(name)) {
+            if (table.holds(name)) {
                 continue;
             }
             Ast.FnDef def = table.reached(name);
-            out.put(name, new Ast.FnDef(name, def.params(), def.declaredReturn(),
-                    def.body(), def.modifiers(), def.pos()));
+            out.put(name, def.reachedAs(name));
         }
         return out;
     }
@@ -383,7 +382,7 @@ public final class HelperInliner {
     public Set<String> recursiveHelpers() {
         Set<String> result = new java.util.LinkedHashSet<>();
         for (String name : graph.recursive()) {
-            if (table.declares(name)) {
+            if (table.holds(name)) {
                 result.add(name);
             }
         }
@@ -398,16 +397,22 @@ public final class HelperInliner {
         Map<String, Ast.FnDef> out = new java.util.LinkedHashMap<>();
         for (String qualified : referencedPreludeRecursive) {
             Ast.FnDef def = table.reached(qualified);
-            out.put(qualified, new Ast.FnDef(qualified, def.params(), def.declaredReturn(),
-                    def.body(), def.modifiers(), def.pos()));
+            out.put(qualified, def.reachedAs(qualified));
         }
         return out;
     }
 
-    /** The module's own helper fns, keyed by name (for the standalone signature check). The
-     * auto-imported prelude helpers are excluded — they are validated once, on their own. */
+    /**
+     * The module's helper fns, keyed by the name it reaches each of them by — what it declared, and
+     * what it took on to emit as a method of its own.
+     *
+     * <p>Both, because both are emitted here and both are checked here. Which module declared one is
+     * not read off this map or off the key: the declaration says it
+     * ({@link Ast.FnDef#declaredBy}), and a check whose rule is about the declaring module — what
+     * may be walked, what must be proven total — asks it there.
+     */
     public Map<String, Ast.FnDef> helpers() {
-        return table.own();
+        return table.fns();
     }
 
     /**
@@ -428,10 +433,9 @@ public final class HelperInliner {
     public Ast.FnDef closeAcross(Ast.FnDef fn, String module) {
         Ast.Expr closed = graph.recurses(fn.name())
                 ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
-        return new Ast.FnDef(HelperNames.qualified(module, fn.name()), fn.params(), fn.declaredReturn(),
-                new Ast.FnBody.Written(
-                        HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)),
-                fn.modifiers(), fn.pos());
+        return fn.reachedAs(HelperNames.qualified(module, fn.name()))
+                .withBody(new Ast.FnBody.Written(
+                        HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)));
     }
 
     /** The module these helpers belong to — what {@link HelperNames#keyIn} compares a name's
@@ -928,7 +932,7 @@ public final class HelperInliner {
                 }
                 BindingId bound = li.binder().id();
                 writing.scopedLambdas().put(bound, new ScopedLambda(
-                        new Ast.FnDef(li.name(), params, null,
+                        Ast.FnDef.lambda(li.name(), params, null,
                                 new Ast.FnBody.Written(lambda.body()), li.pos())));
                 Ast.Expr body = inline(li.body());
                 writing.scopedLambdas().remove(bound);
@@ -1129,7 +1133,7 @@ public final class HelperInliner {
                     // the lambda's body is caller code, so it is not renamed by this helper's
                     // substitution — only the enclosing helper body is.
                     writing.scopedLambdas().put(f.id(), new ScopedLambda(
-                            new Ast.FnDef(f.name(), lparams,
+                            Ast.FnDef.lambda(f.name(), lparams,
                                     declares == null ? null : declares.result(),
                                     new Ast.FnBody.Written(lambda.body()), lambda.pos()),
                             new LambdaOrigin(p.name(), helper.name(), lambda.pos())));
@@ -1628,7 +1632,7 @@ public final class HelperInliner {
         }
         // by the name it is reached by here, which for another module's value is the qualified one
         String reached = spread.name();
-        Ast.FnDef value = table.own().get(reached);
+        Ast.FnDef value = table.fns().get(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reached) ? null : value;
     }

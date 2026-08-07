@@ -71,8 +71,7 @@ public final class Lower {
         Ast.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
-        return new Ast.FnDef(fn.written(), fn.params(), fn.declaredReturn(),
-                new Ast.FnBody.Written(desugar(expanded)), fn.modifiers(), fn.pos());
+        return fn.withBody(new Ast.FnBody.Written(desugar(expanded)));
     }
 
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A

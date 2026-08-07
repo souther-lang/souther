@@ -299,8 +299,8 @@ public final class Resolve {
             case Ast.FnBody.Written w -> new Ast.FnBody.Written(expr(w.expr(), bound));
             case Ast.FnBody.Intrinsic i -> i;
         };
-        return new Ast.FnDef(f.written(), params, retType(f.declaredReturn()), body, f.modifiers(),
-                f.pos());
+        return new Ast.FnDef(f.written(), f.declaredIn(), params, retType(f.declaredReturn()), body,
+                f.modifiers(), f.pos());
     }
 
     // --- written types ---

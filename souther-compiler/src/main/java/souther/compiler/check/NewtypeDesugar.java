@@ -35,8 +35,7 @@ public final class NewtypeDesugar {
                 case Ast.FnBody.Written w -> new Ast.FnBody.Written(go(w.expr(), symbols));
                 case Ast.FnBody.Intrinsic i -> i;
             };
-            fns.add(new Ast.FnDef(fn.written(), fn.params(), fn.declaredReturn(), body, fn.modifiers(),
-                    fn.pos()));
+            fns.add(fn.withBody(body));
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 m.defs(), m.behaviors(), fns, m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());

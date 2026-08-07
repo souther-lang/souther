@@ -33,20 +33,28 @@ import java.util.TreeSet;
  * {@link souther.compiler.codegen.Backend#BOUNDARY_VERSION} records — an unmarked published helper
  * summarises its whole call closure, so a reader never walks it.
  *
- * <p>Two things are asked of a declaration rather than of this graph, because a soundness rule may not
- * rest on what building the graph happened to visit. Whether a name is {@code partial} is read off the
- * declaration it reaches, not off a set collected on the way — a clause names what it names, whether
- * or not a helper of this module names it too. And which declaration a name reaches is read off what
- * the name denotes ({@link HelperNames#keyIn}), not off how it was spelled, so the answer is the same
- * before and after the pass that writes an imported name out qualified.
+ * <p>Which of the two a helper is comes from its declaration. A module emits the recursive helpers it
+ * reaches as its own methods, so an imported one sits in this module's fns under a name of the same
+ * shape as the module's own; the declaration is the only thing that still says who wrote it
+ * ({@link Ast.FnDef#declaredBy}). Deciding it any other way is deciding it by spelling, and this is a
+ * rule about which module carries the guarantee.
+ *
+ * <p>Three things are asked of a declaration rather than of this graph, because a soundness rule may
+ * not rest on what building the graph happened to visit. Whether a name is {@code partial} is read off
+ * the declaration it reaches, not off a set collected on the way — a clause names what it names,
+ * whether or not a helper of this module names it too. And which declaration a name reaches is read
+ * off what the name denotes ({@link HelperNames#keyIn}), not off how it was spelled, so the answer is
+ * the same before and after the pass that writes an imported name out qualified.
  *
  * <p>A path is the shortest one, found breadth-first with each node's callees taken in name order, so
  * the same module always reports the same path.
  */
 final class PartialReachability {
 
-    /** Module-own helper -> the helpers it reaches, in name order. A name absent as a key is a
-     * terminal: an imported or prelude helper, whose declaration answers for its own closure. */
+    /** A helper this module declared -> the helpers it reaches, in name order. A name absent as a
+     * key is a terminal: an imported or prelude helper, whose declaration answers for its own
+     * closure. Which of the two a name is comes from the declaration and not from the name, since a
+     * module's fns hold both under names of one shape. */
     private final Map<String, List<String>> calls;
 
     private final HelperInliner inliner;
@@ -59,6 +67,13 @@ final class PartialReachability {
     static PartialReachability of(HelperInliner inliner) {
         Map<String, List<String>> calls = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.FnDef> entry : inliner.helpers().entrySet()) {
+            // Only what this module declared is a node. What it took on to emit — a prelude helper,
+            // one another module published — is a terminal, because its declaration already answers
+            // for its whole closure (ADR-0098). It is in the same map and under a name of the same
+            // shape, so the declaration is what tells the two apart.
+            if (!entry.getValue().declaredBy(inliner.moduleName())) {
+                continue;
+            }
             if (entry.getValue().body() instanceof Ast.FnBody.Written written) {
                 calls.put(entry.getKey(), reachedBy(written.expr(), inliner));
             }

@@ -47,9 +47,7 @@ public final class HelperNames {
         List<Ast.FnDef> fns = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
             fns.add(fn.body() instanceof Ast.FnBody.Written w
-                    ? new Ast.FnDef(fn.written(), fn.params(), fn.declaredReturn(),
-                            new Ast.FnBody.Written(qualifyForeign(w.expr(), m.name())),
-                            fn.modifiers(), fn.pos())
+                    ? fn.withBody(new Ast.FnBody.Written(qualifyForeign(w.expr(), m.name())))
                     : fn);
         }
         List<Ast.Def> defs = qualifiedInvariants(m);
@@ -265,6 +263,12 @@ public final class HelperNames {
      * that keyed by the spelling would answer differently on either side of that pass — silently,
      * because a miss is what a table does with a key it has not got. The pair (module, name) is what
      * the definition is (ADR-0072), so it is what a table of definitions is asked with.
+     *
+     * <p>What comes back is a key and not an identity. It names a definition only within the module it
+     * was asked for, and it does not hold the module the definition came from: a library helper is
+     * reached under the library's alias, so {@code List.foldFrom} is what {@code souther.list}'s
+     * {@code foldFrom} is keyed as here. A reader that needs the declaring module asks the declaration
+     * ({@link Ast.FnDef#declaredBy}) rather than reading this back.
      */
     public static String keyIn(String module, ValueName.Helper helper) {
         return helper.module().equals(module) ? helper.name() : qualified(helper.module(), helper.name());

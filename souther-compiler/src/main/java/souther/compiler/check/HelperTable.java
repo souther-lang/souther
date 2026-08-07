@@ -21,9 +21,17 @@ import java.util.Map;
  * it is reached by here. A qualified call resolves to whichever of the two declared it, a bare call
  * to the module's own — the standard library has no bare names (spec §stdlib).
  *
- * <p>{@link #own} keeps the order the module wrote its helpers in, and that is load-bearing: the
+ * <p>{@link #fns} keeps the order the module wrote its helpers in, and that is load-bearing: the
  * checks walk it and stop at the first helper they find wrong, so the order decides which one the
  * author is told about. An author reads their file from the top.
+ *
+ * <p>What is in {@link #fns} is what the module <em>has as a fn</em>, which is not the same as what
+ * it declared. A module emits the recursive helpers it reaches as its own methods, so from
+ * {@code Shapes.Prepared} on, a prelude {@code List.foldFrom} and a helper another module published
+ * sit there beside the module's own {@code let}s. Nothing here answers which module declared one:
+ * the declaration answers that ({@link Ast.FnDef#declaredBy}), because the name it is reached by
+ * cannot — {@code List.foldFrom} is reached under the library's alias and declared in
+ * {@code souther.list}.
  *
  * <p>What is in the table depends on {@link InliningPolicy}, which is what an expanded tree is a
  * representation <em>of</em>. Two policies are two tables and not one table read two ways.
@@ -115,13 +123,15 @@ public final class HelperTable {
         return Collections.unmodifiableMap(reached);
     }
 
-    /** The module's own helpers, in the order it wrote them. */
-    public Map<String, Ast.FnDef> own() {
+    /** The module's helpers, in the order it wrote them — what it declared, and what it took on as
+     * its own fns to emit. Which of the two one is, the declaration says. */
+    public Map<String, Ast.FnDef> fns() {
         return Collections.unmodifiableMap(own);
     }
 
-    /** Whether the module declares {@code name} itself. */
-    public boolean declares(String name) {
+    /** Whether the module has {@code name} as a fn of its own — one it declared, or one it took on
+     * to emit. Not whether it declared it: for that, ask the declaration. */
+    public boolean holds(String name) {
         return own.containsKey(name);
     }
 

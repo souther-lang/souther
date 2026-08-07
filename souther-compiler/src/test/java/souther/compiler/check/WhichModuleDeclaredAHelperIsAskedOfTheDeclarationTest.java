@@ -1,0 +1,169 @@
+package souther.compiler.check;
+
+import souther.compiler.Prelude;
+import souther.compiler.ast.Ast;
+import souther.compiler.diag.CompileException;
+import souther.compiler.frontend.CstFrontend;
+import souther.compiler.types.ValueName;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Which module declared a helper is read off the declaration, never off the name it is reached by.
+ *
+ * <p>The two used to be one question. A module emits the recursive helpers it reaches as its own
+ * methods, under the names it reaches them by, so from that point its fns hold declarations of
+ * several modules side by side — and the only thing left saying which was which was the dot the
+ * qualified name was joined with. Every rule about the declaring module was then a rule about the
+ * spelling: the totality check may only require a descent of what this module wrote (ADR-0098), and
+ * it asked whether the name had a dot in it.
+ *
+ * <p>No source can spell the two apart — an identifier holds no dot — so the tables below are built
+ * where a table is built rather than compiled from a file. Each is a shape the pipeline produces: a
+ * published closure is keyed and named qualified by the module that declares it, and an imported
+ * helper arrives under whatever name the reader reaches it by.
+ */
+class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
+
+    private static Ast.Module resolved(String source) {
+        Ast.Module parsed = CstFrontend.parse(source);
+        return Resolve.module(parsed, Symbols.of(parsed));
+    }
+
+    /** {@code source} resolved with {@code imported} (bare name -> declaring module) reachable, which
+     * is what the query layer hands a module that writes an {@code import}. */
+    private static Ast.Module resolved(String source, Map<String, String> imported) {
+        Ast.Module parsed = CstFrontend.parse(source);
+        Map<String, ValueName.Helper> helpers =
+                new LinkedHashMap<>(Resolve.Values.of(parsed).helpers());
+        imported.forEach((bare, module) -> helpers.put(bare, new ValueName.Helper(module, bare)));
+        Resolve.Resolved answered = Resolve.resolving(parsed, Symbols.of(parsed),
+                new Resolve.Values(parsed.name(), helpers, Map.of(), Map.of()));
+        if (!answered.unresolved().isEmpty()) {
+            throw answered.unresolved().get(0);
+        }
+        return answered.module();
+    }
+
+    /** A module declaring one recursive helper that descends on nothing. */
+    private static Ast.FnDef spinOf(String module) {
+        Ast.Module m = resolved("module " + module + "\n\nlet spin (n: Int) : Int = spin(n)\n");
+        return HelperInliner.helpersOf(m).get("spin");
+    }
+
+    private static void check(String module, Map<String, Ast.FnDef> fns) {
+        HelperTable table = HelperTable.of(module, fns, Map.of(), InliningPolicy.FULL);
+        TotalityChecker.check(HelperInliner.over(table, HelperGraph.of(table)));
+    }
+
+    /**
+     * A helper the module declared, filed under a qualified name — the shape a published body is
+     * closed into, read back in the module that wrote it. Its descent is still required.
+     *
+     * <p>Reading the dot skips this, and skipping it is accepting a recursion nobody proved.
+     */
+    @Test
+    void aQualifiedNameIsNotAnExemption() {
+        Ast.FnDef own = spinOf("maths");
+        HelperInliner maths = HelperInliner.forHelpers("maths", Map.of("spin", own));
+        Ast.FnDef closed = maths.closeAcross(own, "maths");
+
+        assertEquals("maths.spin", closed.name());
+        assertEquals("maths", closed.declaredIn());
+
+        CompileException refused = assertThrows(CompileException.class,
+                () -> check("maths", Map.of(closed.name(), closed)));
+        assertEquals("E2001", refused.code());
+    }
+
+    /**
+     * A helper another module declared, reached here under a bare name. Its descent is not this
+     * module's to require: the module that wrote it required it there, and an unmarked published
+     * helper answers for its whole closure (ADR-0098).
+     *
+     * <p>Reading the dot checks this one, and a rejection here names a definition the author of this
+     * module never wrote.
+     */
+    @Test
+    void aBareNameIsNotADeclaration() {
+        Ast.FnDef foreign = spinOf("maths");
+
+        assertEquals("spin", foreign.name());
+        assertEquals("maths", foreign.declaredIn());
+
+        assertDoesNotThrow(() -> check("order", Map.of(foreign.name(), foreign)));
+    }
+
+    /**
+     * A helper this module took on to emit is a terminal in the {@code partial}-reachability graph:
+     * what it reaches is answered by the module that declared it (ADR-0098), so this one does not
+     * walk its body.
+     *
+     * <p>Trust is only visible against something it would otherwise have caught, so {@code wrapped}
+     * below is unmarked and reaches a {@code partial} helper — which the module declaring it rejects.
+     * That is what a module published under an older boundary version can look like
+     * ({@link souther.compiler.codegen.Backend#BOUNDARY_VERSION}), and where the rule says the reader
+     * does not re-derive it, the reader must not report it either.
+     */
+    @Test
+    void aHelperTakenOnToEmitIsATerminal() {
+        Ast.Module maths = resolved("""
+                module maths exposing ( wrapped )
+
+                partial let spin (n: Int) : Int = spin(n)
+                let wrapped (n: Int) : Int = spin(n)
+                """);
+        Map<String, Ast.FnDef> declared = HelperInliner.helpersOf(maths);
+        HelperInliner from = HelperInliner.forHelpers("maths", declared);
+        Ast.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
+        Ast.FnDef wrapped = from.closeAcross(declared.get("wrapped"), "maths");
+
+        Ast.Module order = resolved("""
+                module order
+
+                import maths ( wrapped, spin )
+
+                let throughWrapped (n: Int) : Int = wrapped(n)
+                let straightToSpin (n: Int) : Int = spin(n)
+                """, Map.of("wrapped", "maths", "spin", "maths"));
+        Map<String, Ast.FnDef> fns = new LinkedHashMap<>(HelperInliner.helpersOf(order));
+        fns.put(spin.name(), spin);
+        fns.put(wrapped.name(), wrapped);
+        HelperTable table = HelperTable.of("order", fns, Map.of(), InliningPolicy.FULL);
+        PartialReachability reachability =
+                PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
+
+        // `wrapped` is unmarked, and what it reaches is the module that declared it to answer for.
+        assertEquals(Optional.empty(), reachability.fromHelper("maths.wrapped"));
+        assertEquals(Optional.empty(), reachability.fromHelper("throughWrapped"));
+        // The rule stops at the boundary rather than everywhere: a `partial` helper of another
+        // module is still one, and what this module wrote is still walked to find it.
+        assertEquals(Optional.of(List.of("straightToSpin", "maths.spin")),
+                reachability.fromHelper("straightToSpin"));
+    }
+
+    /**
+     * The library's own case, and the reason the name cannot be asked at all: a prelude helper is
+     * reached under the library's alias and declared in the module the source says. {@code List} is
+     * not {@code souther.list}, so the module a name came from is not in the name — the dot only ever
+     * said that there was one.
+     */
+    @Test
+    void theNameAHelperIsReachedByDoesNotHoldTheModuleThatWroteIt() {
+        Ast.FnDef foldFrom = Prelude.helpers().get("List.foldFrom");
+
+        assertEquals("souther.list", foldFrom.declaredIn());
+        assertTrue(foldFrom.declaredIn().startsWith("souther."));
+        assertEquals("souther.list", foldFrom.reachedAs("List.foldFrom").declaredIn());
+    }
+}

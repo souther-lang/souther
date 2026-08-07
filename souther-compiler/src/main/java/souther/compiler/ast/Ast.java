@@ -412,31 +412,72 @@ public interface Ast {
      * return type and names a primitive: {@code let trim (s: String): String = intrinsic
      * "string.trim"} — its body is {@link FnBody.Intrinsic}, written only in the {@code souther}
      * namespace. What the modifiers say is in {@link Modifiers}.
+     *
+     * <p>{@code declaredIn} is the module that wrote the {@code let}, and it is written once, where
+     * the source is parsed. Every pass after that copies it. It is here because a module emits the
+     * recursive helpers it reaches as its own methods, under the names it reaches them by, so from
+     * that point a module's fns are declarations of several modules under one set of names — and
+     * which module declared one decides what may be checked of it (ADR-0098). The name cannot answer
+     * that: {@code List.foldFrom} is reached under the library's alias and declared in
+     * {@code souther.list}.
+     *
+     * <p>Null says this is not a module-level declaration at all — a block standing where a function
+     * goes, which has parameters and a body so that applying it expands like a call. It does not say
+     * "from somewhere else": a helper this module took on to emit was written by some module and says
+     * which, and every rule here reads that rather than the absence. Anything a later pass mints that
+     * <em>is</em> a declaration says which module it belongs to, so that these stay one question.
      */
-    record FnDef(WrittenName written, List<FnParam> params, RetType declaredReturn, FnBody body,
-                 Modifiers modifiers, SourcePos pos) implements Ast {
+    record FnDef(WrittenName written, String declaredIn, List<FnParam> params,
+                 RetType declaredReturn, FnBody body, Modifiers modifiers, SourcePos pos)
+            implements Ast {
         /** A fn with no modifier (the common case; totality-checked if recursive, published). */
-        public FnDef(WrittenName written, List<FnParam> params, RetType declaredReturn, FnBody body,
-                     SourcePos pos) {
-            this(written, params, declaredReturn, body, Modifiers.NONE, pos);
+        public FnDef(WrittenName written, String declaredIn, List<FnParam> params,
+                     RetType declaredReturn, FnBody body, SourcePos pos) {
+            this(written, declaredIn, params, declaredReturn, body, Modifiers.NONE, pos);
         }
 
-        /** A fn a pass wrote — an expanded copy, a helper filed under its module's qualifier —
-         * named but written nowhere the author would recognise. */
-        public FnDef(String name, List<FnParam> params, RetType declaredReturn, FnBody body,
-                     Modifiers modifiers, SourcePos pos) {
-            this(WrittenName.synthetic(name, pos), params, declaredReturn, body, modifiers, pos);
+        /** A block standing where a function goes, which no module declares: a lambda a binding
+         * holds, one handed to a function parameter. It has parameters and a body like a
+         * declaration, which is what lets an application of it expand like a call, and it is
+         * declared by nobody, which is what {@link #declaredIn} says of it. */
+        public static FnDef lambda(String name, List<FnParam> params, RetType declaredReturn,
+                                   FnBody body, SourcePos pos) {
+            return new FnDef(WrittenName.synthetic(name, pos), null, params, declaredReturn, body,
+                    Modifiers.NONE, pos);
         }
 
-        /** The same, with no modifier. */
-        public FnDef(String name, List<FnParam> params, RetType declaredReturn, FnBody body,
-                     SourcePos pos) {
-            this(name, params, declaredReturn, body, Modifiers.NONE, pos);
+        /**
+         * The same declaration under the name a module reaches it by.
+         *
+         * <p>The one way a declaration is renamed. A module emits a recursive helper it reaches as
+         * one of its own methods, under the name it reaches it by ({@code List.foldFrom},
+         * {@code maths.spin}), and that name is not where the declaration came from:
+         * {@code List.foldFrom} is reached under the library's alias and declared in
+         * {@code souther.list}, so the module it came from cannot be read back out of it. Renaming
+         * here carries {@link #declaredIn} across rather than restating it, so no caller is in a
+         * position to pair a name with an origin that is not its own.
+         */
+        public FnDef reachedAs(String name) {
+            return new FnDef(WrittenName.synthetic(name, pos), declaredIn, params, declaredReturn,
+                    body, modifiers, pos);
+        }
+
+        /** The same declaration with {@code replacement} in place of its body. */
+        public FnDef withBody(FnBody replacement) {
+            return new FnDef(written, declaredIn, params, declaredReturn, replacement, modifiers,
+                    pos);
         }
 
         /** What the fn is called. */
         public String name() {
             return written.canonical();
+        }
+
+        /** Whether {@code module} is the module that declared this. Asked of the declaration, so a
+         * helper another module published answers for the module that wrote it however the module
+         * reading it happens to reach it. A lambda is declared by no module and answers no. */
+        public boolean declaredBy(String module) {
+            return declaredIn != null && declaredIn.equals(module);
         }
 
         /** Whether the definition opts out of the totality check. */
