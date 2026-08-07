@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourcePos;
 
@@ -23,8 +24,8 @@ class PreludeValueDeclaresItsTypeTest {
     @Test
     void aValueWithoutAWrittenTypeIsRefusedAtLoad() {
         SourcePos at = new SourcePos(1, 1);
-        Ast.FnDef value = new Ast.FnDef("someValue", List.of(), null,
-                new Ast.FnBody.Written(new Ast.IntLit(0, at)), at);
+        Ast.FnDef value = new Ast.FnDef(WrittenName.synthetic("someValue", at), "souther.list",
+                List.of(), null, new Ast.FnBody.Written(new Ast.IntLit(0, at)), at);
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> Prelude.signatureOf(value, "List.someValue", Symbols.none()));

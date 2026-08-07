@@ -32,9 +32,10 @@ import java.util.Set;
  * lexicographic recursion. A {@code partial} helper opts out (it is not checked and may not terminate);
  * if any member of a mutually-recursive group is {@code partial} the whole group is skipped — a cycle
  * through an unchecked member cannot be certified, so its other members are not independently certified
- * either. The stdlib's {@code List.foldFrom} (index recursion) is trusted total and exempt — only
- * bare-named module-own helpers are checked. Numeric ({@code n - 1}) and index ({@code i + 1})
- * recursion are not structural (Souther has no inductive {@code Nat}) and must be {@code partial}.
+ * either. The stdlib's {@code List.foldFrom} (index recursion) is trusted total and exempt — only the
+ * helpers this module declared are checked, whatever else it emits beside them. Numeric
+ * ({@code n - 1}) and index ({@code i + 1}) recursion are not structural (Souther has no inductive
+ * {@code Nat}) and must be {@code partial}.
  */
 final class TotalityChecker {
 
@@ -54,9 +55,12 @@ final class TotalityChecker {
         Set<String> handled = new HashSet<>();
         for (String name : inliner.recursiveHelpers()) {
             Ast.FnDef h = own.get(name);
-            // A qualified name (`List.foldFrom`) is a prelude recursive helper injected into the module
-            // (trusted total); only bare-named user helpers are checked.
-            if (h == null || name.indexOf('.') >= 0) {
+            // Only what this module declared is checked. A recursive helper it took on to emit — a
+            // prelude `List.foldFrom`, one another module published — carries its declaring module's
+            // guarantee (ADR-0098), and its own module proved it. Asked of the declaration: the name
+            // it is reached by here says nothing about who wrote it, and `List.foldFrom` does not
+            // even hold the module it came from.
+            if (h == null || !h.declaredBy(inliner.moduleName())) {
                 continue;
             }
             Set<String> group = cycleMembers(name, ownEdges);   // the strongly-connected group (>= 1)

@@ -253,9 +253,11 @@ public final class Shapes {
             // where it is found, and this module is not compiled either way.
             Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
             // An imported definition is written here bare and denotes the module that declares it.
-            // Spelling it that way, once, is what lets everything downstream — the table a call
-            // expands against, the method a recursive helper becomes — read the identity by reading
-            // the name.
+            // Spelling it out, once, settles the name this module reaches it by, which is what the
+            // table a call expands against is keyed by and what the method a recursive helper becomes
+            // is called. It settles nothing about where the definition came from: the fns below hold
+            // declarations of several modules under names of one shape, and which module wrote each is
+            // carried on the declaration (Ast.FnDef.declaredIn).
             Ast.Module m = HelperNames.qualifyImports(desugared.value());
             try {
                 HelperInliner inliner = HelperInliner.forModule(m, published);

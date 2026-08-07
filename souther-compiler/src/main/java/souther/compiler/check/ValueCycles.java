@@ -44,12 +44,12 @@ public final class ValueCycles {
     public static void rejectIn(Ast.Module m, Map<String, Ast.FnDef> published) {
         HelperTable table = HelperTable.of(m, published, InliningPolicy.FULL);
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> e : table.own().entrySet()) {
+        for (Map.Entry<String, Ast.FnDef> e : table.fns().entrySet()) {
             Set<String> called = new LinkedHashSet<>();
             HelperInliner.helperCallsIn(e.getValue().writtenBody(), table.reachable(), called);
             callsOf.put(e.getKey(), called);
         }
-        reject(table.own(), callsOf);
+        reject(table.fns(), callsOf);
     }
 
     /**
