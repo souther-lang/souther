@@ -6,6 +6,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
     void aPolymorphicOperationSettlesItsVariablesFromItsArguments() {
         // List.length : (List<'a>) -> Int — the argument decides 'a, and the result is not a variable
         Ast.Expr call = new Ast.Apply("List.length", new ValueName.Stdlib("List", "length"),
+                new ReachName.OfLibrary(new ValueName.Stdlib("List", "length")),
                 List.of(new Ast.ListLit(List.of(new Ast.IntLit(1, POS)), POS)),
                 ConstructionOrigin.own(), POS);
 
@@ -55,6 +57,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         Ast.Block step = new Ast.Block(List.of(binders.binder("x", POS)),
                 new Ast.ListLit(List.of(new Ast.IntLit(1, POS)), POS), POS);
         Ast.Expr call = new Ast.Apply("List.flatMap", new ValueName.Stdlib("List", "flatMap"),
+                new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
                 List.of(step, new Ast.ListLit(List.of(new Ast.IntLit(2, POS)), POS)),
                 ConstructionOrigin.own(), POS);
 
@@ -87,7 +90,8 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // nothing could be derived from leaving it standing, so it is expanded — and a tree that
         // still holds one is this compiler having failed to do that
         Ast.Expr call = new Ast.Apply("half", new ValueName.Helper("demo", "half"),
-                List.of(new Ast.IntLit(1, POS)), ConstructionOrigin.own(), POS);
+                new ReachName.Bare("half"), List.of(new Ast.IntLit(1, POS)),
+                ConstructionOrigin.own(), POS);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none()).preserving(KEPT)));

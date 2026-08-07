@@ -8,6 +8,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -593,13 +594,11 @@ public final class Resolve {
      */
     private Ast.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
-            case Ast.Var v -> v.denoting(answered(v.written(), valueName(v.written(), bound)));
+            case Ast.Var v -> reached(v, bound);
             // Applying a name is answered as a name: which of a binding, a helper, a library
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
-            case Ast.Apply call when call.appliesAName() -> new Ast.Apply(call.written(),
-                    answered(call.name(), calledName(call, bound)),
-                    exprs(call.args(), bound), call.origin(), call.pos());
+            case Ast.Apply call when call.appliesAName() -> applied(call, bound);
             case Ast.Apply call -> new Ast.Apply(callee(call.function(), bound),
                     exprs(call.args(), bound), call.origin(), call.pos());
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
@@ -662,7 +661,29 @@ public final class Resolve {
      */
     private Ast.Var name(Ast.Var written, Bindings bound) {
         return written.denotes() != null ? written
-                : written.denoting(answered(written.written(), valueName(written.written(), bound)));
+                : reached(written, bound);
+    }
+
+    /**
+     * {@code v} with what it denotes and the name this module reaches it by, both answered here.
+     *
+     * <p>The two together, and only here: which module is doing the reading is what decides the reach
+     * name, and this pass is the last place that has it. A pass downstream working it out from the
+     * spelling would answer differently depending on which rewrites had run — which is the defect
+     * this carries the answer to avoid.
+     */
+    /** An application of a name, with what the name denotes and how this module reaches it answered
+     * here — the same pair, from the same place, as a name standing on its own. */
+    private Ast.Expr applied(Ast.Apply call, Bindings bound) {
+        ValueName denotes = answered(call.name(), calledName(call, bound));
+        Ast.Var name = new Ast.Var(call.name(), denotes,
+                ReachName.of(denotes, call.written(), values.module()));
+        return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos());
+    }
+
+    private Ast.Var reached(Ast.Var v, Bindings bound) {
+        ValueName denotes = answered(v.written(), valueName(v.written(), bound));
+        return v.denoting(denotes, ReachName.of(denotes, v.name(), values.module()));
     }
 
     private List<Ast.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
@@ -719,6 +740,9 @@ public final class Resolve {
         // A `private` declaration is the exception, and asking about it here is safe for the same
         // reason: the only modules that may name one are the library's own, and they are told yes
         // without the entry being looked up at all.
+        // Split off what the author wrote, which is where a library name enters the compiler as two
+        // values: the qualifier they typed and the operation they asked of it. Nothing downstream
+        // splits it again — from here it is carried as the pair.
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             if (Reserved.isNamespace(values.module()) || !Prelude.isPrivateMember(written)) {
@@ -791,7 +815,9 @@ public final class Resolve {
         WrittenName written = dottedName(fa);
         ValueName denotes = lookup(written.canonical(), applied, bound);
         if (denotes != null) {
-            return new Ast.Var(written, answered(written, denotes));
+            ValueName resolved = answered(written, denotes);
+            return new Ast.Var(written, resolved,
+                    ReachName.of(resolved, written.canonical(), values.module()));
         }
         return unknownMember(fa, written, applied, bound);
     }
@@ -815,7 +841,9 @@ public final class Resolve {
         }
         CompileException why = applied ? notCallable(written, bound)
                 : unknownIdentifier(written, bound);
-        return new Ast.Var(written, answered(written, nothing(written.canonical(), why)));
+        ValueName resolved = answered(written, nothing(written.canonical(), why));
+        return new Ast.Var(written, resolved,
+                ReachName.of(resolved, written.canonical(), values.module()));
     }
 
     /** Whether {@code qualifier} names a namespace a member may be reached through: a

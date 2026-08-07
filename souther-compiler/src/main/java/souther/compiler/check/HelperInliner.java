@@ -8,6 +8,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -488,8 +489,8 @@ public final class HelperInliner {
         for (int supplied : rewrite.supplied()) {
             args.add(new Ast.IntLit(supplied, call.pos()));
         }
-        return new Ast.Apply(rewrite.target().qualified(), rewrite.target(), args,
-                ConstructionOrigin.own(),
+        return new Ast.Apply(rewrite.target().qualified(), rewrite.target(),
+                new ReachName.OfLibrary(rewrite.target()), args, ConstructionOrigin.own(),
                 call.pos());
     }
 
@@ -870,7 +871,7 @@ public final class HelperInliner {
                 // separate slots: the binding is in the callee position, the spelling beside it.
                 yield inline(new Ast.LetIn(f, raw.function(), null, false, null,
                         new Ast.Apply(new Ast.Var(f.name(), new ValueName.Local(f.name(), f.id()),
-                                raw.pos()),
+                                new ReachName.Bare(f.name()), raw.pos()),
                                 raw.args(), raw.origin(), spelling(raw.function()), raw.pos()),
                         raw.pos()));
             }
@@ -1206,8 +1207,8 @@ public final class HelperInliner {
             args.add(Ast.Var.local(p, function.pos()));
         }
         return new Ast.Block(params,
-                new Ast.Apply(function.name(), function.denotes(), args, ConstructionOrigin.own(),
-                        function.pos()),
+                new Ast.Apply(function.name(), function.denotes(), function.reachedAs(), args,
+                        ConstructionOrigin.own(), function.pos()),
                 function.pos());
     }
 
@@ -1442,6 +1443,11 @@ public final class HelperInliner {
         static Substituted of(Ast.Binder binder) {
             return new Substituted(binder.name(), new ValueName.Local(binder.name(), binder.id()));
         }
+
+        /** A binding is reached where it is bound, so its own name is the whole of it. */
+        ReachName reachedAs() {
+            return new ReachName.Bare(name);
+        }
     }
 
     /**
@@ -1643,8 +1649,10 @@ public final class HelperInliner {
     private Ast.Var renameVar(Ast.Var v, Renaming renaming) {
         Substituted stands = renaming.substituted(v.denotes());
         return stands != null
-                ? new Ast.Var(stands.name(), stands.denotes(), renaming.at(v.pos()))
-                : new Ast.Var(v.name(), renaming.copy().of(v.denotes()), renaming.at(v.pos()));
+                ? new Ast.Var(stands.name(), stands.denotes(), stands.reachedAs(),
+                        renaming.at(v.pos()))
+                : new Ast.Var(v.name(), renaming.copy().of(v.denotes()), v.reachedAs(),
+                        renaming.at(v.pos()));
     }
 
     private List<Ast.Expr> renameList(List<Ast.Expr> es, Renaming renaming) {

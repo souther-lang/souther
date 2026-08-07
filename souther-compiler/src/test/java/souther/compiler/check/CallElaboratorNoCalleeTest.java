@@ -7,6 +7,7 @@ import souther.compiler.types.TypeName;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -34,7 +35,7 @@ class CallElaboratorNoCalleeTest {
 
     private static RuntimeException answerFor(ValueName denotes) {
         return CallElaborator.noCallee(
-                new Ast.Apply("f", denotes, List.of(new Ast.IntLit(1, AT)),
+                new Ast.Apply("f", denotes, new ReachName.Bare("f"), List.of(new Ast.IntLit(1, AT)),
                         ConstructionOrigin.own(), AT));
     }
 

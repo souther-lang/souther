@@ -1,9 +1,9 @@
 package souther.compiler;
 
-import souther.compiler.check.HelperNames;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -507,17 +507,19 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
         assertTrue(e.getMessage().contains("offset -> maths.seed"), e.getMessage());
     }
 
-    /** That lookup rule, on its own. A helper of another module is filed under its qualified name and
-     * one of this module's under its bare name, and which of the two a name is depends on what it
-     * denotes. Keying by the spelling would answer differently before and after the pass that writes an
-     * imported name out qualified, and a table answers a key it has not got with silence. */
+    /** That lookup rule, on its own. A helper of another module is reached under its qualified name
+     * and one of this module's under its bare name, and which of the two it is depends on what it
+     * denotes and on who is reading. Taken off the spelling it would answer differently before and
+     * after the pass that writes an imported name out qualified, and a table answers a key it has not
+     * got with silence. */
     @Test
-    void aHelperIsKeyedByWhatItDenotesRatherThanByHowItIsWritten() {
+    void aHelperIsReachedByWhatItDenotesRatherThanByHowItIsWritten() {
         ValueName.Helper foreign = new ValueName.Helper("maths", "spin");
         ValueName.Helper own = new ValueName.Helper("order", "spin");
 
-        assertEquals("maths.spin", HelperNames.keyIn("order", foreign));
-        assertEquals("spin", HelperNames.keyIn("order", own));
+        assertEquals(new ReachName.OfModule("maths", "spin"),
+                ReachName.of(foreign, "spin", "order"));
+        assertEquals(new ReachName.Bare("spin"), ReachName.of(own, "spin", "order"));
     }
 
     /** An imported `partial` helper may not be handed over either. */

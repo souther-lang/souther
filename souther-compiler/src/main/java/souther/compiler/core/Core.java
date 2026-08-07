@@ -1,6 +1,7 @@
 package souther.compiler.core;
 
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -62,10 +63,23 @@ public sealed interface Core {
 
     record Binary(Ast.BinOp op, Core left, Core right, Type type, SourcePos pos) implements Core {}
 
-    /** A call to a builtin, an injected behavior, an intrinsic, or a recursive helper emitted as a
-     * method — each reached by the name it is declared under, none of them bound by this body. A
-     * non-recursive helper is already inlined. */
-    record Call(String fn, List<Core> args, Type type, SourcePos pos) implements Core {}
+    /**
+     * A call to a builtin, an injected behavior, an intrinsic, or a recursive helper emitted as a
+     * method — none of them bound by this body. A non-recursive helper is already inlined.
+     *
+     * <p>{@code fn} is the name the module being emitted reaches the callee by, carried from where
+     * resolution settled it. Held as what it is rather than as the spelling of it: the backend needs
+     * both the whole name, to emit the method it calls, and the operation inside it, to reach the
+     * runtime method a library call becomes — and taking the second out of the first meant splitting
+     * a name this compiler had joined a moment earlier.
+     */
+    record Call(ReachName fn, List<Core> args, Type type, SourcePos pos) implements Core {
+
+        /** The name as it is written — what a method name is built from and what a report quotes. */
+        public String name() {
+            return fn.rendered();
+        }
+    }
 
     /**
      * A call a representation kept standing on purpose: resolved to the declaration it names, typed

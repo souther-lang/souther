@@ -4,6 +4,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -1280,16 +1281,24 @@ public interface Ast {
      * {@link ValueName.Unresolved}, so a reader downstream never has a spelling to match and never
      * repeats the report.
      */
-    record Var(WrittenName written, ValueName denotes) implements Expr {
+    record Var(WrittenName written, ValueName denotes, ReachName reachedAs) implements Expr {
 
-        /** A name as the parser read it, before resolution has said what it denotes. */
+        /** A name as the parser read it, before resolution has said what it denotes or how this
+         * module reaches it. */
         public Var(String spelling, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), null);
+            this(WrittenName.of(spelling, pos), null, null);
         }
 
-        /** A name a pass already knows the meaning of, written where the source writes it. */
-        public Var(String spelling, ValueName denotes, SourcePos pos) {
-            this(WrittenName.of(spelling, pos), denotes);
+        /**
+         * A name a pass already knows the meaning of, written where the source writes it.
+         *
+         * <p>The reach name is given rather than worked out here. A pass writing a name into a body
+         * either has one in hand — it is rewriting a name that already carried it — or knows which
+         * module's body it is writing into, and neither is something this constructor can see. Worked
+         * out from the spelling it would be the very derivation the carried value exists to remove.
+         */
+        public Var(String spelling, ValueName denotes, ReachName reachedAs, SourcePos pos) {
+            this(WrittenName.of(spelling, pos), denotes, reachedAs);
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1330,14 +1339,15 @@ public interface Ast {
          * binding. There is no way to write one of these without having the binding in hand.
          */
         public static Var local(Binder binder, SourcePos pos) {
-            return new Var(WrittenName.synthetic(binder.name(), pos),
-                    new ValueName.Local(binder.name(), binder.id()));
+            ValueName.Local local = new ValueName.Local(binder.name(), binder.id());
+            return new Var(WrittenName.synthetic(binder.name(), pos), local,
+                    new ReachName.Bare(binder.name()));
         }
 
         /** A read of a name a desugaring minted, at the form it is rewriting. Written nowhere: the
          * characters at {@code anchor} spell whatever the author put there, which is not this. */
         public static Var desugared(String name, SourcePos anchor) {
-            return new Var(WrittenName.synthetic(name, anchor), null);
+            return new Var(WrittenName.synthetic(name, anchor), null, null);
         }
 
         /**
@@ -1346,11 +1356,26 @@ public interface Ast {
          * source writes, which an import may have let go without its qualifier.
          */
         public String reaches() {
-            return denotes instanceof ValueName.Stdlib lib ? lib.qualified() : name();
+            return reachedAs == null ? name() : reachedAs.rendered();
         }
 
+        /**
+         * The same name, denoting {@code resolved} and reached as {@code reachedAs}.
+         *
+         * <p>The two answers together, because resolution gives them together and they are the two
+         * halves of one question: which declaration this reaches, and under what name it reaches it
+         * from here. Handed over separately, a caller could pair one name's denotation with another's
+         * reach name, and nothing would say so.
+         */
+        public Var denoting(ValueName resolved, ReachName reachedAs) {
+            return new Var(written, resolved, reachedAs);
+        }
+
+        /** The same name denoting {@code resolved}, reached as it already was — for a pass that
+         * changes what a name says about where its construction came from and not which declaration
+         * it reaches. */
         public Var denoting(ValueName resolved) {
-            return new Var(written, resolved);
+            return new Var(written, resolved, reachedAs);
         }
 
         @Override
@@ -1400,10 +1425,11 @@ public interface Ast {
             this(new Var(fn, pos), args, ConstructionOrigin.own(), pos);
         }
 
-        /** Applying a name a pass already knows the meaning of. */
-        public Apply(String fn, ValueName denotes, List<Expr> args, ConstructionOrigin origin,
-                     SourcePos pos) {
-            this(new Var(fn, denotes, pos), args, origin, pos);
+        /** Applying a name a pass already knows the meaning of, and knows how the body it is
+         * writing into reaches. */
+        public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
+                     ConstructionOrigin origin, SourcePos pos) {
+            this(new Var(fn, denotes, reachedAs, pos), args, origin, pos);
         }
 
         /** Whether what this applies is a name. A reader that wants the name itself matches on
@@ -1458,13 +1484,14 @@ public interface Ast {
          * compiler looked up with it.
          */
         public String reaches() {
-            return denotes() instanceof ValueName.Stdlib lib ? lib.qualified() : nameApplied();
+            return function instanceof Var v ? v.reaches() : "";
         }
 
-        /** The name in the callee position, or the empty spelling where what is applied is not a
-         *  name. What both spellings above are built from, and what neither may skip past. */
-        private String nameApplied() {
-            return function instanceof Var v ? v.name() : "";
+        /** How this module reaches what the application applies, or null where what it applies is
+         * not a name. Settled at resolution and carried, so it says the same thing whichever passes
+         * have run. */
+        public ReachName reachedAs() {
+            return function instanceof Var v ? v.reachedAs() : null;
         }
 
         /** What the name this applies denotes, or null where what it applies is not a name. */

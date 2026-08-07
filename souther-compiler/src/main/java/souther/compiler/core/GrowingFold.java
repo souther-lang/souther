@@ -2,6 +2,8 @@ package souther.compiler.core;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -50,17 +52,21 @@ public final class GrowingFold {
 
     /** The rewritten fold: {@code $build(step, xs, from)} walks {@code xs} with a builder as the
      *  accumulator and seals it into a list. Emitted by the backend, written by nobody. */
-    public static final String BUILD = "List.$build";
+    public static final ReachName BUILD =
+            new ReachName.OfLibrary(new ValueName.Stdlib("List", "$build"));
 
     /** The {@code acc ++ …} inside a rewritten step: it adds to the builder the walk carries and
      *  answers with it. Only ever reached from {@link #BUILD}'s step. */
-    public static final String GROW = "List.$grow";
+    public static final ReachName GROW =
+            new ReachName.OfLibrary(new ValueName.Stdlib("List", "$grow"));
 
     /** The same for a fold accumulating a map: the walk carries a builder and hands over the map it
      *  built, and the step's {@code Map.insert} writes into it. */
-    public static final String MAP_BUILD = "Map.$build";
+    public static final ReachName MAP_BUILD =
+            new ReachName.OfLibrary(new ValueName.Stdlib("Map", "$build"));
 
-    public static final String PUT = "Map.$put";
+    public static final ReachName PUT =
+            new ReachName.OfLibrary(new ValueName.Stdlib("Map", "$put"));
 
     /** The empty map a fold accumulating one starts from, and the insert that grows it. */
     private static final String EMPTY = "Map.empty";
@@ -150,18 +156,18 @@ public final class GrowingFold {
 
     /** {@code call} as a build, or null when it is not a fold that only grows a list or a map. */
     private static Core built(Core.Call call) {
-        if (!call.fn().equals(FOLD) || call.args().size() != 4) {
+        if (!call.name().equals(FOLD) || call.args().size() != 4) {
             return null;
         }
         Core seed = call.args().get(1);
-        String build;
+        ReachName build;
         Core step;
         if (call.type() instanceof Type.ListOf
                 && seed instanceof Core.ListLit lit && lit.elements().isEmpty()) {
             build = BUILD;
             step = grownStep(call.args().get(0));
         } else if (call.type() instanceof Type.MapOf
-                && seed instanceof Core.Call empty && empty.fn().equals(EMPTY)) {
+                && seed instanceof Core.Call empty && empty.name().equals(EMPTY)) {
             build = MAP_BUILD;
             step = puttingStep(call.args().get(0));
         } else {
@@ -246,7 +252,7 @@ public final class GrowingFold {
      *  mentions {@link #puttingStep} counts, and a mention that is none of the three refuses the walk. */
     private static int reads(Core e, Set<BindingId> acc) {
         int[] n = {0};
-        count(e, c -> c instanceof Core.Call call && READS.contains(call.fn())
+        count(e, c -> c instanceof Core.Call call && READS.contains(call.name())
                 && !call.args().isEmpty()
                 && call.args().getLast() instanceof Core.Read v && acc.contains(v.binding()), n);
         return n[0];
@@ -375,7 +381,7 @@ public final class GrowingFold {
 
     /** {@code Map.insert(key, value, acc)} as a write into the builder. */
     private static Core inserted(Core e, Set<BindingId> acc) {
-        if (!(e instanceof Core.Call c) || !c.fn().equals(INSERT) || c.args().size() != 3
+        if (!(e instanceof Core.Call c) || !c.name().equals(INSERT) || c.args().size() != 3
                 || !(c.args().get(2) instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
         }
