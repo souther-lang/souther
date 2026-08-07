@@ -603,6 +603,9 @@ final class BodyGen {
                 return;
             }
             int site = ctx.probesOf(node)[arm];
+            if (site == souther.compiler.coverage.CoverageSites.NO_SITE) {
+                return;   // an arm that answers nothing is not one a row can be in
+            }
             ctx.emitted(site);
             code.loadConstant(site);
             code.invokestatic(CD_Probe, "hit", MTD_Probe_hit);

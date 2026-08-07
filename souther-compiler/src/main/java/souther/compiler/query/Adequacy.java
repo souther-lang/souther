@@ -21,6 +21,7 @@ import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowClasses;
 import souther.compiler.types.Type;
@@ -131,6 +132,44 @@ public final class Adequacy {
     }
 
     /**
+     * What each behavior of one module says it does not answer for.
+     *
+     * <p>Asked once, here, and read by every measure that needs a denominator. The signature's cases,
+     * the classes a position is divided into and the rows the generator offers are three counts of the
+     * same universe, and deriving what is in it three times is three chances to disagree — which is
+     * how a case behind an {@code unreachable} came to be asked for by three measures at once.
+     */
+    public record Excluded(String name) implements Key<Map<String, Exclusions>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Exclusions>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            if (!prepared.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.check.TypeChecker.Checked checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked == null ? Map.of() : checked.behaviorBodies();
+            Map<String, Exclusions> out = new LinkedHashMap<>();
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+                    continue;   // a composition has no body of its own to read this off
+                }
+                out.put(spec.name(), Exclusions.of(bodies.get(spec.name()),
+                        spec.params().stream().map(Ast.Param::name).toList(), scope.value()));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * The signature evidence for every behavior of one module.
      *
      * <p>A module's question, not a source's, although the rows are evaluated per source. A behavior's
@@ -154,6 +193,7 @@ public final class Adequacy {
                 return Answer.absent();
             }
             Map<String, Observed> byTarget = rowsOf(db, name);
+            Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 Sig sig = sigs.value().get(behavior.name());
@@ -161,7 +201,11 @@ public final class Adequacy {
                     continue;   // a behavior whose signature did not work out has nothing to measure
                 }
                 out.put(behavior.name(), evidenceOf(sig, scope.value(),
-                        byTarget.getOrDefault(behavior.name(), Observed.NONE)));
+                        byTarget.getOrDefault(behavior.name(), Observed.NONE),
+                        behavior instanceof Ast.SpecBehavior spec ? spec.params().stream()
+                                .map(Ast.Param::name).toList() : List.of(),
+                        excluded == null ? Exclusions.NONE
+                                : excluded.getOrDefault(behavior.name(), Exclusions.NONE)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -196,6 +240,7 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
+            Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say. Read off the rows rather than
             // off what was asked for — asking is not evidence that it happened.
@@ -212,7 +257,9 @@ public final class Adequacy {
                 }
                 Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
                 out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
-                        plan, seen, armsMeasured && !seen.armsUnseen()));
+                        plan, seen, armsMeasured && !seen.armsUnseen(),
+                        excluded == null ? Exclusions.NONE
+                                : excluded.getOrDefault(spec.name(), Exclusions.NONE)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -516,6 +563,7 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(
                             Coverage.sourceIdOf(db, name), bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
+            Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
 
             Map<String, Filling> out = new LinkedHashMap<>();
@@ -534,7 +582,9 @@ public final class Adequacy {
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             levelOf(db).measuresArms()
                                     && !byTarget.getOrDefault(spec.name(), Observed.NONE)
-                                            .armsUnseen()));
+                                            .armsUnseen(),
+                            excluded == null ? Exclusions.NONE
+                                    : excluded.getOrDefault(spec.name(), Exclusions.NONE)));
                 } catch (LinkageError _) {
                     // The runtime is not on this host's classpath, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -568,7 +618,7 @@ public final class Adequacy {
         private static Filling rowsFor(
                 Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                FixtureReader.Construction building, boolean armsMeasured) {
+                FixtureReader.Construction building, boolean armsMeasured, Exclusions excluded) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -580,7 +630,7 @@ public final class Adequacy {
             List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
             souther.compiler.partition.Partitions.Partitioning partitioning =
-                    Coverages.partitioningOf(spec, sig, symbols, body, plan);
+                    Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
             Generator.Subject subject = new Generator.Subject(parameters, sig.ins(),
                     partitioning.axes(), symbols);
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
@@ -898,7 +948,12 @@ public final class Adequacy {
         return TypeOps.isSumType(t, symbols) ? TypeOps.leafCases(t, symbols) : Set.of();
     }
 
-    static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen) {
+    /**
+     * @param parameters the behavior's parameter names, which is how an exclusion read off the body
+     *                   at an input position is matched to the position this counts
+     */
+    static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen,
+                                        List<String> parameters, Exclusions excluded) {
         List<RowOutcome> rows = seen.rows();
         Set<TypeName> declaredOut = coverableCases(sig.out(), symbols);
         Set<TypeName> specified = new LinkedHashSet<>();
@@ -911,12 +966,21 @@ public final class Adequacy {
         List<Set<TypeName>> inSpecified = new ArrayList<>(ins.size());
         List<Set<TypeName>> inExecuted = new ArrayList<>(ins.size());
         List<Set<TypeName>> inVerified = new ArrayList<>(ins.size());
+        List<Set<TypeName>> inExcluded = new ArrayList<>(ins.size());
         int[] unreadableIn = new int[ins.size()];
-        for (Type in : ins) {
-            declaredIn.add(coverableCases(in, symbols));
+        for (int i = 0; i < ins.size(); i++) {
+            Set<TypeName> declared = coverableCases(ins.get(i), symbols);
+            declaredIn.add(declared);
             inSpecified.add(new LinkedHashSet<>());
             inExecuted.add(new LinkedHashSet<>());
             inVerified.add(new LinkedHashSet<>());
+            // Matched within the position it was read at: a class is named the same way at every
+            // position of the same type, and one behaviour's `Off` arm says nothing about another
+            // input that is also a `Flag`.
+            List<TypeName> here = i < parameters.size()
+                    ? excluded.atParameter(parameters.get(i)) : List.of();
+            inExcluded.add(here.stream().filter(declared::contains)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new)));
         }
 
         for (RowOutcome row : rows) {
@@ -960,7 +1024,7 @@ public final class Adequacy {
         for (int i = 0; i < ins.size(); i++) {
             InputCaseEvidence evidence = declaredIn.get(i).isEmpty() ? InputCaseEvidence.none()
                     : new InputCaseEvidence(declaredIn.get(i), inSpecified.get(i), inExecuted.get(i),
-                            inVerified.get(i), unreadableIn[i]);
+                            inVerified.get(i), inExcluded.get(i), unreadableIn[i]);
             inputs.add(evidence);
             partial |= evidence.status() == MeasurementStatus.PARTIAL;
         }

@@ -75,7 +75,7 @@ class RowClassesTest {
         CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
         List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
-                Partitions.of(spec, sigs.get("submit"), symbols),
+                Partitions.of(spec, sigs.get("submit"), symbols, Exclusions.NONE),
                 GuardThresholds.of("submit", body, plan, parameters, symbols), symbols);
 
         Output.Examples.Of observed = compilation.db()

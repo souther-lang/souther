@@ -70,17 +70,37 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
     }
 
     /**
+     * One class the body says it does not answer for, and why.
+     *
+     * <p>{@code reasons} is every reason on the paths that abort, and usually one. An arm made of a
+     * {@code match} whose arms abort for different reasons has no single reason, and naming the one
+     * written above the others would describe the class by where the file happens to put it.
+     */
+    public record ExcludedClass(String classId, List<String> reasons) {
+
+        public ExcludedClass {
+            reasons = List.copyOf(reasons);
+        }
+    }
+
+    /**
      * How much of one position's partition the rows reach.
      *
+     * @param classes          the classes a row can be written at. What the model divides the position
+     *                         into, less what the body says it does not answer for
+     * @param excluded         the classes the body rules out, named so that a report says what it took
+     *                         out rather than showing a position with fewer classes than the type has
      * @param unclassifiedRows rows whose value at this position could not be read. Above zero, an
      *                         unreached class is undecided rather than unreached.
      */
     public record AxisCoverage(String axis, String path, List<String> classes, Set<String> covered,
-                               int unclassifiedRows, MeasurementStatus status) {
+                               List<ExcludedClass> excluded, int unclassifiedRows,
+                               MeasurementStatus status) {
 
         public AxisCoverage {
             classes = List.copyOf(classes);
             covered = Set.copyOf(covered);
+            excluded = List.copyOf(excluded);
         }
 
         public List<String> uncovered() {

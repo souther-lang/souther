@@ -39,7 +39,7 @@ class PartitionsTest {
         Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals(behavior)).findFirst().orElseThrow();
         return Partitions.of(spec, sigs.get(behavior),
-                compilation.db().ask(new Shapes.Scope(module)).value());
+                compilation.db().ask(new Shapes.Scope(module)).value(), Exclusions.NONE);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {

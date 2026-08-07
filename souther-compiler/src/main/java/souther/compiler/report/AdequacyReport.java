@@ -415,13 +415,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             if (input.declared().isEmpty()) {
                 continue;
             }
-            out.append(String.format("                in #%d specified %d/%d%n", i + 1,
-                    input.specified().size(), input.declared().size()));
+            // Counted against the cases a row can be written at. A case the body answers `unreachable`
+            // for is one the compiler refuses a row for, so leaving it in the denominator would ask
+            // for work that cannot be done and hold the model one case short for ever.
+            out.append(String.format("                in #%d specified %d/%d%s%n", i + 1,
+                    input.specified().size(), input.coverable().size(),
+                    input.excluded().isEmpty() ? ""
+                            : "   excluded " + input.excluded().size()));
             int position = i + 1;
             for (Adequacy.Finding f : behavior.of(Adequacy.Kind.INPUT_CASE_UNSPECIFIED)) {
                 if (f.args().get(1).equals(position)) {
                     out.append(String.format("      · %suses `%s`%n", noRow(f), f.args().get(0)));
                 }
+            }
+            for (TypeName ruled : input.excluded()) {
+                out.append(String.format("      · `%s` is declared unreachable%n", ruled.name()));
             }
         }
     }
@@ -439,6 +447,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /**
+     * The reason the model wrote, where there is one to name.
+     *
+     * <p>Several reasons are not printed: a class ruled out by a fork whose paths abort for different
+     * reasons has no one sentence about it, and picking one would say something the model does not.
+     */
+    private static String why(PartitionEvidence.ExcludedClass ruled) {
+        return ruled.reasons().size() == 1 ? ": " + ruled.reasons().get(0)
+                : ruled.reasons().isEmpty() ? "" : " on every path";
+    }
+
+    /**
      * How much of what the model distinguishes the rows reach.
      *
      * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
@@ -452,12 +471,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         int classes = partition.axes().stream().mapToInt(a -> a.classes().size()).sum();
         int covered = partition.axes().stream().mapToInt(a -> a.covered().size()).sum();
-        out.append(String.format("    partition   axes %d   single-axis %d/%d%s%n",
-                partition.axes().size(), covered, classes, pairs(partition.pairs())));
+        int excluded = partition.axes().stream().mapToInt(a -> a.excluded().size()).sum();
+        out.append(String.format("    partition   axes %d   single-axis %d/%d%s%s%n",
+                partition.axes().size(), covered, classes,
+                excluded == 0 ? "" : "   excluded " + excluded, pairs(partition.pairs())));
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
             out.append(String.format("      · %s `%s`%n",
                     f.status() == MeasurementStatus.PARTIAL
                             ? "undecided whether a row is in" : "no row is in", f.args().get(0)));
+        }
+        // Not a finding: nothing is owed here, and what the line says is what the model already
+        // decided rather than something the rows left undone.
+        for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+            for (PartitionEvidence.ExcludedClass ruled : axis.excluded()) {
+                out.append(String.format("      · `%s` is declared unreachable%s%n",
+                        ruled.classId(), why(ruled)));
+            }
         }
         List<PartitionEvidence.BoundaryCoverage> measured = partition.boundaries().stream()
                 .filter(b -> b.status() != MeasurementStatus.UNAVAILABLE).toList();
@@ -600,6 +629,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             names(in.putArray("specified"), input.specified());
             names(in.putArray("executed"), input.executed());
             names(in.putArray("verified"), input.verified());
+            names(in.putArray("excluded"), input.excluded());
             in.put("unclassifiedRows", input.unclassifiedRows());
         }
     }
@@ -616,6 +646,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             a.put("path", axis.path());
             axis.classes().forEach(a.putArray("classes")::add);
             axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
+            ArrayNode excluded = a.putArray("excluded");
+            for (PartitionEvidence.ExcludedClass ruled : axis.excluded()) {
+                ObjectNode e = excluded.addObject();
+                e.put("class", ruled.classId());
+                ruled.reasons().forEach(e.putArray("reasons")::add);
+            }
             a.put("unclassifiedRows", axis.unclassifiedRows());
             a.put("status", axis.status().name().toLowerCase(java.util.Locale.ROOT));
         }

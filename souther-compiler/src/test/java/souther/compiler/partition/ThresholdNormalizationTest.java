@@ -50,7 +50,7 @@ class ThresholdNormalizationTest {
         CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
         List<Threshold> thresholds = GuardThresholds.of(behavior, body, plan,
                 spec.params().stream().map(Ast.Param::name).toList(), symbols);
-        Partitions.Partitioning base = Partitions.of(spec, sigs.get(behavior), symbols);
+        Partitions.Partitioning base = Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE);
         return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds);
     }
 

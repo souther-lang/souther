@@ -2605,6 +2605,8 @@ An input position carries the same three, with *executed* in place of *observed*
 
 *What counts as a case to cover.* A position that is a sum — a union, or a named `+data S = A | B+` — has cases to cover, folded to their leaves. A position typed as one data has one, and covering it is not a question any row can fail, so it is not counted. This is narrower than what a row's expected arm is held against (<<e1904>>), which uses the single name to catch a row that wrote the wrong one.
 
+[[a-case-the-body-rules-out-is-not-covered-or-uncovered]]*A case the body says it does not answer for is neither covered nor uncovered.* It is *excluded*: a third answer beside the two, reported and not counted against the model. A row naming such a case reaches an `+unreachable+` and is <<e1911>>, so asking for one is asking for work the compiler refuses, and a model that states where its combinations cannot arise would report a coverage it can never reach. The case stays *declared* — the type has it, and that is part of what the model says — and leaves what the rows are held to, so what a report counts is `+declared - excluded+`. Which cases those are is read from the body and is stated below (<<what-is-read-off-a-body>>); a behavior with no body has none.
+
 *A measurement says how much of itself it could make.* A row whose case cannot be read from its text — a helper's answer, which names no case (<<example-expected>>) — is counted as unclassified rather than dropped. While there is one, a case with no rows is *undecided* rather than missing, because one of those rows may be covering it. A behavior with no rows at all is not measured: an absence of evidence is not a set of gaps.
 
 *An editor answers from the workspace or not at all.* Analysing one document cannot say what a behavior's rows cover, because they are written across its module's own source and any number of attached files (<<example-placement>>); reading one file would report what another covers as uncovered. So an editor computes this from the workspace compile, and where it has only a single document the measures are unavailable and nothing is reported.
@@ -2634,6 +2636,18 @@ An invariant's bound is a boundary and not a partition. Everything outside it is
 
 A rule that drew a line is kept per line. The same value can be a boundary of an invariant and of two separate `+guard+`s, and reaching it through one says nothing about the others, so one value can be several obligations.
 
+[[what-is-read-off-a-body]]A class the body says it does not answer for is *excluded*, as a case of the signature is (<<a-case-the-body-rules-out-is-not-covered-or-uncovered>>), and leaves the classes a row can be written at — at this position, in the combinations this position takes part in, and in the rows a tool offers to fill what nothing covers. One universe, so that the three cannot come to disagree about what there was to cover.
+
+Only what the body states without anything having to be decided is read:
+
+* the body is followed to the first fork through what a `+let+` binds;
+* a function written where a call takes one is not entered. Evaluating that position makes the function, and what it matches on when the call applies it is about its own parameters rather than about this behavior's inputs;
+* where that fork is a `+match+` on an input position, each case whose arm answers nothing (<<an-arm-that-answers-nothing-is-not-an-arm>>) is excluded at that position;
+* nothing below a fork is read. An arm of one `+match+` holding a `+match+` on a second input says what that input cannot be *given the first one*, which is not a fact about the second input and is not something a class of it can carry;
+* nothing is read off a condition. Which values satisfy `+somePredicate(f)+` is a question with a solver behind it, and an answer taken on faith here removes a case the author should have been asked for.
+
+So exclusions that hold are missed, and that is the direction to miss in: a class left in is a class the report asks for a row at, which tells the author something true about their model. A class wrongly taken out tells them nothing at all.
+
 [#example-branch-coverage]
 === Which arms of the body the rows go through
 
@@ -2647,6 +2661,14 @@ Two more the dial asks, needing the arms measured:
 This is *branch-arm* coverage and nothing wider. Going through both arms of two nested conditions is four arms and says nothing about whether their combinations were tried, so covering every arm is a lower bound on covering what a body can do rather than the same thing.
 
 An `+unreachable+` (<<unreachable>>) is not an arm. Reaching one is already <<e1911>>, so counting it would leave every correct model permanently one arm short. An invariant clause is not one either: it is a property of a type rather than a fork in this body, and whether the rows reach its edges is <<example-adequacy>>'s question, asked another way.
+
+[[an-arm-that-answers-nothing-is-not-an-arm]]More precisely, an arm is not an arm where evaluating it cannot answer a value. That is the whole of what an arm is made of and not the shape it is written in: an arm whose every path ends in an `+unreachable+` answers as little as one written as a bare `+unreachable+`, and so does a value one of whose parts is an `+unreachable+`. An arm that has one path answering a value is an arm, whatever else is beside that path and whether or not a row has been written for it — what a body has to cover is a property of the body, and rows do not move it.
+
+[[a-fork-nothing-reaches-has-no-arms]]Nor is an arm an arm where nothing reaches the fork it belongs to. A row cannot get past something that aborts, so a fork written after one — a `+match+` under a binding whose value is an `+unreachable+`, anything at all inside an arm that answers nothing — is a fork no row takes: the row that would take it reaches the `+unreachable+` first and is <<e1911>>, which states nothing. Such arms are as much not arms as the one that aborts, and for the same reason. This reaches the whole body, so a body that cannot answer at all has no arms and draws no line for a row to be at.
+
+What a call answers is not read. A non-recursive helper is already inlined into the body that uses it, so its arms are here; a recursive one is a shared method, and an arm whose only content is a call to a helper that never answers is counted as an arm. That is a gap in the measure and is stated rather than worked around, because reading through a call means deciding what a call does.
+
+A function written where a call takes one is made there and run elsewhere. Evaluating that position produces the function; its body runs when the call applies it, on arguments the position does not have — a step that answers `+unreachable+` for an element it may never be handed does not stop the expression around it from answering. The arms inside such a function are arms, and the rows that run it go through them.
 
 *The measurement is opted into by writing a row.* A behavior that no row names is not reported as having arms nothing reaches, whether or not another behavior's rows run through it. A row about `+A+` that calls `+B+` did go through `+B+`'s arm and that arm counts as reached; what does not follow is that `+B+`'s author has been asked anything.
 
@@ -4919,6 +4941,8 @@ No row applies `submit` to a `Overseas`, so input #1 has a case nothing was trie
 
 The same warning for an input position that is a sum. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
 
+Not warned about for a case the body says it does not answer for (<<a-case-the-body-rules-out-is-not-covered-or-uncovered>>): the row it asks for would reach an `+unreachable+` and be <<e1911>>, so an author told to write one has been handed work their compiler refuses.
+
 [#e1916]
 === No row is at a boundary
 
@@ -4936,10 +4960,11 @@ A warning, and one that needs the arms measured where the line was drawn by a `+
 [,text]
 ----
 No row goes through the `else` arm of `submit`.
-Hint: Either a row is missing for what this arm answers, or nothing can reach it.
+Hint: Either a row is missing for what this arm answers, or nothing reaches it — which an
+`unreachable` states.
 ----
 
-A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites. A behavior no row names is not warned about, whether or not another behavior's rows run through it.
+A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites. A behavior no row names is not warned about, whether or not another behavior's rows run through it. An arm that answers nothing is not an arm and is not warned about (<<an-arm-that-answers-nothing-is-not-an-arm>>); the hint names `+unreachable+` because stating that nothing reaches an arm is what answers this warning where no row can.
 
 [#e1919]
 === A stand-in and a recorded row answer one input differently

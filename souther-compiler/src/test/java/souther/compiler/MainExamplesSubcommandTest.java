@@ -197,6 +197,47 @@ class MainExamplesSubcommandTest {
                 behaviorDef.get("required"));
     }
 
+    /**
+     * A key added to this version is optional, so a document written before it existed is still one.
+     *
+     * <p>Which is one direction and not both. This schema validates a document written before the key
+     * existed, because nothing demands it — that is what is checked here. It does not follow that a
+     * reader holding the older copy of this schema accepts a document written now: every object here
+     * is {@code additionalProperties: false}, so an older validator refuses a key added since. The
+     * version says what was taken away, not what was added, and a reader that must accept newer
+     * documents needs the newer schema rather than a higher number.
+     */
+    @Test
+    void aKeyAddedSinceIsNotDemandedOfADocumentWrittenBeforeIt() throws Exception {
+        JsonNode schema;
+        try (java.io.InputStream in =
+                     Main.class.getResourceAsStream("/souther/adequacy-schema-1.json")) {
+            assertNotNull(in);
+            schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        }
+        JsonNode axis = schema.get("$defs").get("partition")
+                .get("properties").get("axes").get("items");
+        JsonNode input = schema.get("$defs").get("signature")
+                .get("properties").get("inputs").get("items");
+
+        for (JsonNode where : List.of(axis, input)) {
+            assertTrue(where.get("properties").has("excluded"), "the key is declared");
+            assertFalse(required(where).contains("excluded"),
+                    "and not demanded, or a document written before it would stop being valid");
+        }
+
+        JsonNode emitted = JSON.readTree(run("--format", "json"))
+                .get("modules").get(0).get("behaviors").get(1);
+        assertTrue(emitted.get("signature").get("inputs").get(0).has("excluded"),
+                "what is written now carries it");
+    }
+
+    private static List<String> required(JsonNode of) {
+        List<String> names = new ArrayList<>();
+        of.get("required").forEach(each -> names.add(each.asString()));
+        return names;
+    }
+
     private static void agrees(JsonNode emitted, JsonNode properties, JsonNode required) {
         for (JsonNode key : required) {
             assertTrue(emitted.has(key.asString()),

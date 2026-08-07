@@ -12,6 +12,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PartitionClass;
@@ -40,9 +41,10 @@ final class Coverages {
      * and two derivations of them would be two chances to disagree.
      */
     static Partitions.Partitioning partitioningOf(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
-                                                  Core body, CoverageSites.Plan plan) {
+                                                  Core body, CoverageSites.Plan plan,
+                                                  Exclusions excluded) {
         List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
-        Partitions.Partitioning partitioning = Partitions.of(behavior, sig, symbols);
+        Partitions.Partitioning partitioning = Partitions.of(behavior, sig, symbols, excluded);
         if (body == null) {
             return partitioning;
         }
@@ -57,10 +59,11 @@ final class Coverages {
      */
     static PartitionEvidence of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
-                                boolean armsMeasured) {
+                                boolean armsMeasured, Exclusions excluded) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
-        Partitions.Partitioning partitioning = partitioningOf(behavior, sig, symbols, body, plan);
+        Partitions.Partitioning partitioning =
+                partitioningOf(behavior, sig, symbols, body, plan, excluded);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
         List<PartitionEvidence.BoundaryCoverage> boundaries = new ArrayList<>();
@@ -75,7 +78,7 @@ final class Coverages {
                 continue;
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, readings));
+                axes.add(coverageOf(axis, readings, excluded));
                 divided.add(axis);
             }
             // Whether the arms were measured, and nothing else. A row that did not finish makes a
@@ -161,10 +164,14 @@ final class Coverages {
      * single-position coverage is measured on its own and not derived from this.
      */
     private static PartitionEvidence.PairSpace pairsOf(List<Axis> axes, Readings readings) {
+        // The product of what a row can be written at, not of what the types declare. A class the
+        // body rules out takes a whole slice of the product with it — every combination it takes part
+        // in is one no row can sit in — which is a different thing from a pair whose two classes each
+        // have rows but never together.
         long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
-                total += (long) axes.get(i).classes().size() * axes.get(j).classes().size();
+                total += (long) axes.get(i).eligible().size() * axes.get(j).eligible().size();
             }
         }
         if (total == 0) {
@@ -194,19 +201,27 @@ final class Coverages {
                 (int) total - reached, false, readings.status(axes));
     }
 
-    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
+    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
+                                                             Exclusions excluded) {
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
             String in = Readings.classIn(where, axis);
-            if (in != null) {
+            if (in != null && !axis.excluded().contains(in)) {
                 covered.add(in);
             }
         }
         MeasurementStatus status = readings.noRows() && !readings.someRowsUnseen()
                 ? MeasurementStatus.UNAVAILABLE : readings.status(List.of(axis));
+        // The model's own words for why, carried through so a report can say what it took out of the
+        // denominator rather than showing a position with fewer classes than its type has.
+        List<PartitionEvidence.ExcludedClass> ruled = excluded.at(axis.path()).stream()
+                .filter(each -> axis.excluded().contains(each.name()))
+                .map(each -> new PartitionEvidence.ExcludedClass(each.name(),
+                        excluded.reasonsFor(axis.path(), each)))
+                .toList();
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.path().toString(),
-                axis.classes().stream().map(PartitionClass::id).toList(), covered,
-                readings.couldNotSay(axis), status);
+                axis.eligible().stream().map(PartitionClass::id).toList(), covered,
+                ruled, readings.couldNotSay(axis), status);
     }
 
     /**
