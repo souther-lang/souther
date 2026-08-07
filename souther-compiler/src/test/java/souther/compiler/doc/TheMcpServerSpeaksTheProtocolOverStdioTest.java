@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -140,6 +141,58 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
         String name = jarApi.get("inputSchema").get("properties").get("name")
                 .get("description").asString();
         assertTrue(name.contains("#member"), "and so does the argument that takes it: " + name);
+    }
+
+    /**
+     * A code is the one token in a banner that survives not being able to read the banner, and the
+     * lookup it opens is how a reader answered in a language they do not read gets to an
+     * explanation they do. That the code is a name this tool takes is a relation the compiler
+     * holds over every code it prints; a client that has to infer it from a search hit is being
+     * asked to rediscover something already guaranteed.
+     */
+    @Test
+    void theDocReadSchemaSaysThatADiagnosticCodeIsAName() {
+        List<JsonNode> answers = serve("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+
+        JsonNode docRead = answers.getFirst().get("result").get("tools").valueStream()
+                .filter(t -> t.get("name").asString().equals("doc_read")).findFirst().orElseThrow();
+        String description = docRead.get("description").asString();
+        assertTrue(description.contains("E2011"),
+                "the description names the form a reader copies out of a banner: " + description);
+        String name = docRead.get("inputSchema").get("properties").get("name")
+                .get("description").asString();
+        assertTrue(name.contains("diagnostic code"),
+                "and so does the argument that takes it: " + name);
+    }
+
+    @Test
+    void aDiagnosticCodeIsReadInTheSpellingTheBannerPrintsItIn() {
+        List<JsonNode> answers = serve("""
+                {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"doc_read","arguments":{"name":"E2011"}}}""");
+
+        JsonNode result = answers.getFirst().get("result");
+        assertFalse(result.get("isError").asBoolean(), "the printed spelling is a name, not a mistake");
+        assertTrue(result.get("content").get(0).get("text").asString()
+                .contains("may violate its invariant"));
+    }
+
+    /**
+     * The server's own rule, held as written: a description names these tools and never a command
+     * line. It is broader than "do not send the client somewhere it cannot go" — a description
+     * mentioning the equivalent CLI call as a mere aside would fail this too — and deliberately so,
+     * because a client reading one has no way to tell a command it cannot run from an answer it
+     * failed to find, and the line between naming and merely mentioning is not one a test can hold.
+     */
+    @Test
+    void noToolDescriptionWritesACommandLineInvocation() {
+        List<JsonNode> answers = serve("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+
+        for (JsonNode tool : answers.getFirst().get("result").get("tools").valueStream().toList()) {
+            String description = tool.get("description").asString();
+            assertFalse(description.contains("`souther"),
+                    tool.get("name").asString() + " sends the client to a command it has no way to"
+                            + " run: " + description);
+        }
     }
 
     @Test
