@@ -66,7 +66,35 @@ import java.util.Set;
  */
 public final class InvariantChecker {
 
-    record Findings(List<CompileException> errors, List<Diagnostic> warnings) {}
+    /**
+     * What one analysis came to.
+     *
+     * <p>{@code status} is not about the model. It says whether the findings are all of the findings
+     * there were: this check is fail-open, so an analysis that fell over produces exactly what an
+     * analysis that finished and found nothing produces, and a consumer reading only the two lists
+     * cannot tell them apart. Production does not need to — the run-time check is the backstop
+     * either way — but a test asserting that a construction is discharged is asserting something
+     * about an analysis that ran, and without this it would pass just as well on one that did not.
+     */
+    record Findings(List<CompileException> errors, List<Diagnostic> warnings, Status status) {}
+
+    /** Whether an analysis produced all of the findings there were. {@code ABANDONED} covers both a
+     * walk that fell over and a body there was none of: neither ran to the end, and the findings are
+     * as complete in one case as in the other, which is not at all. */
+    enum Status { COMPLETE, ABANDONED }
+
+    /** One analysis that fell over, and what it fell over on. */
+    record GaveUp(String where, RuntimeException why) {}
+
+    /**
+     * Where a test in this package reads the analyses that fell over, and null everywhere else.
+     *
+     * <p>Beside {@link #WATCHING} and for the same reason. Falling over is silent by design: the
+     * catch that makes this check unable to reject a valid program also makes it unable to say it
+     * stopped. A body with no discharge to run is not recorded here — there was nothing to fall over
+     * on — so what lands here is only what the analysis could not get through.
+     */
+    static List<GaveUp> GAVE_UP;
 
     /** One construction and how this check came out on it. */
     record Said(String type, SourcePos pos, Verdict verdict) {}
@@ -141,8 +169,12 @@ public final class InvariantChecker {
         try {
             owed = stated == null ? Predicates.Owed.UNREADABLE
                     : c.predicates.obligations(stated, Known.top(), fields, false);
-        } catch (RuntimeException _) {
-            owed = Predicates.Owed.UNREADABLE;   // fail-open, as the walk is
+        } catch (RuntimeException why) {
+            // Fail-open, as the walk is — and recorded, because a clause this could not read and an
+            // analysis that fell over reading it both come out `runtimeOnly`, and only one of them
+            // is something the model says.
+            gaveUp("capabilityOf " + data.name(), why);
+            owed = Predicates.Owed.UNREADABLE;
         }
         // A clause owing nothing is answered here as one nothing can be asked of. What it is instead
         // — a clause that holds wherever it is built — is a fourth answer this classification does
@@ -199,7 +231,7 @@ public final class InvariantChecker {
                             Scope params, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, invariants);
         if (body == null) {
-            return new Findings(c.errors, c.warnings);
+            return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
         try {
             Entered in = new Entered(Known.top(), Denotations.none());
@@ -208,10 +240,20 @@ public final class InvariantChecker {
                         body.pos()), in.known(), in.at());
             }
             c.walk(body, in.known(), in.at(), 0);
-        } catch (RuntimeException _) {
+        } catch (RuntimeException why) {
             // fail-open: the run-time invariant check remains the backstop
+            gaveUp("analyze", why);
+            return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
-        return new Findings(c.errors, c.warnings);
+        return new Findings(c.errors, c.warnings, Status.COMPLETE);
+    }
+
+    /** Records an analysis that fell over, for a test in this package to read. */
+    private static void gaveUp(String where, RuntimeException why) {
+        List<GaveUp> watching = GAVE_UP;
+        if (watching != null) {
+            watching.add(new GaveUp(where, why));
+        }
     }
 
     // --- the walk ------------------------------------------------------------------------------
