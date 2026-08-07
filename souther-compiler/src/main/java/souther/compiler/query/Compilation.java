@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
@@ -155,6 +156,12 @@ public final class Compilation {
      * recursive prelude helpers it reaches. */
     public Ast.Module module(String name) {
         return db.ask(new Shapes.Prepared(name)).value();
+    }
+
+    /** What the names in {@code module} denote — the table a question about a type is asked against,
+     *  for a reader outside the compile that holds a type and has to ask what it is. */
+    public Symbols symbols(String module) {
+        return db.ask(new Shapes.Scope(module)).value();
     }
 
     /** The signatures of the behaviors {@code module} declares. */

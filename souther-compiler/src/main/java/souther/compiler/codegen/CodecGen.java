@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -125,26 +126,23 @@ final class CodecGen {
     }
 
 
-    private void emitKeyDecoder(CodeBuilder code, Ast.DecRef key) {
+    private void emitKeyDecoder(CodeBuilder code, BoundaryMapKey key) {
         switch (key) {
-            case Ast.DataDecRef d -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
-            case Ast.PrimDecRef p -> {
-                // A String key is the string leaf itself, which canonicalizes and does nothing else.
-                // A temporal is that leaf parsed. No other primitive is a boundary key.
-                if (p.kind() == Ast.PrimKind.STRING) {
-                    emitStringLeaf(code, CD_ObjectDecoders);
-                    return;
-                }
-                String parse = switch (p.kind()) {
-                    case DATE -> "date";
-                    case DATETIME -> "dateTime";
-                    case STRING, INT, BOOL, DECIMAL ->
-                            throw new IllegalStateException("not a map key decoder: " + p.kind());
-                };
+            // a named key runs its own decoder: a newtype's applies its invariant, an enumeration's
+            // reads the case name
+            case BoundaryMapKey.Newtype n -> invokeCodec(code, n.name(), "decoder", MTD_Rdecoder);
+            case BoundaryMapKey.UnitEnum e -> invokeCodec(code, e.name(), "decoder", MTD_Rdecoder);
+            // text is the string leaf itself, which canonicalizes and does nothing else; a temporal
+            // is that leaf parsed
+            case BoundaryMapKey.Text _ -> emitStringLeaf(code, CD_ObjectDecoders);
+            case BoundaryMapKey.Date _ -> {
                 emitStringLeaf(code, CD_ObjectDecoders);
-                code.invokevirtual(CD_StringDecoder, parse, MTD_leafTemporal);
+                code.invokevirtual(CD_StringDecoder, "date", MTD_leafTemporal);
             }
-            default -> throw new IllegalStateException("not a map key decoder: " + key);
+            case BoundaryMapKey.DateTime _ -> {
+                emitStringLeaf(code, CD_ObjectDecoders);
+                code.invokevirtual(CD_StringDecoder, "dateTime", MTD_leafTemporal);
+            }
         }
     }
 
@@ -162,24 +160,26 @@ final class CodecGen {
      * canonicalization collision is caught, and that is a property of every key type, not of the
      * ones that need converting.
      */
-    private static boolean needsRekey(Ast.DecRef key) {
+    private static boolean needsRekey(BoundaryMapKey key) {
         return true;
     }
 
     /** The name of the generated per-$Dec helper that remaps a decoded {@code Map<String, V>}'s keys
      *  into the key type, invariant-checked. A temporal key is named with a second {@code $} so it
      *  cannot collide with a data whose name is {@code Date}. */
-    private static String rekeyMethod(Ast.DecRef key) {
+    private static String rekeyMethod(BoundaryMapKey key) {
         return switch (key) {
-            case Ast.DataDecRef d -> "__rekey$" + d.typeName().denotes().qualified().replace('.', '$');
-            case Ast.PrimDecRef p -> "__rekey$$" + p.kind();
-            default -> throw new IllegalStateException("not a map key decoder: " + key);
+            case BoundaryMapKey.Newtype n -> "__rekey$" + n.name().qualified().replace('.', '$');
+            case BoundaryMapKey.UnitEnum e -> "__rekey$" + e.name().qualified().replace('.', '$');
+            case BoundaryMapKey.Text _ -> "__rekey$$STRING";
+            case BoundaryMapKey.Date _ -> "__rekey$$DATE";
+            case BoundaryMapKey.DateTime _ -> "__rekey$$DATETIME";
         };
     }
 
     /** {@code invokedynamic} producing a {@code BiFunction<Map, Path, Result>} over the current $Dec
      *  class's {@code __rekey$<keyType>}, for {@code Decoder.flatMapWithPath} in a newtype-keyed map. */
-    private static DynamicCallSiteDesc rekeyCallSite(ClassDesc cdDec, Ast.DecRef key) {
+    private static DynamicCallSiteDesc rekeyCallSite(ClassDesc cdDec, BoundaryMapKey key) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, cdDec, rekeyMethod(key), MTD_rekey);
         return DynamicCallSiteDesc.of(
@@ -192,51 +192,55 @@ final class CodecGen {
 
     /** {@code invokedynamic} producing a {@code Function<K, String>} over the key newtype's bare
      *  {@code value()} accessor, for {@code Maps.mapKeys} when encoding a newtype-keyed map. */
-    private DynamicCallSiteDesc keyValueCallSite(Ast.EncElem key) {
+    private DynamicCallSiteDesc keyValueCallSite(BoundaryMapKey key) {
         return switch (key) {
             // an enumeration key renders as its case's name, the same string its decoder reads
-            case Ast.DataEnc d when symbols.get(d.typeName().denotes()) instanceof Ast.SumData sum
-                    && TypeOps.isUnitOnlySum(sum, symbols) -> DynamicCallSiteDesc.of(
+            case BoundaryMapKey.UnitEnum e -> DynamicCallSiteDesc.of(
                     BSM_METAFACTORY, "apply",
                     MethodTypeDesc.of(CD_Function),
                     MethodTypeDesc.of(CD_Object, CD_Object),
                     MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
-                            cd(d.typeName().denotes()), TAG_METHOD, MTD_tag),
+                            cd(e.name()), TAG_METHOD, MTD_tag),
                     MTD_tag);
-            case Ast.DataEnc d -> {
+            case BoundaryMapKey.Newtype n -> {
                 DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                        DirectMethodHandleDesc.Kind.VIRTUAL, cd(d.typeName().denotes()), "value", MTD_value);
+                        DirectMethodHandleDesc.Kind.VIRTUAL, cd(n.name()), "value", MTD_value);
                 yield DynamicCallSiteDesc.of(
                         BSM_METAFACTORY, "apply",
                         MethodTypeDesc.of(CD_Function),                  // no captures: () -> Function
                         MethodTypeDesc.of(CD_Object, CD_Object),         // samMethodType: (Object) -> Object
                         impl,                                            // implMethod: K.value() -> String
-                        MethodTypeDesc.of(CD_String, cd(d.typeName().denotes()))); // (K) -> String
+                        MethodTypeDesc.of(CD_String, cd(n.name())));     // (K) -> String
             }
             // a temporal renders as its ISO form, which is its `toString` — the same rendering an
             // IsoTextRaw field gets
-            case Ast.PrimEnc _ -> DynamicCallSiteDesc.of(
+            case BoundaryMapKey.Date _, BoundaryMapKey.DateTime _ -> DynamicCallSiteDesc.of(
                     BSM_METAFACTORY, "apply",
                     MethodTypeDesc.of(CD_Function),
                     MethodTypeDesc.of(CD_Object, CD_Object),
                     MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_String,
                             "valueOf", MethodTypeDesc.of(CD_String, CD_Object)),
                     MethodTypeDesc.of(CD_String, CD_Object));
-            default -> throw new IllegalStateException("not a map key encoder: " + key);
+            // text is already the string the map encoder wants; needsKeyRender keeps it from here
+            case BoundaryMapKey.Text _ ->
+                    throw new IllegalStateException("a text key is not rendered");
         };
     }
 
     /** Whether a map's keys are rendered before the String-keyed encoder sees them: a {@code String}
      *  key is already what it wants. */
-    private static boolean needsKeyRender(Ast.EncElem key) {
-        return !(key instanceof Ast.PrimEnc p && p.kind() == Ast.PrimKind.STRING);
+    private static boolean needsKeyRender(BoundaryMapKey key) {
+        return !(key instanceof BoundaryMapKey.Text);
     }
 
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
      * method reference when the type is a sum (its factory lives on a sealed interface). */
     private void invokeCodec(CodeBuilder code, Ast.Name typeName, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(typeName.denotes()), method, mtd,
-                symbols.get(typeName.denotes()) instanceof Ast.SumData);
+        invokeCodec(code, typeName.denotes(), method, mtd);
+    }
+
+    private void invokeCodec(CodeBuilder code, TypeName type, String method, MethodTypeDesc mtd) {
+        code.invokestatic(cd(type), method, mtd, symbols.get(type) instanceof Ast.SumData);
     }
 
     byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
@@ -609,9 +613,9 @@ final class CodecGen {
             });
             // One key-remap helper per key type used as a map key anywhere in this decoder; the
             // decode body's flatMapWithPath call sites reference them.
-            Map<String, Ast.DecRef> keyTypes = new LinkedHashMap<>();
+            Map<String, BoundaryMapKey> keyTypes = new LinkedHashMap<>();
             collectKeyedMapTypes(dec, keyTypes);
-            for (Ast.DecRef key : keyTypes.values()) {
+            for (BoundaryMapKey key : keyTypes.values()) {
                 emitRekeyHelper(cb, key);
             }
             emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb, invariants));
@@ -716,7 +720,7 @@ final class CodecGen {
     }
 
     /** Collects the String-backed newtypes used as map keys anywhere in a derived decoder. */
-    private void collectKeyedMapTypes(Ast.DecoderDef dec, Map<String, Ast.DecRef> out) {
+    private void collectKeyedMapTypes(Ast.DecoderDef dec, Map<String, BoundaryMapKey> out) {
         switch (dec) {
             case Ast.ObjectDecoder obj -> {
                 for (Ast.Bind bind : obj.binds()) {
@@ -728,7 +732,7 @@ final class CodecGen {
         }
     }
 
-    private void collectKeyedMapTypes(Ast.DecRef ref, Map<String, Ast.DecRef> out) {
+    private void collectKeyedMapTypes(Ast.DecRef ref, Map<String, BoundaryMapKey> out) {
         switch (ref) {
             case Ast.MapDecRef mp -> {
                 if (needsRekey(mp.key())) {
@@ -751,7 +755,7 @@ final class CodecGen {
      * (spec 15) and a failure lands at the key's path; on success it returns a {@code Map<K, V>} in
      * iteration order. Materialised as a {@code BiFunction} for {@code Decoder.flatMapWithPath}.
      */
-    private void emitRekeyHelper(ClassBuilder cb, Ast.DecRef key) {
+    private void emitRekeyHelper(ClassBuilder cb, BoundaryMapKey key) {
         cb.withMethodBody(rekeyMethod(key), MTD_rekey, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
                 code -> {
             // locals: src=0, path=1, keyDec=2, out=3, issues=4, it=5, entry=6, key=7, kr=8, decoded=9
@@ -1164,7 +1168,7 @@ final class CodecGen {
             case Ast.ListDecRef l -> Type.list(bindType(l.element()));
             case Ast.SetDecRef s -> Type.set(bindType(s.element()));
             case Ast.OptionDecRef o -> Type.option(bindType(o.element()));
-            case Ast.MapDecRef mp -> Type.map(bindType(mp.key()), bindType(mp.value()));
+            case Ast.MapDecRef mp -> Type.map(mp.key().type(), bindType(mp.value()));
         };
     }
 

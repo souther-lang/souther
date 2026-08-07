@@ -536,11 +536,9 @@ public final class DataChecker {
                         Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
                                 .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name() + "." + e.getKey(), Type.show(badKey))
-                                .hint("check.map.key.field.hint").build(),
-                        "a Map crossing the boundary at `" + ctx.data().name() + "." + e.getKey()
-                                + "` must be keyed by String, a String-backed newtype (`data X ="
-                                + " String`), Date or DateTime, got " + Type.show(badKey)
-                                + " (ADR-0040)");
+                                .hint("check.map.key.hint").build(),
+                        "`" + ctx.data().name() + "." + e.getKey() + "` is keyed by "
+                                + Type.show(badKey) + ": " + TypeOps.MAP_KEY_RULE);
             }
         }
 
@@ -626,8 +624,7 @@ public final class DataChecker {
             }
             case Ast.ListDecRef l -> Type.list(decRefType(l.element(), symbols));
             case Ast.OptionDecRef o -> Type.option(decRefType(o.element(), symbols));
-            case Ast.MapDecRef mp -> Type.map(
-                    decRefType(mp.key(), symbols), decRefType(mp.value(), symbols));
+            case Ast.MapDecRef mp -> Type.map(mp.key().type(), decRefType(mp.value(), symbols));
         };
     }
 

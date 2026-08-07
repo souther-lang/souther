@@ -587,11 +587,9 @@ public final class SpecChecker {
                 throw CompileException.of(
                         Diagnostic.of(DiagnosticCode.E1314, "check.map.key.param")
                                 .at(p.written().region()).args(p.name(), Type.show(bad))
-                                .hint("check.map.key.param.hint").build(),
+                                .hint("check.map.key.hint").build(),
                         "parameter `" + p.name() + "` carries a Map keyed by " + Type.show(bad)
-                                + "; a Map crossing the boundary must be keyed by String, a"
-                                + " String-backed newtype (`data X = String`), Date or DateTime"
-                                + " (ADR-0040)");
+                                + "; " + TypeOps.MAP_KEY_RULE);
             }
         }
         Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(spec.ret(), symbols), symbols);
@@ -599,10 +597,9 @@ public final class SpecChecker {
             throw CompileException.of(
                     Diagnostic.of(DiagnosticCode.E1314, "check.map.key.output")
                             .at(spec.pos()).args(spec.name(), Type.show(bad))
-                            .hint("check.map.key.output.hint").build(),
+                            .hint("check.map.key.hint").build(),
                     "behavior `" + spec.name() + "` outputs a Map keyed by " + Type.show(bad)
-                            + "; a Map crossing the boundary must be keyed by String, a String-backed"
-                            + " newtype (`data X = String`), Date or DateTime (ADR-0040)");
+                            + "; " + TypeOps.MAP_KEY_RULE);
         }
     }
 
