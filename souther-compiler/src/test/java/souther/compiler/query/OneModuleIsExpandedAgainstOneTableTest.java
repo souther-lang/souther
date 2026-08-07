@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Two callers build it. The check builds it from the settled module and the definitions its
  * imports publish, held apart ({@link HelperInliner#forModule}); {@link Bodies.Expanding} builds it
- * from {@link Bodies.Helpers}, which is those two already joined, and hands the join over as what the
+ * from {@link Bodies.ModuleDefinitions}, which is those two already joined, and hands the join over as what the
  * module has as fns of its own. So a definition another module publishes was one of this module's own
  * fns on one path and not on the other — and what a call expands to was decided by which caller was
  * asking.

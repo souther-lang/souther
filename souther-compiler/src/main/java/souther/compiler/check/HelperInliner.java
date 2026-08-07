@@ -181,7 +181,7 @@ public final class HelperInliner {
     public static HelperInliner forModule(Ast.Module module, Map<String, Ast.FnDef> imported) {
         HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL);
         HelperInliner inliner = new HelperInliner(table, HelperGraph.of(table));
-        inliner.computeReferencedPreludeRecursive(module);
+        inliner.computeTakenOnRecursive(module);
         return inliner;
     }
 
@@ -262,11 +262,17 @@ public final class HelperInliner {
         return own;
     }
 
-    /** Prelude recursive helpers this module reaches, by qualified name (`List.foldFrom`). A prelude
-     * recursive helper is not inlined (it would expand forever); instead it is emitted as one of this
-     * module's own methods, exactly like a module-own recursive helper (see {@link
-     * #injectedRecursiveHelpers}). Only the ones actually reached are emitted. */
-    private final Set<String> referencedPreludeRecursive = new java.util.LinkedHashSet<>();
+    /**
+     * The recursive helpers this module reaches and does not declare, by the qualified name it
+     * reaches each of them by ({@code List.foldFrom}, {@code pricing.sumDown}).
+     *
+     * <p>A recursive helper is not inlined — it would expand forever — so it is emitted as one of
+     * this module's own methods, exactly like a recursive helper the module declared (see {@link
+     * #injectedRecursiveHelpers}). That holds whoever declared it: the standard library, or a module
+     * that published one, or published something that calls one. Only the ones actually reached are
+     * emitted.
+     */
+    private final Set<String> takenOnRecursive = new java.util.LinkedHashSet<>();
 
     /** The helpers this module's example rows apply, which need a method for that reason alone. */
     private final Set<String> exampleHelpers = new java.util.LinkedHashSet<>();
@@ -281,7 +287,7 @@ public final class HelperInliner {
      * publish into what it has as fns of its own: that join answered yes for every published helper
      * whether this module reached it or not, and so covered what this walk was not finding.
      */
-    private void computeReferencedPreludeRecursive(Ast.Module module) {
+    private void computeTakenOnRecursive(Ast.Module module) {
         Set<String> named = new LinkedHashSet<>();
         Deque<Ast.Expr> work = new ArrayDeque<>();
         for (Ast.FnDef fn : module.fns()) {
@@ -299,11 +305,11 @@ public final class HelperInliner {
                 e -> helpersNamedIn(e, table.reachable(), named));
         for (String name : graph.reachedFrom(named)) {
             if (graph.recurses(name) && !table.holds(name)) {
-                referencedPreludeRecursive.add(name);
+                takenOnRecursive.add(name);
             }
         }
         exampleHelpers.addAll(exampleHelpers(module, table.reachable()));
-        exampleHelpers.removeAll(referencedPreludeRecursive);
+        exampleHelpers.removeAll(takenOnRecursive);
         exampleHelpers.removeIf(graph::recurses);   // already emitted as a recursive helper
     }
 
@@ -381,10 +387,11 @@ public final class HelperInliner {
         return out;
     }
 
-    /** The recursive helpers this module emits as methods: its own recursive helpers plus the prelude
-     * recursive helpers it reaches (spec 13.1). A call to any of them is left standing by {@link
-     * #inline}. The internal {@code recursive} set additionally holds prelude recursive helpers the
-     * module does not reach, so {@code inline} never expands one that slips in through a nested body. */
+    /** The recursive helpers this module emits as methods: the ones it declares, plus the ones it
+     * reaches and took on to emit — a library one, or one another module published (spec 13.1). A
+     * call to any of them is left standing by {@link #inline}. The graph's own {@code recursive} set
+     * additionally holds recursive helpers the module does not reach at all, so {@code inline} never
+     * expands one that slips in through a nested body. */
     public Set<String> recursiveHelpers() {
         Set<String> result = new java.util.LinkedHashSet<>();
         for (String name : graph.recursive()) {
@@ -392,16 +399,18 @@ public final class HelperInliner {
                 result.add(name);
             }
         }
-        result.addAll(referencedPreludeRecursive);
+        result.addAll(takenOnRecursive);
         return result;
     }
 
-    /** The prelude recursive helpers this module reaches, renamed to their qualified names so they are
-     * emitted as the module's own methods — a prelude {@code let foldFrom} is reached as {@code
-     * List.foldFrom}, and its self-call already reads {@code List.foldFrom}. */
+    /** The recursive helpers this module reaches and does not declare, renamed to the qualified names
+     * it reaches them by so they are emitted as the module's own methods — a library {@code let
+     * foldFrom} is reached as {@code List.foldFrom}, and its self-call already reads {@code
+     * List.foldFrom}. Which module declared one is not in that name and is read off the declaration
+     * ({@link Ast.FnDef#declaredIn}). */
     public Map<String, Ast.FnDef> injectedRecursiveHelpers() {
         Map<String, Ast.FnDef> out = new java.util.LinkedHashMap<>();
-        for (String qualified : referencedPreludeRecursive) {
+        for (String qualified : takenOnRecursive) {
             Ast.FnDef def = table.reached(qualified);
             out.put(qualified, def.reachedAs(qualified));
         }

@@ -612,7 +612,7 @@ public final class Output {
                     || exampleOrigins == null || fakeOrigins == null) {
                 return Answer.absent();
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.Reachable(name)).value();
+            Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // `requirements` is asked for above as a readiness condition — a module whose
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
@@ -831,7 +831,7 @@ public final class Output {
             if (classes == null || requirements == null || fakeOrigins == null) {
                 return List.of();
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.Reachable(name)).value();
+            Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // As above: `requirements` says this module is ready to be read, not what to read.
             return souther.compiler.ExampleStatements.fakeTables(prepared.value(), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
@@ -882,7 +882,7 @@ public final class Output {
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.Reachable(name)).value();
+            Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             souther.compiler.ExampleVerifier.Observations observed =
                     souther.compiler.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
                             requirements, evaluationLoader(db),
