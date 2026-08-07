@@ -215,7 +215,7 @@ class CompileBehaviorByNameTest {
                             List.map(f, xs)
                         }""")));
 
-        assertEquals("E1401", handed.diagnostic().code());
+        assertEquals("E1818", handed.diagnostic().code());
         assertEquals(handed.diagnostic().code(), bound.diagnostic().code());
     }
 

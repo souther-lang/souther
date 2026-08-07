@@ -107,7 +107,7 @@ public final class Analyzer {
         try {
             for (CstError e : CstParser.parse(text).errors()) {
                 out.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
-                        LspDiagnostic.ERROR, null, e.legacyMessage()));
+                        LspDiagnostic.ERROR, e.code().name(), e.legacyMessage()));
             }
         } catch (RuntimeException | StackOverflowError e) {
             return List.of(internalError(lines, e));   // the parse itself did not finish
@@ -177,7 +177,7 @@ public final class Analyzer {
             try {
                 for (CstError e : CstParser.parse(text).errors()) {
                     syntax.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
-                            LspDiagnostic.ERROR, null, e.legacyMessage()));
+                            LspDiagnostic.ERROR, e.code().name(), e.legacyMessage()));
                 }
             } catch (RuntimeException | StackOverflowError e) {
                 syntax.add(internalError(lines, e));   // the parse itself did not finish

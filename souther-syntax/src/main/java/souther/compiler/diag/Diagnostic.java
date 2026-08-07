@@ -2,6 +2,7 @@ package souther.compiler.diag;
 
 
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.List;
 
 /**
@@ -149,7 +150,8 @@ public final class Diagnostic {
      * agree at every site reporting that rule and neither is given here.
      */
     public static Builder of(DiagnosticCode code, String messageKey) {
-        return new Builder(code, messageKey);
+        return new Builder(Objects.requireNonNull(code, "a diagnostic reports a rule, and a rule has"
+                + " a code; `literal` is the one path without one"), messageKey);
     }
 
 

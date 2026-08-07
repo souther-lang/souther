@@ -858,7 +858,7 @@ public final class TypeOps {
         for (Ast.Field f : data.fields()) {
             if (types.put(f.name(), fieldType(f)) != null) {
                 throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1004, "e1004.dup").at(f.pos())
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.declaredfield").at(f.pos())
                                 .args(f.name(), data.name()).build(),
                         "duplicate field `" + f.name() + "` in `" + data.name() + "`");
             }

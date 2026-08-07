@@ -18,6 +18,11 @@ import souther.compiler.diag.DiagnosticCode;
 public record CstError(int offset, int width, DiagnosticCode code, String messageKey,
                        String legacyMessage, Object[] args) {
 
+    public CstError {
+        java.util.Objects.requireNonNull(code, "a syntax error says which part of the language did"
+                + " not read, and that is a code");
+    }
+
     public static CstError of(int offset, int width, DiagnosticCode code, String messageKey,
                               String legacyMessage, Object... args) {
         return new CstError(offset, width, code, messageKey, legacyMessage, args);

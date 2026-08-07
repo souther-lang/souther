@@ -131,6 +131,9 @@ public enum DiagnosticCode {
     E1813("a-recursive-helper-declares-its-return-type", "check.helper.title"),
     E1814("a-recursive-helper-does-not-reach-an-injected-behavior", "check.helper.title"),
     E1815("an-empty-collections-element-type-is-determined", "check.fold.seed.title"),
+    E1816("what-is-ordered-by-is-an-ordered-value", "check.type.mismatch.title"),
+    E1817("what-is-summed-is-a-number", "check.type.mismatch.title"),
+    E1818("a-helper-does-not-call-a-behavior", "e1401.title"),
 
     // --- examples ---
     E1901("example-target-is-a-behavior", "check.example.title"),

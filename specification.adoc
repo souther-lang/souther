@@ -192,7 +192,7 @@ The extension is `+.sou+`. Each file defines one module.
 
 Two hold of the names inside it:
 
-* [[a-declaration-is-made-once]]a name is declared once in the namespace it is declared in — a `+let+`, a data, a field of one data, an entry of one clause list;
+* [[a-declaration-is-made-once]]a name is written once where one is expected — a `+let+`, a data, a field of one data, a field of one construction, an entry of one clause list;
 * [[a-spelling-answers-one-thing-where-a-value-is-written]]a spelling has one answer where a value is written. A data is written as a value — a unit data is one, a newtype is applied to what it wraps — so a `+let+` and a data of one name would be one spelling with two answers.
 
 [[a-binding-does-not-shadow-a-builtin]]A binding MUST NOT take the name of a built-in value. A binding is in force over a region and everything outside it is unaffected (<<blocks>>), which is what makes shadowing a model's own names harmless; a built-in has no declaration to read instead, so a binding over one takes it away with nothing to point at.
@@ -1941,7 +1941,7 @@ A behavior's `+let+` may call a behavior. Which ones it may call is decided by o
 
 [[behavior-does-not-reach-itself]]A behavior MUST NOT reach itself, whether through calls, `+depends on+` or `+>->+` stages, or a mixture of them. A `+depends on+` cycle leaves nothing to build first and a call cycle does not terminate; recursion belongs to a helper `+let+`, where it is proven total (<<fn-rules>>).
 
-A helper `+let+` may not. A helper is expanded into what calls it, and an invariant that names one carries it to an importing module as source (<<published-modules>>); it names only what travels with it, which is what keeps an invariant's rule a single question about the requirement set rather than a second one about where a name came from. A behavior a helper wanted is called from the behavior's own `+let+` and its result passed in.
+[[a-helper-does-not-call-a-behavior]]A helper `+let+` may not. A helper is expanded into what calls it, and an invariant that names one carries it to an importing module as source (<<published-modules>>); it names only what travels with it, which is what keeps an invariant's rule a single question about the requirement set rather than a second one about where a name came from. A behavior a helper wanted is called from the behavior's own `+let+` and its result passed in.
 
 * An *empty* requirement set: call it by name. Nothing is injected and nothing is written in `+depends on+`.
 * A *non-empty* requirement set: write it in `+depends on+` and call it through that name (<<depends-on>>). It arrives already bound, as any requirement does.
@@ -3029,7 +3029,10 @@ A core module may also write `+private let+`. A `+private+` declaration is part 
 *Every* standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature — there is no compiler table of signatures, and a function the compiler can call but a declaration does not describe does not exist. What stays in the compiler is what the *type language cannot say*, as a side condition on a declared signature rather than in place of one:
 
 * the operators (`{plus}` `+-+` `+*+` `+/+` `+==+` `+<+` `+<=+` `+>+` `+>=+`) are syntax, and the arithmetic ones carry the closed-newtype rules (<<newtype>>) a plain function does not;
-* "the element is an ordered value" — Souther has no `+comparable+` type class, so `+List.sort+` / `+max+` / `+min+` / `+sortBy+` declare `+List<'a>+` and the constraint on `+'a+` is checked in the compiler.
+* [[what-is-ordered-by-is-an-ordered-value]]"the element is an ordered value" — Souther has no `+comparable+` type class, so `+List.sort+` / `+max+` / `+min+` declare `+List<'a>+` and the constraint on `+'a+` is checked in the compiler. `+sortBy+` states it of what its key function answers with, which is the value being ordered by;
+* [[what-is-summed-is-a-number]]"the element is a number" — `+List.sum+` / `+product+` declare `+List<'a>+` for the same reason, and the constraint that `+'a+` is `+Int+` or `+Decimal+`, the two types arithmetic is defined for, is checked in the compiler.
+
+Neither is a type mismatch, and a diagnostic about one does not read as one: the argument has the type its parameter takes, and what it does not have is a capability the signature had no way to ask for.
 
 Because a signature is a declaration and nothing else, a standard-library function is a function value like any other: `+List.map(String.trim, xs)+` and `+let f = String.length+` are ordinary (<<blocks>>). A value the library offers is declared the same way, with no parameter list — `+let empty : Map<'k, 'a> = intrinsic "map.empty"+` — and is written `+Map.empty+`.
 
@@ -4700,6 +4703,37 @@ position — the field or behavior output it feeds — or seed it with a non-emp
 ----
 
 Reported at the operation (<<an-empty-collections-element-type-is-determined>>). What an empty collection holds does not follow from the collection, so it follows from the position it is written in or from nothing at all.
+
+[#e1816]
+=== What is ordered by is not an ordered value
+
+[,text]
+----
+`sort` needs an ordered element, but the element is Member.
+----
+
+Reported at the call (<<what-is-ordered-by-is-an-ordered-value>>). Not a type mismatch: `+sort+`, `+max+`, `+min+` declare `+List<'a>+` and the argument fits, and `+sortBy+`'s key function fits its declared signature too. What is missing is a capability the signature had no way to ask for, Souther having no `+comparable+` type class (<<stdlib>>), so the compiler asks it beside the signature. For `+sortBy+` it is asked of what the key answers with, that being the value being ordered by.
+
+[#e1817]
+=== What is summed is not a number
+
+[,text]
+----
+`sum` needs an Int or a Decimal element, but the element is String.
+----
+
+Reported at the call (<<what-is-summed-is-a-number>>). The same shape as <<e1816>> and a different obligation: `+sum+` and `+product+` declare `+List<'a>+`, and what `+'a+` has to be is one of the two types arithmetic is defined for.
+
+[#e1818]
+=== A behavior is called from somewhere that does not reach one
+
+[,text]
+----
+`allocate` is a behavior, and it cannot be called from here.
+Hint: Call it from the behavior's own `let` and pass the result in, or name it in `depends on`.
+----
+
+Reported at the call (<<a-helper-does-not-call-a-behavior>>). A helper is expanded into whatever calls it and travels to an importing module as source, so what it may name is what travels with it; a `+>->+` composition is composed with a behavior rather than calling one. Not <<e1401>>, which is about a name that is no behavior at all.
 
 [#e1901]
 === Example target is not a behavior

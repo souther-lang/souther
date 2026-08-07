@@ -84,7 +84,7 @@ public final class CallElaborator {
             return;
         }
         throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1805, "check.ordered.key")
+                Diagnostic.of(DiagnosticCode.E1816, "check.ordered.key")
                         .at(call.pos()).args(call.written(), Type.show(answered))
                         .hint("check.ordered.hint").build(),
                 call.written() + "'s key must be an ordered value (Int, String, Decimal, Date, DateTime,"
@@ -345,8 +345,8 @@ public final class CallElaborator {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
             case ValueName.Behavior _ -> CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1401, "e1401.behavior").at(call.name().region())
-                            .args(call.written()).hint("e1401.behavior.hint", call.written())
+                    Diagnostic.of(DiagnosticCode.E1818, "check.behavior.notcallablehere").at(call.name().region())
+                            .args(call.written()).hint("check.behavior.notcallablehere.hint", call.written())
                             .build(),
                     "`" + call.written() + "` is a behavior, and it cannot be called from here: a helper"
                             + " `let` does not reach one, and a `>->` composition is composed with"
@@ -688,7 +688,7 @@ public final class CallElaborator {
                             + " other type has no place for one");
         }
         throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1806, "check.numeric")
+                Diagnostic.of(DiagnosticCode.E1817, "check.numeric")
                         .at(call.name().region())
                         .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
                         .hint("check.numeric.hint").build(),
@@ -707,7 +707,7 @@ public final class CallElaborator {
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
     static CompileException needsOrdered(SourcePos pos, String subject, Type element, String legacy) {
         return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1806, "check.ordered").at(pos)
+                Diagnostic.of(DiagnosticCode.E1816, "check.ordered").at(pos)
                         .args(subject, Localizable.of("kind.ordered.list"), Type.show(element))
                         .hint("check.ordered.hint").build(),
                 legacy);
