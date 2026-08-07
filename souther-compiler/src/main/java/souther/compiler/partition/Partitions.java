@@ -132,8 +132,16 @@ public final class Partitions {
             NumericDomain.Bounds domain = base.domains().get(axis.path().toString());
             BigDecimal min = domain == null ? null : domain.min();
             BigDecimal max = domain == null ? null : domain.max();
+            // Filtered once, and both answers read the filtered list. A line outside what the
+            // position holds divides nothing, and it is not a boundary either: leaving it in the
+            // cuts while the intervals dropped it asks for a row at a value the record refuses,
+            // which is the thing being fixed here happening again one field over.
+            List<Threshold> reachable = here.stream()
+                    .filter(t -> (min == null || t.value().compareTo(min) >= 0)
+                            && (max == null || t.value().compareTo(max) <= 0))
+                    .toList();
             List<PartitionClass> classes = Intervals.classesOf(
-                    Intervals.of(here, min, max), axis.path(), axis.type(), symbols);
+                    Intervals.of(reachable, min, max), axis.path(), axis.type(), symbols);
             // What the position is, not what an invariant said about it. There is a bound to read
             // only where the type is a newtype carrying one, and a plain `Decimal` has none — read
             // off the bound, every such position would be called an integer and a threshold of
@@ -143,7 +151,7 @@ public final class Partitions {
             // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), axis.path(), axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), here, decimal)).excluding(axis.excluded()));
+                    merged(axis.cuts(), reachable, decimal)).excluding(axis.excluded()));
         }
         return new Partitioning(out, base.omitted(), base.domains());
     }
@@ -381,10 +389,6 @@ public final class Partitions {
     }
 
     /** The cuts of a position, each carrying the rule that drew it. */
-    static List<Cut> cutsOf(Type type, Symbols symbols) {
-        return cutsOf(type, boundsOf(type, symbols), boundsOf(type, symbols), null);
-    }
-
     /**
      * The cuts of a position whose range is already settled.
      *

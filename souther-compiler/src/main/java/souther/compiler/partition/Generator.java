@@ -548,7 +548,41 @@ public final class Generator {
                 here.put(axis.path().toString(), decided.get(axis.path().toString()));
             }
         }
-        return valueAt(subject, p, here, Map.of(), check);
+        return valueAt(subject, p, here, settledIn(here), check);
+    }
+
+    /**
+     * The positions a caller fixed at one number.
+     *
+     * <p>Only where the position has a single value to take. A class offers one value to stand for
+     * it, and that is the one the row will carry, so the rest of the record can be chosen beside it;
+     * a position still holding several is not settled at all and nothing is claimed of it.
+     */
+    private static Map<String, BigDecimal> settledIn(Map<String, List<FixtureTemplate>> decided) {
+        Map<String, BigDecimal> out = new LinkedHashMap<>();
+        decided.forEach((path, candidates) -> {
+            if (candidates.size() == 1) {
+                BigDecimal number = writtenNumber(candidates.get(0).value());
+                if (number != null) {
+                    out.put(path, number);
+                }
+            }
+        });
+        return out;
+    }
+
+    /** The number a fixture is, reaching through the newtype it may be wrapped in. */
+    private static BigDecimal writtenNumber(Ast.Expr written) {
+        return switch (written) {
+            case Ast.IntLit i -> BigDecimal.valueOf(i.value());
+            case Ast.DecimalLit d -> d.value();
+            case Ast.Neg n -> {
+                BigDecimal inner = writtenNumber(n.operand());
+                yield inner == null ? null : inner.negate();
+            }
+            case Ast.Apply a when a.args().size() == 1 -> writtenNumber(a.args().get(0));
+            case null, default -> null;
+        };
     }
 
     /** One parameter's value, with the positions the caller fixed already decided. */

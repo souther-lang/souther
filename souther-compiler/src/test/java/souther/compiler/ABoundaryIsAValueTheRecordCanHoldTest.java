@@ -125,6 +125,41 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "nothing here is out of reach:\n" + report);
     }
 
+    /** A guard drawn at a value the record cannot hold divides nothing and is no edge either. Held
+     * because the two answers are computed from one list, and a line left in the cuts while the
+     * intervals dropped it is this same defect one field over. */
+    @Test
+    void aLineTheRecordCannotHoldIsNotABoundaryEither() throws Exception {
+        String gated = TIMESHEET
+                .replace("interval.endsAt.value - interval.startsAt.value >= 480",
+                        "interval.startsAt.value >= 1440")
+                .replace("then LongShift", "then LongShift")
+                .replace("else ShortShift", "else ShortShift");
+        List<String> asked = boundariesOf(gated);
+
+        assertEquals(4, asked.size(), () -> "asked for " + asked);
+        assertFalse(asked.stream().anyMatch(l -> l.contains("guard@")),
+                () -> "no interval starts at 1440, so the comparison has no line to be at: " + asked);
+    }
+
+    /**
+     * A row filling a class picks the rest of the record beside the value it settled on.
+     *
+     * <p>The boundary filler and the class filler are two searches over one record, and only one of
+     * them was told what the other had fixed. A class of `720 <= x <= 1439` stands for 720, and an
+     * `endsAt` taken from its own type's bottom is refused beside it.
+     */
+    @Test
+    void aClassIsFilledBesideWhatItSettledOn() throws Exception {
+        String report = reportOn(TIMESHEET.replace(
+                        "interval.endsAt.value - interval.startsAt.value >= 480",
+                        "interval.startsAt.value >= 720"),
+                "--generate", "--boundaries");
+
+        assertFalse(report.contains("every value tried was refused"),
+                () -> "the class of the afternoon is as writable as its edge:\n" + report);
+    }
+
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test
