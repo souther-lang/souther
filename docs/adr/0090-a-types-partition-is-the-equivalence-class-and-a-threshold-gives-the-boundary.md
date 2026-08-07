@@ -1,6 +1,8 @@
 # ADR-0090: A type's partition is the equivalence class, and a threshold gives the boundary
 
 Status: Accepted. Fixes what the compiler may derive as an equivalence class, and what it may not.
+Revised in place for #427: what a threshold is intersected with is what the *position* admits, which
+is the field's type read under the rules of the record holding it.
 
 ## Context
 
@@ -30,8 +32,21 @@ report names it as *not derivable* rather than dividing it.
 A type states classes: `Bool` is two, an optional is two, a sum is its leaf cases. A record is not a
 class — it is taken apart field by field, two levels deep. A threshold states where one class ends:
 an invariant bounds what can exist, and a `guard`'s comparison against a constant divides what a row
-can write. Thresholds at one position merge into one partition and are intersected with what the type
-admits.
+can write. Thresholds at one position merge into one partition and are intersected with what the
+position admits.
+
+What a position admits is not what its type admits. A field's type says which values exist of that
+type; the record holding it may relate that field to another, and the position admits that rule read
+at this field — `startsAt < endsAt` over minutes of a day leaves `startsAt` stopping at 1439. Read off
+the type alone the position offers 1440, which no row can be written at, and the report cannot tell
+that gap from one worth closing.
+
+A record's rule takes an edge in and does not put one there. A position its own type leaves open stays
+one the model draws no line through: a rule between two fields is not a partition of one of them, and
+treating it as one would divide an `Int` the author never bounded. What is read of such a rule is an
+ordering of numbers and nothing else; a rule of another shape leaves the position where its type left
+it, which is the safe direction — an edge too far out is a row nobody can write, and an edge never
+moved is one they can.
 
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both
@@ -41,7 +56,9 @@ one.
 Only a comparison that is the whole of a `guard`'s condition is read. A condition built with `&&`,
 `||` or `!` contributes no threshold.
 
-A cut keeps every rule that drew it. One value can be an obligation several times over.
+A cut keeps every rule that drew it. One value can be an obligation several times over — but a rule
+that took a line in is not a second line. The bound and the record that narrowed it settled one edge
+together and are one obligation, named by both.
 
 ## Consequences
 
