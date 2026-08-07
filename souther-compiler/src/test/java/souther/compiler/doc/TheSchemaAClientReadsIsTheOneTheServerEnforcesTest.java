@@ -55,6 +55,19 @@ class TheSchemaAClientReadsIsTheOneTheServerEnforcesTest {
     }
 
     /**
+     * A number that no `double` holds is still the number that was sent. Rounding it on the way in
+     * decides the question before anything gets to ask it: `1.0000000000000000001` becomes a count
+     * the schema does not admit and would be honoured as `1`, and `1e-324` becomes zero, which is
+     * this server's spelling for every hit there is.
+     */
+    @Test
+    void aCountIsJudgedAsTheNumberSentAndNotAsWhatADoubleCanHold() {
+        assertCount("1.0000000000000000001", false);
+        assertCount("1e-324", false);
+        assertCount("1e400", false);
+    }
+
+    /**
      * Both edges of the domain refuse, and a client that cannot tell which one it fell off does
      * not know whether to round the number or to make it smaller.
      */
@@ -64,6 +77,8 @@ class TheSchemaAClientReadsIsTheOneTheServerEnforcesTest {
         assertTrue(refusal("2147483648").contains("2147483647"), refusal("2147483648"));
         assertFalse(refusal("2147483648").contains("whole number"),
                 "2147483648 is whole; what it is not is small enough");
+        assertTrue(refusal("1e400").contains("2147483647"),
+                "1e400 is whole too, and taking it to a double would have called it otherwise");
     }
 
     @Test

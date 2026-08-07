@@ -1,5 +1,6 @@
 package souther.compiler.doc;
 
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -34,7 +35,19 @@ import java.util.regex.Pattern;
  */
 public final class McpServer {
 
-    private static final JsonMapper JSON = JsonMapper.builder().build();
+    /**
+     * The reader for requests and the writer for responses.
+     *
+     * <p>Numbers with a point or an exponent are kept as decimals rather than taken to {@code
+     * double}, because a request's number is a value and {@code double} is a box that not every
+     * value fits. {@code 1.0000000000000000001} rounds to {@code 1} on the way in, and a count no
+     * schema admits would then be honoured as one that it does; {@code 1e-324} falls to zero, which
+     * is this server's spelling for every hit there is. What is checked further down has to be the
+     * number that was sent.
+     */
+    private static final JsonMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .build();
 
     /**
      * One character that is not a space — written so that a client's regular expressions and this
