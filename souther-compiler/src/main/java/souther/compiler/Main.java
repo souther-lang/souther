@@ -62,7 +62,7 @@ public final class Main {
               --behavior <name>         report only this behavior
               --generate                print commented rows for what nothing covers
               --boundaries              with --generate, add rows at the untried boundaries
-              --strict                  exit non-zero while rows are waiting for a `let`
+              --strict                  exit non-zero on a gap the report names
             options (compile):
               --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
               --warnings report|error   refuse a compile that warns (default report)
@@ -402,8 +402,12 @@ public final class Main {
                 String rows = GeneratedRows.of(compilation, module, behavior, boundaries);
                 (render.json() ? System.err : System.out).print(rows);
             }
-            if (strict && report.pendingRows() > 0) {
-                System.err.println(report.pendingRows() + " example row(s) are waiting for a `let`");
+            // What the report just named, and nothing else. A row waiting for a `let` is not one of
+            // them: waiting is the normal state of a model being written, and a gate on it refuses the
+            // record of what an injected behavior owes — which is the thing the report exists to keep.
+            if (strict && report.adequacy() == AdequacyReport.AdequacyStatus.NOT_SATISFIED) {
+                System.err.println(Messages.get("cli.examples.strict.refused", render.locale(),
+                        report.adequacyGaps().size()));
                 return 1;
             }
             return 0;

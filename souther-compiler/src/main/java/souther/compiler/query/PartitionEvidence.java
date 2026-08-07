@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Partitions;
 
 import java.util.List;
 import java.util.Set;
@@ -19,11 +20,13 @@ import java.util.Set;
  * @param boundaries   one entry per rule that drew a line, per side of it
  * @param notDerivable positions the model does not divide, named so a report can say what it could
  *                     not measure rather than passing over it
- * @param omitted      positions dropped for being past the axis limit
+ * @param omitted      positions dropped for being past the axis limit, with what dropping each
+ *                     one cost — a position that was carrying a boundary leaves the rows there
+ *                     unmeasured rather than covered
  */
 public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> boundaries,
                                 PairSpace pairs, List<String> notDerivable,
-                                List<Incompleteness> omitted) {
+                                List<Partitions.OmittedAxis> omitted) {
 
     public static final PartitionEvidence NONE = new PartitionEvidence(List.of(), List.of(),
             PairSpace.NONE, List.of(), List.of());
