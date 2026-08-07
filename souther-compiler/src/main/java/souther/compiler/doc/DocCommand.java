@@ -97,9 +97,13 @@ public final class DocCommand {
         SpecDocument.Section section = spec.section(anchor);
         if (section == null) {
             err.println("no section `" + anchor + "`");
+            // Through the same fold the lookup itself went through: a reader who typed the case the
+            // compiler prints would otherwise be told there is nothing near what they asked for.
+            String asked = DocName.canonical(anchor);
             List<String> near = spec.sections().stream()
                     .map(SpecDocument.Section::anchor)
-                    .filter(a -> a.contains(anchor) || anchor.contains(a))
+                    .filter(a -> DocName.canonical(a).contains(asked)
+                            || asked.contains(DocName.canonical(a)))
                     .toList();
             if (!near.isEmpty()) {
                 err.println("did you mean: " + String.join(", ", near));

@@ -37,7 +37,11 @@ public final class SpecDocument {
         this.ownTexts = List.copyOf(ownTexts);
         this.byAnchor = new LinkedHashMap<>();
         for (Section s : sections) {
-            byAnchor.put(s.anchor(), s);
+            Section taken = byAnchor.put(DocName.canonical(s.anchor()), s);
+            if (taken != null) {
+                throw new IllegalStateException("two sections are asked for by the same name: `"
+                        + taken.anchor() + "` and `" + s.anchor() + "`");
+            }
         }
     }
 
@@ -103,9 +107,10 @@ public final class SpecDocument {
         return inOrder;
     }
 
-    /** The section named by {@code anchor}, or null when no section has that anchor. */
+    /** The section named by {@code anchor} in whatever case it was asked for, or null when no
+     *  section has that anchor. */
     public Section section(String anchor) {
-        return byAnchor.get(anchor);
+        return byAnchor.get(DocName.canonical(anchor));
     }
 
     /**
