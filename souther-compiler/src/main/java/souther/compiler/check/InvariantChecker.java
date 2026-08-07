@@ -399,8 +399,13 @@ public final class InvariantChecker {
      * values it is is not decided here, so what holds of the construction is what holds of both.
      */
     private enum Verdict {
-        /** Every clause is discharged, or none of them is expressible. */
+        /** Every clause is discharged. */
         PROVED,
+        /** A clause names something the check cannot read at this construction, and no clause is
+         * unproven: nothing is owed here because nothing could be asked. Silent, as a discharge is,
+         * and not the same thing — the run-time check is what stands for the clause, and an author
+         * who reads the silence as a proof is reading something that was never attempted. */
+        UNREPRESENTABLE,
         /** A clause is expressible and unproven: the construction may abort. */
         UNKNOWN,
         /** A clause the reading without the path's assumptions already refutes, so the invariant
@@ -413,6 +418,11 @@ public final class InvariantChecker {
 
         boolean refuted() {
             return this == REFUTED_ALONE || this == REFUTED_NOT_ALONE;
+        }
+
+        /** Whether nothing is said of a construction that came out this way. */
+        boolean silent() {
+            return this == PROVED || this == UNREPRESENTABLE;
         }
 
         /**
@@ -432,7 +442,12 @@ public final class InvariantChecker {
             if (a == b) {
                 return a;
             }
-            return a.refuted() && b.refuted() ? REFUTED_NOT_ALONE : UNKNOWN;
+            if (a.refuted() && b.refuted()) {
+                return REFUTED_NOT_ALONE;
+            }
+            // One branch discharged the invariant and the other could not read it. Neither says the
+            // construction may abort, so neither does this; what it is not is proven of both.
+            return a.silent() && b.silent() ? UNREPRESENTABLE : UNKNOWN;
         }
     }
 
@@ -445,17 +460,24 @@ public final class InvariantChecker {
         // cannot be guarded is not the same as what cannot be computed.
         Set<Core> unnamed = unnamed(given.values(), k, at);
         List<Predicates.Clause> owed = new ArrayList<>();
+        // A clause the check cannot read here owes nothing and proves nothing, and the two are not
+        // the same answer. Kept apart: a clause that owes nothing because it folded to what it is read
+        // with is discharged, and one that owes nothing because nothing here could be asked of it is
+        // left to the run-time check.
+        boolean unreadable = false;
         // A newtype construction from a value written out is the constant check's to report: it names
         // the clause that failed. It reads the construction as written, so a name given the value is
         // not one it sees, and this check says it instead — which is what `decidesFalse` carries.
         for (Core stated : clauses.statedAt(named, type, given)) {
             List<Predicates.Clause> o = predicates.obligations(stated, k, at, unnamed, decidesFalse);
-            if (o != null) {
+            if (o == null) {
+                unreadable = true;
+            } else {
                 owed.addAll(o);
             }
         }
         if (owed.isEmpty()) {
-            return Verdict.PROVED;   // nothing here is expressible — the run-time check stands for it
+            return unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
         }
         NumericDomain dom = k.numbers();
         // The same clauses read against the same site, under what would be known here had no
@@ -490,7 +512,12 @@ public final class InvariantChecker {
         if (alongside) {
             return Verdict.REFUTED_NOT_ALONE;
         }
-        return unknown ? Verdict.UNKNOWN : Verdict.PROVED;
+        if (unknown) {
+            return Verdict.UNKNOWN;
+        }
+        // Every clause that could be read is discharged. One that could not be read still stands, so
+        // this is not the whole invariant proven.
+        return unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
     }
 
     /** Whether the constant check reads this construction: a newtype's, over a value written where
@@ -520,6 +547,10 @@ public final class InvariantChecker {
                             .hint("check.invariant.reify", type.name()).warning().build());
                 }
             }
+            // Nothing was asked here, so nothing is said. Whether that is the right thing to say of a
+            // construction the check could not read is a question about what E2011 reports, and this
+            // answers it the way it has always been answered.
+            case UNREPRESENTABLE -> { }
             case PROVED -> { }
         }
     }
