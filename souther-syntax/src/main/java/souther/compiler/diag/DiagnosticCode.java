@@ -74,7 +74,7 @@ public enum DiagnosticCode {
     E1310("unreachable-states-its-reason", "parse.title"),
     E1311("what-crosses-the-boundary-has-an-external-representation", "check.boundary.title"),
     E1312("a-parameter-names-one-type", "check.boundary.title"),
-    E1313("a-behavior-does-not-output-an-optional", "check.boundary.title"),
+    E1313("an-optional-does-not-stand-in-a-boundary", "check.boundary.title"),
     E1314("a-map-that-crosses-is-keyed-by-a-text-key", "check.boundary.title"),
     E1315("a-collection-member-supports-equality", "check.boundary.title"),
     E1316("a-generic-type-is-given-its-arguments", "check.typearg.title"),

@@ -552,29 +552,42 @@ public final class SpecChecker {
     }
 
     /**
-     * A behavior does not answer an optional (ADR-0011). "Might not be there" as a business result is
-     * the model's own sum — {@code -> 会員 | 会員なし} — which reads closer to the specification than
-     * {@code Option<会員>}, and it is what a reader of the answer gets to match on. It also keeps the
-     * runtime's {@code Option} out of the Java-facing signature an exposed behavior generates
-     * (ADR-0008).
+     * An optional does not stand in a behavior's boundary. A boundary carries the model's own
+     * vocabulary, and absence there is owned by the data that holds it, on a {@code ?} field, or by a
+     * sum the model names — {@code -> 会員 | 会員なし}, which reads closer to the specification than
+     * {@code Option<会員>} and is what a reader of the answer gets to match on. What may not cross is
+     * the runtime representation of structural optionality, which has no owner on the far side.
      *
      * <p>Asked of the resolved type, so it holds whichever way the type was written: naming it and
      * marking it with {@code ?} reach the same type, and a rule attached to one spelling is a rule the
-     * other spelling walks past (issue #202). A data with an optional field is unaffected — that is a
-     * field, which is where an optional belongs.
+     * other spelling walks past. Asked of the boundary's shape rather than of the whole type, so a
+     * collection carrying one is subject to it and a data holding one is not — that is a field, which
+     * is where an optional belongs.
      */
-    static void rejectOptionalOutput(Ast.SpecBehavior spec, Symbols symbols) {
-        if (!(TypeOps.successType(spec.ret(), symbols) instanceof Type.OptionOf opt)) {
-            return;
+    static void rejectOptionalIO(Ast.SpecBehavior spec, Symbols symbols) {
+        for (Ast.Param p : spec.params()) {
+            Type opt = TypeOps.optionalInBoundaryShape(TypeOps.successType(p.type(), symbols));
+            if (opt != null) {
+                throw CompileException.of(
+                        Diagnostic.of(DiagnosticCode.E1313, "check.param.optional")
+                                .at(p.written().region()).args(p.name(), Type.show(opt))
+                                .hint("check.param.optional.hint").build(),
+                        "parameter `" + p.name() + "` carries an optional (" + Type.show(opt)
+                                + "); an input that may be absent is a `?` field of the data that"
+                                + " carries it, or a case the model names");
+            }
         }
-        String element = Type.show(opt.element());
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1313, "check.output.optional")
-                        .at(spec.pos()).args(spec.name(), Type.show(opt))
-                        .hint("check.output.optional.hint", element).build(),
-                "behavior `" + spec.name() + "` outputs an optional (" + Type.show(opt)
-                        + "); an absence a behavior answers with is a case of the model's own sum —"
-                        + " write `-> " + element + " | <the absence>` and name what it is (ADR-0011)");
+        Type opt = TypeOps.optionalInBoundaryShape(TypeOps.successType(spec.ret(), symbols));
+        if (opt != null) {
+            throw CompileException.of(
+                    Diagnostic.of(DiagnosticCode.E1313, "check.output.optional")
+                            .at(spec.pos()).args(spec.name(), Type.show(opt))
+                            .hint("check.output.optional.hint").build(),
+                    "the output of `" + spec.name() + "` carries an optional (" + Type.show(opt)
+                            + "); an absence a behavior answers with is a case of the model's own sum,"
+                            + " written `-> A | <the absence>`, or a `?` field of the data that carries"
+                            + " it");
+        }
     }
 
     /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object

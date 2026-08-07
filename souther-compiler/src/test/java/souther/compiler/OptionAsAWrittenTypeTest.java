@@ -9,8 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * `Option<T>` is the name of the type a `?` field has, and a model may write it wherever it reads one
- * (issue #202). What it may not do is make one — that is the `?` field being given its value, and
- * nothing else — or answer one out of a behavior, which is a domain sum's job (ADR-0011).
+ * inside the model. What it may not do is make one — that is the `?` field being given its value, and
+ * nothing else — or stand in a behavior's boundary, where the vocabulary is the model's own and
+ * absence belongs to the data that carries it.
  */
 class OptionAsAWrittenTypeTest {
 
@@ -34,15 +35,6 @@ class OptionAsAWrittenTypeTest {
                 behavior bill : (a: Amount) -> Receipt
                     constructs Receipt
                 let bill (a) = Receipt { total = a }
-                """));
-    }
-
-    @Test
-    void aBehaviorInputMayNameTheType() {
-        assertDoesNotThrow(() -> Compiler.compile(HEAD + """
-                behavior bill : (o: Option<Int>) -> Receipt
-                    constructs Receipt, Amount
-                let bill (o) = Receipt { total = Amount(Option.withDefault(0, o)) }
                 """));
     }
 
@@ -209,7 +201,7 @@ class OptionAsAWrittenTypeTest {
         }
     }
 
-    // --- answering one out of a behavior --------------------------------------------------------
+    // --- the boundary of a behavior -------------------------------------------------------------
 
     @Test
     void aBehaviorMayNotOutputAnOptional() {
@@ -217,8 +209,51 @@ class OptionAsAWrittenTypeTest {
                 behavior bill : (a: Amount) -> Option<Int>
                 let bill (a) = List.get(0, [ 1 ])
                 """);
-        assertTrue(e.getMessage().contains("outputs an optional"), e.getMessage());
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
         assertTrue(e.getMessage().contains("|"), "the message points at the domain sum: " + e.getMessage());
+    }
+
+    @Test
+    void aBehaviorMayNotTakeAnOptional() {
+        // A parameter is a boundary, and the model's own vocabulary is what crosses it.
+        CompileException e = err(HEAD + """
+                behavior bill : (o: Option<Int>) -> Receipt
+                    constructs Receipt, Amount
+                let bill (o) = Receipt { total = Amount(Option.withDefault(0, o)) }
+                """);
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+        assertTrue(e.getMessage().contains("`o`"), "the parameter is named: " + e.getMessage());
+    }
+
+    @Test
+    void anOptionalInsideAnOutputIsRefusedToo() {
+        // The optional is not the output; it is what the output carries. The rule is asked of the
+        // boundary's shape, so a collection is descended.
+        CompileException e = err(HEAD + """
+                behavior bill : (a: Amount) -> List<Option<Int>>
+                let bill (a) = [ List.get(0, [ 1 ]) ]
+                """);
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+    }
+
+    @Test
+    void anOptionalUnderAMapValueIsRefused() {
+        CompileException e = err(HEAD + """
+                behavior bill : (a: Amount) -> Map<String, Option<Int>>
+                let bill (a) = Map.singleton("k", List.get(0, [ 1 ]))
+                """);
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+    }
+
+    @Test
+    void anOptionalInsideAnInputIsRefusedToo() {
+        CompileException e = err(HEAD + """
+                behavior bill : (os: List<Option<Int>>) -> Receipt
+                    constructs Receipt, Amount
+                let bill (os) = Receipt { total = Amount(List.length(os)) }
+                """);
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+        assertTrue(e.getMessage().contains("`os`"), "the parameter is named: " + e.getMessage());
     }
 
     @Test
@@ -233,7 +268,7 @@ class OptionAsAWrittenTypeTest {
                 let second (n) = Receipt { total = Amount(n) }
                 behavior both = first >-> second
                 """);
-        assertTrue(e.getMessage().contains("outputs an optional"), e.getMessage());
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
     }
 
     @Test
@@ -243,6 +278,18 @@ class OptionAsAWrittenTypeTest {
                 behavior write : (a: Amount) -> Note
                     constructs Note
                 let write (a) = Note { text = None }
+                """));
+    }
+
+    @Test
+    void aBehaviorMayStillTakeADataWithAnOptionalField() {
+        // The walk stops at a nominal data: absence a data owns is written on its field, and that
+        // data's own decoder is what reads it. Both sides of the boundary read the same way.
+        assertDoesNotThrow(() -> Compiler.compile(HEAD + """
+                data Note = { text: String? }
+                behavior read : (n: Note) -> Receipt
+                    constructs Receipt, Amount
+                let read (n) = Receipt { total = Amount(1) }
                 """));
     }
 }
