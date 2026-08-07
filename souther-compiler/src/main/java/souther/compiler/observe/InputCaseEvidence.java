@@ -58,4 +58,16 @@ public record InputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
     public MeasurementStatus status() {
         return Evidence.status(declared, unclassifiedRows);
     }
+
+    /** Why there are no numbers, where there are none. Derived rather than held, for the reason
+     * {@link OutputCaseEvidence#reason()} gives. */
+    public Reason reason() {
+        return declared.isEmpty() ? Reason.NOT_A_SUM : null;
+    }
+
+    /** Why one input's cases have no numbers. */
+    public enum Reason {
+        /** The position is one data rather than a sum, so there is no case to cover. */
+        NOT_A_SUM
+    }
 }

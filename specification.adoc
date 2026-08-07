@@ -2676,6 +2676,29 @@ A function written where a call takes one is made there and run elsewhere. Evalu
 
 *A boundary a guard drew is met by reaching the comparison, not by writing the value.* A threshold read off a `+guard+` is a boundary to reach (<<example-adequacy>>), and a row can carry exactly that value and never get to the guard because an earlier branch went the other way. Such a boundary counts as met only where a row both wrote the value and went through one of the two arms of the `+if+` whose condition compares it. A boundary an invariant drew is met by writing the value: nothing outside the bound can be constructed, so the edge is the whole of what there is to reach.
 
+[#example-report-vocabulary]
+=== The words the report uses
+
+`+souther examples+` writes its own words, and a reader who wants to know what one of them means has nowhere to look it up unless it is written down. A diagnostic carries a code and a code names a rule; a line of this report carries neither, so its vocabulary is fixed here.
+
+*What the rows establish about a case.* `+specified+` — a row expects this case; `+observed+` — the behavior was seen to answer with it; `+verified+` — a row expected it and the behavior produced it. An input position carries `+executed+` where an output carries `+observed+` (<<example-adequacy>>).
+
+*What the rows reach of the model's own distinctions.* `+partition axes+` is how many positions the model divides at all; `+single-axis+` is how many of those positions' classes some row is in; `+pairs+` counts combinations across two positions, as counts rather than a ratio (<<example-partition>>). `+boundary+` is the lines some rule drew that a row is at. `+not derivable+` is a position the model draws no line through, which is a fact about the model and not a gap in the rows.
+
+*Whether a measure has a number.* Three states, and the report's own word for each. `+complete+` — the measure was made and everything it reads was readable, so a gap is a gap. `+partial+` — it was made and something it reads was not, so it shows what it saw and what it could not decide; a line under a partial measure reads `+undecided+`, which is that measure's account of one thing rather than a state of its own. `+unavailable+` — there is no number.
+
+*Why a measure has none.* `+unavailable+` alone does not say, and the two states it covers ask opposite things of a reader:
+
+* [[a-measure-says-why-it-has-no-number]]a measure that has no number MUST say why, and one that has a number MUST NOT.
+
+`+not applicable+` — there is nothing here for the measure to be about, and no row could change that: a `+>->+` composition and a behavior with no `+let+` have no arms, and a position that is not a sum has no cases to cover. `+not measured+` — it could have been made and was not, and which of the reasons is given: no row names this behavior, the build did not ask for the arms, or the run's instrumentation could not be tied back to the body.
+
+That difference is the one worth reading. `+not applicable+` asks nothing of an author. `+not measured+` says what to do: write a row, ask for the arms, or find out why the run could not read them. Rows that nothing could read are neither — a source that would not evaluate may hold the row being asked for, so what it was carrying is undecided rather than absent.
+
+*A measure's reason is the measure's own.* It is not worked out from the numbers beside it, from how many rows a behavior has, or from whether the behavior is injected. Those correlate with the reason and are not it.
+
+*The JSON form carries the same two.* Every measure emits `+status+`, and emits `+reason+` exactly where `+status+` is `+unavailable+`. `+schemaVersion+` is raised when a field is removed or renamed, and not when one is added: a document written before a field existed is still a document of this version. That holds one way only. Every object in the schema is closed, so an older copy of it refuses a document carrying a field added since; a reader that has to accept newer documents wants the newer schema rather than a higher number.
+
 [#control-flow]
 == Control structures
 

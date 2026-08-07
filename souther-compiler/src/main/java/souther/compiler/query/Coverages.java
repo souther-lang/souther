@@ -53,13 +53,15 @@ final class Coverages {
     }
 
     /**
-     * @param armsMeasured whether the rows were run against classes that record which arms they went
-     *                     through. A boundary a {@code guard} drew is not decided without that: the
-     *                     value being written is not the same as the comparison having been evaluated.
+     * @param armsAsked whether the build asked for the arms at all. A boundary a {@code guard} drew is
+     *                  not decided without them: the value being written is not the same as the
+     *                  comparison having been evaluated. Whether the run then managed to read them is
+     *                  a second question, and {@code observed} answers it — the two fail differently
+     *                  and a measure that took one boolean for both could not say which had happened.
      */
     static PartitionEvidence of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
-                                boolean armsMeasured, Exclusions excluded) {
+                                boolean armsAsked, Exclusions excluded) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
         Partitions.Partitioning partitioning =
@@ -85,7 +87,7 @@ final class Coverages {
             // *missing* hit undecidable and takes nothing away from one that was found: a row that
             // wrote the value and went through the comparison did so whatever else stopped.
             boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
-                    armsMeasured, observed.someRowsUnseen()));
+                    armsAsked, observed.armsUnseen(), observed.someRowsUnseen()));
         }
         return new PartitionEvidence(axes, boundaries, pairsOf(divided, readings),
                 notDerivable, partitioning.omitted());
@@ -177,9 +179,16 @@ final class Coverages {
         if (total == 0) {
             return PartitionEvidence.PairSpace.NONE;
         }
+        // Before the size of the space is worth mentioning. A combination nothing tried to sit in is
+        // not a combination left untried by anybody, and how many of them there are says nothing
+        // about a behavior no row names.
+        if (readings.noRows() && !readings.someRowsUnseen()) {
+            return PartitionEvidence.PairSpace.unavailable((int) Math.min(total, Integer.MAX_VALUE),
+                    PartitionEvidence.PairSpace.Reason.NO_ROWS);
+        }
         if (total > PAIR_LIMIT) {
             return new PartitionEvidence.PairSpace((int) Math.min(total, Integer.MAX_VALUE), 0, 0, 0,
-                    (int) Math.min(total, Integer.MAX_VALUE), true, MeasurementStatus.PARTIAL);
+                    (int) Math.min(total, Integer.MAX_VALUE), true, MeasurementStatus.PARTIAL, null);
         }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
@@ -198,11 +207,25 @@ final class Coverages {
         }
         int reached = covered.size();
         return new PartitionEvidence.PairSpace((int) total, reached, reached, 0,
-                (int) total - reached, false, readings.status(axes));
+                (int) total - reached, false, readings.status(axes), null);
     }
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings,
                                                              Exclusions excluded) {
+        List<String> classes = axis.eligible().stream().map(PartitionClass::id).toList();
+        // The model's own words for why, carried through so a report can say what it took out of the
+        // denominator rather than showing a position with fewer classes than its type has. Said
+        // whether or not a row was written: what the body rules out is a fact about the body.
+        List<PartitionEvidence.ExcludedClass> ruled = excluded.at(axis.path()).stream()
+                .filter(each -> axis.excluded().contains(each.name()))
+                .map(each -> new PartitionEvidence.ExcludedClass(each.name(),
+                        excluded.reasonsFor(axis.path(), each)))
+                .toList();
+        if (readings.noRows() && !readings.someRowsUnseen()) {
+            return PartitionEvidence.AxisCoverage.unavailable(axis.id().toString(),
+                    axis.path().toString(), classes, ruled,
+                    PartitionEvidence.AxisCoverage.Reason.NO_ROWS);
+        }
         Set<String> covered = new LinkedHashSet<>();
         for (Map<AxisId, Classification> where : readings.byRow()) {
             String in = Readings.classIn(where, axis);
@@ -210,18 +233,9 @@ final class Coverages {
                 covered.add(in);
             }
         }
-        MeasurementStatus status = readings.noRows() && !readings.someRowsUnseen()
-                ? MeasurementStatus.UNAVAILABLE : readings.status(List.of(axis));
-        // The model's own words for why, carried through so a report can say what it took out of the
-        // denominator rather than showing a position with fewer classes than its type has.
-        List<PartitionEvidence.ExcludedClass> ruled = excluded.at(axis.path()).stream()
-                .filter(each -> axis.excluded().contains(each.name()))
-                .map(each -> new PartitionEvidence.ExcludedClass(each.name(),
-                        excluded.reasonsFor(axis.path(), each)))
-                .toList();
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.path().toString(),
-                axis.eligible().stream().map(PartitionClass::id).toList(), covered,
-                ruled, readings.couldNotSay(axis), status);
+                classes, covered, ruled, readings.couldNotSay(axis),
+                readings.status(List.of(axis)), null);
     }
 
     /**
@@ -235,12 +249,13 @@ final class Coverages {
      */
     private static List<PartitionEvidence.BoundaryCoverage> boundariesOf(
             Axis axis, List<String> parameters, List<RowOutcome> rows, Symbols symbols,
-            boolean armsMeasured, boolean someRowsUnseen) {
+            boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen) {
         List<PartitionEvidence.BoundaryCoverage> out = new ArrayList<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
-            boolean available = !rows.isEmpty()
-                    && (!(each.origin() instanceof OriginRef.GuardOrigin) || armsMeasured);
-            Met met = !available ? Met.UNDECIDED : switch (each.origin()) {
+            PartitionEvidence.BoundaryCoverage.Reason absent = each.origin() instanceof OriginRef.GuardOrigin
+                    ? whyNoGuardLine(rows, armsAsked, armsUnseen, someRowsUnseen)
+                    : whyNoInvariantLine(rows, someRowsUnseen);
+            Met met = absent != null ? Met.UNDECIDED : switch (each.origin()) {
                 case OriginRef.GuardOrigin g -> evaluatedAt(axis, parameters, rows, each.value(), g);
                 default -> writtenAt(axis, parameters, rows, each.value());
             };
@@ -261,9 +276,46 @@ final class Coverages {
                     met == Met.YES,
                     met == Met.UNDECIDED ? MeasurementStatus.UNAVAILABLE
                             : met == Met.UNREADABLE ? MeasurementStatus.PARTIAL
-                                    : MeasurementStatus.COMPLETE));
+                                    : MeasurementStatus.COMPLETE,
+                    met == Met.UNDECIDED ? absent : null));
         }
         return out;
+    }
+
+    /**
+     * The first gate a {@code guard}'s line did not get through.
+     *
+     * <p>Its own path, because a guard's line and an invariant's are not measured the same way and so
+     * cannot fail to be measured for the same reasons. Meeting this one takes the comparison having
+     * run, which puts the arms in front of the rows: nothing a row carries decides it until the
+     * classes that record where the row went exist and survived.
+     */
+    private static PartitionEvidence.BoundaryCoverage.Reason whyNoGuardLine(
+            List<RowOutcome> rows, boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen) {
+        if (!armsAsked) {
+            return PartitionEvidence.BoundaryCoverage.Reason.ARMS_NOT_ASKED;
+        }
+        if (armsUnseen) {
+            return PartitionEvidence.BoundaryCoverage.Reason.ARMS_UNREADABLE;
+        }
+        return whyNoInvariantLine(rows, someRowsUnseen);
+    }
+
+    /**
+     * The first gate an invariant's line did not get through.
+     *
+     * <p>Only the one: nothing outside the bound can be constructed, so writing the value is the whole
+     * of what there is to reach and no instrumentation is owed. This is why the two origins are asked
+     * separately — an invariant's line can never be waiting on the arms, and a measure that could say
+     * so would be able to say something that is not true of it.
+     */
+    private static PartitionEvidence.BoundaryCoverage.Reason whyNoInvariantLine(
+            List<RowOutcome> rows, boolean someRowsUnseen) {
+        // Nothing read is not the same as nothing written. A source that could not be evaluated may
+        // hold the row that is at this line, so the question is undecided rather than unasked, and
+        // the reading below settles it that way.
+        return rows.isEmpty() && !someRowsUnseen
+                ? PartitionEvidence.BoundaryCoverage.Reason.NO_ROWS : null;
     }
 
     /**
