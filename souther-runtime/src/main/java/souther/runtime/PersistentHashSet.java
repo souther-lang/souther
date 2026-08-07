@@ -131,7 +131,7 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
      * when the set already is one, so a set Souther built pays nothing.
      */
     @Override
-    public boolean valueEquals(Object o) {
+    public boolean valueEquals(@Nullable Object o) {
         if (o == this) {
             return true;
         }

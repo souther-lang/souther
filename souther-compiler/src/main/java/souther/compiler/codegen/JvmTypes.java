@@ -5,7 +5,6 @@ import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
-import java.lang.classfile.Label;
 import java.lang.classfile.TypeAnnotation;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;

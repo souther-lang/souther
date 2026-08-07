@@ -2,7 +2,6 @@ package souther.lsp.analysis;
 
 import org.junit.jupiter.api.Test;
 import souther.lsp.protocol.Position;
-import souther.lsp.protocol.Range;
 import souther.lsp.protocol.TextEdit;
 
 import java.util.LinkedHashMap;

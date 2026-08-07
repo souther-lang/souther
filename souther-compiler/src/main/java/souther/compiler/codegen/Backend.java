@@ -17,7 +17,6 @@ import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
-import souther.compiler.coverage.CoverageSites;
 
 import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;

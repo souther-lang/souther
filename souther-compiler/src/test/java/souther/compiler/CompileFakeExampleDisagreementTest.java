@@ -602,18 +602,6 @@ class CompileFakeExampleDisagreementTest {
                 """));
     }
 
-    /** The E1919s of a compile that may also fail, read off the reports rather than the warnings —
-     * a compile that raises drops the warnings it had collected. */
-    private static List<String> codesOf(String model) {
-        List<String> codes = new ArrayList<>();
-        for (String code : allCodesOf(model)) {
-            if ("E1919".equals(code)) {
-                codes.add(code);
-            }
-        }
-        return codes;
-    }
-
     /** Every example-family code the compile reported, in order. Read off the reports so that the
      * error a case is really about is visible beside the E1919s, and a test cannot pass by the whole
      * comparison having stopped working. */

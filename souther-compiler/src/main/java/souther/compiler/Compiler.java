@@ -322,12 +322,6 @@ public final class Compiler {
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure,
-                                      java.time.Duration exampleBudget) {
-        return linked(sources, path, warningsOut, measure, exampleBudget, null, null);
-    }
-
-    private static Compilation linked(List<String> sources, ModulePath path,
-                                      List<Located> warningsOut, Adequacy.Asked measure,
                                       java.time.Duration exampleBudget, Deadline deadline,
                                       EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(sources, path);

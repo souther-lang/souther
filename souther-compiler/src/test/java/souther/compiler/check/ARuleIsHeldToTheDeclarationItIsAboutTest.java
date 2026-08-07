@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.Prelude;
 import souther.compiler.check.DischargeRules.Built;
 import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carried;

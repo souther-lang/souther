@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingId;
-import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
 import java.util.HashSet;

@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Souther's value semantics for a type whose Java {@code equals} and {@code hashCode} belong to a
  * JDK contract it cannot break.
@@ -18,7 +20,7 @@ package souther.runtime;
 public interface ValueSemantics {
 
     /** Whether {@code other} is the same Souther value as this one. */
-    boolean valueEquals(Object other);
+    boolean valueEquals(@Nullable Object other);
 
     /** A hash that agrees with {@link #valueEquals}. */
     int valueHash();

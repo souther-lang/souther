@@ -381,8 +381,6 @@ final class HelperParams {
         private Type pinned;
         /** Whether the position now being read is a field read off its child. */
         private boolean readingAField;
-        /** The parameter being settled: a variable standing for it is what is being worked out. */
-        private BindingId target;
         /** What every other parameter of this helper is known to be, for {@link #saysWhatAnotherHolds}. */
         private List<Type> otherParameters = List.of();
         /** Every reading of a parameter that leaves what it holds open, and what they settle. One
@@ -424,7 +422,6 @@ final class HelperParams {
 
         Type typeOf(Ast.Binder target, Ast.Expr body, Scope env, Type answers, List<Type> others) {
             this.otherParameters = others;
-            this.target = target.id();
             this.pinned = null;
             this.readings.forParameter();
             this.openUse = null;

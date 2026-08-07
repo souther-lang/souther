@@ -497,7 +497,7 @@ public interface Ast {
         public Expr writtenBody() {
             return switch (body) {
                 case FnBody.Written w -> w.expr();
-                case FnBody.Intrinsic i -> throw new IllegalStateException(
+                case FnBody.Intrinsic _ -> throw new IllegalStateException(
                         "`" + name() + "` is an intrinsic and has no written body");
             };
         }

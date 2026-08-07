@@ -9,7 +9,6 @@ import souther.compiler.diag.Region;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -89,7 +88,7 @@ public final class BinaryElaborator {
                 yield switch (answer) {
                     case ArithmeticCheck.Allowed allowed ->
                             new Core.Binary(bin.op(), left, right, allowed.resultType(), bin.pos());
-                    case ArithmeticCheck.DeferToPlainTypeCheck ignored -> {
+                    case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
                         // One type against another: the found-versus-expected block says it better
                         // than a sentence would, and requireType raises or absorbs it.
                         Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");

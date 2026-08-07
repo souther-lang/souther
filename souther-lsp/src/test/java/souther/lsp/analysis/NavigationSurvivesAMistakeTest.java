@@ -1,7 +1,6 @@
 package souther.lsp.analysis;
 
 import souther.lsp.protocol.Position;
-import souther.lsp.protocol.Range;
 import souther.lsp.protocol.TextEdit;
 
 import org.junit.jupiter.api.Test;

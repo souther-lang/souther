@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.math.BigDecimal;
 import java.util.Iterator;
 import java.util.List;
@@ -40,7 +42,7 @@ public final class Values {
 
     private Values() {}
 
-    public static boolean equal(Object a, Object b) {
+    public static boolean equal(@Nullable Object a, @Nullable Object b) {
         if (a == b) {
             return true;
         }
@@ -67,11 +69,11 @@ public final class Values {
     }
 
     /** Two amounts are the same amount when they differ only in scale. */
-    public static boolean equal(BigDecimal a, BigDecimal b) {
+    public static boolean equal(@Nullable BigDecimal a, @Nullable BigDecimal b) {
         return a == null ? b == null : b != null && a.compareTo(b) == 0;
     }
 
-    public static int hash(Object v) {
+    public static int hash(@Nullable Object v) {
         return switch (v) {
             case null -> 0;
             case Long l -> l.hashCode();
@@ -94,7 +96,7 @@ public final class Values {
     }
 
     /** The hash of an amount, taken after dropping the scale its equality ignores. */
-    public static int hash(BigDecimal v) {
+    public static int hash(@Nullable BigDecimal v) {
         return v == null ? 0 : v.stripTrailingZeros().hashCode();
     }
 

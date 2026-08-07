@@ -2,9 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.Compiler;
 import souther.compiler.Prelude;
-import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
-import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
