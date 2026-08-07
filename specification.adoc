@@ -3816,6 +3816,19 @@ was checked.
 
 A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when building the table where it is written (<<example-fakes>>) does not come to a value, with the same three reasons <<e1920>> distinguishes. A warning rather than an error: what stopped the build says the table was not read, not that it is wrong.
 
+[#e1922]
+=== An import is never used under the name it was given
+
+[,text]
+----
+`Employee` is imported but never used under this name.
+Hint: Take it off the import list. What another module declares is reachable qualified
+whether or not it is imported, so an entry here earns its place only by being written bare
+somewhere below.
+----
+
+A warning, at the entry on the list rather than at the import as a whole. What an import list buys is the bare name; an entry no bare use reads buys nothing and still says the module depends on that name. A qualified reach does not keep an entry: it reads the same whether or not the name is listed (<<imports>>), so a name reached only that way is on the list for nothing. An editor is told the entry is unnecessary rather than merely told about it, since what to do with it is to delete it.
+
 [#e1923]
 === An example evaluation did not answer
 
@@ -3890,10 +3903,31 @@ assumed where it stands, the value being built is one the invariant rejects. Fix
 value, or guard the path so the violating case cannot reach here.
 ----
 
-Neither names what decided it: the check knows the values alone did not, and not which of the things known there did. The companion E2011 is a warning, not an error: it says the guards do not establish the invariant, so the check remains at run time.
+Neither names what decided it: the check knows the values alone did not, and not which of the things known there did.
+
+[#e2011]
+=== A construction is not shown to satisfy its invariant
+
+[,text]
+----
+Constructing `Amount` here may violate its invariant: the guards do not establish it. Guard
+it with `guard`, or reify the relation into `Amount`'s (or an input's) invariant so it is
+assumed here.
+Hint: If a relation between inputs guarantees this, declare it as an `invariant` on the
+input data so it is checked once at its boundary and assumed here.
+----
+
+A warning, and the one diagnostic in this chapter that says nothing about whether the model is wrong. E2010 is the check having proved the invariant false; this is the check having proved nothing either way, so what was always going to happen still happens — the invariant is tested when the value is built, and a violation aborts there (<<violation-destination>>). A model whose guards do establish the invariant by an argument the check cannot follow is told this too, and is not thereby wrong.
+
+What to do about it is therefore a choice and not a repair. Guarding the construction puts the reason where the check can read it. Reifying the relation — declaring it as an `+invariant+` on an input's own data — moves it to that data's boundary, where it is tested once and assumed everywhere the value reaches afterwards (<<invariant-discharge>>). Leaving it is the third: the run-time test is the guarantee, and the warning says it is still the thing doing the work.
+
+An attempted construction raises no warning. What this reports is a possible abort, and an attempt takes its `+else+` value instead of aborting (<<attempted-construction>>).
 
 [#e2012]
-=== `as` names what a construction builds
+[#e2013]
+=== An attempted construction that cannot be read
+
+Two codes, for the two ways the form does not read at all (<<attempted-construction>>). E2012 is `+as+` naming something that does not build a value:
 
 [,text]
 ----
@@ -3902,19 +3936,73 @@ Hint: Write the construction whose invariant decides the branch, or drop the `as
 a condition.
 ----
 
-Emitted for the forms of an attempted construction that cannot be read (<<attempted-construction>>). Attempting a type that declares no invariant is E2013, since the `+else+` value could never be reached.
+E2013 is the form reading and having nothing to decide, since a type declaring no invariant refuses no value:
+
+[,text]
+----
+`Amount` declares no invariant, so an attempted construction of it always succeeds and the
+`else` value is never reached.
+Hint: Construct `Amount` directly, or give it the invariant that decides the branch.
+----
 
 [#e2014]
-=== A clause answered by name does not exist
+[#e2015]
+[#e2016]
+[#e2017]
+[#e2018]
+[#e2019]
+=== A per-clause departure and the clauses it answers for
+
+Six codes, for the ways a departure answering one invariant clause at a time does not line up with the clauses the type declares (<<attempt-departures>>, <<invariant-clause-name>>). E2014 answers a clause by a name the type does not declare:
 
 [,text]
 ----
 `Amount` has no invariant clause named `nonNegative`.
 Hint: The clauses that can be answered by name are: inYen. A clause is named where it is
-declared (`invariant <name> = ...`); one declared without a name is answered by `| _`.
+declared (`invariant <name> = ...`); one declared without a name is answered by `| _ -> ...`.
 ----
 
-Emitted when a per-clause departure names a clause the type does not declare (<<attempt-departures>>, <<invariant-clause-name>>). The rest of that form is checked with its own codes: a clause that can fail and has no arm is E2015, unnamed clauses left unanswered E2016, a `+| _+` with nothing to answer E2017, arms with no attempted construction to answer for E2018, and a clause answered twice E2019.
+E2015 leaves a clause that can fail with no arm to reach. A failure reaches one arm, so a clause with none is a failure with nowhere to go:
+
+[,text]
+----
+These clauses of `Amount` have no arm: inYen. A failure reaches one arm, so every clause
+that can fail needs one.
+Hint: Answer each of them, or give the `else` one value, which answers any failure.
+----
+
+E2016 is the same for the clauses that have no name to be answered by:
+
+[,text]
+----
+`Amount` has invariant clauses declared without a name, and nothing here answers them.
+Hint: Add `| _ -> ...` for them, or name them where they are declared.
+----
+
+E2017 is the other direction — the arm that answers the unnamed clauses where there are none:
+
+[,text]
+----
+Every invariant clause of `Amount` is named and answered, so `| _ -> ...` answers nothing.
+Hint: Drop it. It would come back the moment `Amount` declares a clause without a name.
+----
+
+E2018 is arms with nothing to answer for, the departure having no attempted construction above it:
+
+[,text]
+----
+These arms answer one invariant clause each, and there is no attempted construction here
+for them to answer for.
+Hint: Attempt the construction (`guard T(v) as x else ...`), or give the `else` one value.
+----
+
+E2019 is one clause answered twice:
+
+[,text]
+----
+The clause `inYen` is answered twice. An arm is chosen by the clause that failed, so a
+second arm for it could never be reached.
+----
 
 [#e2101]
 === A generated method exceeds the JVM parameter-slot limit
