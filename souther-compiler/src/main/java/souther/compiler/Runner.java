@@ -14,6 +14,8 @@ import net.unit8.raoh.ResourceBundleMessageResolver;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
+import net.unit8.raoh.decode.ObjectDecoders;
+import net.unit8.raoh.decode.builtin.StringDecoder;
 import net.unit8.raoh.json.JsonDecoders;
 import net.unit8.raoh.encode.Encoder;
 import net.unit8.raoh.encode.ObjectEncoders;
@@ -477,25 +479,14 @@ public final class Runner {
      *
      * <p>A data delegates to its generated {@code jsonDecoder()}, so a nested shape, an invariant and
      * a sum's discriminator are all read exactly as they are at the boundary. What is composed here
-     * is only what has no class of its own: the primitives and the collections. A map keyed by a
-     * newtype or a temporal (ADR-0040) is still left out — the generated per-data decoder remaps
-     * those keys and this one does not.
+     * is only what has no class of its own: the primitives and the collections.
      */
     private static Decoder<JsonNode, ?> decoderFor(MemoryClassLoader loader, String pkg, Type type, int index) {
         if (type instanceof Type.Prim prim) {
             return leafDecoder(prim, index);
         }
         if (type instanceof Type.Ref ref) {
-            try {
-                Class<?> c = loader.loadClass(ref.name().qualified());
-                @SuppressWarnings("unchecked")   // the generated class's factory erases at the reflection boundary
-                Decoder<JsonNode, ?> decoder = (Decoder<JsonNode, ?>) c.getMethod("jsonDecoder").invoke(null);
-                return decoder;
-            } catch (ReflectiveOperationException e) {
-                throw fail("run.decode.nodecoder",
-                        "cannot obtain a decoder for `" + ref.name().name() + "`: " + e,
-                        ref.name().name(), e.toString());
-            }
+            return codecOf(loader, ref, "jsonDecoder");
         }
         if (type instanceof Type.ListOf list) {
             return JsonDecoders.list(decoderFor(loader, pkg, list.element(), index));
@@ -504,13 +495,103 @@ public final class Runner {
             return JsonDecoders.list(decoderFor(loader, pkg, set.element(), index))
                     .map(elements -> Sets.fromList(new java.util.ArrayList<Object>(elements)));
         }
-        if (type instanceof Type.MapOf map && map.key() == Type.STRING) {
-            return JsonDecoders.map(decoderFor(loader, pkg, map.value(), index));
+        if (type instanceof Type.MapOf map) {
+            Decoder<Object, ?> key = keyDecoder(loader, map.key());
+            return JsonDecoders.map(decoderFor(loader, pkg, map.value(), index))
+                    .flatMapWithPath((entries, path) -> rekey(key, entries, path));
         }
         throw fail("run.decode.unsupported",
                 "input #" + (index + 1) + " has type `" + Type.show(type)
                         + "`, which `run` cannot decode yet (only a data type, a primitive, or a"
                         + " collection of those).", index + 1, Type.show(type));
+    }
+
+    /**
+     * The decoder for a boundary map's key. A key reaches this already read out of the JSON object
+     * that carried it, so what it decodes from is a string rather than a {@code JsonNode} — the
+     * neutral source, whichever source the map itself came from. This is the decoder
+     * {@code CodecGen.emitKeyDecoder} builds, in Java.
+     *
+     * <p>Which key types arrive here is not asked again. What may key a map that crosses is
+     * {@code TypeOps.isBoundaryMapKey}, and E1314 has already refused everything else, so a named key
+     * runs its own decoder — a String-backed newtype enforcing its invariant, an enumeration reading
+     * its case's name — and the three primitives are the string leaf, parsed for a temporal. Telling
+     * the newtype and the enumeration apart here would be reading the boundary's rule a second time,
+     * in a place that cannot see all of it.
+     */
+    private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, Type key) {
+        if (key instanceof Type.Ref ref) {
+            return codecOf(loader, ref, "decoder");
+        }
+        // text arriving from outside is canonical, which is what the string leaf makes it
+        StringDecoder<Object> text = ObjectDecoders.string().normalize();
+        if (key == Type.STRING) {
+            return text;
+        }
+        if (key == Type.DATE) {
+            return text.date();
+        }
+        if (key == Type.DATETIME) {
+            return text.dateTime();
+        }
+        throw new IllegalStateException("not a boundary map key: " + Type.show(key));
+    }
+
+    /**
+     * A decoded {@code Map<String, V>} rekeyed by the key type's own decoder, which is where a key's
+     * invariant is enforced and a temporal key is parsed.
+     *
+     * <p>A bad key is reported at that key's own path, and every key is read before the result is
+     * settled, so a map with two bad keys says so about both. A {@code String} key is rekeyed like
+     * any other: the keys of a decoded object do not pass the string leaf, so leaving them alone is
+     * the one place a boundary would hand over text it had not made canonical.
+     *
+     * <p>Two keys that decode to one key are refused rather than collapsed. Making a key canonical
+     * is what lets an object arrive with the same key written twice, and a map holding one entry
+     * where the input wrote two is a value the input never described — so the second is a failure at
+     * its own key, not the winner of an overwrite.
+     */
+    private static Result<Map<Object, Object>> rekey(Decoder<Object, ?> key, Map<String, ?> entries,
+                                                     net.unit8.raoh.Path path) {
+        Map<Object, Object> out = new java.util.LinkedHashMap<>();
+        Issues issues = Issues.EMPTY;
+        for (Map.Entry<String, ?> entry : entries.entrySet()) {
+            net.unit8.raoh.Path at = path.append(entry.getKey());
+            Result<?> decoded = key.decode(entry.getKey(), at);
+            if (decoded instanceof Err<?> err) {
+                issues = issues.merge(err.issues());
+                continue;
+            }
+            Object rekeyed = ((Ok<?>) decoded).value();
+            if (out.containsKey(rekeyed)) {
+                issues = issues.merge(((Err<?>) Result.fail(at, DUPLICATE_KEY, DUPLICATE_KEY_MESSAGE))
+                        .issues());
+            } else {
+                out.put(rekeyed, entry.getValue());
+            }
+        }
+        return issues.isEmpty() ? new Ok<>(out) : new Err<>(issues);
+    }
+
+    /** What a key colliding with one already read is reported as — the code and the wording the
+     *  generated rekey helper uses, so the two paths refuse the same input the same way. */
+    private static final String DUPLICATE_KEY = "duplicate_key";
+    private static final String DUPLICATE_KEY_MESSAGE = "two keys are the same key once decoded";
+
+    /** The named static decoder factory of a generated class — {@code jsonDecoder} for a value read
+     *  from JSON, {@code decoder} for a map key, which is read from the string the object carried.
+     *  Either erases at the reflection boundary. */
+    private static <I> Decoder<I, ?> codecOf(MemoryClassLoader loader, Type.Ref ref, String factory) {
+        try {
+            @SuppressWarnings("unchecked")
+            Decoder<I, ?> decoder = (Decoder<I, ?>)
+                    loader.loadClass(ref.name().qualified()).getMethod(factory).invoke(null);
+            return decoder;
+        } catch (ReflectiveOperationException e) {
+            throw fail("run.decode.nodecoder",
+                    "cannot obtain a decoder for `" + ref.name().name() + "`: " + e,
+                    ref.name().name(), e.toString());
+        }
     }
 
     /** A primitive over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
@@ -570,10 +651,16 @@ public final class Runner {
             return Representations.sortedArray(
                     encodeElements(loader, pkg, behavior, set.element(), (java.util.Collection<?>) result));
         }
-        if (out instanceof Type.MapOf map && map.key() == Type.STRING) {
+        // A map's key is encoded by the same recursion its value is: a key that crosses writes as a
+        // bare string whichever of the five kinds it is (E1314), and each of them already has the
+        // encoder that writes it — the string leaf, the ISO form of a temporal, the newtype's bare
+        // value, the enumeration's case name. Asking here which kind it is would ask the boundary's
+        // question twice.
+        if (out instanceof Type.MapOf map) {
             Map<String, Object> encoded = new java.util.LinkedHashMap<>();
             ((Map<?, ?>) result).forEach((k, v) ->
-                    encoded.put((String) k, encode(loader, pkg, behavior, map.value(), v)));
+                    encoded.put((String) encode(loader, pkg, behavior, map.key(), k),
+                            encode(loader, pkg, behavior, map.value(), v)));
             return Representations.sortedObject(encoded);
         }
         if (out instanceof Type.Ref ref) {

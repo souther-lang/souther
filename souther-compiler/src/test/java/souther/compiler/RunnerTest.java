@@ -415,42 +415,103 @@ class RunnerTest {
                         "{\"items\":[{\"name\":\"a\",\"price\":1},{\"name\":\"b\",\"price\":2}]}"));
     }
 
-    /** A type `run` still cannot drive is named the way the source writes it, not in the checker's
-     * own spelling, and in the reader's language — the runner is as much a user surface as the
-     * compiler's diagnostics. */
+    /**
+     * A parameter type reaches {@code run} already judged. What may cross is the checker's question,
+     * and every kind it admits is one the runner composes a decoder for, so {@code run.decode
+     * .unsupported} has no input left to refuse — each row here is refused before a decoder is asked
+     * for at all.
+     */
     @Test
-    void namesAnUndecodableInputTypeInSurfaceSyntax() throws Exception {
-        Path file = write("keyed.sou", """
+    void aParameterTypeTheRunnerCannotDecodeIsRefusedBeforeItIsAsked() throws Exception {
+        assertInputRefused("(Int, Int)", "a tuple", "E1311");
+        assertInputRefused("Int?", "an optional", "E1402");
+        assertInputRefused("A | B", "an anonymous union", "E1312");
+        assertInputRefused("Map<Int, Int>", "a map an object cannot be keyed by", "E1314");
+
+        Path file = write("indrives.sou", """
                 data UserId = String
                 data Out = { n: Int }
                 behavior f : (byUser: Map<UserId, Int>) -> Out constructs Out
                 let f (byUser) = Out { n = Map.size(byUser) }
                 """);
-        Runner.RunException e = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "f", "{\"u1\": 1}"));
-        assertTrue(e.getMessage().contains("Map<UserId, Int>"), e.getMessage());
-        assertFalse(e.getMessage().contains("MapOf"), e.getMessage());
+        assertEquals("{\"n\":1}", Runner.run(file, "f", "{\"u1\": 1}"));
+    }
+
+    /**
+     * The same of an output type, which is a separate claim and asked separately: the encoder is
+     * composed from the behavior's return type, and what may be returned is a shorter list than what
+     * may be taken — an anonymous union is a parameter the checker refuses and an output it admits.
+     */
+    @Test
+    void anOutputTypeTheRunnerCannotEncodeIsRefusedBeforeItIsAsked() throws Exception {
+        assertOutputRefused("(Int, Int)", "(1, 2)", "a tuple", "E1311");
+        assertOutputRefused("Int?", "1", "an optional", "E1402");
+        assertOutputRefused("Map<Int, Int>", "Map.fromList([ (1, 2) ])",
+                "a map an object cannot be keyed by", "E1314");
+
+        Path file = write("outdrives.sou", """
+                data UserId = String
+                data A = { a: Int }
+                data B = { b: Int }
+                behavior f : (n: Int) -> Map<UserId, Int> constructs UserId
+                let f (n) = Map.fromList([ (UserId("u1"), n) ])
+                behavior g : (n: Int) -> A | B constructs A
+                let g (n) = A { a = n }
+                """);
+        assertEquals("{\"u1\":1}", Runner.run(file, "f", "1"));
+        // the union's own encoder writes the case, so the answer carries the discriminator
+        assertEquals("{\"a\":1,\"type\":\"A\"}", Runner.run(file, "g", "1"));
+    }
+
+    /** That a parameter of this type never reaches the runner's decoder: the compile refuses it,
+     *  naming the code that owns the rule. */
+    private void assertInputRefused(String type, String what, String code) throws Exception {
+        Path file = write("inref" + Math.abs(type.hashCode()) + ".sou", """
+                data A = { a: Int }
+                data B = { b: Int }
+                data Out = { n: Int }
+                behavior f : (v: %s) -> Out constructs Out
+                let f (v) = Out { n = 1 }
+                """.formatted(type));
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> Runner.run(file, "f", "1"), what + " is refused before run decodes");
+        assertTrue(e.getMessage().contains(code), what + ": " + e.getMessage());
+    }
+
+    /** That an output of this type never reaches the runner's encoder. */
+    private void assertOutputRefused(String type, String body, String what, String code)
+            throws Exception {
+        Path file = write("outref" + Math.abs(type.hashCode()) + ".sou", """
+                data A = { a: Int }
+                data B = { b: Int }
+                behavior f : (n: Int) -> %s
+                let f (n) = %s
+                """.formatted(type, body));
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> Runner.run(file, "f", "1"), what + " is refused before run encodes");
+        assertTrue(e.getMessage().contains(code), what + ": " + e.getMessage());
     }
 
     /** A run failure is read in the language the command line selected, as a compile error is. The
      * exception's own message stays English — that is what a Java caller sees. */
     @Test
     void aRunFailureIsRenderedInTheSelectedLocale() throws Exception {
-        Path file = write("keyed.sou", """
-                data UserId = String
+        Path file = write("injected.sou", """
                 data Out = { n: Int }
-                behavior f : (byUser: Map<UserId, Int>) -> Out constructs Out
-                let f (byUser) = Out { n = Map.size(byUser) }
+                behavior f : (n: Int) -> Out constructs Out
+                behavior g : (n: Int) -> Out constructs Out
+                let g (n) = Out { n = n }
                 """);
         Runner.RunException e = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "f", "{\"u1\": 1}"));
+                () -> Runner.run(file, "f", "1"));
 
-        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("デコードできません"),
+        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("実装がありません"),
                 e.localized(java.util.Locale.JAPANESE));
-        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("Map<UserId, Int>"),
+        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("`f`"),
                 e.localized(java.util.Locale.JAPANESE));
-        assertTrue(e.localized(java.util.Locale.ENGLISH).contains("cannot decode yet"),
+        assertTrue(e.localized(java.util.Locale.ENGLISH).contains("has no implementation"),
                 e.localized(java.util.Locale.ENGLISH));
+        assertEquals(e.getMessage(), e.localized(java.util.Locale.ENGLISH));
     }
 
     /** The decoder's own issue text is part of the message the reader sees, so it is resolved in the
