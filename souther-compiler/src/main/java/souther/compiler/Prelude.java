@@ -31,30 +31,12 @@ import java.util.Set;
  * (see {@code check.HelperInliner}), or a named kernel the backend emits — is the declaration's
  * {@linkplain Ast.FnBody body}, not a second registry.
  *
- * <p>Everything is reached through a module qualifier — {@code List.map}, {@code String.trim} — since
- * the standard library carries no bare names (spec §stdlib). Entries are therefore keyed by their
- * qualified name.
+ * <p>The library publishes no bare names (spec §stdlib), so entries are keyed by the qualified name
+ * — {@code List.map}, {@code String.trim}. A module that imports a name writes it without the
+ * qualifier; what it reaches is this same entry, since an import elides the qualifier where the call
+ * is written and settles nothing else.
  */
 public final class Prelude {
-
-    /** The bundled prelude sources, in load order. */
-    private static final List<String> RESOURCES =
-            List.of("/souther/bool.sou", "/souther/string.sou", "/souther/map.sou", "/souther/list.sou",
-                    "/souther/set.sou", "/souther/date.sou", "/souther/datetime.sou",
-                    "/souther/int.sou", "/souther/decimal.sou", "/souther/option.sou");
-
-    /** Reserved module name → short qualifier (spec §stdlib). {@code souther.list} → {@code List}. */
-    private static final Map<String, String> MODULE_TO_ALIAS = Map.ofEntries(
-            Map.entry("souther.list", "List"),
-            Map.entry("souther.string", "String"),
-            Map.entry("souther.map", "Map"),
-            Map.entry("souther.set", "Set"),
-            Map.entry("souther.bool", "Bool"),
-            Map.entry("souther.date", "Date"),
-            Map.entry("souther.datetime", "DateTime"),
-            Map.entry("souther.int", "Int"),
-            Map.entry("souther.decimal", "Decimal"),
-            Map.entry("souther.option", "Option"));
 
     /** Every qualifier a call may carry — the language's constant ({@link Reserved}), read from
      *  there so nothing has to initialize this class to know it. */
@@ -88,11 +70,6 @@ public final class Prelude {
      *  name exist" and "may this name be written" are two questions with two answers. */
     private static final Set<String> PRIVATE = new LinkedHashSet<>();
 
-    /** The qualifiers in the order {@link #RESOURCES} loads them, filled while loading — so it is
-     *  declared above the {@code static} block that loads, or it would still be null when written
-     *  to. What it is for is {@link #published()}, which reads one module at a time. */
-    private static final List<String> QUALIFIERS_IN_LOAD_ORDER = new ArrayList<>();
-
     /**
      * The data declarations whose JVM implementation souther-runtime provides by hand rather than
      * the backend generating. The classification is made once, here: it anchors the declared names
@@ -111,10 +88,6 @@ public final class Prelude {
      *  the projection of {@link #ENTRIES} the backend reads to derive a kernel's JVM descriptor
      *  from the declaration rather than repeating it. */
     private static final Map<String, Signature> KERNELS = new LinkedHashMap<>();
-
-    /** Bare stdlib name → a qualified suggestion, so a bare call gets a "did you mean" hint. The
-     *  checker built-ins (which are not in the prelude sources) are listed here explicitly. */
-    private static final Map<String, String> BARE_TO_QUALIFIED = new LinkedHashMap<>();
 
     /** The Souther-bodied declarations, as the inliner's table wants them: a materialized projection
      *  of {@link #ENTRIES}, derived once after loading and never written again. */
@@ -171,6 +144,22 @@ public final class Prelude {
      *  rewritten before inlining. */
     private static final Map<String, Rewrite> SUGARED =
             Map.of("List.fold", new Rewrite("List.foldFrom", List.of(0)));
+
+    /** Bare name → every published name it could be, in {@link Reserved#MODULES} order:
+     *  {@code insert} is {@code Map.insert} or {@code Set.insert}. Derived from the published
+     *  surface — which includes the sugar, so it is built after {@link #SUGARED} — so a function
+     *  added to a module is offered by every reader of this the day it is added. */
+    private static final Map<String, List<String>> CANDIDATES = candidates();
+
+    private static Map<String, List<String>> candidates() {
+        Map<String, List<String>> byBareName = new LinkedHashMap<>();
+        for (String qualified : published()) {
+            byBareName.computeIfAbsent(qualified.substring(qualified.indexOf('.') + 1),
+                    bare -> new ArrayList<>()).add(qualified);
+        }
+        byBareName.replaceAll((bare, qualified) -> List.copyOf(qualified));
+        return Collections.unmodifiableMap(byBareName);
+    }
 
     /** Whether {@code qualifiedName} is one of those — a name no tree holds after the rewrite. */
     public static boolean sugared(String qualifiedName) {
@@ -236,7 +225,7 @@ public final class Prelude {
         }
         names.addAll(SUGARED.keySet());
         Set<String> byModule = new LinkedHashSet<>();
-        for (String qualifier : QUALIFIERS_IN_LOAD_ORDER) {
+        for (String qualifier : QUALIFIERS) {
             for (String name : names) {
                 if (name.startsWith(qualifier + ".")) {
                     byModule.add(name);
@@ -253,14 +242,33 @@ public final class Prelude {
         return HELPERS;
     }
 
-    /** A qualified suggestion for a bare standard-library name ({@code "map"} → {@code "List.map"}),
-     *  or {@code null} if the name is not a standard-library function. */
-    public static String qualifiedFor(String bareName) {
-        return BARE_TO_QUALIFIED.get(bareName);
+    /**
+     * Every published name a bare {@code bareName} could be reaching for, in {@link Reserved#MODULES}
+     * order — {@code ["Map.insert", "Set.insert"]} — or empty where the library publishes no such
+     * name. What a report does with more than one is offer them all: a reader told only about
+     * {@code Map.insert} has been told the library has no {@code Set.insert}.
+     */
+    public static List<String> qualifiedCandidates(String bareName) {
+        return CANDIDATES.getOrDefault(bareName, List.of());
+    }
+
+    /** Those candidates as a diagnostic writes them: {@code `Map.insert`, `Set.insert`}. The
+     *  sentence they sit in belongs to the message catalog, so what is built here is the list and
+     *  not a phrase — an "or" assembled in Java would be an English word in the Japanese report. */
+    public static String candidateList(String bareName) {
+        StringBuilder sb = new StringBuilder();
+        for (String qualified : qualifiedCandidates(bareName)) {
+            if (!sb.isEmpty()) {
+                sb.append(", ");
+            }
+            sb.append('`').append(qualified).append('`');
+        }
+        return sb.toString();
     }
 
     private static void load() {
-        for (String resource : RESOURCES) {
+        for (Reserved.StdlibModule declared : Reserved.MODULES) {
+            String resource = "/" + declared.moduleName().replace('.', '/') + ".sou";
             // The prelude is resolved like any other module (issue #177): its own declarations are
             // collected first, then everything is resolved against them, so a signature may name a
             // data the module declares. What it declares must be runtime-backed (see
@@ -269,12 +277,11 @@ public final class Prelude {
             Ast.Module parsed = CstFrontend.parse(read(resource));
             Symbols symbols = symbolsOf(parsed, resource);
             Ast.Module module = Resolve.module(parsed, symbols);
-            String alias = MODULE_TO_ALIAS.get(module.name());
-            if (alias == null) {
-                throw new IllegalStateException("prelude resource " + resource
-                        + " declares unknown module " + module.name());
+            if (!declared.moduleName().equals(module.name())) {
+                throw new IllegalStateException("prelude resource " + resource + " declares module "
+                        + module.name() + ", not " + declared.moduleName());
             }
-            QUALIFIERS_IN_LOAD_ORDER.add(alias);
+            String alias = declared.qualifier();
             for (Ast.Def def : module.defs()) {
                 if (RUNTIME_DEFS.containsKey(def.name())) {
                     throw new IllegalStateException(
@@ -299,52 +306,9 @@ public final class Prelude {
                 }
                 if (fn.isPrivate()) {
                     PRIVATE.add(qualified);
-                    // A name no caller can write needs no "did you mean" hint, and offering one
-                    // would name the very declaration the modifier hides.
-                    continue;
                 }
-                BARE_TO_QUALIFIED.putIfAbsent(fn.name(), qualified);
             }
         }
-        // Explicit bare→qualified hints. Two kinds need one: the checker built-ins, which have no
-        // prelude source to derive from, and every name more than one module defines — the derived
-        // hint takes whichever module RESOURCES loads first (bool, string, map, list, set, …), which
-        // is an accident of that order rather than the answer a reader wants.
-        BARE_TO_QUALIFIED.put("length", "List.length` or `String.length");
-        BARE_TO_QUALIFIED.put("toInt", "String.toInt` or `Decimal.toInt");
-        BARE_TO_QUALIFIED.put("toDecimal", "String.toDecimal");
-        BARE_TO_QUALIFIED.put("fromInt", "String.fromInt` or `Decimal.fromInt");
-        BARE_TO_QUALIFIED.put("fromDecimal", "String.fromDecimal");
-        BARE_TO_QUALIFIED.put("round", "Decimal.round");
-        BARE_TO_QUALIFIED.put("get", "List.get` or `Map.get");
-        BARE_TO_QUALIFIED.put("map", "List.map`, `Set.map`, or `Option.map");
-        BARE_TO_QUALIFIED.put("filter", "List.filter` or `Set.filter");
-        BARE_TO_QUALIFIED.put("partition", "List.partition` or `Set.partition");
-        BARE_TO_QUALIFIED.put("empty", "Map.empty` or `Set.empty");
-        BARE_TO_QUALIFIED.put("fold", "List.fold`, `Map.fold`, or `Set.fold");
-        BARE_TO_QUALIFIED.put("isEmpty", "List.isEmpty`, `String.isEmpty`, `Map.isEmpty`, or `Set.isEmpty");
-        BARE_TO_QUALIFIED.put("size", "Map.size` or `Set.size");
-        BARE_TO_QUALIFIED.put("contains", "List.contains`, `String.contains`, or `Set.contains");
-        BARE_TO_QUALIFIED.put("reverse", "List.reverse` or `String.reverse");
-        BARE_TO_QUALIFIED.put("concat", "List.concat` or `String.concat");
-        BARE_TO_QUALIFIED.put("toList", "Map.toList` or `Set.toList");
-        BARE_TO_QUALIFIED.put("fromList", "Map.fromList` or `Set.fromList");
-        BARE_TO_QUALIFIED.put("singleton", "Map.singleton` or `Set.singleton");
-        BARE_TO_QUALIFIED.put("union", "Map.union` or `Set.union");
-        BARE_TO_QUALIFIED.put("intersection", "Map.intersection` or `Set.intersection");
-        BARE_TO_QUALIFIED.put("difference", "Map.difference` or `Set.difference");
-        BARE_TO_QUALIFIED.put("max", "List.max`, `Int.max`, or `Decimal.max");
-        BARE_TO_QUALIFIED.put("min", "List.min`, `Int.min`, or `Decimal.min");
-        BARE_TO_QUALIFIED.put("abs", "Int.abs` or `Decimal.abs");
-        BARE_TO_QUALIFIED.put("clamp", "Int.clamp` or `Decimal.clamp");
-        BARE_TO_QUALIFIED.put("find", "List.find");
-        BARE_TO_QUALIFIED.put("sortBy", "List.sortBy");
-        BARE_TO_QUALIFIED.put("compare", "Int.compare` or `Decimal.compare");
-        BARE_TO_QUALIFIED.put("truncatingRemainder", "Int.truncatingRemainder");
-        BARE_TO_QUALIFIED.put("add", "Int.add` or `Decimal.add");
-        BARE_TO_QUALIFIED.put("subtract", "Int.subtract` or `Decimal.subtract");
-        BARE_TO_QUALIFIED.put("multiply", "Int.multiply` or `Decimal.multiply");
-        BARE_TO_QUALIFIED.put("divide", "Int.divide` or `Decimal.divide");
     }
 
     /**

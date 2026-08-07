@@ -25,6 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * things have to hold for that to mean anything, and each is a test here: a code names exactly one
  * rule, a code resolves to documentation, and documentation names no code that is not one.
  *
+ * <p>That a code resolves is checked next door, in {@code
+ * EveryDiagnosticTheCompilerEmitsCanBeLookedUpTest}, which asks the document rather than the text.
+ * What is here is the other direction and the rule anchors.
+ *
  * <p>The rule anchor is what makes the first checkable. Two diagnostics carry one code when they
  * report one rule broken in different ways, and two codes when they enforce different rules — so
  * the anchors are distinct, and picking an anchor another code already claims is either a sign the
@@ -72,31 +76,6 @@ class EveryDiagnosticCodeIsReadableTest {
             }
         }
         assertEquals(List.of(), shared, "two codes claim one rule");
-    }
-
-    @Test
-    void everyCodeResolvesToASection() throws IOException {
-        Set<String> sections = codeSectionsOf(spec(), false);
-        Set<String> missing = new TreeSet<>();
-        for (DiagnosticCode code : DiagnosticCode.values()) {
-            if (!sections.contains(code.docAnchor())) {
-                missing.add(code.name());
-            }
-        }
-        assertEquals(Set.of(), missing,
-                "`souther doc <code>` has no answer for these — a reader who meets one has nothing to type");
-    }
-
-    @Test
-    void everyRetiredCodeResolvesToItsRetirementNote() throws IOException {
-        Set<String> retiredSections = codeSectionsOf(spec(), true);
-        Set<String> missing = new TreeSet<>();
-        for (RetiredDiagnosticCode code : RetiredDiagnosticCode.values()) {
-            if (!retiredSections.contains(code.docAnchor())) {
-                missing.add(code.name());
-            }
-        }
-        assertEquals(Set.of(), missing, "a retired code says nothing about what replaced it");
     }
 
     /**

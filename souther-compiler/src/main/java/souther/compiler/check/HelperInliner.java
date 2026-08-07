@@ -162,8 +162,9 @@ public final class HelperInliner {
     }
 
     /** A helper is a fn whose name is not a behavior's; behavior fns are lowered on their own. The
-     * auto-imported prelude helpers (spec §reserved-namespace) join the inlining map so a bare
-     * {@code not(x)} expands at any call site; a module-own helper of the same name shadows one. */
+     * prelude helpers join the inlining map under the qualified names they are reached by
+     * ({@code Bool.not}), a module's own under the bare names it declared them with — so the two
+     * never stand for one key, and how a call came to name one of them was settled before this. */
     public static HelperInliner forModule(Ast.Module module) {
         return forModule(module, Map.of());
     }

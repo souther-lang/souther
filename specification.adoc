@@ -319,7 +319,9 @@ import String ( trim, split )
 
 Qualified access (`+List.map+`) always works without importing, so `+import+` only elides the qualifier. Importing the same bare name from two modules is a compile error, reported at the second import line: writing both `+import String (length )+` and `+import List (length )+` says `+length+` is exposed from both. Import one and qualify the other call (`+String.length(...)+`). As with the wildcard prohibition, no name is delivered implicitly. A name the library does not have is a compile error at the import line, not at the first use.
 
-An import says which names MAY be written without their qualifier. It does not say what one of them means where it is written: a binding in force means what it binds, and a name the module declares itself means that declaration. So `+import List ( map )+` and a parameter named `+map+` may sit in one module, and inside that parameter's scope `+map+` is the parameter. What a name means is settled once, wherever it is written — in a body, in an `+invariant+`, in an `+example+` row, in a `+fake+` — and an import is the last thing consulted.
+An import says which names MAY be written without their qualifier. It does not say what one of them means where it is written: a binding in force means what it binds. So `+import List ( map )+` and a parameter named `+map+` may sit in one module, and inside that parameter's scope `+map+` is the parameter. What a name means is settled once, wherever it is written — in a body, in an `+invariant+`, in an `+example+` row, in a `+fake+` — and an import is the last thing consulted.
+
+A declaration is not a binding in force and does not shadow an import. Importing a name the module declares itself — a `+data+`, a `+let+`, or a behavior written with that name — is a compile error reported at the import line, not a shadowing: one spelling would stand for two things, and nothing at a call site could choose between them. Rename the declaration, drop it, or drop the import and write the library name qualified. Qualified access is always available, so a module MAY declare `+let not+` and still call `+Bool.not(...)+`; it is `+import Bool ( not )+` beside that declaration that is refused.
 
 [#published-modules]
 === Importing a module another project compiled
@@ -1144,7 +1146,7 @@ let build (rows) = {
 }
 ----
 
-A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a `+let+` returned, of a string joined from parts — is not a term, and a clause needing it is left to the run-time check.
+A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a behavior answered — is not a term, and a clause needing it is left to the run-time check.
 
 [,text]
 ----
@@ -1229,6 +1231,32 @@ let build (rows) = {
 "A property of every element" is a clause like `+List.all(p, value)+` or `+List.allDistinctBy(f, value)+`: nothing new is in a sublist, so what held of every element still holds. "A particular element" is `+List.contains(x, value)+` or `+Set.contains(x, value)+`, which a selection may drop.
 
 An operation not in the table keeps nothing that can be relied on, and a clause over what it built is left to the run-time check.
+
+===== A construction whose result is no smaller than what it read
+
+An operation given two containers, or given a container and something to put in it, establishes no element relation to a single source that any of the four shapes states. Appending and union read two sources, so neither of them alone is what the result was built from; an insert puts in an element or an entry the container it read did not hold. A property of every element does not survive either way. How many there are is bounded from below all the same, and that bound is a fact of its own.
+
+[cols="2,3"]
+|===
+| what holds of the result | the operations
+
+| no smaller than either container it was given | `+List.append+`, `+Set.union+`, `+Map.union+`
+| no smaller than the container it was given | `+Set.insert+`, `+Map.insert+`
+|===
+
+`+List.append+` is written `+a ++ b+`, and a `+String+` is joined with the same operator and read the same way: `+String.length(a ++ b)+` is no less than `+String.length(a)+` and no less than `+String.length(b)+`.
+
+So a lower bound on any source named above is a lower bound on the result, and a non-empty list appended to any list is non-empty.
+
+[,text]
+----
+data Lines = List<Line> invariant List.length(value) >= 1
+
+behavior joined : (a: Lines, b: List<Line>) -> Lines
+let joined (a, b) = Lines(a.value ++ b)   // discharged: no shorter than `a`
+----
+
+Nothing is said the other way. A union answers one of what both sides hold, and an insert of something already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
 
 [#invariant-discharge-projection]
 ===== A projection the closure copied
@@ -3177,7 +3205,7 @@ Note that `+applicant.rank == Staff+` cannot be written as a condition. `+==+` w
 map  filter  fold  foldRight  all  any  length  get  mapIndexed
 reverse  contains  sum  product  append  concat  flatMap  isEmpty  sort  rangeInclusive
 distinct  distinctBy  allDistinctBy  partition  groupBy  indexBy  filterMap  max  min  find  sortBy
-take  drop  zip  unzip
+take  drop  zipShortest  unzip
 ----
 
 All are called through the qualifier `+List+` (<<stdlib>>). `+List.get+` returns `+Option<T>+`. `+List.map+` / `+List.filter+` / `+List.fold+` / `+List.all+` / `+List.any+` / `+List.mapIndexed+` take a block (<<blocks>>). Import them as `+import List (map, all )+` to write unqualified thereafter.
@@ -3968,7 +3996,7 @@ Reported at the pattern (<<an-or-pattern-binds-the-sum-and-opens-nothing>>). Wha
 The match branches disagree: Submitted vs Int.
 ----
 
-Reported at the `+match+` (<<match-arms-agree-on-a-type>>). It answers with one value, so its arms produce one type; a union of what they produce is written by declaring it.
+Reported at the `+match+` (<<branches-agree-on-a-type>>). It answers with one value, so its arms produce one type; a union of what they produce is written by declaring it.
 
 [#e1301]
 === Use of null
@@ -4891,16 +4919,17 @@ was checked.
 A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when building the table where it is written (<<example-fakes>>) does not come to a value, with the same three reasons <<e1920>> distinguishes. A warning rather than an error: what stopped the build says the table was not read, not that it is wrong.
 
 [#e1922]
-=== An import is never used
+=== An import is never used under the name it was given
 
 [,text]
 ----
-`Amount` is imported but never used under this name.
-Hint: Take it off the import list. What another module declares is reachable qualified whether or
-not it is imported, so an entry here earns its place only by being written bare somewhere below.
+`Employee` is imported but never used under this name.
+Hint: Take it off the import list. What another module declares is reachable qualified
+whether or not it is imported, so an entry here earns its place only by being written bare
+somewhere below.
 ----
 
-A warning, quoted at the entry on the import list (<<imports-are-used>>). An import brings a name in so it can be written bare; what the entry buys is that spelling, and an entry nothing writes bare buys nothing. Reaching the same declaration qualified is unaffected, so removing the entry does not take anything away from the module.
+A warning, at the entry on the list rather than at the import as a whole (<<imports-are-used>>). What an import list buys is the bare name; an entry no bare use reads buys nothing and still says the module depends on that name. A qualified reach does not keep an entry: it reads the same whether or not the name is listed (<<imports>>), so a name reached only that way is on the list for nothing. An editor is told the entry is unnecessary rather than merely told about it, since what to do with it is to delete it.
 
 [#e1923]
 === An example evaluation did not answer
@@ -4976,21 +5005,30 @@ assumed where it stands, the value being built is one the invariant rejects. Fix
 value, or guard the path so the violating case cannot reach here.
 ----
 
-Neither names what decided it: the check knows the values alone did not, and not which of the things known there did. The companion E2011 is a warning, not an error: it says the guards do not establish the invariant, so the check remains at run time.
+Neither names what decided it: the check knows the values alone did not, and not which of the things known there did.
 
 [#e2011]
-=== A construction's invariant is not established where it stands
+=== A construction is not shown to satisfy its invariant
 
 [,text]
 ----
-Constructing `Amount` here may violate its invariant: the guards do not establish it. Guard it with
-`guard`, or reify the relation into `Amount`'s (or an input's) invariant so it is assumed here.
+Constructing `Amount` here may violate its invariant: the guards do not establish it. Guard
+it with `guard`, or reify the relation into `Amount`'s (or an input's) invariant so it is
+assumed here.
+Hint: If a relation between inputs guarantees this, declare it as an `invariant` on the
+input data so it is checked once at its boundary and assumed here.
 ----
 
-A warning, and the companion of <<e2010>> (<<construction-invariant-is-discharged>>). The invariant is expressible in the checked fragment but the guards do not prove it, so the check remains at run time and the construction can abort there. It says the proof is missing and not that the value is wrong: a construction nothing establishes may still hold on every path the model takes. A clause outside the fragment is a third thing and is not warned about — the run-time check stands for it and there was never a proof to miss.
+A warning, and the one diagnostic in this chapter that says nothing about whether the model is wrong. E2010 is the check having proved the invariant false; this is the check having proved nothing either way, so what was always going to happen still happens — the invariant is tested when the value is built, and a violation aborts there (<<violation-destination>>). A model whose guards do establish the invariant by an argument the check cannot follow is told this too, and is not thereby wrong.
+
+What to do about it is therefore a choice and not a repair. Guarding the construction puts the reason where the check can read it. Reifying the relation — declaring it as an `+invariant+` on an input's own data — moves it to that data's boundary, where it is tested once and assumed everywhere the value reaches afterwards (<<invariant-discharge>>). Leaving it is the third: the run-time test is the guarantee, and the warning says it is still the thing doing the work.
+
+An attempted construction raises no warning. What this reports is a possible abort, and an attempt takes its `+else+` value instead of aborting (<<attempted-construction>>).
 
 [#e2012]
-=== `as` names what a construction builds
+=== An attempted construction that cannot be read
+
+Two codes, for the two ways the form does not read at all (<<attempted-construction>>). E2012 is `+as+` naming something that does not build a value:
 
 [,text]
 ----
@@ -4999,7 +5037,14 @@ Hint: Write the construction whose invariant decides the branch, or drop the `as
 a condition.
 ----
 
-Emitted for the forms of an attempted construction that cannot be read (<<attempted-construction>>). Attempting a type that declares no invariant is E2013, since the `+else+` value could never be reached.
+E2013 is the form reading and having nothing to decide, since a type declaring no invariant refuses no value:
+
+[,text]
+----
+`Amount` declares no invariant, so an attempted construction of it always succeeds and the
+`else` value is never reached.
+Hint: Construct `Amount` directly, or give it the invariant that decides the branch.
+----
 
 [#e2013]
 === An attempted type declares no invariant
@@ -5014,16 +5059,58 @@ Hint: Construct `Rank` directly, or give it the invariant that decides the branc
 Emitted when the type attempted declares no invariant, its own or one a spread brought in (<<attempt-subject-declares-an-invariant>>). The `+else+` is written to be reached, and here nothing can reach it: the branch is not one, so writing it is an error rather than dead code that reads as a decision.
 
 [#e2014]
-=== A clause answered by name does not exist
+=== A per-clause departure and the clauses it answers for
+
+Six codes, for the ways a departure answering one invariant clause at a time does not line up with the clauses the type declares (<<attempt-departures>>, <<invariant-clause-name>>). E2014 answers a clause by a name the type does not declare:
 
 [,text]
 ----
 `Amount` has no invariant clause named `nonNegative`.
 Hint: The clauses that can be answered by name are: inYen. A clause is named where it is
-declared (`invariant <name> = ...`); one declared without a name is answered by `| _`.
+declared (`invariant <name> = ...`); one declared without a name is answered by `| _ -> ...`.
 ----
 
-Emitted when a per-clause departure names a clause the type does not declare (<<attempt-departures>>, <<invariant-clause-name>>). The rest of that form is checked with its own codes: a clause that can fail and has no arm is E2015, unnamed clauses left unanswered E2016, a `+| _+` with nothing to answer E2017, arms with no attempted construction to answer for E2018, and a clause answered twice E2019.
+E2015 leaves a clause that can fail with no arm to reach. A failure reaches one arm, so a clause with none is a failure with nowhere to go:
+
+[,text]
+----
+These clauses of `Amount` have no arm: inYen. A failure reaches one arm, so every clause
+that can fail needs one.
+Hint: Answer each of them, or give the `else` one value, which answers any failure.
+----
+
+E2016 is the same for the clauses that have no name to be answered by:
+
+[,text]
+----
+`Amount` has invariant clauses declared without a name, and nothing here answers them.
+Hint: Add `| _ -> ...` for them, or name them where they are declared.
+----
+
+E2017 is the other direction — the arm that answers the unnamed clauses where there are none:
+
+[,text]
+----
+Every invariant clause of `Amount` is named and answered, so `| _ -> ...` answers nothing.
+Hint: Drop it. It would come back the moment `Amount` declares a clause without a name.
+----
+
+E2018 is arms with nothing to answer for, the departure having no attempted construction above it:
+
+[,text]
+----
+These arms answer one invariant clause each, and there is no attempted construction here
+for them to answer for.
+Hint: Attempt the construction (`guard T(v) as x else ...`), or give the `else` one value.
+----
+
+E2019 is one clause answered twice:
+
+[,text]
+----
+The clause `inYen` is answered twice. An arm is chosen by the clause that failed, so a
+second arm for it could never be reached.
+----
 
 [#e2015]
 === A clause that can fail has no arm
