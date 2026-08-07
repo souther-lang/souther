@@ -40,7 +40,7 @@ class AnArgumentTheSchemaDoesNotDeclareIsRefusedNotDroppedTest {
 
         assertEquals(-32602, answer.get("error").get("code").asInt(),
                 "answering the default 20 here would look like the count was honoured");
-        assertTrue(answer.get("error").get("message").asString().contains("must be an integer"));
+        assertTrue(answer.get("error").get("message").asString().contains("must be a whole number"));
     }
 
     @Test

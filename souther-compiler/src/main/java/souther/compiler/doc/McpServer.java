@@ -15,6 +15,7 @@ import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * {@code souther mcp}: the doc/api/japi answers, served over the Model Context Protocol's stdio
@@ -34,6 +35,21 @@ import java.util.List;
 public final class McpServer {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /**
+     * One character that is not a space — written so that a client's regular expressions and this
+     * server's read it as the same set.
+     *
+     * <p>It is spelled in code points rather than with {@code \s}, because that shorthand does not
+     * mean the same thing on both sides: a schema's patterns are ECMA-262, where {@code \s} takes
+     * in the no-break space and the byte order mark, and Java's takes in neither. The set below is
+     * ECMA-262's, and the same literal is what gets published and what gets matched, so there is
+     * no second definition to fall out of step with the first.
+     */
+    private static final String NON_BLANK = "[^\\u0009-\\u000d\\u0020\\u00a0\\u1680"
+            + "\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000\\ufeff]";
+
+    private static final Pattern SAYS_SOMETHING = Pattern.compile(NON_BLANK);
 
     /**
      * The protocol revisions this server answers under, newest first.
@@ -105,7 +121,7 @@ public final class McpServer {
                 schema.put("type", "string");
                 // Somewhere in it, a character that is not a space: the empty term is the one a
                 // search cannot walk, and saying so here is cheaper than a call spent finding out.
-                schema.put("pattern", "\\S");
+                schema.put("pattern", NON_BLANK);
             }
 
             @Override
@@ -113,7 +129,8 @@ public final class McpServer {
                 if (!value.isString()) {
                     return "`" + name + "` must be a string";
                 }
-                return value.asString().isBlank() ? "`" + name + "` must not be empty" : null;
+                return SAYS_SOMETHING.matcher(value.asString()).find()
+                        ? null : "`" + name + "` must not be empty";
             }
         },
 
@@ -127,11 +144,15 @@ public final class McpServer {
 
             @Override
             String malformed(String name, JsonNode value) {
-                // A count written as a string is the shape a client falls into when it is guessing,
-                // and answering the default would look like the count had been honoured. One past
-                // what a count can hold is refused here rather than thrown from the conversion.
-                if (!value.isIntegralNumber() || !value.canConvertToInt()) {
-                    return "`" + name + "` must be an integer no larger than " + Integer.MAX_VALUE;
+                // A schema's `integer` is a value that is whole, not a way of writing one down:
+                // 1, 1.0 and 1e0 are the same number and all three are integers. Asking Jackson
+                // whether the node is integral would answer about the notation instead, and refuse
+                // two spellings of a count this server is published as taking.
+                if (!value.isNumber() || !value.canConvertToExactIntegral()) {
+                    return "`" + name + "` must be a whole number";
+                }
+                if (!value.canConvertToInt()) {
+                    return "`" + name + "` must be no larger than " + Integer.MAX_VALUE;
                 }
                 return value.intValue() < 0
                         ? "`" + name + "` must not be negative; 0 is all of them" : null;

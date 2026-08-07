@@ -35,13 +35,94 @@ class TheSchemaAClientReadsIsTheOneTheServerEnforcesTest {
                 "and above this the conversion the server performs cannot hold the value");
     }
 
+    /**
+     * A schema's `integer` is a value that is whole, not a way of writing one down: 1, 1.0 and 1e0
+     * are one number and all three are integers under it. So the boundary is fixed here as values
+     * rather than as notations, and each is sent as well as read.
+     */
+    @Test
+    void everyWayOfWritingACountIsAnsweredByWhetherTheCountIsInTheDomain() {
+        assertCount("0", true);
+        assertCount("1", true);
+        assertCount("1.0", true);
+        assertCount("1e0", true);
+        assertCount("2147483647", true);
+        assertCount("1.5", false);
+        assertCount("-1", false);
+        assertCount("2147483648", false);
+        assertCount("\"1\"", false);
+        assertCount("null", false);
+    }
+
+    /**
+     * Both edges of the domain refuse, and a client that cannot tell which one it fell off does
+     * not know whether to round the number or to make it smaller.
+     */
+    @Test
+    void aCountOutsideTheDomainIsToldWhichEdgeItFellOff() {
+        assertTrue(refusal("1.5").contains("whole number"), refusal("1.5"));
+        assertTrue(refusal("2147483648").contains("2147483647"), refusal("2147483648"));
+        assertFalse(refusal("2147483648").contains("whole number"),
+                "2147483648 is whole; what it is not is small enough");
+    }
+
+    @Test
+    void aCountWrittenWithAPointIsReadAsTheCountAndNotMerelyAllowed() {
+        String one = serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":"
+                + "\"doc_search\",\"arguments\":{\"term\":\"newtype\",\"limit\":1.0}}}")
+                .getFirst().get("result").get("content").get(0).get("text").asString();
+
+        assertEquals(1, one.lines().filter(line -> line.contains("\t")).count(), one);
+    }
+
     @Test
     void aStringArgumentPublishesThatEmptyIsNotOneOfItsValues() {
         JsonNode term = argument("doc_search", "term");
 
         assertEquals("string", term.get("type").asString());
-        assertEquals("\\S", term.get("pattern").asString(),
+        assertTrue(term.get("pattern").asString().startsWith("[^"),
                 "the empty term is what the server refuses, so the schema says so before the call");
+    }
+
+    /**
+     * `\s` is not one set. A schema's patterns are ECMA-262, where it takes in the no-break space;
+     * Java's does not. Written either way, the same argument has to be answered the same way.
+     */
+    @Test
+    void aSpaceIsASpaceOnBothSidesOfTheSchema() {
+        String published = argument("doc_read", "name").get("pattern").asString();
+
+        for (String space : List.of("\\u0020", "\\u00a0", "\\u2003", "\\ufeff")) {
+            assertFalse(java.util.regex.Pattern.compile(published)
+                            .matcher(unescape(space)).find(),
+                    space + " is a space, so a string of only it says nothing");
+
+            JsonNode answer = serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
+                    + "{\"name\":\"doc_read\",\"arguments\":{\"name\":\"" + space + "\"}}}").getFirst();
+
+            assertEquals(-32602, answer.get("error").get("code").asInt(),
+                    space + " is refused by the server too, not only by the schema: " + answer);
+        }
+    }
+
+    private String unescape(String escaped) {
+        return String.valueOf((char) Integer.parseInt(escaped.substring(2), 16));
+    }
+
+    private String refusal(String written) {
+        return count(written).get("error").get("message").asString();
+    }
+
+    private JsonNode count(String written) {
+        return serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":"
+                + "\"doc_search\",\"arguments\":{\"term\":\"newtype\",\"limit\":" + written + "}}}")
+                .getFirst();
+    }
+
+    private void assertCount(String written, boolean inDomain) {
+        JsonNode answer = count(written);
+
+        assertEquals(inDomain, answer.has("result"), "limit: " + written + " -> " + answer);
     }
 
     @Test
@@ -82,6 +163,8 @@ class TheSchemaAClientReadsIsTheOneTheServerEnforcesTest {
                 "{\"name\":\"doc_read\",\"arguments\":{\"name\":\"purpose\"}}",
                 "{\"name\":\"doc_search\",\"arguments\":{\"term\":\"newtype\"}}",
                 "{\"name\":\"doc_search\",\"arguments\":{\"term\":\"newtype\",\"limit\":0}}",
+                "{\"name\":\"doc_search\",\"arguments\":{\"term\":\"newtype\",\"limit\":1.0}}",
+                "{\"name\":\"doc_search\",\"arguments\":{\"term\":\"newtype\",\"limit\":1e0}}",
                 "{\"name\":\"doc_search\",\"arguments\":{\"term\":\"newtype\",\"limit\":2147483647}}",
                 "{\"name\":\"stdlib_api\",\"arguments\":{}}",
                 "{\"name\":\"stdlib_api\",\"arguments\":{\"name\":\"List\"}}",
