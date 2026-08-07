@@ -8,6 +8,8 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -100,6 +102,49 @@ class AnUnknownOptionIsNotAFileNameTest {
         assertEquals(2, said.code());
         assertTrue(said.err().contains("unknown option `--lang`"), said.err());
         assertTrue(said.err().contains("compile/run/examples"), said.err());
+    }
+
+    /**
+     * Every option this compiler has, not only the one the report was written about. Read out of the
+     * usage text, the owners were whoever the option was documented under: {@code --behavior} came
+     * back as {@code examples} though {@code run} takes it, {@code --search} as {@code doc} though
+     * {@code api} takes it, and {@code --input}, {@code --check} and {@code --write} had no owner at
+     * all — each one a refusal that names the wrong command or names none.
+     */
+    @Test
+    void everyOptionThisCompilerHasIsAnsweredWithTheCommandsThatTakeIt() throws Exception {
+        Path file = source("m.sou", FORMATTED);
+        for (String option : Main.knownOptions()) {
+            if (!option.startsWith("--")) {
+                continue;   // a short option still reads as a path, so no command refuses one
+            }
+            String owners = Main.optionOwners(option);
+            // asked of a command that does not take it, which for fmt's own options is another one
+            Said said = owners.contains("fmt")
+                    ? run("compile", file.toString(), "-d", dir.resolve("out").toString(), option)
+                    : run("fmt", file.toString(), "--check", option);
+
+            assertEquals(2, said.code(), option);
+            assertTrue(said.err().contains("unknown option `" + option + "`"), option + ": " + said.err());
+            assertTrue(said.err().contains("it is an option of " + owners), option + ": " + said.err());
+        }
+    }
+
+    /**
+     * The table and the usage text name the same options. They say different things about them — the
+     * usage groups an option under the commands it is documented with, which is not always every
+     * command that takes it — but an option in one and not the other is a drift between what the
+     * author is shown and what a refusal can say.
+     */
+    @Test
+    void theUsageTextAndTheTableNameTheSameOptions() {
+        Set<String> written = new TreeSet<>();
+        for (String word : Main.usage().split("[\\s,\\[\\]|]+")) {
+            if (word.startsWith("-")) {
+                written.add(word);
+            }
+        }
+        assertEquals(new TreeSet<>(Main.knownOptions()), written);
     }
 
     /** The commands whose option it is still take it. */

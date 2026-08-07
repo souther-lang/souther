@@ -46,7 +46,7 @@ public final class Main {
             commands:
               compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
-              fmt <file.sou>... [-w] [--check]                     format source (stdout, or -w in place)
+              fmt <file.sou>... [-w|--write] [--check]             format source (stdout, or -w in place)
               examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
               doc [<anchor> | <set>/<topic> | --search <term>]     read the language specification
               api [<Module>[.<name>] | --search <term>]            the stdlib surface and its signatures
@@ -65,7 +65,7 @@ public final class Main {
               --strict                  exit non-zero while rows are waiting for a `let`
             options (compile):
               --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
-            options (compile/examples):
+            options (compile/examples/japi):
               -cp, --class-path <path>  where to find modules another project compiled
 
             options (compile/run/examples):
@@ -74,33 +74,51 @@ public final class Main {
               --color auto|always|never  color the human output (default: auto)""";
 
     /**
-     * Which commands each option belongs to, read off {@link #USAGE}: the heading {@code options
-     * (compile/run/examples)} already says both that an option exists and whose it is, so a command
-     * that has to name someone else's option reads it from there rather than keeping a second list
-     * that would drift from the one the author is shown.
+     * Which commands take each option: what a command reads when it has to say that an option is
+     * not its own but is somebody's.
+     *
+     * <p>Written here rather than read back out of {@link #USAGE}. The usage text is what an author
+     * is shown, and reading it for what an option means is the dependency the wrong way round — it
+     * says an option under the heading of the commands it is documented with, which is not the same
+     * set as the commands that accept it. {@code --behavior} is documented under {@code examples}
+     * and taken by {@code run} as well; {@code -cp} is documented under {@code compile/examples} and
+     * taken by {@code japi} too. This table is the one the commands answer from, and a test holds it
+     * against both the usage text and what each parser has a case for.
      */
-    private static final Map<String, String> OPTION_OWNERS = optionOwners();
+    private static final Map<String, String> OPTION_OWNERS = Map.ofEntries(
+            Map.entry("--format", "compile/run/examples"),
+            Map.entry("--lang", "compile/run/examples"),
+            Map.entry("--color", "compile/run/examples"),
+            Map.entry("-cp", "compile/examples/japi"),
+            Map.entry("--class-path", "compile/examples/japi"),
+            Map.entry("-d", "compile"),
+            Map.entry("--adequacy", "compile"),
+            Map.entry("--behavior", "run/examples"),
+            Map.entry("--input", "run"),
+            Map.entry("-w", "fmt"),
+            Map.entry("--write", "fmt"),
+            Map.entry("--check", "fmt"),
+            Map.entry("--module", "examples"),
+            Map.entry("--generate", "examples"),
+            Map.entry("--boundaries", "examples"),
+            Map.entry("--strict", "examples"),
+            Map.entry("--search", "doc/api"),
+            Map.entry("--limit", "doc"),
+            Map.entry("--source", "api"));
 
-    private static Map<String, String> optionOwners() {
-        Map<String, String> owners = new java.util.LinkedHashMap<>();
-        String commands = null;
-        for (String line : USAGE.lines().toList()) {
-            String said = line.strip();
-            if (said.startsWith("options (") && said.endsWith("):")) {
-                commands = said.substring("options (".length(), said.length() - 2);
-            } else if (commands != null && said.startsWith("-")) {
-                // The option and its aliases lead the line; the first word that is not one of them
-                // begins the placeholder or the prose.
-                for (String word : said.split("\\s+")) {
-                    String option = word.endsWith(",") ? word.substring(0, word.length() - 1) : word;
-                    if (!option.startsWith("-")) {
-                        break;
-                    }
-                    owners.put(option, commands);
-                }
-            }
-        }
-        return java.util.Collections.unmodifiableMap(owners);
+    /** Every option this table names, for the test that holds it against the usage text. */
+    static java.util.Set<String> knownOptions() {
+        return OPTION_OWNERS.keySet();
+    }
+
+    /** The usage text, for the test that holds it against the table. */
+    static String usage() {
+        return USAGE;
+    }
+
+    /** The commands that take {@code option}, or null where this compiler has no such option. */
+    static String optionOwners(String option) {
+        return OPTION_OWNERS.get(option);
     }
 
     /**
@@ -108,7 +126,8 @@ public final class Main {
      *
      * <p>What {@code run} has always asked, now asked by the commands that were not asking it. A
      * short option a command does not know still reads as a path, which is where {@code run} draws
-     * the line too; so does {@code --}, which no command reads as the end of its options yet.
+     * the line too. A bare {@code --} reads as an option and is refused as an unknown one; no command
+     * takes it as the end of its options yet.
      */
     private static boolean looksLikeOption(String arg) {
         return arg.startsWith("--");
