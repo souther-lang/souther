@@ -46,7 +46,7 @@ public final class Main {
             commands:
               compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
-              fmt <file.sou>... [-w] [--check]                     format source (stdout, or -w in place)
+              fmt <file.sou>... [-w|--write] [--check]             format source (stdout, or -w in place)
               examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
               doc [<anchor> | <set>/<topic> | --search <term>]     read the language specification
               api [<Module>[.<name>] | --search <term>]            the stdlib surface and its signatures
@@ -65,13 +65,82 @@ public final class Main {
               --strict                  exit non-zero while rows are waiting for a `let`
             options (compile):
               --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
-            options (compile/examples):
+            options (compile/examples/japi):
               -cp, --class-path <path>  where to find modules another project compiled
 
             options (compile/run/examples):
               --format human|json      how to render a compile error (default: human)
               --lang <tag>             message locale, e.g. ja or en (default: system, then ja)
               --color auto|always|never  color the human output (default: auto)""";
+
+    /**
+     * Which commands take each option: what a command reads when it has to say that an option is
+     * not its own but is somebody's.
+     *
+     * <p>Written here rather than read back out of {@link #USAGE}. The usage text is what an author
+     * is shown, and reading it for what an option means is the dependency the wrong way round — it
+     * says an option under the heading of the commands it is documented with, which is not the same
+     * set as the commands that accept it. {@code --behavior} is documented under {@code examples}
+     * and taken by {@code run} as well; {@code -cp} is documented under {@code compile/examples} and
+     * taken by {@code japi} too. This table is the one the commands answer from, and a test holds it
+     * against both the usage text and what each parser has a case for.
+     */
+    private static final Map<String, String> OPTION_OWNERS = Map.ofEntries(
+            Map.entry("--format", "compile/run/examples"),
+            Map.entry("--lang", "compile/run/examples"),
+            Map.entry("--color", "compile/run/examples"),
+            Map.entry("-cp", "compile/examples/japi"),
+            Map.entry("--class-path", "compile/examples/japi"),
+            Map.entry("-d", "compile"),
+            Map.entry("--adequacy", "compile"),
+            Map.entry("--behavior", "run/examples"),
+            Map.entry("--input", "run"),
+            Map.entry("-w", "fmt"),
+            Map.entry("--write", "fmt"),
+            Map.entry("--check", "fmt"),
+            Map.entry("--module", "examples"),
+            Map.entry("--generate", "examples"),
+            Map.entry("--boundaries", "examples"),
+            Map.entry("--strict", "examples"),
+            Map.entry("--search", "doc/api"),
+            Map.entry("--limit", "doc"),
+            Map.entry("--source", "api"));
+
+    /** Every option this table names, for the test that holds it against the usage text. */
+    static java.util.Set<String> knownOptions() {
+        return OPTION_OWNERS.keySet();
+    }
+
+    /** The usage text, for the test that holds it against the table. */
+    static String usage() {
+        return USAGE;
+    }
+
+    /** The commands that take {@code option}, or null where this compiler has no such option. */
+    static String optionOwners(String option) {
+        return OPTION_OWNERS.get(option);
+    }
+
+    /**
+     * Whether the token reads as an option rather than as a path.
+     *
+     * <p>What {@code run} has always asked, now asked by the commands that were not asking it. A
+     * short option a command does not know still reads as a path, which is where {@code run} draws
+     * the line too. A bare {@code --} reads as an option and is refused as an unknown one; no command
+     * takes it as the end of its options yet.
+     */
+    private static boolean looksLikeOption(String arg) {
+        return arg.startsWith("--");
+    }
+
+    /** The usage error a command answers with when a token reads as an option it has no case for. */
+    private static int unknownOption(String command, String option) {
+        String owners = OPTION_OWNERS.get(option);
+        System.err.println("unknown option `" + option + "` for `" + command + "`"
+                + (owners == null ? "" : " — it is an option of " + owners));
+        System.err.println(USAGE);
+        return 2;
+    }
 
     public static void main(String[] args) {
         int code = guarded(() -> dispatch(args));
@@ -89,10 +158,9 @@ public final class Main {
      * {@link CompileException} is not one of these — it is an answer about the source and is rendered
      * as one where it is caught — so it goes on rather than being reported as a fault of the compiler.
      */
-    static int guarded(Runnable command) {
+    static int guarded(java.util.function.IntSupplier command) {
         try {
-            command.run();
-            return 0;
+            return command.getAsInt();
         } catch (RuntimeException e) {
             String said = internalFailure(e);
             if (said == null) {
@@ -103,38 +171,26 @@ public final class Main {
         }
     }
 
-    private static void dispatch(String[] args) {
+    /**
+     * The command's answer as its exit code, which only {@link #main} turns into one.
+     *
+     * <p>Ending the process is a fact about the process, not about the command, and a command that
+     * ends it has no answer left to give: everything it decides — that an option is not one of its
+     * own, that a file is not formatted — is unreachable from anywhere but a shell. Read as a number
+     * here, each of those is an ordinary result.
+     */
+    static int dispatch(String[] args) {
         String command = args.length == 0 ? "" : args[0];
         String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);
-        switch (command) {
+        return switch (command) {
             case "run" -> runSubcommand(rest);
             case "compile" -> compileSubcommand(rest);
             case "fmt" -> fmtSubcommand(rest);
             case "examples" -> examplesSubcommand(rest);
-            case "doc" -> {
-                int code = DocCommand.run(rest, System.out, System.err);
-                if (code != 0) {
-                    System.exit(code);
-                }
-            }
-            case "api" -> {
-                int code = ApiCommand.run(rest, System.out, System.err);
-                if (code != 0) {
-                    System.exit(code);
-                }
-            }
-            case "japi" -> {
-                int code = JapiCommand.run(rest, System.out, System.err);
-                if (code != 0) {
-                    System.exit(code);
-                }
-            }
-            case "mcp" -> {
-                int code = McpServer.serve(System.in, System.out);
-                if (code != 0) {
-                    System.exit(code);
-                }
-            }
+            case "doc" -> DocCommand.run(rest, System.out, System.err);
+            case "api" -> ApiCommand.run(rest, System.out, System.err);
+            case "japi" -> JapiCommand.run(rest, System.out, System.err);
+            case "mcp" -> McpServer.serve(System.in, System.out);
             default -> {
                 String hint = command.endsWith(".sou")
                         ? "no command given — did you mean `souther compile " + command
@@ -142,9 +198,9 @@ public final class Main {
                         : command.isEmpty() ? "no command given" : "unknown command `" + command + "`";
                 System.err.println(hint);
                 System.err.println(USAGE);
-                System.exit(2);
+                yield 2;
             }
-        }
+        };
     }
 
     /**
@@ -166,9 +222,12 @@ public final class Main {
     }
 
     /** {@code souther compile <file.sou>... -d <outdir>}: writes the generated {@code .class} files. */
-    private static void compileSubcommand(String[] rawArgs) {
+    private static int compileSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         Path outDir = Path.of(".");
@@ -178,8 +237,7 @@ public final class Main {
                 case "--adequacy" -> {
                     if (++i >= args.length || adequacyLevel(args[i]) == null) {
                         System.err.println("`--adequacy` takes off, witness or all");
-                        System.exit(2);
-                        return;
+                        return 2;
                     }
                     measure = Adequacy.Asked.warningsAt(adequacyLevel(args[i]));
                 }
@@ -187,8 +245,7 @@ public final class Main {
                     if (++i >= args.length) {
                         System.err.println("`-d` needs an output directory");
                         System.err.println(USAGE);
-                        System.exit(2);
-                        return;
+                        return 2;
                     }
                     outDir = Path.of(args[i]);
                 }
@@ -196,8 +253,7 @@ public final class Main {
                     if (++i >= args.length) {
                         System.err.println("`" + args[i - 1] + "` needs a class path");
                         System.err.println(USAGE);
-                        System.exit(2);
-                        return;
+                        return 2;
                     }
                     for (String entry : args[i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
@@ -205,14 +261,18 @@ public final class Main {
                         }
                     }
                 }
-                default -> sources.add(Path.of(args[i]));
+                default -> {
+                    if (looksLikeOption(args[i])) {
+                        return unknownOption("compile", args[i]);
+                    }
+                    sources.add(Path.of(args[i]));
+                }
             }
         }
         if (sources.isEmpty()) {
             System.err.println("compile takes at least one .sou file");
             System.err.println(USAGE);
-            System.exit(2);
-            return;
+            return 2;
         }
         List<Located> warnings = new ArrayList<>();
         try {
@@ -223,15 +283,16 @@ public final class Main {
             for (Path file : written) {
                 System.out.println("wrote " + file);
             }
+            return 0;
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
-            System.exit(1);
+            return 1;
         } catch (IOException e) {
             // The compile itself finished — these warnings are the whole set, and what stopped the
             // command was writing the classes out, which says nothing about the source.
             report(warnings, sources, render);
             System.err.println("io error: " + e.getMessage());
-            System.exit(1);
+            return 1;
         }
     }
 
@@ -243,9 +304,12 @@ public final class Main {
      * that already compiles how much of it the rows have pinned down. Mixing them would put a report
      * on stdout next to {@code wrote <path>} and make a failing build the only way to see it.
      */
-    private static void examplesSubcommand(String[] rawArgs) {
+    private static int examplesSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         String module = null;
@@ -262,8 +326,7 @@ public final class Main {
                     if (++i >= args.length) {
                         System.err.println("`" + args[i - 1] + "` needs a class path");
                         System.err.println(USAGE);
-                        System.exit(2);
-                        return;
+                        return 2;
                     }
                     for (String entry : args[i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
@@ -274,30 +337,32 @@ public final class Main {
                 case "--module" -> {
                     if (++i >= args.length) {
                         System.err.println("`--module` needs a module name");
-                        System.exit(2);
-                        return;
+                        return 2;
                     }
                     module = Reserved.name(args[i]);   // a name from outside
                 }
                 case "--behavior" -> {
                     if (++i >= args.length) {
                         System.err.println("`--behavior` needs a behavior name");
-                        System.exit(2);
-                        return;
+                        return 2;
                     }
                     behavior = Reserved.name(args[i]);   // a name from outside
                 }
                 case "--generate" -> generate = true;
                 case "--boundaries" -> boundaries = true;
                 case "--strict" -> strict = true;
-                default -> sources.add(Path.of(args[i]));
+                default -> {
+                    if (looksLikeOption(args[i])) {
+                        return unknownOption("examples", args[i]);
+                    }
+                    sources.add(Path.of(args[i]));
+                }
             }
         }
         if (sources.isEmpty()) {
             System.err.println("examples takes at least one .sou file");
             System.err.println(USAGE);
-            System.exit(2);
-            return;
+            return 2;
         }
         List<Located> warnings = new ArrayList<>();
         try {
@@ -324,14 +389,15 @@ public final class Main {
             }
             if (strict && report.pendingRows() > 0) {
                 System.err.println(report.pendingRows() + " example row(s) are waiting for a `let`");
-                System.exit(1);
+                return 1;
             }
+            return 0;
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
-            System.exit(1);
+            return 1;
         } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
-            System.exit(1);
+            return 1;
         }
     }
 
@@ -351,7 +417,7 @@ public final class Main {
      * writes it back in place; {@code --check} writes nothing and exits 1 if any file is not already
      * formatted, listing those files. A file with a syntax error is reported and left untouched.
      */
-    private static void fmtSubcommand(String[] args) {
+    private static int fmtSubcommand(String[] args) {
         boolean write = false;
         boolean check = false;
         List<Path> files = new ArrayList<>();
@@ -359,25 +425,27 @@ public final class Main {
             switch (a) {
                 case "-w", "--write" -> write = true;
                 case "--check" -> check = true;
-                default -> files.add(Path.of(a));
+                default -> {
+                    if (looksLikeOption(a)) {
+                        return unknownOption("fmt", a);
+                    }
+                    files.add(Path.of(a));
+                }
             }
         }
         if (files.isEmpty()) {
             System.err.println("fmt takes at least one .sou file");
             System.err.println(USAGE);
-            System.exit(2);
-            return;
+            return 2;
         }
         if (write && check) {
             System.err.println("`-w` and `--check` are mutually exclusive");
-            System.exit(2);
-            return;
+            return 2;
         }
         if (!write && !check && files.size() > 1) {
             // Concatenating several files to stdout gives an unattributable blob; make the intent explicit.
             System.err.println("formatting multiple files needs `-w` (write in place) or `--check`");
-            System.exit(2);
-            return;
+            return 2;
         }
         List<Path> unformatted = new ArrayList<>();
         boolean failed = false;
@@ -435,16 +503,17 @@ public final class Main {
                 System.out.println(f);
             }
         }
-        if (failed || (check && !unformatted.isEmpty())) {
-            System.exit(1);
-        }
+        return failed || (check && !unformatted.isEmpty()) ? 1 : 0;
     }
 
     /** {@code souther run <file.sou> [--behavior <name>] [--input <json>]}: compiles the file in
      * memory and drives one behavior, printing its output as JSON (see {@link Runner}). */
-    private static void runSubcommand(String[] rawArgs) {
+    private static int runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
         Path source = firstSource(args);
         List<Path> sources = source == null ? List.of() : List.of(source);
         List<Located> warnings = new ArrayList<>();
@@ -454,16 +523,17 @@ public final class Main {
             // result reads JSON and nothing else.
             report(warnings, sources, render);
             System.out.println(output);
+            return 0;
         } catch (Runner.RunException e) {
             // The compile finished before the run began, so these warnings are the whole set — and a
             // run that aborted on an invariant is where a warning that the construction was unproven
             // is worth most. A usage error is raised before any of it and carries none.
             report(warnings, sources, render);
             System.err.println(e.localized(Messages.resolveLocale(render.lang)));
-            System.exit(e.exitCode);
+            return e.exitCode;
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
-            System.exit(1);
+            return 1;
         }
     }
 
@@ -583,26 +653,29 @@ public final class Main {
             };
         }
 
+        /** The arguments with these flags taken out, or {@code null} where one of them was written
+         *  without its value — which the caller answers as a usage error. */
         String[] extract(String[] args) {
             List<String> kept = new ArrayList<>();
             for (int i = 0; i < args.length; i++) {
-                switch (args[i]) {
-                    case "--format" -> format = next(args, ++i);
-                    case "--lang" -> lang = next(args, ++i);
-                    case "--color" -> color = next(args, ++i);
-                    default -> kept.add(args[i]);
+                String option = args[i];
+                switch (option) {
+                    case "--format", "--lang", "--color" -> {
+                        if (++i >= args.length) {
+                            System.err.println("`" + option + "` needs a value");
+                            System.err.println(USAGE);
+                            return null;
+                        }
+                        switch (option) {
+                            case "--format" -> format = args[i];
+                            case "--lang" -> lang = args[i];
+                            default -> color = args[i];
+                        }
+                    }
+                    default -> kept.add(option);
                 }
             }
             return kept.toArray(new String[0]);
-        }
-
-        private static String next(String[] args, int i) {
-            if (i >= args.length) {
-                System.err.println("option needs a value");
-                System.err.println(USAGE);
-                System.exit(2);
-            }
-            return args[i];
         }
     }
 
