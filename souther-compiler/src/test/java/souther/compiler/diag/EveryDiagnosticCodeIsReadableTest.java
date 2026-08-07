@@ -231,6 +231,32 @@ class EveryDiagnosticCodeIsReadableTest {
                         + " or move the site to the code its rule has");
     }
 
+    /**
+     * A title named for a code belongs to that code.
+     *
+     * <p>A title is a category and is shared on purpose — twenty codes read {@code BOUNDARY TYPE} —
+     * but a few are named {@code eNNNN.title}, from before there was anything but a code to name
+     * them after. Those are not categories, and a second code taking one says a reader is being
+     * shown the classification of a rule this is not: E1818 was shown as {@code ARBITRARY JAVA
+     * CALL} while its own section said it is not that.
+     *
+     * <p>Only the borrowing is checkable. A code under a shared title whose wording contradicts its
+     * rule — E1816 read {@code TYPE MISMATCH} beside a specification saying it is not one — is read
+     * for, as the rules themselves are.
+     */
+    @Test
+    void aTitleNamedForACodeIsUsedByThatCode() {
+        List<String> borrowed = new ArrayList<>();
+        for (DiagnosticCode code : DiagnosticCode.values()) {
+            Matcher m = Pattern.compile("^e([0-9]{4})\\.title$").matcher(code.titleKey());
+            if (m.matches() && !code.name().equals("E" + m.group(1))) {
+                borrowed.add(code + " -> " + code.titleKey());
+            }
+        }
+        assertEquals(List.of(), borrowed,
+                "a code is shown under a title named for another; give it a category of its own");
+    }
+
     private static String spec() throws IOException {
         try (InputStream in = EveryDiagnosticCodeIsReadableTest.class.getResourceAsStream(SPEC)) {
             if (in == null) {
