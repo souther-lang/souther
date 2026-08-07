@@ -199,12 +199,12 @@ final class DischargeRules {
      * <p>Written on its own and not as a {@link Shape}, because none of these establishes an element
      * relation to a single source that a shape states. It is not that they keep nothing:
      * {@code List.append(a, b)} keeps every element of both, and holds neither {@code a}'s alone nor
-     * {@code b}'s; an insert or a union answers one entry for a key that was already there, so what
-     * the result holds may have been in neither. The cardinality is a separate fact and survives
+     * {@code b}'s, so neither of the two is what it was built from; an insert puts in an element or
+     * an entry the container it read did not hold. The cardinality is a separate fact and survives
      * either way — which is why these sat among the constructions nothing is known of, their bound
      * discarded with an element rule that was never the same statement.
      *
-     * <p>No more than the bound. A union makes one entry of a key both sides have and an insert of
+     * <p>No more than the bound. A union answers one of what both sides hold and an insert of
      * something already there adds nothing, so neither answers the sum of what it read; appending
      * does, and stating it for that one alone would be a second rule for one operation. The bound is
      * what they share, and it is what a lower-bound invariant asks for.

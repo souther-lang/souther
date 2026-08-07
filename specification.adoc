@@ -1135,7 +1135,7 @@ An operation not in the table keeps nothing that can be relied on, and a clause 
 
 ===== A construction whose result is no smaller than what it read
 
-An operation given two containers, or given a container and an element to put in it, establishes no element relation to a single source that any of the four shapes states. `+List.append(a, b)+` holds `+a+`'s elements and `+b+`'s and neither of them alone; an insert or a union answers one entry for a key that was already there, so what the result holds may have been in neither. A property of every element does not survive either way. How many there are is bounded from below all the same, and that bound is a fact of its own.
+An operation given two containers, or given a container and something to put in it, establishes no element relation to a single source that any of the four shapes states. Appending and union read two sources, so neither of them alone is what the result was built from; an insert puts in an element or an entry the container it read did not hold. A property of every element does not survive either way. How many there are is bounded from below all the same, and that bound is a fact of its own.
 
 [cols="2,3"]
 |===
@@ -1157,7 +1157,7 @@ behavior joined : (a: Lines, b: List<Line>) -> Lines
 let joined (a, b) = Lines(a.value ++ b)   // discharged: no shorter than `a`
 ----
 
-Nothing is said the other way. A union answers one entry for a key both sides hold and an insert of an element already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
+Nothing is said the other way. A union answers one of what both sides hold, and an insert of something already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
 
 [#invariant-discharge-projection]
 ===== A projection the closure copied
