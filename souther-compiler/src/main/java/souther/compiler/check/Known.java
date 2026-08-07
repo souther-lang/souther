@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.numeric.NumericDomain.Rel;
@@ -8,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -31,16 +33,16 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
      * clauses are read at all, and both readings are asked about the same clauses. */
     record Unguarded(NumericDomain numbers, PredicateFacts facts) {
 
-        Unguarded taking(LinearForm f, Rel rel) {
-            return new Unguarded(numbers.assume(f, rel), facts);
+        Unguarded taking(LinearForm f, Rel rel, Map<String, Granularity> kinds) {
+            return new Unguarded(numbers.assume(f, rel, kinds), facts);
         }
 
         Unguarded taking(String key, boolean positive) {
             return new Unguarded(numbers, facts.assume(key, positive));
         }
 
-        Unguarded assigning(String atom, LinearForm f) {
-            return new Unguarded(numbers.assign(atom, f), facts);
+        Unguarded assigning(String atom, LinearForm f, Map<String, Granularity> kinds) {
+            return new Unguarded(numbers.assign(atom, f, kinds), facts);
         }
     }
 
@@ -54,9 +56,9 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
     }
 
     /** This, with {@code f rel 0} taken as holding as far as {@code held} reaches. */
-    Known taking(LinearForm f, Rel rel, Held held) {
-        return new Known(numbers.assume(f, rel), facts, quantified, spoken,
-                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel) : unguarded);
+    Known taking(LinearForm f, Rel rel, Held held, Map<String, Granularity> kinds) {
+        return new Known(numbers.assume(f, rel, kinds), facts, quantified, spoken,
+                held == Held.OF_THE_VALUE ? unguarded.taking(f, rel, kinds) : unguarded);
     }
 
     /** This, with the predicate {@code key} taken as holding — or as failing, where {@code positive}
@@ -68,9 +70,9 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
 
     /** This, with {@code atom} standing for {@code f}. A name is an alias for what it was given
      * wherever it is named, so this reaches both readings. */
-    Known assigning(String atom, LinearForm f) {
-        return new Known(numbers.assign(atom, f), facts, quantified, spoken,
-                unguarded.assigning(atom, f));
+    Known assigning(String atom, LinearForm f, Map<String, Granularity> kinds) {
+        return new Known(numbers.assign(atom, f, kinds), facts, quantified, spoken,
+                unguarded.assigning(atom, f, kinds));
     }
 
     /**

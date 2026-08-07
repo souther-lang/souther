@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -39,6 +40,10 @@ final class Terms {
 
     private final Symbols symbols;
     private final Map<TypeName, Boolean> numericNewtypes = new HashMap<>();
+    /** How the values of each atom this has named are spaced. Kept here because this is where an
+     * atom's name is made: the key and the kind of number behind it are decided in one step, and
+     * anywhere else would be a second place that has to agree about which is which. */
+    private final Map<String, Granularity> atomKinds = new HashMap<>();
 
     Terms(Symbols symbols) {
         this.symbols = symbols;
@@ -216,7 +221,7 @@ final class Terms {
     /** The canonical atom key of a numeric location ({@code x}, {@code p.a}, a newtype's value) or of
      * a size call over a nameable container, or {@code null} if {@code e} is neither. */
     String atomOf(Core e, Denotations at, Known k) {
-        String size = sizeAtom(e, arg -> bodyKey(arg, at));
+        String size = sizeAtomOf(e, arg -> bodyKey(arg, at));
         if (size != null) {
             return size;
         }
@@ -230,7 +235,76 @@ final class Terms {
         if (root != null && !readable(at.of(root), k)) {
             return null;
         }
-        return pathKey(e, at);
+        return named(pathKey(e, at), granularityOf(e.type()));
+    }
+
+    /** {@link #sizeAtom}, with the atom it names recorded as a whole number. A size counts elements,
+     * so there is nothing to decide about it. */
+    String sizeAtomOf(Core e, java.util.function.Function<Core, String> key) {
+        return named(sizeAtom(e, key), Granularity.DISCRETE);
+    }
+
+    /** {@link #sizeKey}, with the atom it names recorded. */
+    String sizeKeyOf(ValueName size, String container) {
+        return named(sizeKey(size, container), Granularity.DISCRETE);
+    }
+
+    /** {@code key}, with how its values are spaced recorded against it. */
+    private String named(String key, Granularity g) {
+        if (key == null) {
+            return null;
+        }
+        Granularity had = atomKinds.putIfAbsent(key, g);
+        if (had != null && had != g) {
+            throw new IllegalStateException("atom `" + key + "` is " + had + " and " + g);
+        }
+        return key;
+    }
+
+    /** How the values of a numeric type are spaced. */
+    Granularity granularityOf(Type t) {
+        if (t == Type.INT) {
+            return Granularity.DISCRETE;
+        }
+        if (t == Type.DECIMAL) {
+            return Granularity.DENSE;
+        }
+        Type base = TypeOps.directNumericNewtypeBase(t, symbols);
+        if (base == Type.INT) {
+            return Granularity.DISCRETE;
+        }
+        if (base == Type.DECIMAL) {
+            return Granularity.DENSE;
+        }
+        throw new IllegalStateException("not a number: " + Type.show(t));
+    }
+
+    /** The spacing of every atom {@code f} is written over, for the domain to record. Every one of
+     * them was named here, so one that is not is a form built somewhere this cannot answer for. */
+    Map<String, Granularity> kindsOf(LinearForm f) {
+        return kindsOfAtoms(f.coefs().keySet());
+    }
+
+    /** The same, for a name being given a form: the name is an atom too, and its own type says how
+     * its values are spaced. */
+    Map<String, Granularity> kindsOf(LinearForm f, String atom, Type type) {
+        Map<String, Granularity> out = new HashMap<>(kindsOf(f));
+        Granularity g = granularityOf(type);
+        named(atom, g);
+        out.put(atom, g);
+        return out;
+    }
+
+    private Map<String, Granularity> kindsOfAtoms(Set<String> atoms) {
+        Map<String, Granularity> out = new HashMap<>();
+        for (String atom : atoms) {
+            Granularity g = atomKinds.get(atom);
+            if (g == null) {
+                throw new IllegalStateException("atom `" + atom + "` was not named here");
+            }
+            out.put(atom, g);
+        }
+        return out;
     }
 
     /** An expression's canonical key: a location names itself, and everything else is read

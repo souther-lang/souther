@@ -76,19 +76,22 @@ public final class NumericDomain {
     private final Map<String, BigDecimal> hi;                  // atom -> upper bound (absent = +inf)
     private final Map<String, Map<String, BigDecimal>> diff;   // diff[a][b] = tightest known (a - b)
     private final List<Asserted> kept;                         // forms outside both shapes, as written
+    private final Map<String, Granularity> kinds;              // atom -> how its values are spaced
     private Map<String, Map<String, BigDecimal>> closed;       // diff closed transitively, on first ask
 
     private NumericDomain(boolean bottom, Map<String, BigDecimal> lo, Map<String, BigDecimal> hi,
-                          Map<String, Map<String, BigDecimal>> diff, List<Asserted> kept) {
+                          Map<String, Map<String, BigDecimal>> diff, List<Asserted> kept,
+                          Map<String, Granularity> kinds) {
         this.bottom = bottom;
         this.lo = lo;
         this.hi = hi;
         this.diff = diff;
         this.kept = kept;
+        this.kinds = kinds;
     }
 
     public static NumericDomain top() {
-        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of());
+        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of());
     }
 
     public boolean isBottom() {
@@ -97,18 +100,58 @@ public final class NumericDomain {
 
     // --- assume: tighten along `f rel 0` -------------------------------------------------------
 
-    /** The domain refined by asserting {@code f rel 0}. */
-    public NumericDomain assume(LinearForm f, Rel rel) {
-        if (bottom || rel == Rel.NE) {
+    /**
+     * The domain refined by asserting {@code f rel 0}.
+     *
+     * @param atomKinds how the values of each atom of {@code f} are spaced. Required rather than
+     *                  defaulted: an atom whose spacing is guessed is one a strict bound is either
+     *                  wrongly sharpened on or silently left blunt, and neither shows up as a
+     *                  failure anywhere near where the guess was made.
+     */
+    public NumericDomain assume(LinearForm f, Rel rel, Map<String, Granularity> atomKinds) {
+        NumericDomain d = knowing(f.coefs().keySet(), atomKinds);
+        if (d.bottom || rel == Rel.NE) {
             // `f != 0` is a disjunction, and the domain holds conjunctions of bounds. Nothing to
             // record; what settles such a guard is the fact keyed on the comparison itself.
-            return this;
+            return d;
         }
         if (rel == Rel.EQ) {
-            return addLe(f, false).addLe(f.negate(), false);
+            return d.addLe(f, false).addLe(f.negate(), false);
         }
         // Reduce `f rel 0` to `g <= 0` (or `g < 0`): negate the form for >=/>, keep it for <=/<.
-        return addLe(negOf(rel) ? f.negate() : f, strictOf(rel));
+        return d.addLe(negOf(rel) ? f.negate() : f, strictOf(rel));
+    }
+
+    /**
+     * The domain with the spacing of each of {@code atoms} recorded.
+     *
+     * <p>One atom is one kind of number for as long as the domain lives. The same key arriving as
+     * both is not a widening to absorb — the key is what says two readings are of one value, so two
+     * spacings under one key means the naming and the typing disagree, and the answer to that is to
+     * stop rather than to pick the safer of the two.
+     */
+    private NumericDomain knowing(Set<String> atoms, Map<String, Granularity> atomKinds) {
+        Map<String, Granularity> next = null;
+        for (String atom : atoms) {
+            Granularity given = atomKinds.get(atom);
+            if (given == null) {
+                throw new IllegalStateException("no granularity given for atom `" + atom + "`");
+            }
+            Granularity had = kinds.get(atom);
+            if (had == given) {
+                continue;
+            }
+            if (had != null) {
+                throw new IllegalStateException(
+                        "atom `" + atom + "` is " + had + " and " + given);
+            }
+            if (next == null) {
+                next = new HashMap<>(kinds);
+            }
+            next.put(atom, given);
+        }
+        return next == null ? this
+                : new NumericDomain(bottom, lo, hi, diff, kept, Map.copyOf(next));
     }
 
     /** Assert {@code g <= 0} (or {@code g < 0} when strict), updating an interval or a difference, or
@@ -143,7 +186,7 @@ public final class NumericDomain {
         // a guard restating an invariant discharge it, which is the promise the flagging rests on.
         List<Asserted> next = new ArrayList<>(kept);
         next.add(new Asserted(g, strict));
-        return new NumericDomain(false, lo, hi, diff, List.copyOf(next));
+        return new NumericDomain(false, lo, hi, diff, List.copyOf(next), kinds);
     }
 
     /** The two atoms of a unit difference {@code {a:+1, b:-1}} as {@code {a, b}}, or {@code null} if
@@ -295,11 +338,14 @@ public final class NumericDomain {
 
     /** The domain after {@code atom := f}: drop every prior fact about {@code atom}, then record its
      * new interval bounds from {@code f} (relational facts about {@code f} are not re-derived). */
-    public NumericDomain assign(String atom, LinearForm f) {
-        if (bottom) {
-            return this;
+    public NumericDomain assign(String atom, LinearForm f, Map<String, Granularity> atomKinds) {
+        Set<String> named = new HashSet<>(f.coefs().keySet());
+        named.add(atom);
+        NumericDomain known = knowing(named, atomKinds);
+        if (known.bottom) {
+            return known;
         }
-        NumericDomain d = forget(atom);
+        NumericDomain d = known.forget(atom);
         BigDecimal up = d.upperBound(f);
         BigDecimal down = negOrNull(d.upperBound(f.negate()));
         NumericDomain r = d;
@@ -338,26 +384,26 @@ public final class NumericDomain {
         });
         List<Asserted> nk = new ArrayList<>(kept);
         nk.removeIf(a -> a.f().coefs().containsKey(atom));
-        return new NumericDomain(false, nlo, nhi, nd, List.copyOf(nk));
+        return new NumericDomain(false, nlo, nhi, nd, List.copyOf(nk), kinds);
     }
 
     // --- immutable updates ---------------------------------------------------------------------
 
     private NumericDomain bottom() {
-        return new NumericDomain(true, Map.of(), Map.of(), Map.of(), List.of());
+        return new NumericDomain(true, Map.of(), Map.of(), Map.of(), List.of(), kinds);
     }
 
     private NumericDomain withHi(String a, BigDecimal bound) {
         Map<String, BigDecimal> nhi = new HashMap<>(hi);
         nhi.merge(a, bound, NumericDomain::min);
-        NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept);
+        NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept, kinds);
         return d.feasible() ? d : bottom();
     }
 
     private NumericDomain withLo(String a, BigDecimal bound) {
         Map<String, BigDecimal> nlo = new HashMap<>(lo);
         nlo.merge(a, bound, NumericDomain::max);
-        NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept);
+        NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept, kinds);
         return d.feasible() ? d : bottom();
     }
 
@@ -365,7 +411,7 @@ public final class NumericDomain {
         Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
         diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
         nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, NumericDomain::min);
-        NumericDomain d = new NumericDomain(false, lo, hi, nd, kept);
+        NumericDomain d = new NumericDomain(false, lo, hi, nd, kept, kinds);
         return d.feasible() ? d : bottom();
     }
 

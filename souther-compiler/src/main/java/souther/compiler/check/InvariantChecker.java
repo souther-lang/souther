@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Combinators.Handed;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
@@ -507,8 +508,9 @@ public final class InvariantChecker {
         NumericDomain alone = k.unguarded().numbers();
         for (Predicates.Clause c : owed) {
             for (Predicates.Constraint known : c.known()) {
-                dom = dom.assume(known.form(), known.rel());
-                alone = alone.assume(known.form(), known.rel());
+                Map<String, Granularity> kinds = terms.kindsOf(known.form());
+                dom = dom.assume(known.form(), known.rel(), kinds);
+                alone = alone.assume(known.form(), known.rel(), kinds);
             }
         }
         // An invariant is the conjunction of its clauses, so every one of them is read before what
@@ -910,7 +912,8 @@ public final class InvariantChecker {
         if (what instanceof Denotes.Term term && terms.isNumeric(li.value().type())) {
             LinearForm vf = terms.affineOf(li.value(), at, k);
             if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
-                out = out.assigning(term.key(), vf);
+                out = out.assigning(term.key(), vf,
+                        terms.kindsOf(vf, term.key(), li.value().type()));
             }
         }
         return new Entered(out, at.binding(li.binder().id(), li.value(), what));
