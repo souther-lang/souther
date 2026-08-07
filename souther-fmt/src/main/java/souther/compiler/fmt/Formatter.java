@@ -97,12 +97,11 @@ public final class Formatter {
 
     // --- layout ---
     //
-    // Every repeated or joined construct is written through one of these two, so the separator of a
-    // construct is a place the layout may break rather than a literal the construct spelled itself.
-    // A construct that spells its own separators is one the width cannot reach: the break has to
-    // exist in the document before the renderer can choose it, and the renderer breaks the outermost
-    // group that does not fit, so a member is split only when the structure around it had nothing to
-    // give.
+    // Every repeated or joined construct is written through these, so the separator of a construct
+    // is a place the layout may break rather than a literal the construct spelled itself. A
+    // construct that spells its own separators is one the width cannot reach: the break has to exist
+    // in the document before the renderer can choose it, and the renderer breaks the outermost group
+    // that does not fit, so a member is split only when the structure around it had nothing to give.
 
     /** Members with a comma between them, one to a line where they do not fit. The comma stays on
      * the line its member ends. */
@@ -711,6 +710,10 @@ public final class Formatter {
      * Which rung of {@link CstParser}'s precedence ladder an operator is read on. Operators on one
      * rung are read by one loop and chain; the comparisons are read by a single test and never
      * chain, so their runs are one operator long and flattening them is a no-op.
+     *
+     * <p>An operator missing from here is refused rather than given a rung of its own: sharing one
+     * would lay out a run the parser does not read as a run, which is the reading a reader takes
+     * from the layout and cannot check.
      */
     private static int ladderLevel(SyntaxKind k) {
         return switch (k) {
@@ -719,7 +722,7 @@ public final class Formatter {
             case EQ, NE, LT, LE, GT, GE -> 3;
             case PLUS, MINUS, PLUSPLUS -> 4;
             case STAR, SLASH -> 5;
-            default -> 0;
+            default -> throw new IllegalStateException("no precedence rung for " + k);
         };
     }
 
@@ -845,7 +848,7 @@ public final class Formatter {
         }
         // `x -> e` keeps its bare parameter; anything parenthesised was written that way
         Doc paramsDoc = n.token(SyntaxKind.LPAREN).isPresent()
-                ? concat(text("("), Doc.join(text(", "), params), text(")"))
+                ? delimited("(", SOFTLINE, params, ")")
                 : params.get(0);
         return concat(paramsDoc, text(" -> "), expr(lastExprChild(n)));
     }
