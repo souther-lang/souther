@@ -4,9 +4,11 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -57,10 +59,12 @@ public final class Partitions {
      *                nobody can name is not an axis, and folding several into one would put a class
      *                nothing can classify into the denominator
      */
-    public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted) {
+    public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
+                               Map<String, NumericDomain.Bounds> domains) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
+            domains = Map.copyOf(domains);
         }
 
         /** Only the positions the model actually divides. */
@@ -74,9 +78,10 @@ public final class Partitions {
     public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
+        Map<String, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
-            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), sig.inputTypes().get(i),
-                    0, symbols, found);
+            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()),
+                    sig.inputTypes().get(i), 0, symbols, found, null, domains);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -100,7 +105,7 @@ public final class Partitions {
                         !axis.cuts().isEmpty()));
             }
         }
-        return new Partitioning(kept, omitted);
+        return new Partitioning(kept, omitted, domains);
     }
 
     /**
@@ -121,7 +126,10 @@ public final class Partitions {
                 out.add(axis);
                 continue;
             }
-            Bounds domain = boundsOf(axis.type(), symbols);
+            // What this position can hold, which is the type's bound already narrowed by whatever
+            // the record it sits in says about it. Reading the type again here would put a threshold
+            // back inside a range the record has no values in.
+            NumericDomain.Bounds domain = base.domains().get(axis.path().toString());
             BigDecimal min = domain == null ? null : domain.min();
             BigDecimal max = domain == null ? null : domain.max();
             List<PartitionClass> classes = Intervals.classesOf(
@@ -137,7 +145,7 @@ public final class Partitions {
                     classes.isEmpty() ? axis.classes() : classes,
                     merged(axis.cuts(), here, decimal)).excluding(axis.excluded()));
         }
-        return new Partitioning(out, base.omitted());
+        return new Partitioning(out, base.omitted(), base.domains());
     }
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
@@ -202,22 +210,52 @@ public final class Partitions {
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
-                             List<Axis> out) {
+                             List<Axis> out, NumericDomain.Bounds projected,
+                             Map<String, NumericDomain.Bounds> domains) {
         AxisId id = AxisId.of(behavior, path);
         List<PartitionClass> classes = classesOf(type, symbols);
-        List<Cut> cuts = cutsOf(type, symbols);
+        Bounds here = narrowed(boundsOf(type, symbols), projected);
+        if (here != null && !here.isEmpty()) {
+            domains.put(path.toString(), new NumericDomain.Bounds(here.min(), here.max()));
+        }
+        List<Cut> cuts = cutsOf(type, here);
         if (!classes.isEmpty() || !cuts.isEmpty()) {
             out.add(new Axis(id, path, type, classes, cuts));
             return;
         }
         Map<String, Type> fields = productFields(type, symbols);
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
+            FieldDomains record = fieldDomainsOf(type, symbols);
             for (Map.Entry<String, Type> field : fields.entrySet()) {
-                walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out);
+                walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
+                        record.at(field.getKey()), domains);
             }
             return;
         }
         out.add(Axis.notDerivable(id, path, type));
+    }
+
+    /** What the record a field sits in leaves each of its fields able to hold. */
+    private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
+        return type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
+                ? FieldDomains.of(ref.name(), data, symbols) : FieldDomains.NONE;
+    }
+
+    /**
+     * The type's own bound, taken in to where the record it sits in stops.
+     *
+     * <p>Only taken in. A record's rule moves an edge the type already has; it does not put one on a
+     * position the type left open. An {@code Int} nobody bounded stays a position the model draws no
+     * line through, which is what a report says of it (ADR-0090) — giving it an edge here would make
+     * a rule relating two fields into a partition of one of them.
+     */
+    private static Bounds narrowed(Bounds own, NumericDomain.Bounds projected) {
+        if (own == null || projected == null) {
+            return own;
+        }
+        return new Bounds(own.min() == null ? null : highest(own.min(), projected.min()),
+                own.max() == null ? null : lowest(own.max(), projected.max()),
+                own.decimal());
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -339,7 +377,11 @@ public final class Partitions {
 
     /** The cuts of a position, each carrying the rule that drew it. */
     static List<Cut> cutsOf(Type type, Symbols symbols) {
-        Bounds bounds = boundsOf(type, symbols);
+        return cutsOf(type, boundsOf(type, symbols));
+    }
+
+    /** The cuts of a position whose range is already settled. */
+    private static List<Cut> cutsOf(Type type, Bounds bounds) {
         if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref ref)) {
             return List.of();
         }
