@@ -36,9 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>It refutes rather than verifies, and the name says so. Deciding that a call is right needs the
  * types of every argument, which is the checker's job over a program and not this scan's over a
  * document. What it decides is the argument count, whether the name is published, and — for an
- * argument whose being a function or not is settled by how it is written — whether it stands at a
- * parameter declared to take one. An argument neither settles is left alone, so
- * {@code List.map(xs, ys)} passes here and is caught only by the compiler (E1804).
+ * argument whose being a function or not is settled by how it is written, at a call site where no
+ * other binding of that name is in the way — whether it stands at a parameter declared to take one.
+ * Anything else is left alone, so {@code List.map(xs, ys)} passes here and is caught only by the
+ * compiler (E1804).
  */
 class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
 
@@ -49,15 +50,30 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
     /**
      * A function declared beside the call, so a bare name written as an argument is known to be one.
      * A behavior counts: its name handed over is the behavior, and passing one to {@code List.map}
-     * and calling it by name reach the same place (<<blocks>>, specification.adoc:1818).
+     * and calling it by name reach the same place (specification.adoc:1818).
      */
     private static final Pattern DECLARED_FUNCTION = Pattern.compile(
             "(?m)^\\s*(?:partial\\s+)?let\\s+([a-z][A-Za-z0-9]*)\\s*\\("
                     + "|^\\s*behavior\\s+([a-z][A-Za-z0-9]*)\\s*:");
 
+    /** A parameter list — a helper's, or an anonymous block's. Its binders stand for values. */
+    private static final Pattern PARAMETERS = Pattern.compile(
+            "(?:let\\s+[a-z][A-Za-z0-9]*\\s*)?\\(([^()]*)\\)\\s*(?:->|=|:)");
+
+    /** A block taking one parameter without parentheses: {@code r -> …}. */
+    private static final Pattern BARE_PARAMETER = Pattern.compile("(?<![\\w.])([a-z][A-Za-z0-9]*)\\s*->");
+
+    /** A {@code let} binding a value rather than declaring a function. */
+    private static final Pattern VALUE_BINDING =
+            Pattern.compile("(?m)^\\s*let\\s+([a-z][A-Za-z0-9]*)\\s*(?::[^=(]*)?=");
+
     /** The delimiter of a block AsciiDoc takes as it stands. A listing is one region a name is
      *  declared over; outside one, a paragraph is. */
     private static final Pattern BLOCK_DELIMITER = Pattern.compile("^([-.+/])\\1{3,}$");
+
+    /** The anchor attribute a section carries, which is how a finding says where it is without
+     *  naming a line number every edit above it would move. */
+    private static final Pattern ANCHOR = Pattern.compile("^\\[#([A-Za-z0-9_-]+)]$");
 
     /** An argument written as an ellipsis rather than as a value — the call is quoted, not made. */
     private static final Pattern ELIDED = Pattern.compile("\\.\\.\\.|…");
@@ -73,21 +89,26 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
             "-?\\d[\\d_]*(\\.\\d+)?m?|\"[^\"]*\"|true|false|\\[.*]|[A-Z][A-Za-z0-9]*\\s*\\{.*}");
 
     /**
-     * A call the specification writes in order to say that it is refused. The document is right
-     * about each of these and the checker is right to resolve them otherwise; what is checked here
-     * is the calls a reader is meant to copy.
+     * The calls the specification writes in order to say that they are refused, each with the
+     * contradiction it is written to carry. Expected rather than skipped: a negative example that
+     * stops contradicting the library — because the library came to accept it — is as much a
+     * document out of step as a positive one that starts. A second occurrence of the same spelling
+     * under another anchor is an extra entry and fails too.
      */
-    private static final Set<String> WRITTEN_TO_BE_REFUSED = Set.of(
+    private static final List<String> WRITTEN_TO_BE_REFUSED = List.of(
             // "`Decimal.divide(dividend, divisor)` without scale and mode cannot be written"
-            "Decimal.divide(dividend, divisor)",
+            "stdlib-decimal: Decimal.divide(dividend, divisor) is written with 2 argument(s) and declares 4",
             // "a *value* and not a function — written `Map.empty`, never `Map.empty()`"
-            "Map.empty()",
-            "Set.empty()");
+            "stdlib-map: Map.empty() is a value and takes no argument list",
+            // "so it is a *value* and not a function — written `Set.empty`, never `Set.empty()`"
+            "stdlib-set: Set.empty() is a value and takes no argument list");
 
     @Test
-    void theSpecificationCallsTheStandardLibraryTheWayTheLibraryDeclaresItself() {
-        assertEquals(Set.of(), disagreements(text()),
-                "the specification writes these calls, and the checker resolves them otherwise");
+    void theOnlyCallsContradictingTheLibraryAreTheOnesWrittenToBeRefused() {
+        List<Finding> found = findings(text());
+
+        assertEquals(WRITTEN_TO_BE_REFUSED, keysOf(found), "the specification writes these calls, "
+                + "and the checker resolves them otherwise: " + found);
     }
 
     @Test
@@ -103,7 +124,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
      */
     @Test
     void aFunctionPassedWhereTheSignatureDeclaresTheCollectionIsCaught() {
-        Set<String> found = disagreements("""
+        List<String> found = disagreements("""
                 [,text]
                 ----
                 let isValid (r: PreApprovalReason) = ...
@@ -116,7 +137,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
         assertEquals(2, found.size(), found.toString());
         assertTrue(found.stream().allMatch(f -> f.contains("List.all") && f.contains("argument 2")),
                 found.toString());
-        assertEquals(Set.of(), disagreements("""
+        assertEquals(List.of(), disagreements("""
                 [,text]
                 ----
                 let isValid (r: PreApprovalReason) = ...
@@ -145,7 +166,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
      */
     @Test
     void aBehaviorNameStandsWhereTheSignatureDeclaresAFunction() {
-        assertEquals(Set.of(), disagreements("""
+        assertEquals(List.of(), disagreements("""
                 [,text]
                 ----
                 behavior norm : (s: String) -> String
@@ -170,7 +191,7 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
      */
     @Test
     void aFunctionDeclaredInOneListingDoesNotNameAnotherListingsValue() {
-        assertEquals(Set.of(), disagreements("""
+        assertEquals(List.of(), disagreements("""
                 [,text]
                 ----
                 let n (x: Int) = x + 1
@@ -185,17 +206,48 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
                 """));
     }
 
+    /**
+     * Nor does a name a binding in the same listing has taken over. The scan does not resolve names,
+     * so where one spelling stands for a function in one place and a parameter in another it settles
+     * nothing and says nothing — a shadowing is harmless in the language and must be here too.
+     */
+    @Test
+    void aParameterShadowingAFunctionOfTheSameListingSettlesNothing() {
+        assertEquals(List.of(), disagreements("""
+                [,text]
+                ----
+                let index (x: Int) = x + 1
+
+                let nth (index: Int, xs: List<String>) =
+                    List.get(index, xs)
+                ----
+                """));
+    }
+
+    /** A block's own parameter is a binding like any other. */
+    @Test
+    void aBlockParameterShadowingAFunctionOfTheSameListingSettlesNothing() {
+        assertEquals(List.of(), disagreements("""
+                [,text]
+                ----
+                let p (x: Int) = x > 0
+
+                List.map(p -> List.get(p, xs), ys)
+                ----
+                """));
+    }
+
     @Test
     void aCallPassingTooFewOrTooManyArgumentsIsCaught() {
         assertEquals(1, disagreements("`+List.map(xs)+`").size());
         assertEquals(1, disagreements("`+List.map(f, xs, more)+`").size());
-        assertEquals(Set.of(), disagreements("`+List.map(f, xs)+`"));
+        assertEquals(List.of(), disagreements("`+List.map(f, xs)+`"));
     }
 
     /** A pipe supplies the last argument, so the call is written with one fewer. */
     @Test
     void aPipedCallIsReadWithTheArgumentThePipeSupplies() {
-        assertEquals(Set.of(), disagreements("`+xs |> List.map(.value)+`"));
+        assertEquals(List.of(), disagreements("`+xs |> List.map(.value)+`"));
         assertEquals(1, disagreements("`+xs |> List.map(f, xs)+`").size());
     }
 
@@ -213,34 +265,56 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
     /** An ellipsis stands for arguments rather than being one, so the count says nothing. */
     @Test
     void aCallQuotedWithAnEllipsisIsNotCountedAgainstItsArity() {
-        assertEquals(Set.of(), disagreements("`+String.length(...)+`"));
+        assertEquals(List.of(), disagreements("`+String.length(...)+`"));
     }
 
-    /** Every way the specification contradicts a resolved signature, one line each. */
-    private static Set<String> disagreements(String adoc) {
-        NavigableMap<Integer, Set<String>> declared = declarationsByRegion(adoc);
+    /**
+     * One way the specification contradicts a resolved signature. Identified by the anchor it stands
+     * under rather than by its line, which every edit above it moves.
+     */
+    private record Finding(String anchor, String written, String says, int line) {
+        String key() {
+            return anchor + ": " + written + " " + says;
+        }
+
+        @Override
+        public String toString() {
+            return "specification.adoc:" + line + " [" + anchor + "] " + written + " " + says;
+        }
+    }
+
+    private static List<String> keysOf(List<Finding> found) {
+        return found.stream().map(Finding::key).sorted().toList();
+    }
+
+    private static List<String> disagreements(String adoc) {
+        return keysOf(findings(adoc));
+    }
+
+    private static List<Finding> findings(String adoc) {
+        NavigableMap<Integer, Declared> declared = declarationsByRegion(adoc);
+        NavigableMap<Integer, String> anchors = anchorsByOffset(adoc);
         Map<String, ApiCommand.Signature> surface = ApiCommand.surface();
-        Set<String> found = new TreeSet<>();
+        List<Finding> found = new ArrayList<>();
         for (Call call : callsIn(adoc)) {
-            if (WRITTEN_TO_BE_REFUSED.contains(call.written())) {
-                continue;
-            }
+            String anchor = anchors.floorEntry(call.at()) == null ? ""
+                    : anchors.floorEntry(call.at()).getValue();
             ApiCommand.Signature signature = surface.get(call.name());
             if (signature == null) {
-                found.add(call.where() + call.name() + " names nothing the standard library publishes");
+                found.add(call.saying(anchor, "names nothing the standard library publishes"));
                 continue;
             }
             if (Prelude.isEmptyCollectionValue(call.name())) {
-                found.add(call.where() + call.name() + " is a value and takes no argument list");
+                found.add(call.saying(anchor, "is a value and takes no argument list"));
                 continue;
             }
             int declares = signature.paramNames().size();
             int written = call.args().size() + (call.piped() ? 1 : 0);
             if (written != declares && call.args().stream().noneMatch(a -> ELIDED.matcher(a).find())) {
-                found.add(call.where() + call.name() + " is written with " + written
-                        + " argument(s) and declares " + declares);
+                found.add(call.saying(anchor, "is written with " + written
+                        + " argument(s) and declares " + declares));
             }
-            Set<String> here = declared.floorEntry(call.at()).getValue();
+            Declared here = declared.floorEntry(call.at()).getValue();
             for (int i = 0; i < call.args().size() && i < declares; i++) {
                 boolean takesAFunction = signature.paramTypes().get(i) instanceof Type.FnOf;
                 String at = " as argument " + (i + 1) + ", where it declares "
@@ -248,13 +322,12 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
                 switch (kindOf(call.args().get(i), here, surface)) {
                     case FUNCTION -> {
                         if (!takesAFunction) {
-                            found.add(call.where() + call.name() + " is passed a function" + at);
+                            found.add(call.saying(anchor, "is passed a function" + at));
                         }
                     }
                     case NOT_A_FUNCTION -> {
                         if (takesAFunction) {
-                            found.add(call.where() + call.name()
-                                    + " is passed something that is not a function" + at);
+                            found.add(call.saying(anchor, "is passed something that is not a function" + at));
                         }
                     }
                     case UNDECIDED -> { }
@@ -270,10 +343,9 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
     /**
      * An anonymous block, a getter block and a name declared as a function are functions; a literal,
      * a list literal, a construction and a library name declaring no parameter list are not. A name
-     * nothing here declares settles nothing either way.
+     * nothing here declares — or one a binding of the same region has also taken — settles nothing.
      */
-    private static Kind kindOf(String argument, Set<String> declaredHere,
-                               Map<String, ApiCommand.Signature> surface) {
+    private static Kind kindOf(String argument, Declared here, Map<String, ApiCommand.Signature> surface) {
         String written = argument.strip();
         if (arrowAt(written) >= 0 || GETTER.matcher(written).matches()) {
             return Kind.FUNCTION;
@@ -282,8 +354,8 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
             return Kind.NOT_A_FUNCTION;
         }
         if (NAME.matcher(written).matches()) {
-            if (declaredHere.contains(written)) {
-                return Kind.FUNCTION;
+            if (here.functions().contains(written)) {
+                return here.bindings().contains(written) ? Kind.UNDECIDED : Kind.FUNCTION;
             }
             ApiCommand.Signature published = surface.get(written);
             if (published != null) {
@@ -295,12 +367,12 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
 
     /** One call as the document writes it, with the arguments split as the parser would. */
     private record Call(String name, List<String> args, boolean piped, int at, int line) {
-        String where() {
-            return "specification.adoc:" + line + ": ";
-        }
-
         String written() {
             return name + "(" + String.join(", ", args) + ")";
+        }
+
+        Finding saying(String anchor, String says) {
+            return new Finding(anchor, written(), says, line);
         }
     }
 
@@ -409,13 +481,17 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
         return i >= 1 && text.charAt(i) == '>' && text.charAt(i - 1) == '|';
     }
 
+    /** What a region of the document declares: the names it declares as functions, and the names it
+     *  also binds as something else, which leaves a bare occurrence of one undecided. */
+    private record Declared(Set<String> functions, Set<String> bindings) {}
+
     /**
-     * The functions declared in each region of the document, keyed by where the region starts. A
-     * listing block is one region and a paragraph outside one is another, so a name is a function
-     * where it was declared rather than everywhere the document goes on to write it.
+     * What each region of the document declares, keyed by where the region starts. A listing block
+     * is one region and a paragraph outside one is another, so a name is a function where it was
+     * declared rather than everywhere the document goes on to write it.
      */
-    private static NavigableMap<Integer, Set<String>> declarationsByRegion(String adoc) {
-        NavigableMap<Integer, Set<String>> byStart = new TreeMap<>();
+    private static NavigableMap<Integer, Declared> declarationsByRegion(String adoc) {
+        NavigableMap<Integer, Declared> byStart = new TreeMap<>();
         boolean listing = false;
         int start = 0;
         int at = 0;
@@ -426,22 +502,54 @@ class NoStandardLibraryCallTheSpecificationWritesContradictsItsSignatureTest {
                 listing = !listing;
             }
             if (boundary || (!listing && delimiter.isEmpty())) {
-                byStart.put(start, declaredFunctionsIn(adoc.substring(start, at)));
+                byStart.put(start, declaredIn(adoc.substring(start, at)));
                 start = at;
             }
             at += line.length() + 1;
         }
-        byStart.put(start, declaredFunctionsIn(adoc.substring(Math.min(start, adoc.length()))));
+        byStart.put(start, declaredIn(adoc.substring(Math.min(start, adoc.length()))));
         return byStart;
     }
 
-    private static Set<String> declaredFunctionsIn(String region) {
-        Set<String> declared = new TreeSet<>();
+    private static Declared declaredIn(String region) {
+        Set<String> functions = new TreeSet<>();
         Matcher m = DECLARED_FUNCTION.matcher(region);
         while (m.find()) {
-            declared.add(m.group(1) != null ? m.group(1) : m.group(2));
+            functions.add(m.group(1) != null ? m.group(1) : m.group(2));
         }
-        return declared;
+        Set<String> bindings = new TreeSet<>();
+        Matcher params = PARAMETERS.matcher(region);
+        while (params.find()) {
+            for (String parameter : params.group(1).split(",")) {
+                String binder = parameter.strip().split("[:\\s]", 2)[0];
+                if (!binder.isEmpty()) {
+                    bindings.add(binder);
+                }
+            }
+        }
+        Matcher bare = BARE_PARAMETER.matcher(region);
+        while (bare.find()) {
+            bindings.add(bare.group(1));
+        }
+        Matcher value = VALUE_BINDING.matcher(region);
+        while (value.find()) {
+            bindings.add(value.group(1));
+        }
+        return new Declared(functions, bindings);
+    }
+
+    /** The section anchor in force at each offset, so a finding says where it is by name. */
+    private static NavigableMap<Integer, String> anchorsByOffset(String adoc) {
+        NavigableMap<Integer, String> byOffset = new TreeMap<>();
+        int at = 0;
+        for (String line : adoc.split("\n", -1)) {
+            Matcher m = ANCHOR.matcher(line.strip());
+            if (m.matches()) {
+                byOffset.put(at, m.group(1));
+            }
+            at += line.length() + 1;
+        }
+        return byOffset;
     }
 
     private static int lineOf(String text, int at) {
