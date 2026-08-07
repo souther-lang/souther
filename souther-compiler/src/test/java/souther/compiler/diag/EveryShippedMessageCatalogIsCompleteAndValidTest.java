@@ -1,0 +1,655 @@
+package souther.compiler.diag;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.Prelude;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Properties;
+import java.util.ResourceBundle;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+/**
+ * Every catalog that ships is complete on its own and valid on its own.
+ *
+ * <p>The checks here used to name the English and the Japanese catalog, one literal path each. A
+ * third catalog therefore shipped with nothing said about it: a file of three keys quoting a
+ * standard-library name that no longer exists passed every one of them, and a compile run in that
+ * language answered with its message body translated and its title, its hint and every key it did
+ * not define still in English. {@link ResourceBundle} falls back to the base for a key a locale is
+ * missing, which is what turns an incomplete catalog into one answer written half in each language
+ * rather than into a visible failure.
+ *
+ * <p>So the quantifier is over the catalog files that ship, discovered from the tree, and not over a
+ * list of locales somebody has to remember to extend. A catalog added tomorrow is under all of this
+ * the moment it is written.
+ *
+ * <p>The fallback stays: a key missing from both catalogs still renders as itself rather than
+ * stopping a compile, and a bundle half-migrated on a branch still runs. What it no longer is, is
+ * how a shipped catalog is allowed to be incomplete.
+ *
+ * <p>Validity is checked over every message rather than over the ones that name an argument, since
+ * {@code Messages.get} renders them all as patterns. It is also checked over the file's physical
+ * shape, because the checks that read a catalog line by line are only as good as the format they
+ * assume {@link Properties} was given.
+ */
+class EveryShippedMessageCatalogIsCompleteAndValidTest {
+
+    /** Where the bundle {@link Messages} reads lives, as a path under a module's resources. */
+    private static final String PACKAGE = "souther/compiler/diag";
+    /** The bundle's own name, so the base catalog is {@code messages.properties}. */
+    private static final String BUNDLE = "messages";
+    private static final String SUFFIX = ".properties";
+
+    /**
+     * The same control {@link Messages} looks a bundle up with, used here to spell a locale back
+     * into the file name it would be read from.
+     */
+    private static final ResourceBundle.Control CONTROL =
+            ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES);
+
+    /** An argument reference: {@code {0}}, and {@code {10}} too — a single digit is not the rule. */
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\d+)}");
+
+    /**
+     * A line of a catalog: a key of the shape the catalog uses, {@code =}, and the message.
+     *
+     * <p>Narrower than what {@link Properties} would accept, which is the point. It also takes
+     * {@code :} and bare whitespace as separators and joins a line ending in a backslash to the
+     * next, so {@code foo=first} followed by {@code foo:second} is one key defined twice, and a
+     * scan looking for {@code =} sees one definition and nothing wrong. Holding the files to one
+     * spelling is what lets the duplicate check below read a line as a definition.
+     */
+    private static final Pattern DEFINITION = Pattern.compile("[A-Za-z0-9._-]+=.*");
+
+    /**
+     * A catalog that ships: the file, and the language its messages are written in.
+     *
+     * <p>The base file carries no language in its name. To {@link ResourceBundle} it is the root
+     * bundle, which is a fallback rather than a language; to Souther it is the English catalog,
+     * which is what {@link Messages#defaultLocale()} says and what makes "the same keys as the base"
+     * a statement about a language rather than about a default.
+     */
+    private record Catalog(Path path, Locale locale) {
+
+        String name() {
+            return path.getFileName().toString();
+        }
+
+        boolean isBase() {
+            return name().equals(BUNDLE + SUFFIX);
+        }
+    }
+
+    @Test
+    void exactlyOneCatalogIsTheBase() throws IOException {
+        List<String> bases = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                bases.add(catalog.path().toString());
+            }
+        }
+        assertEquals(1, bases.size(),
+                "the base catalog is what every other one is compared against, and what a key"
+                        + " missing everywhere else falls back to: " + bases);
+    }
+
+    /**
+     * One catalog per language, across every module.
+     *
+     * <p>The modules ship onto one class path — the compiler depends on the syntax module — so two
+     * files named for one language are two answers to the same lookup, and which one a reader gets
+     * is decided by class-path order rather than by anything here. Each would pass every check on
+     * its own, being complete and valid separately, and the other would simply never be read.
+     *
+     * <p>The base is under this too, its language being the English the base is written in: a
+     * {@code messages_en.properties} added beside it is the same collision, and the one
+     * {@link ResourceBundle} would prefer is not the one the rest of this file calls the base.
+     */
+    @Test
+    void noTwoCatalogsAreWrittenForTheSameLanguage() throws IOException {
+        Map<String, List<String>> byLanguage = new TreeMap<>();
+        for (Catalog catalog : catalogs()) {
+            byLanguage.computeIfAbsent(catalog.locale().toLanguageTag(), _ -> new ArrayList<>())
+                    .add(catalog.path().toString());
+        }
+        List<String> shared = new ArrayList<>();
+        byLanguage.forEach((language, files) -> {
+            if (files.size() > 1) {
+                shared.add(language + ": " + files);
+            }
+        });
+        assertEquals(List.of(), shared, "two catalogs answer for one language");
+    }
+
+    /**
+     * A catalog is named for the locale it will be read as. The name is the only place a shipped
+     * file says which language it is in, so a name {@link ResourceBundle} resolves differently than
+     * this test reads it would leave the checks below describing a locale nobody is ever answered
+     * in — spelling the locale back through the same control is what closes that.
+     */
+    @Test
+    void everyCatalogIsNamedForTheLocaleItIsReadAs() throws IOException {
+        Set<String> misnamed = new TreeSet<>();
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                continue;
+            }
+            String reachedAs = CONTROL.toBundleName(BUNDLE, catalog.locale()) + SUFFIX;
+            if (!reachedAs.equals(catalog.name())) {
+                misnamed.add(catalog.name() + " is read as " + catalog.locale().toLanguageTag()
+                        + ", which is looked up as " + reachedAs);
+            }
+        }
+        assertEquals(Set.of(), misnamed, "a catalog's name and the locale it is reached by disagree");
+    }
+
+    /**
+     * The invariant the fallback used to stand in for. A shipped catalog defines every key the base
+     * defines, so a reader who chose that language is answered in it throughout one diagnostic —
+     * title, message, labels and hint — rather than in whichever of the two languages each key
+     * happened to have reached.
+     */
+    @Test
+    void everyCatalogDefinesTheSameKeysAsTheBase() throws IOException {
+        Set<String> base = keysOf(baseCatalog().path());
+        Set<String> divergent = new TreeSet<>();
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                continue;
+            }
+            Set<String> keys = keysOf(catalog.path());
+            for (String key : difference(base, keys)) {
+                divergent.add(catalog.name() + " does not define " + key);
+            }
+            for (String key : difference(keys, base)) {
+                divergent.add(catalog.name() + " defines " + key + ", which the base does not");
+            }
+        }
+        assertEquals(Set.of(), divergent);
+    }
+
+    /**
+     * A key names the same arguments everywhere it is written.
+     *
+     * <p>The site passes one argument list and does not know which language it will be rendered in,
+     * so which arguments a key takes is part of the key and not part of a translation. A message
+     * that leaves one out drops what the site had to say and reads fine doing it — the Japanese
+     * type mismatch said "the type here does not match" while the English one named the argument
+     * that did not: {@code argument 3 of `foo`}. One that names an argument the base does not shows
+     * the reader a bare {@code {1}}, since nothing was passed for it.
+     *
+     * <p>Neither is visible to the checks around this one. Each catalog is well-formed on its own,
+     * and each substitutes the arguments it names.
+     *
+     * <p>Order is a translation's business — a language that puts the expected type first is
+     * still saying the same thing — so it is the set that has to agree. Read through
+     * {@link MessageFormat} rather than off the text, so a brace quoted as a literal
+     * ({@code '{0}'}) is not counted as an argument that has to appear elsewhere.
+     */
+    @Test
+    void everyCatalogUsesTheSameArgumentsAsTheBase() throws IOException {
+        Properties base = load(baseCatalog().path());
+        Set<String> divergent = new TreeSet<>();
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                continue;
+            }
+            Properties messages = load(catalog.path());
+            for (String key : messages.stringPropertyNames()) {
+                String there = base.getProperty(key);
+                if (there == null) {
+                    continue;   // a key the base does not define is reported next door
+                }
+                Set<Integer> mine = argumentsOf(messages.getProperty(key), catalog.locale());
+                Set<Integer> theirs = argumentsOf(there, Locale.ENGLISH);
+                if (!mine.equals(theirs)) {
+                    divergent.add(catalog.name() + ": " + key + " takes " + mine
+                            + ", the base takes " + theirs);
+                }
+            }
+        }
+        assertEquals(Set.of(), divergent,
+                "the site passes one argument list for every language");
+    }
+
+    /**
+     * The argument indexes {@code template} references, as the formatter reads them: rendered with
+     * a mark for each argument the pattern could name, and the marks that come out are the ones it
+     * does name.
+     *
+     * <p>{@code getFormatsByArgumentIndex()} gives the bound and not the set — it is as long as the
+     * highest index mentioned, so a message using {@code {0}} and {@code {2}} reports three.
+     */
+    private static Set<Integer> argumentsOf(String template, Locale locale) {
+        MessageFormat pattern;
+        try {
+            pattern = new MessageFormat(template, locale);
+        } catch (IllegalArgumentException _) {
+            return Set.of();   // refused, and reported as that rather than as an argument list
+        }
+        int bound = pattern.getFormatsByArgumentIndex().length;
+        Object[] marks = new Object[bound];
+        for (int i = 0; i < bound; i++) {
+            marks[i] = MARK + Integer.toString(i) + MARK;
+        }
+        String rendered = pattern.format(marks);
+        Set<Integer> named = new TreeSet<>();
+        for (int i = 0; i < bound; i++) {
+            if (rendered.contains(MARK + Integer.toString(i) + MARK)) {
+                named.add(i);
+            }
+        }
+        return named;
+    }
+
+    /** Stands in for an argument while its pattern is rendered; no message writes one. */
+    private static final char MARK = '\u0001';
+
+    /**
+     * Every message parses as a {@link MessageFormat} pattern, whether or not it names an argument.
+     *
+     * <p>{@code Messages.get} renders every message as one, so a template the formatter refuses is
+     * a message that cannot be shown — {@code `| Some { field }`} reads as an argument called
+     * {@code " field "} and throws where the reader was going to be told what to write. Checking
+     * only the messages that name a {@code {n}} left that outside: the pattern is refused at
+     * construction, before any argument is substituted, and a message with a stray brace and no
+     * placeholder names none.
+     *
+     * <p>What the message says survives that: a literal brace is written {@code '{'} and a literal
+     * apostrophe {@code ''}, and the check below renders each pattern to see what comes out.
+     */
+    @Test
+    void everyMessageIsAPatternTheFormatterAccepts() throws IOException {
+        List<String> refused = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties messages = load(catalog.path());
+            for (String key : messages.stringPropertyNames()) {
+                try {
+                    new MessageFormat(messages.getProperty(key), catalog.locale());
+                } catch (IllegalArgumentException e) {
+                    refused.add(catalog.name() + ": " + key + " -> " + e.getMessage());
+                }
+            }
+        }
+        refused.sort(String::compareTo);
+        assertEquals(List.of(), refused,
+                "the formatter cannot read these; quote a literal brace as `'{'`");
+    }
+
+    /**
+     * A lone {@code '} opens a quoted run and {@code ''} is the apostrophe itself. A message that
+     * writes {@code a data's} therefore quotes the whole rest of itself: the apostrophe disappears
+     * and every {@code {n}} after it renders literally, as the placeholder rather than the value.
+     *
+     * <p>Nothing caught that, because a message is only read when its diagnostic fires and the
+     * result is prose nobody diffs. This renders each one with stand-in arguments and fails on any
+     * placeholder that survived.
+     *
+     * <p>Rendered from the catalog's own text rather than through {@link Messages#get}, which reads
+     * the bundle and so can answer with the base's copy of a key. A check that a file is valid has
+     * to have read that file.
+     */
+    @Test
+    void everyCatalogSubstitutesAllOfItsArguments() throws IOException {
+        List<String> broken = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties messages = load(catalog.path());
+            for (String key : messages.stringPropertyNames()) {
+                String template = messages.getProperty(key);
+                int arity = arityOf(template);
+                Object[] args = new Object[arity];
+                for (int i = 0; i < arity; i++) {
+                    args[i] = "<arg" + i + ">";
+                }
+                MessageFormat pattern;
+                try {
+                    pattern = new MessageFormat(template, catalog.locale());
+                } catch (IllegalArgumentException _) {
+                    continue;   // named above, and this one has nothing to add about it
+                }
+                String rendered = pattern.format(args);
+                if (PLACEHOLDER.matcher(rendered).find()) {
+                    broken.add(catalog.name() + ": " + key + " -> " + rendered);
+                }
+            }
+        }
+        broken.sort(String::compareTo);
+        assertEquals(List.of(), broken);
+    }
+
+    /**
+     * Every definition is spelled {@code key=value} on one line.
+     *
+     * <p>The check below reads a catalog line by line to see a key defined twice, which
+     * {@link Properties} cannot be asked because it keeps only the last value. That reading is only
+     * as good as the file format it assumes, and the format {@code Properties} actually accepts is
+     * wider than the one the catalogs use: {@code :} and bare whitespace separate a key from its
+     * value too, and a line ending in a backslash continues into the next. Under that, a second
+     * definition written {@code foo:second} is invisible to the duplicate check and still wins at
+     * run time.
+     *
+     * <p>So the format is required rather than observed. The catalogs are edited by hand, and
+     * one spelling is no loss.
+     */
+    @Test
+    void everyCatalogLineIsOneKeyAndOneValue() throws IOException {
+        List<String> off = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            int number = 0;
+            for (String line : Files.readAllLines(catalog.path(), StandardCharsets.UTF_8)) {
+                number++;
+                if (line.isBlank() || line.startsWith("#")) {
+                    continue;
+                }
+                if (!DEFINITION.matcher(line).matches() || line.endsWith("\\")) {
+                    off.add(catalog.name() + ":" + number + ": " + line);
+                }
+            }
+        }
+        assertEquals(List.of(), off,
+                "a catalog line is `key=value`, on one line, or blank, or a `#` comment");
+    }
+
+    @Test
+    void noCatalogDefinesAKeyTwice() throws IOException {
+        List<String> duplicated = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            for (String key : duplicateKeys(catalog.path())) {
+                duplicated.add(catalog.name() + ": " + key);
+            }
+        }
+        assertEquals(List.of(), duplicated);
+    }
+
+    @Test
+    void everyCatalogNamesOnlyStandardLibraryFunctionsThatExist() throws IOException {
+        Set<String> missing = new TreeSet<>();
+        for (Catalog catalog : catalogs()) {
+            for (String name : missingLibraryNames(catalog.path())) {
+                missing.add(catalog.name() + ": " + name);
+            }
+        }
+        assertEquals(Set.of(), missing);
+    }
+
+    /**
+     * A key the compiler names but the catalog does not define renders as the key itself, so the
+     * reader gets {@code check.match.newtype.notnewtype} where the message belongs. Nothing else
+     * catches it: the site compiles, and the text is only read when that diagnostic fires.
+     *
+     * <p>The keys are collected from the sources rather than from the call sites, because a key is
+     * also passed to the parser's and the AST builder's own {@code error(...)} helpers, and those
+     * sites are invisible to a scan for {@code Diagnostic.of}. A string literal counts as a key when
+     * it is shaped like one and its first segment is one the catalog already uses — so the very
+     * first key of a brand-new namespace is the one case this does not see.
+     *
+     * <p>Against the base, which every other catalog is held to define exactly.
+     */
+    @Test
+    void everyKeyTheCompilerNamesIsInTheCatalog() throws IOException {
+        Set<String> defined = keysOf(baseCatalog().path());
+        Set<String> namespaces = new TreeSet<>();
+        for (String key : defined) {
+            namespaces.add(key.substring(0, key.indexOf('.')));
+        }
+        Set<String> named = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                String key = m.group(1);
+                if (namespaces.contains(key.substring(0, key.indexOf('.')))) {
+                    named.add(key);
+                }
+            }
+        }
+        assertFalse(named.isEmpty(), "found no message keys at all — the source scan missed the tree");
+        named.removeAll(defined);
+        assertEquals(Set.of(), named);
+    }
+
+    /**
+     * The other direction, over the one namespace where it holds: an example message the catalog
+     * defines and nothing shows.
+     *
+     * <p>Narrower than the check above on purpose. Elsewhere a key is often built from parts — a
+     * title from a code, a kind from a type — and a scan for literals cannot see those. Here every
+     * key is written out at the site that uses it, which is what makes a hint nobody attaches
+     * findable at all. That is the mistake this catches: a hint added beside a new message and never
+     * passed to the diagnostic renders nowhere, and the message still reads fine on its own.
+     */
+    @Test
+    void noExampleMessageIsDefinedAndNeverShown() throws IOException {
+        Set<String> named = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                named.add(m.group(1));
+            }
+        }
+        Set<String> unshown = new TreeSet<>();
+        for (String key : keysOf(baseCatalog().path())) {
+            if (key.startsWith("check.example.") && !named.contains(key)) {
+                unshown.add(key);
+            }
+        }
+        assertEquals(Set.of(), unshown);
+    }
+
+    /**
+     * The same question over every namespace, not just the example one: a message the catalog
+     * defines and nothing names is a message no compile can show. Four of them were found by
+     * reading rather than by a build while the codes were being assigned, and two of those had a
+     * rule written for them in the specification off the strength of text nobody could reach.
+     *
+     * <p>Held to the keys a site writes out. A key built by concatenation is invisible to a scan of
+     * literals and would read as unused: the hints, which are `+<key> + ".hint"+` at several sites,
+     * and the two namespaces whose leaf is chosen at run time.
+     */
+    @Test
+    void noMessageIsDefinedAndNeverShown() throws IOException {
+        Set<String> named = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                named.add(m.group(1));
+            }
+        }
+        Set<String> unshown = new TreeSet<>();
+        for (String key : keysOf(baseCatalog().path())) {
+            if (key.endsWith(".hint") || key.startsWith("check.typearg.") || key.startsWith("kind.")
+                    || named.contains(key)) {
+                continue;
+            }
+            unshown.add(key);
+        }
+        assertEquals(Set.of(), unshown, "defined and unreachable — nothing can show these");
+    }
+
+    private static final Pattern KEY_LITERAL =
+            Pattern.compile("\"([a-z][a-z0-9]*(?:\\.[a-z0-9]+)+)\"");
+
+    /**
+     * The catalogs that ship, found in the tree rather than listed here. Read off the repository
+     * because that is what "shipped" is decided by: a file under a module's resources, in the
+     * package the bundle is read from, is in the jar and is reachable by whoever names its language.
+     */
+    private static List<Catalog> catalogs() throws IOException {
+        List<Catalog> found = new ArrayList<>();
+        for (Path resources : moduleDirectories("resources")) {
+            Path directory = resources.resolve(PACKAGE);
+            if (!Files.isDirectory(directory)) {
+                continue;
+            }
+            try (Stream<Path> files = Files.list(directory)) {
+                for (Path file : files.sorted().toList()) {
+                    String name = file.getFileName().toString();
+                    if (name.startsWith(BUNDLE) && name.endsWith(SUFFIX)) {
+                        found.add(new Catalog(file, localeOf(name)));
+                    }
+                }
+            }
+        }
+        return List.copyOf(found);
+    }
+
+    private static Catalog baseCatalog() throws IOException {
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                return catalog;
+            }
+        }
+        throw new IllegalStateException("no base catalog was found; the scan missed the tree");
+    }
+
+    /**
+     * The language a catalog file's name says it is in. The base names none and is English.
+     *
+     * <p>English as a fact about the file, not as {@link Messages#defaultLocale()}. The two agree
+     * and are different things: one is the language the base catalog is written in, the other is
+     * which language is chosen when nobody names one. Reading the second here would make the base's
+     * text get checked against whatever the default becomes.
+     */
+    private static Locale localeOf(String name) {
+        String stem = name.substring(0, name.length() - SUFFIX.length());
+        String tag = stem.substring(BUNDLE.length());
+        return tag.isEmpty()
+                ? Locale.ENGLISH
+                : Locale.forLanguageTag(tag.substring(1).replace('_', '-'));
+    }
+
+    /** Every module's main sources. Any module may name a message key. */
+    static List<Path> mainSources() throws IOException {
+        List<Path> sources = new ArrayList<>();
+        for (Path root : moduleDirectories("java")) {
+            try (Stream<Path> walk = Files.walk(root)) {
+                walk.filter(p -> p.toString().endsWith(".java")).forEach(sources::add);
+            }
+        }
+        return sources;
+    }
+
+    /** Every module's {@code src/main/<kind>}, for the modules that have one. The test runs in its
+     *  own module directory, so the repository root is that directory's parent. */
+    private static List<Path> moduleDirectories(String kind) throws IOException {
+        Path module = Path.of("").toAbsolutePath();
+        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
+                ? module.getParent() : module;
+        List<Path> directories = new ArrayList<>();
+        try (Stream<Path> modules = Files.list(repo)) {
+            for (Path candidate : modules.map(m -> m.resolve(Path.of("src", "main", kind))).toList()) {
+                if (Files.isDirectory(candidate)) {
+                    directories.add(candidate);
+                }
+            }
+        }
+        directories.sort(Path::compareTo);
+        return directories;
+    }
+
+    private static Properties load(Path catalog) throws IOException {
+        Properties messages = new Properties();
+        try (BufferedReader text = Files.newBufferedReader(catalog, StandardCharsets.UTF_8)) {
+            messages.load(text);
+        }
+        return messages;
+    }
+
+    private static Set<String> keysOf(Path catalog) throws IOException {
+        return new TreeSet<>(load(catalog).stringPropertyNames());
+    }
+
+    private static Set<String> difference(Set<String> from, Set<String> without) {
+        Set<String> left = new TreeSet<>(from);
+        left.removeAll(without);
+        return left;
+    }
+
+    /** One past the highest argument index the pattern names. */
+    private static int arityOf(String template) {
+        Matcher m = PLACEHOLDER.matcher(template);
+        int highest = -1;
+        while (m.find()) {
+            highest = Math.max(highest, Integer.parseInt(m.group(1)));
+        }
+        return highest + 1;
+    }
+
+    /**
+     * The qualified standard-library names this catalog quotes that the library does not publish.
+     *
+     * <p>A hint that tells an author to reach for {@code List.flatMap} after it was renamed sends
+     * them to a compile error, in the one text whose whole job is to get them out of one. Nothing
+     * else notices: the catalog is prose, so a rename sweeps the code and the tests and leaves the
+     * advice behind — which is exactly what happened to two hints here, found in review rather than
+     * by a build.
+     *
+     * <p>Only a name under a library qualifier is checked, and only where the catalog wrote it as
+     * code. A qualifier the library does not have is somebody's module and not this test's business.
+     */
+    private static Set<String> missingLibraryNames(Path catalog) throws IOException {
+        Pattern quoted = Pattern.compile("`([A-Z][A-Za-z]*)\\.([a-zA-Z_][A-Za-z0-9_]*)`");
+        Set<String> missing = new TreeSet<>();
+        for (String line : Files.readAllLines(catalog, StandardCharsets.UTF_8)) {
+            Matcher m = quoted.matcher(line);
+            while (m.find()) {
+                if (!Prelude.isQualifier(m.group(1))) {
+                    continue;
+                }
+                String qualified = m.group(1) + "." + m.group(2);
+                if (!Prelude.published().contains(qualified)) {
+                    missing.add(qualified);
+                }
+            }
+        }
+        return Set.copyOf(missing);
+    }
+
+    /**
+     * The keys this catalog defines more than once. A second definition silently wins, so the first
+     * one is dead and whichever diagnostics meant it render someone else's text — the same kind of
+     * defect as the one above, and just as invisible for the same reason.
+     *
+     * <p>Read line by line rather than through {@link Properties}, which keeps only the last value
+     * and so cannot see the collision at all. What a line means is settled by the check above,
+     * which holds every catalog to one definition per line spelled with {@code =} — without it a
+     * second definition written another way would be read here as prose.
+     */
+    private static List<String> duplicateKeys(Path catalog) throws IOException {
+        Set<String> seen = new LinkedHashSet<>();
+        Set<String> duplicated = new TreeSet<>();
+        try (BufferedReader lines = Files.newBufferedReader(catalog, StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = lines.readLine()) != null) {
+                String trimmed = line.strip();
+                int eq = trimmed.indexOf('=');
+                if (trimmed.isEmpty() || trimmed.startsWith("#") || eq < 0) {
+                    continue;
+                }
+                String key = trimmed.substring(0, eq).strip();
+                if (!seen.add(key)) {
+                    duplicated.add(key);
+                }
+            }
+        }
+        return List.copyOf(duplicated);
+    }
+}
