@@ -70,12 +70,20 @@ argument it prints everything, which for a library this size is the fastest way 
 ## japi
 
 ```
-souther japi <class-or-package> [-cp <path>]
+souther japi <class-or-package>[#<member>] [-cp <path>]
 ```
 
 A dependency's public API, read from its class files without loading them, with javadoc taken from
 the `-sources.jar` beside the jar. This is the answer to "what does this library actually offer"
 without disassembling anything.
+
+A class name answers with every published member; `Class#member` answers with one of them, which is
+what a class carrying sixteen overloads of the same name is worth asking. A compile-time constant is
+printed with its value, since the value is what the declaration says.
+
+```
+souther japi net.unit8.raoh.Result#map2
+```
 
 ## mcp
 

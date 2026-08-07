@@ -112,9 +112,12 @@ public final class McpServer {
                     List.of(new Param("name", Kind.STRING, true, "a stdlib module, e.g. `String`"))),
             new Tool("jar_api",
                     "A dependency jar's public API read from its class files, with javadoc from the"
-                            + " -sources.jar beside it. Give a fully qualified class or package name.",
+                            + " -sources.jar beside it. Give a fully qualified class or package name."
+                            + " To read one member of a class rather than all of them, write"
+                            + " `Class#member` — for example `net.unit8.raoh.Result#map2`.",
                     List.of(new Param("name", Kind.STRING, true,
-                                    "a fully qualified class or package name"),
+                                    "a fully qualified class or package name, optionally followed by"
+                                            + " `#member` to select one member of the class"),
                             new Param("classpath", Kind.STRING, false,
                                     "jars or class directories to search, path-separated;"
                                             + " omit to search the CLI's own class path"))));

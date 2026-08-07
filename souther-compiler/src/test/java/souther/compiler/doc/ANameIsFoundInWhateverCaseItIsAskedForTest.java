@@ -75,6 +75,23 @@ class ANameIsFoundInWhateverCaseItIsAskedForTest {
                 "the suggestion goes through the same fold as the lookup: " + answer.err());
     }
 
+    /**
+     * `e1001` is the name of the diagnostic `e1001-removed` is about, so that section is what was
+     * asked for. `e1002` is one keystroke away and is about something else entirely — a diagnostic
+     * code is not a word, and its neighbours are not near it. When the name asked for opens a
+     * section's own name, that is the answer, and the near spellings are not worth listing beside it.
+     */
+    @Test
+    void aNameASectionIsNamedAfterIsAnsweredWithThatSectionAlone() {
+        Answer answer = run(DocCommand.class.getClassLoader(), "E1001");
+
+        assertEquals(2, answer.code());
+        String suggestion = answer.err().lines().filter(l -> l.startsWith("did you mean"))
+                .findFirst().orElseThrow();
+        assertEquals("did you mean: e1001-removed", suggestion,
+                "the section the name belongs to, and nothing that merely spells like it");
+    }
+
     @Test
     void aShippedTopicKeepsItsSpellingAndIsStillFoundByAnyCase() throws Exception {
         try (URLClassLoader loader = jarOf("MixedCase", List.of("Guide.md"))) {

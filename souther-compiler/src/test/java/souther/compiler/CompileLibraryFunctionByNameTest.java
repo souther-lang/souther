@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A named function may be handed over rather than applied, and that is one rule for every named
- * function ([#blocks]): {@code List.all(reasons, isValid)} and {@code List.all(reasons, r ->
- * isValid(r))} are the same thing. It held for a module's own {@code let} and not for the library's,
+ * function ([#blocks]): {@code List.all(isValid, reasons)} and {@code List.all(r -> isValid(r),
+ * reasons)} are the same thing. It held for a module's own {@code let} and not for the library's,
  * whose names could not be written without an argument list at all.
  *
  * <p>What a name is on the other side of — a Souther body, a shipped kernel — is not the name's

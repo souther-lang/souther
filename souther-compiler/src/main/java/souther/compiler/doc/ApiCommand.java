@@ -81,7 +81,7 @@ public final class ApiCommand {
     }
 
     /** One callable name's parameters, as written, and the type its call answers with. */
-    private record Signature(List<String> paramNames, List<Type> paramTypes, Type result) {}
+    record Signature(List<String> paramNames, List<Type> paramTypes, Type result) {}
 
     private static void listPublished(PrintStream out, String prefix) {
         surface().forEach((name, signature) -> {
@@ -100,7 +100,7 @@ public final class ApiCommand {
      * only the arguments its caller writes. Leaving it out would have this command contradict the
      * specification about what exists.
      */
-    private static Map<String, Signature> surface() {
+    static Map<String, Signature> surface() {
         Map<String, Signature> surface = new LinkedHashMap<>();
         for (Map.Entry<String, Prelude.PreludeEntry> e : Prelude.entries().entrySet()) {
             if (Prelude.published().contains(e.getKey())) {

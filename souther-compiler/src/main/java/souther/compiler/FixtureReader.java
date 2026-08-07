@@ -633,21 +633,22 @@ public final class FixtureReader {
      * What a name stands for: a binding in force, or the body a value — a {@code let} with no parameter
      * list — was defined as. Null where the name is neither.
      *
+     * <p>Read from the table {@link #helperDef} reads, and from nothing else. That table is the
+     * settled representation this whole reading is written against, and what it does not hold is not
+     * a value a fixture may read. The written module is not a second way to the same answer: it
+     * holds every definition, a behavior's implementation among them, and a behavior taking nothing
+     * is written the way a value is — so a spread, which asks here for any name it does not bind,
+     * used to copy the fields of one.
+     *
      * <p>Whether a fixture may name it is not a property of this one body: a value stands for a
      * fixture when it is a literal, a construction, a spread, a {@code fromList} over one, or a name
      * of another such value. So the body is read the same way the row's own text is, and a chain of
      * values holds.
      */
     private Ast.Expr valueBody(String name) {
-        for (Ast.FnDef fn : module.fns()) {
-            if (fn.name().equals(name) && fn.params().isEmpty()
-                    && fn.body() instanceof Ast.FnBody.Written w) {
-                return w.expr();
-            }
-        }
-        Ast.FnDef imported = values.get(name);
-        return imported != null && imported.params().isEmpty()
-                && imported.body() instanceof Ast.FnBody.Written w ? w.expr() : null;
+        Ast.FnDef value = values.get(name);
+        return value != null && value.params().isEmpty()
+                && value.body() instanceof Ast.FnBody.Written w ? w.expr() : null;
     }
 
     /**
