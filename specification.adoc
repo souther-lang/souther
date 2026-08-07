@@ -3653,12 +3653,35 @@ Field `submittedAt` from `...TravelRequestCommon` conflicts with a field of `Sub
 ----
 
 [#e1005]
-=== Missing field in a spread
+=== Missing field in a construction
+
+Reported where a construction finishes with a field of the constructed type left without a value (<<construction-supplies-every-field>>). A field may be written out, filled from a binding of its name, or supplied by a spread. The hint follows how the construction was written: nothing was spread, or something was and what it copies from does not declare the field, or a sum was and the field is outside the part its cases share.
+
+Nothing was spread, so the field had to be written and was not:
+
+[,text]
+----
+Construction of `PreApproved` is missing field `preApprover`.
+Hint: Give `preApprover` a value: write `preApprover = …`, or write `preApprover` alone to fill
+it from a binding of that name.
+----
+
+Something was spread, and what it copies from does not declare the field:
 
 [,text]
 ----
 Construction of `PreApproved` is missing field `preApprover`.
 Hint: Supply `preApprover` explicitly; the spread does not provide it.
+----
+
+A spread of a sum copies the part every case of it spreads (<<sum-data>>), so a field outside that part is missing however plainly the cases declare it:
+
+[,text]
+----
+Construction of `PreApproved` is missing field `preApprover`.
+Hint: `preApprover` is not in the part every case of `Request` spreads, so the spread does not
+provide it. Supply it explicitly, or open `Request` with `match` and read it from the case that
+has it.
 ----
 
 [#e1007]
