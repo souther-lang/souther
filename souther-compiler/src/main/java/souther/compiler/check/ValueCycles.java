@@ -62,7 +62,8 @@ public final class ValueCycles {
      * Refuses the first value of {@code own} that reaches itself, naming the path it goes round.
      *
      * <p>{@code callsOf} is the call graph over the same table: a cycle may be closed by calling a
-     * helper that names the value, so the two kinds of edge are followed together.
+     * helper that names the value, so the two kinds of edge are followed together — which is why both
+     * are keyed by the name a reference reaches its target by, and neither by a spelling.
      */
     static void reject(Map<String, Ast.FnDef> own, Map<String, Set<String>> callsOf) {
         Map<String, Set<String>> edges = new LinkedHashMap<>();
@@ -102,19 +103,29 @@ public final class ValueCycles {
         }
     }
 
-    /** The names of {@code own}'s values that {@code e} reads. A value is written bare, so a
-     * reference to one is a {@code Var} and never reaches the call graph. */
-    static void valuesRead(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> out) {
+    /**
+     * The values of {@code reachable} that {@code e} reads, by the name it reaches each of them by. A
+     * value is written bare, so a reference to one is a {@code Var} and never reaches the call graph.
+     *
+     * <p>Asked with the reach name the reference carries, which is what {@link
+     * HelperInliner#helperCallsIn} asks a call with. The two are the two kinds of edge in one graph
+     * and are followed together, so a table answering one of them under a key the other does not use
+     * is a graph with edges missing — and missing silently, because a miss is what a table does with
+     * a key it has not got. Reading {@link Ast.Var#name()} here asked with the spelling instead, and
+     * an import may let a name go without its qualifier: it agreed with the key only where a pass had
+     * already written the spelling out qualified.
+     */
+    static void valuesRead(Ast.Expr e, Map<String, Ast.FnDef> reachable, Set<String> out) {
         if (e == null) {
             return;
         }
         if (e instanceof Ast.Var v && v.denotes() instanceof ValueName.Helper) {
-            Ast.FnDef d = own.get(v.name());
+            Ast.FnDef d = reachable.get(v.reaches());
             if (d != null && d.params().isEmpty()) {
-                out.add(v.name());
+                out.add(v.reaches());
             }
         }
-        Ast.forEachChild(e, c -> valuesRead(c, own, out));
+        Ast.forEachChild(e, c -> valuesRead(c, reachable, out));
     }
 
     /** Records into {@code path} a route from {@code from} back to {@code target}, or answers false. */
