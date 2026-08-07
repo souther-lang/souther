@@ -716,13 +716,21 @@ public final class DataChecker {
             if (pv == null) {
                 Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1005, "e1005.msg").at(pos)
                         .args(typeName, f.getKey());
-                d = switch (fromSums.size()) {
-                    case 0 -> d.hint("e1005.hint");
-                    case 1 -> d.hint("e1005.hint.sum", typeName, f.getKey(),
-                            fromSums.iterator().next());
-                    default -> d.hint("e1005.hint.sums", typeName, f.getKey(),
-                            String.join(", ", fromSums));
-                };
+                // one rule broken in one of several ways, and the hint is where the way is said. What
+                // was written decides it: `fromSums` counts the sums spread, which says nothing about
+                // whether anything was spread at all, so a construction with no spread is asked about
+                // separately rather than read off an empty count.
+                if (spreads.isEmpty()) {
+                    d = d.hint("e1005.hint.written");
+                } else {
+                    d = switch (fromSums.size()) {
+                        case 0 -> d.hint("e1005.hint.spread");
+                        case 1 -> d.hint("e1005.hint.sum", typeName, f.getKey(),
+                                fromSums.iterator().next());
+                        default -> d.hint("e1005.hint.sums", typeName, f.getKey(),
+                                String.join(", ", fromSums));
+                    };
+                }
                 throw CompileException.of(d.build(),
                         "construction of `" + typeName + "` is missing field `" + f.getKey() + "`");
             }
