@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Several values carried together through a computation (ADR-0036). A tuple has no external form, so
  * it is never a data field or a behavior's input or output; within a computation it is a value like
@@ -60,7 +62,7 @@ public sealed interface Tuple {
     int size();
 
     /** Whether {@code a} and {@code b} are the same tuple; what each arm's {@code equals} answers. */
-    static boolean same(Tuple a, Object b) {
+    static boolean same(Tuple a, @Nullable Object b) {
         if (a == b) {
             return true;
         }
@@ -124,7 +126,7 @@ public sealed interface Tuple {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             return same(this, o);
         }
 
@@ -159,7 +161,7 @@ public sealed interface Tuple {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             return same(this, o);
         }
 

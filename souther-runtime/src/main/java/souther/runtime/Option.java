@@ -16,7 +16,7 @@ public sealed interface Option<T> permits Option.Some, Option.None {
     record Some<T>(T value) implements Option<T> {
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             return o instanceof Some<?> other && Values.equal(value, other.value());
         }
 

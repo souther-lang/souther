@@ -156,7 +156,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
      * foreign map meant is not a question the boundary can answer.
      */
     @Override
-    public boolean valueEquals(Object o) {
+    public boolean valueEquals(@Nullable Object o) {
         if (o == this) {
             return true;
         }

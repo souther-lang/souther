@@ -373,7 +373,7 @@ public final class PersistentVector<E> extends AbstractList<E>
     /** Whether {@code o} is the same list the language means: the same elements in the same order,
      *  each compared through {@link Values}. */
     @Override
-    public boolean valueEquals(Object o) {
+    public boolean valueEquals(@Nullable Object o) {
         if (o == this) {
             return true;
         }

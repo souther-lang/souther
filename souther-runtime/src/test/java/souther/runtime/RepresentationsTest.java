@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -30,7 +31,7 @@ class RepresentationsTest {
      * against a BMP one that is the larger code unit and the smaller code point, and two objects
      * that differ only in the order their members were put.
      */
-    private static final List<Object> CORPUS = Arrays.asList(
+    private static final List<@Nullable Object> CORPUS = Arrays.asList(
             null,
             false,
             true,
@@ -180,7 +181,7 @@ class RepresentationsTest {
 
     @Test
     void theKindsAreOrderedNullFalseTrueNumberStringArrayObject() {
-        List<Object> ascending = Arrays.asList(null, false, true, 0L, "", List.of(), object());
+        List<@Nullable Object> ascending = Arrays.asList(null, false, true, 0L, "", List.of(), object());
         for (int i = 0; i < ascending.size() - 1; i++) {
             assertTrue(Representations.compareExternalForms(ascending.get(i), ascending.get(i + 1)) < 0,
                     ascending.get(i) + " must come before " + ascending.get(i + 1));
@@ -296,12 +297,12 @@ class RepresentationsTest {
 
     @Test
     void theOrderIsTransitive() {
-        for (Object a : CORPUS) {
-            for (Object b : CORPUS) {
+        for (@Nullable Object a : CORPUS) {
+            for (@Nullable Object b : CORPUS) {
                 if (Representations.compareExternalForms(a, b) > 0) {
                     continue;
                 }
-                for (Object c : CORPUS) {
+                for (@Nullable Object c : CORPUS) {
                     if (Representations.compareExternalForms(b, c) <= 0) {
                         assertTrue(Representations.compareExternalForms(a, c) <= 0,
                                 written(a) + " <= " + written(b) + " <= " + written(c)
@@ -315,10 +316,11 @@ class RepresentationsTest {
     // === sorting ===
 
     @Test
+    @SuppressWarnings("unchecked")   // sortedArray answers Object; over a list it is the list back
     void sortedArrayPutsTheMembersInOrderWhicheverOrderTheyArrivedIn() {
-        List<Object> members = new ArrayList<>(CORPUS);
-        List<Object> forwards = (List<Object>) Representations.sortedArray(members);
-        List<Object> reversed = new ArrayList<>(members);
+        List<@Nullable Object> members = new ArrayList<>(CORPUS);
+        List<@Nullable Object> forwards = (List<@Nullable Object>) Representations.sortedArray(members);
+        List<@Nullable Object> reversed = new ArrayList<>(members);
         java.util.Collections.reverse(reversed);
 
         assertEquals(written(forwards), written(Representations.sortedArray(reversed)));
@@ -413,18 +415,18 @@ class RepresentationsTest {
     // === helpers ===
 
     private interface Pair {
-        void check(Object a, Object b);
+        void check(@Nullable Object a, @Nullable Object b);
     }
 
     private static void forEachPair(Pair check) {
-        for (Object a : CORPUS) {
-            for (Object b : CORPUS) {
+        for (@Nullable Object a : CORPUS) {
+            for (@Nullable Object b : CORPUS) {
                 check.check(a, b);
             }
         }
     }
 
-    private static boolean isAscending(List<Object> xs) {
+    private static boolean isAscending(List<@Nullable Object> xs) {
         for (int i = 0; i < xs.size() - 1; i++) {
             if (Representations.compareExternalForms(xs.get(i), xs.get(i + 1)) > 0) {
                 return false;
@@ -446,7 +448,7 @@ class RepresentationsTest {
      * because their order is not part of what the object is. It is written here rather than asked of
      * {@link Representations} so that the law above is checked against something else.
      */
-    private static String written(Object v) {
+    private static String written(@Nullable Object v) {
         return switch (v) {
             case null -> "null";
             case Boolean b -> b.toString();

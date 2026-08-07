@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -132,7 +134,7 @@ public final class Representations {
     }
 
     /** The members of an encoded array, in ascending order of their own external representation. */
-    public static Object sortedArray(Object encoded) {
+    public static Object sortedArray(@Nullable Object encoded) {
         if (!(encoded instanceof List<?> members)) {
             throw notAnExternalForm(encoded);
         }
@@ -140,7 +142,7 @@ public final class Representations {
     }
 
     /** The members of an encoded object, in ascending order of their keys. */
-    public static Object sortedObject(Object encoded) {
+    public static Object sortedObject(@Nullable Object encoded) {
         if (!(encoded instanceof Map<?, ?> members)) {
             throw notAnExternalForm(encoded);
         }
@@ -153,15 +155,19 @@ public final class Representations {
      * form they are written in; strings by UTF-16 code unit; arrays element by element with the
      * shorter one first; objects as their members read in key order.
      */
-    public static int compareExternalForms(Object a, Object b) {
+    public static int compareExternalForms(@Nullable Object a, @Nullable Object b) {
         return compare(a, b, null);
     }
 
-    private static int compare(Object a, Object b, KeyOrders orders) {
+    private static int compare(@Nullable Object a, @Nullable Object b, @Nullable KeyOrders orders) {
         int form = rank(a);
         int other = rank(b);
         if (form != other) {
             return Integer.compare(form, other);
+        }
+        if (a == null || b == null) {
+            // the ranks agree, so both are null: the rank is the whole of what a null is
+            return 0;
         }
         return switch (form) {
             case NULL, FALSE, TRUE -> 0;
@@ -182,10 +188,14 @@ public final class Representations {
      * it holds is not — and stopping at the outside would accept, at one entry point, what the other
      * refuses.
      */
-    static boolean representationEquals(Object a, Object b) {
+    static boolean representationEquals(@Nullable Object a, @Nullable Object b) {
         int form = rank(a);
         if (form != rank(b)) {
             return false;
+        }
+        if (a == null || b == null) {
+            // the ranks agree, so both are null: the rank is the whole of what a null is
+            return true;
         }
         return switch (form) {
             case NULL, FALSE, TRUE -> true;
@@ -196,7 +206,7 @@ public final class Representations {
         };
     }
 
-    private static int rank(Object v) {
+    private static int rank(@Nullable Object v) {
         return switch (v) {
             case null -> NULL;
             case Boolean b -> b ? TRUE : FALSE;
@@ -231,7 +241,7 @@ public final class Representations {
         return number.toString();
     }
 
-    private static int compareArrays(List<?> a, List<?> b, KeyOrders orders) {
+    private static int compareArrays(List<?> a, List<?> b, @Nullable KeyOrders orders) {
         Iterator<?> xs = a.iterator();
         Iterator<?> ys = b.iterator();
         while (xs.hasNext() && ys.hasNext()) {
@@ -243,7 +253,7 @@ public final class Representations {
         return Integer.compare(a.size(), b.size());
     }
 
-    private static int compareObjects(Map<?, ?> a, Map<?, ?> b, KeyOrders orders) {
+    private static int compareObjects(Map<?, ?> a, Map<?, ?> b, @Nullable KeyOrders orders) {
         List<String> xs = keysOf(a, orders);
         List<String> ys = keysOf(b, orders);
         for (int i = 0; i < Math.min(xs.size(), ys.size()); i++) {
@@ -307,17 +317,19 @@ public final class Representations {
      */
     private static final class KeyOrders {
 
-        private Map<Object, List<String>> known;
+        private @Nullable Map<Object, List<String>> known;
 
         List<String> of(Map<?, ?> members) {
-            if (known == null) {
-                known = new IdentityHashMap<>();
+            Map<Object, List<String>> cache = known;
+            if (cache == null) {
+                cache = new IdentityHashMap<>();
+                known = cache;
             }
-            return known.computeIfAbsent(members, m -> sortedKeys((Map<?, ?>) m));
+            return cache.computeIfAbsent(members, m -> sortedKeys((Map<?, ?>) m));
         }
     }
 
-    private static List<String> keysOf(Map<?, ?> members, KeyOrders orders) {
+    private static List<String> keysOf(Map<?, ?> members, @Nullable KeyOrders orders) {
         return orders == null ? sortedKeys(members) : orders.of(members);
     }
 
@@ -348,7 +360,7 @@ public final class Representations {
     }
 
     /** One refusal, so a carrier the encoders do not emit is reported the same wherever it lands. */
-    private static IllegalStateException notAnExternalForm(Object v) {
+    private static IllegalStateException notAnExternalForm(@Nullable Object v) {
         return new IllegalStateException("not a Souther external representation: " + switch (v) {
             case null -> "nothing at all";     // null is a form, but it is not an array or an object
             case String said -> said;          // a phrase from the caller, not a value's own class
