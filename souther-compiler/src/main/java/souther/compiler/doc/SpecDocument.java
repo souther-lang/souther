@@ -37,7 +37,13 @@ public final class SpecDocument {
     private static final Pattern ANCHOR = Pattern.compile("^\\[#([^\\]]+)]\\s*$");
     private static final Pattern ALSO_NAMED = Pattern.compile("^\\[also-named=\"([^\"]*)\"]\\s*$");
     private static final Pattern HEADING = Pattern.compile("^(={2,})\\s+(.*\\S)\\s*$");
-    private static final String LISTING_DELIMITER = "----";
+    /**
+     * The delimiter of a block AsciiDoc takes as it stands: listing {@code ----}, literal
+     * {@code ....}, passthrough {@code ++++}, and the comment block {@code ////}. Four or more of
+     * the character repeated, and the block runs to the line that repeats it exactly — a shorter
+     * run, or a different character, is content rather than the end of it.
+     */
+    private static final Pattern OPAQUE_DELIMITER = Pattern.compile("^([-.+/])\\1{3,}$");
 
     /** A section: the first anchor written above its heading, its title, heading level (2 for
      *  {@code ==}), and body up to the next heading of the same or a higher level. */
@@ -86,14 +92,10 @@ public final class SpecDocument {
     public static SpecDocument of(String adoc) {
         String[] lines = adoc.split("\n", -1);
         record Heading(List<String> anchors, String title, int level, int anchorFrom, int bodyFrom) {}
+        boolean[] takenAsItStands = opaqueLines(lines);
         List<Heading> headings = new ArrayList<>();
-        boolean inListing = false;
         for (int i = 0; i < lines.length; i++) {
-            if (lines[i].startsWith(LISTING_DELIMITER)) {
-                inListing = !inListing;
-                continue;
-            }
-            if (inListing) {
+            if (takenAsItStands[i]) {
                 continue;
             }
             Matcher heading = HEADING.matcher(lines[i]);
@@ -167,7 +169,6 @@ public final class SpecDocument {
         // An anchor written anywhere else names a place inside a section rather than a section, and
         // there is no text of its own to answer with: what a reader is sent to for it is the
         // section it stands in. The heading runs are stepped over, having been registered above.
-        inListing = false;
         Section standingIn = null;
         int next = 0;
         for (int i = 0; i < lines.length; i++) {
@@ -177,11 +178,7 @@ public final class SpecDocument {
                 next++;
                 continue;
             }
-            if (lines[i].startsWith(LISTING_DELIMITER)) {
-                inListing = !inListing;
-                continue;
-            }
-            if (inListing || standingIn == null) {
+            if (takenAsItStands[i] || standingIn == null) {
                 continue;
             }
             Matcher anchor = ANCHOR.matcher(lines[i]);
@@ -190,6 +187,38 @@ public final class SpecDocument {
             }
         }
         return new SpecDocument(sections, ownTexts, byAnchor, List.copyOf(writtenAs.values()));
+    }
+
+    /**
+     * Which lines are inside a block AsciiDoc takes as it stands, delimiters included.
+     *
+     * <p>Nothing there is document structure: a heading written in a listing is shown to a reader
+     * as the words of a heading, and one written in a comment block is not shown at all. Reading
+     * either as a section would not only answer for a name AsciiDoc never registered — it would cut
+     * the surrounding section short at a heading that is not there, so the two would disagree about
+     * where the sections are and not only about what they are called.
+     *
+     * <p>One walk answers for both what a heading is and what an anchor is, so the document has one
+     * account of where its structure is written and not two that can come apart.
+     */
+    private static boolean[] opaqueLines(String[] lines) {
+        boolean[] opaque = new boolean[lines.length];
+        String open = null;
+        for (int i = 0; i < lines.length; i++) {
+            String delimiter = lines[i].strip();
+            if (open != null) {
+                opaque[i] = true;
+                if (delimiter.equals(open)) {
+                    open = null;
+                }
+                continue;
+            }
+            if (OPAQUE_DELIMITER.matcher(delimiter).matches()) {
+                open = delimiter;
+                opaque[i] = true;
+            }
+        }
+        return opaque;
     }
 
     /** Every section, in document order. */

@@ -35,9 +35,10 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
     /** An AsciiDoc cross-reference: {@code <<anchor>>} or {@code <<anchor,the words shown>>}. */
     private static final Pattern XREF = Pattern.compile("<<([^,>]+)[^>]*>>");
 
-    /** The delimiters of the blocks AsciiDoc takes verbatim: listing, literal, passthrough, and the
-     *  comment block. A macro is not expanded inside any of them, so nothing there is a reference. */
-    private static final Set<String> VERBATIM = Set.of("----", "....", "++++", "////");
+    /** The delimiter of a block AsciiDoc takes as it stands: listing, literal, passthrough, and the
+     *  comment block. A macro is not expanded inside any of them, so nothing there is a reference.
+     *  Four or more of the character, closed by the line that repeats it exactly. */
+    private static final Pattern OPAQUE_DELIMITER = Pattern.compile("^([-.+/])\\1{3,}$");
 
     @Test
     void everyCrossReferenceInTheSpecificationResolvesToASection() {
@@ -80,17 +81,17 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
     /** The names the document sends a reader to, where AsciiDoc expands a macro at all. */
     private static Set<String> referencesIn(String adoc) {
         Set<String> found = new TreeSet<>();
-        String verbatim = null;
+        String opaque = null;
         for (String line : adoc.split("\n", -1)) {
             String delimiter = line.strip();
-            if (verbatim != null) {
-                if (delimiter.equals(verbatim)) {
-                    verbatim = null;
+            if (opaque != null) {
+                if (delimiter.equals(opaque)) {
+                    opaque = null;
                 }
                 continue;
             }
-            if (VERBATIM.contains(delimiter)) {
-                verbatim = delimiter;
+            if (OPAQUE_DELIMITER.matcher(delimiter).matches()) {
+                opaque = delimiter;
                 continue;
             }
             if (line.startsWith("//")) {
