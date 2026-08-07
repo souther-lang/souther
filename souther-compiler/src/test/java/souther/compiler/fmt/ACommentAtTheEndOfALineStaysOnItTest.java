@@ -38,6 +38,49 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 """, formatted);
     }
 
+    /**
+     * The same words in the same place in the child list, told apart by the whitespace in front of
+     * them: the one below carries the newline that ended the line above it and the one beside does
+     * not. Written as a pair because either half alone is satisfied by a formatter that treats every
+     * comment the same way.
+     */
+    @Test
+    void whichOfTheTwoItIsComesFromTheWhitespaceBeforeIt() {
+        String beside = Formatter.format("""
+                module m
+                data D =
+                    { a: Int   // the comment
+                    , b: Int
+                    }
+                """);
+        String below = Formatter.format("""
+                module m
+                data D =
+                    { a: Int
+                    // the comment
+                    , b: Int
+                    }
+                """);
+
+        assertEquals("""
+                module m
+
+                data D =
+                    { a: Int // the comment
+                    , b: Int
+                    }
+                """, beside);
+        assertEquals("""
+                module m
+
+                data D =
+                    { a: Int
+                    // the comment
+                    , b: Int
+                    }
+                """, below);
+    }
+
     @Test
     void onTheFieldItWasWrittenAfter() {
         String formatted = Formatter.format("""

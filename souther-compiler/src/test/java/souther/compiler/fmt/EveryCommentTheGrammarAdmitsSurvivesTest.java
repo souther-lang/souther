@@ -122,6 +122,11 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
         sweep(gaps(FIXTURE, true));
     }
 
+    @Test
+    void aProbeAtTheEndOfALineComesBackExactlyOnce() {
+        sweep(gaps(FIXTURE, false));
+    }
+
     private static void sweep(List<String> variants) {
         List<String> lost = new ArrayList<>();
         List<String> duplicated = new ArrayList<>();

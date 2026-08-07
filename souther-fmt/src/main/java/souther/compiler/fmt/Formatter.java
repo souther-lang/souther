@@ -73,12 +73,37 @@ public final class Formatter {
         }
     }
 
+    /**
+     * The comments {@code file} holds that {@code consumed} does not — the ones the formatter found
+     * and did not write. {@link SyntaxKind#LINE_COMMENT} is the only kind of comment the grammar
+     * has, so this is all of them.
+     */
+    static List<SyntaxToken> unconsumed(SyntaxNode file, java.util.Set<Integer> consumed) {
+        List<SyntaxToken> out = new ArrayList<>();
+        for (SyntaxToken t : tokens(file)) {
+            if (t.kind() == SyntaxKind.LINE_COMMENT && !consumed.contains(t.start())) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
     /** Formats an already-parsed file into its canonical form — for a caller that has parsed the
      * source (e.g. to check for syntax errors) and need not parse it again. Assumes {@code file}
      * came from a clean parse. */
     public static String format(SyntaxNode file) {
         try {
-            return new Formatter().file(file).render(WIDTH);
+            Formatter formatter = new Formatter();
+            Doc doc = formatter.file(file);
+            List<SyntaxToken> missing = unconsumed(file, formatter.consumedComments);
+            if (!missing.isEmpty()) {
+                throw new IllegalStateException(
+                        missing.size() + " comment(s) in this source reached no construct and would"
+                                + " have been dropped; the first is at offset "
+                                + missing.get(0).start() + ": "
+                                + missing.get(0).text().stripTrailing());
+            }
+            return doc.render(WIDTH);
         } catch (StackOverflowError _) {
             throw tooDeep();
         }
@@ -1213,7 +1238,10 @@ public final class Formatter {
                     i--;
                 }
                 if (!lineEnded && i >= 0) {
-                    out.computeIfAbsent(owner(code.get(i)), _ -> new ArrayList<>()).add(t);
+                    SyntaxNode o = onItsOwnLine(owner(code.get(i)));
+                    if (o != null) {
+                        out.computeIfAbsent(o, _ -> new ArrayList<>()).add(t);
+                    }
                 }
                 lineEnded = true;            // a line comment runs to the end of its line
             } else {
@@ -1237,6 +1265,46 @@ public final class Formatter {
             node = node.parent();
         }
         return node;
+    }
+
+    /**
+     * The construct whose line a comment can be written at the end of, at or above {@code n}. Only a
+     * construct the layout gives a line of its own can carry one: a comment put after part of a line
+     * would have the rest of that line written inside it, which is a change to what the code says
+     * rather than to how it reads. So the owner moves up until it reaches one, and a comment written
+     * after the condition of an {@code if} is written at the end of the declaration that holds it.
+     */
+    private static SyntaxNode onItsOwnLine(SyntaxNode n) {
+        for (SyntaxNode c = n; c != null && c.parent() != null; c = c.parent()) {
+            if (takesALineOf(c.parent().kind(), c.kind())) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a {@code child} of {@code parent} is written on a line of its own. These are the
+     * places a member's comments are asked for; a construct added to one of these lists without
+     * being asked is what the count of comments consumed against the comments the tree holds is
+     * there to catch. */
+    private static boolean takesALineOf(SyntaxKind parent, SyntaxKind child) {
+        return switch (parent) {
+            case SOURCE_FILE -> isTopLevel(child);
+            case PRODUCT_BODY, NEW_DATA_EXPR ->
+                    child == SyntaxKind.FIELD || child == SyntaxKind.FIELD_INIT
+                            || child == SyntaxKind.SPREAD_MEMBER;
+            case MATCH_EXPR -> child == SyntaxKind.MATCH_CASE;
+            case EXAMPLE_DEF -> child == SyntaxKind.EXAMPLE_ROW;
+            case FAKE_DEF -> child == SyntaxKind.FAKE_ROW;
+            case EXPOSING_CLAUSE -> child == SyntaxKind.EXPOSED_ENTRY;
+            case PARAM_LIST -> child == SyntaxKind.PARAM;
+            case DATA_DEF -> child == SyntaxKind.INVARIANT_CLAUSE;
+            case BEHAVIOR_SIG -> child == SyntaxKind.CONSTRUCTS_CLAUSE
+                    || child == SyntaxKind.DEPENDS_CLAUSE;
+            case BLOCK_EXPR -> true;
+            case ARG_LIST, LIST_EXPR, TUPLE_EXPR -> isExprKind(child);
+            default -> false;
+        };
     }
 
     /** {@code n}'s trailing comments, marked consumed. Empty where it has none, or where they have
