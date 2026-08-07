@@ -1,6 +1,40 @@
 # ADR-0044: Diagnostics are data rendered by a locale-aware layer
 
-Status: Accepted
+Status: Accepted. Revised 2026-08-07 — see *Revision*.
+
+## Revision (2026-08-07)
+
+The original Decision resolved the locale as `--lang` > `SOUTHER_LANG` > the JVM default > Japanese.
+The last two steps are withdrawn: the chain is now `--lang` > `SOUTHER_LANG` > English, and the JVM
+default locale is not read at all. `Messages.defaultLocale()` answers English and is the one place
+the default is written.
+
+Everything the toolchain ships to be read is in English — `specification.adoc`, every bundled
+library topic, the CLI's own topics — so a reader on a Japanese desktop who passed no flag was
+answered out of `messages_ja.properties` while every document that would explain the answer was in
+the other language. The JVM default is what made this depend on where the compiler ran: it says
+which language the machine's interface is in, which for a toolchain documented in one language
+cannot be evidence about the reader, because most values of it select an answer with nothing behind
+it to read.
+
+The rule this leaves is that a diagnostic is answered in a language the toolchain documents itself
+in, which binds what may be added and not only what is resolved: a message catalog is publishable
+once the documents a reader of it would be sent to exist in that language. Changing the terminal
+fallback alone would not have held — a `messages_fr.properties` dropped in beside English-only
+documents would put the disagreement back.
+
+`messages_ja.properties` stays and `--lang ja` still answers out of it. A reader who names a
+language has said which one they read, which is a different claim from a machine having a locale;
+what no longer answers is the second. Readers who were being served Japanese by default keep it with
+`SOUTHER_LANG=ja` in a shell profile.
+
+Amending in place rather than superseding: what changed is a default and the reason for it, not the
+shape of the decision — diagnostics are still data rendered by a locale-aware layer, and the code
+and type strings are still locale-independent, which is what makes a code a lookup that survives
+being answered in a language the reader does not read. Two surfaces still name a language of their
+own and are untouched here: the LSP renders in English because a language server is not told the
+editor's UI locale, and the annotation processor resolves from `souther.lang`. That the policy is
+written in each adapter rather than in one place is a separate problem from which language it names.
 
 ## Context
 
@@ -35,7 +69,8 @@ suggestion. A `DiagnosticRenderer` turns it into text — `HumanRenderer` (Elm-s
 stderr is a TTY) or `JsonRenderer`. Prose comes from a `ResourceBundle` catalog: `messages_ja`
 (default) over an English base (`messages.properties`); a key missing from Japanese falls back to
 English, a key missing from both renders as itself, so the compiler never crashes on an unmigrated
-site. Locale is resolved once: `--lang` > `SOUTHER_LANG` > the JVM default > Japanese. The code and
+site. Locale is resolved once: `--lang` > `SOUTHER_LANG` > the JVM default > Japanese — the last two steps
+withdrawn by the *Revision* above. The code and
 the type strings are locale-independent — the stable identity; titles, messages, hints, and labels
 follow the locale.
 

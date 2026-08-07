@@ -51,11 +51,15 @@ the rows does not reveal.
 ## doc
 
 ```
-souther doc [<anchor> | <set>/<topic> | --search <term> [--limit <n>]]
+souther doc [<anchor> | <error-code> | <set>/<topic> | --search <term> [--limit <n>]]
 ```
 
 The language specification and the documentation bundled libraries ship. With no argument it lists
 every section and topic as `name<TAB>title`. New to Souther? Read `souther doc cli/start-here`.
+
+Every diagnostic code the compiler prints is the name of the section explaining it, in either case:
+the `E2011` in a banner is `souther doc E2011`. Nothing else has to be read off the banner for the
+lookup to work.
 
 ## api
 
@@ -100,7 +104,7 @@ harnesses that take tools rather than shell commands. The tools are `doc_search`
 | Option | Meaning |
 | --- | --- |
 | `--format human\|json` | how to render a compile error (default `human`) |
-| `--lang <tag>` | message locale, e.g. `ja` or `en` (default: the system's, then `ja`) |
+| `--lang <tag>` | message locale, e.g. `ja` or `en`, or `SOUTHER_LANG` (default `en`, which is what the shipped documents are written in) |
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 
 These apply to `compile`, `run` and `examples`. Passing them to another command is an error.

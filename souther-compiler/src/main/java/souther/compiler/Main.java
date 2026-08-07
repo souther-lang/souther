@@ -48,7 +48,7 @@ public final class Main {
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
               fmt <file.sou>... [-w|--write] [--check]             format source (stdout, or -w in place)
               examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
-              doc [<anchor> | <set>/<topic> | --search <term>]     read the language specification
+              doc [<anchor> | <error-code> | <set>/<topic> | --search <term>]  read the language specification
               api [<Module>[.<name>] | --search <term>]            the stdlib surface and its signatures
               japi <class-or-package>[#<member>] [-cp <path>]      a dependency jar's public API, with javadoc
             options (doc):
@@ -71,7 +71,7 @@ public final class Main {
 
             options (compile/run/examples):
               --format human|json      how to render a compile error (default: human)
-              --lang <tag>             message locale, e.g. ja or en (default: system, then ja)
+              --lang <tag>             message locale, e.g. ja or en, or SOUTHER_LANG (default: en)
               --color auto|always|never  color the human output (default: auto)""";
 
     /**

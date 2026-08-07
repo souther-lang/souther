@@ -6,13 +6,19 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 /**
- * The diagnostic message catalog. Prose lives in {@code messages_ja.properties} (the default) and
- * {@code messages.properties} (English base); a key missing from the Japanese bundle falls back to
- * the English base automatically. A key missing from both renders as the key itself, so a
- * not-yet-migrated site never crashes the compiler.
+ * The diagnostic message catalog. Prose lives in {@code messages.properties} (the English base) and
+ * {@code messages_ja.properties}; a key missing from the Japanese bundle falls back to the English
+ * base automatically. A key missing from both renders as the key itself, so a not-yet-migrated site
+ * never crashes the compiler.
  *
  * <p>Locale is resolved once, highest precedence first: an explicit {@code --lang} value, the
- * {@code SOUTHER_LANG} environment variable, the JVM default locale, then Japanese.
+ * {@code SOUTHER_LANG} environment variable, then English.
+ *
+ * <p>The JVM default locale is not consulted. It says which language the machine's own interface is
+ * in, which is not evidence about the reader: everything the toolchain ships to read — the
+ * specification, the bundled library topics, the CLI's own topics — is written in English, so a
+ * reader who chose nothing is answered in the language the answer can be followed up in. Reading
+ * the machine instead made the language of the answer depend on where it was run.
  */
 public final class Messages {
 
@@ -30,16 +36,12 @@ public final class Messages {
         if (tag != null && !tag.isBlank()) {
             return Locale.forLanguageTag(tag.replace('_', '-'));
         }
-        Locale def = Locale.getDefault();
-        if (def != null && !def.getLanguage().isBlank()) {
-            return def;
-        }
-        return Locale.JAPANESE;
+        return defaultLocale();
     }
 
-    /** The default locale when none is chosen: Japanese. */
+    /** The locale when none is chosen: English, the one the shipped documents are written in. */
     public static Locale defaultLocale() {
-        return Locale.JAPANESE;
+        return Locale.ENGLISH;
     }
 
     /** Looks up {@code key} for {@code locale} and fills {@code args}. Missing key → the key itself. */

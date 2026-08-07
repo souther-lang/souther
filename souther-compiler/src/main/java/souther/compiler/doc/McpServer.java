@@ -50,10 +50,13 @@ public final class McpServer {
                     "Search the Souther language specification and every bundled library doc for a term.",
                     Map.of("term", "the word or phrase to look for"), List.of("term")),
             new Tool("doc_read",
-                    "Read one specification section by its anchor (e.g. `newtype`) or one bundled library"
-                            + " doc topic by its set-qualified name (e.g. `raoh/tutorial`)."
-                            + " `doc_search` and the no-argument `souther doc` listing name them.",
-                    Map.of("name", "a section anchor or a set/topic name"), List.of("name")),
+                    "Read one specification section by its anchor (e.g. `newtype`), the explanation of"
+                            + " one diagnostic by its code (e.g. `E2011` — every code the compiler"
+                            + " prints is the name of the section explaining it, in either case), or"
+                            + " one bundled library doc topic by its set-qualified name"
+                            + " (e.g. `raoh/tutorial`). `doc_search` names them.",
+                    Map.of("name", "a section anchor, a diagnostic code, or a set/topic name"),
+                    List.of("name")),
             new Tool("stdlib_api",
                     "The Souther standard library's published surface with resolved signatures."
                             + " No name lists everything; a module qualifier (`List`) or a qualified name"
