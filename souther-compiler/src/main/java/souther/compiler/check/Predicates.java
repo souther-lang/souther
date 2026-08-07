@@ -182,35 +182,60 @@ final class Predicates {
         }
     }
 
+    /**
+     * What a clause owes, and whether any part of it was outside what the check can read.
+     *
+     * <p>The two are apart because a clause owing nothing has two reasons: it folded to what it is
+     * read with, or nothing in it could be asked here. A conjunction can be both at once — one
+     * conjunct discharged and the next unreadable — and reporting only the obligations would say the
+     * invariant was proven when half of it was never read.
+     *
+     * @param clauses what is owed, which the reading discharges or refutes
+     * @param unreadable whether a conjunct of it names something the check cannot read here, whose
+     *                   run-time check stands whatever the rest comes out as
+     */
+    record Owed(List<Clause> clauses, boolean unreadable) {
+
+        static final Owed NOTHING = new Owed(List.of(), false);
+        static final Owed UNREADABLE = new Owed(List.of(), true);
+
+        static Owed of(Clause clause) {
+            return new Owed(List.of(clause), false);
+        }
+
+        /** Both conjuncts of one clause: everything either owes, unreadable if either was. */
+        Owed and(Owed other) {
+            List<Clause> both = new ArrayList<>(clauses);
+            both.addAll(other.clauses);
+            return new Owed(List.copyOf(both), unreadable || other.unreadable);
+        }
+    }
+
     /** What {@code inv} owes, where {@code decidesFalse} says a clause folding to the other answer
      * than it is read with is this check's to report. A newtype's constant construction is checked
      * elsewhere, and that check names the clause that failed rather than only saying one did, so it
      * is left to say it. */
-    List<Clause> obligations(Core inv, Known k, Denotations at, boolean decidesFalse) {
+    Owed obligations(Core inv, Known k, Denotations at, boolean decidesFalse) {
         return obligations(inv, k, at, Set.of(), true, decidesFalse);
     }
 
     /** The same, where {@code unnamed} holds the values the site hands over that no clause may be
      * read against. */
-    List<Clause> obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
-                             boolean decidesFalse) {
+    Owed obligations(Core inv, Known k, Denotations at, Set<Core> unnamed,
+                     boolean decidesFalse) {
         return obligations(inv, k, at, unnamed, true, decidesFalse);
     }
 
-    private List<Clause> obligations(Core rawInv, Known k, Denotations at, Set<Core> unnamed,
-                                     boolean positive, boolean decidesFalse) {
+    private Owed obligations(Core rawInv, Known k, Denotations at, Set<Core> unnamed,
+                             boolean positive, boolean decidesFalse) {
         Core inv = asSizeComparison(rawInv);
         if (inv instanceof Core.Binary b && b.op() == Ast.BinOp.AND && positive) {
             // Each conjunct on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
-            List<Clause> l = obligations(b.left(), k, at, unnamed, true, decidesFalse);
-            List<Clause> r = obligations(b.right(), k, at, unnamed, true, decidesFalse);
-            if (l == null && r == null) {
-                return null;
-            }
-            List<Clause> both = new ArrayList<>(l == null ? List.of() : l);
-            both.addAll(r == null ? List.of() : r);
-            return both;
+            // That it stands is carried rather than dropped — the other conjunct being discharged is
+            // not the invariant proven.
+            return obligations(b.left(), k, at, unnamed, true, decidesFalse)
+                    .and(obligations(b.right(), k, at, unnamed, true, decidesFalse));
         }
         Core under = negated(inv);
         if (under != null) {
@@ -223,10 +248,10 @@ final class Predicates {
             // saying so needs no term to be named. Read under a denial it is the other answer that
             // discharges, which is why the polarity is asked.
             if (folded == positive) {
-                return List.of();
+                return Owed.NOTHING;
             }
             if (decidesFalse) {
-                return List.of(VIOLATED);
+                return Owed.of(VIOLATED);
             }
         }
         Constraint numeric = null;
@@ -247,11 +272,11 @@ final class Predicates {
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
         if (numeric == null && fact == null) {
-            return null;
+            return Owed.UNREADABLE;
         }
         List<Constraint> known = new ArrayList<>();
         sizeFacts(inv, at, known);
-        return List.of(new Clause(numeric, fact, known));
+        return Owed.of(new Clause(numeric, fact, known));
     }
 
     /** Whether {@code inv} is decided outright: the clause, with the construction's own values
@@ -376,12 +401,11 @@ final class Predicates {
      * reaches. What a clause owes at a construction is what it guarantees where it is already
      * established, so the two read the same clauses through the same rule and differ only in
      * direction. */
-    Known assume(List<Clause> owed, Known k, Known.Held held) {
-        if (owed == null) {
-            return k;
-        }
+    Known assume(Owed owed, Known k, Known.Held held) {
         Known out = k;
-        for (Clause c : owed) {
+        // What could not be read says nothing here: a clause left to the run-time check is not one
+        // the seeding may assume, and the flag saying so is the construction site's to act on.
+        for (Clause c : owed.clauses()) {
             for (Constraint known : c.known()) {
                 // What is known of a size holds of the container itself, whatever established the
                 // clause it was read out of.

@@ -145,9 +145,31 @@ final class Terms {
             if (counted != null) {
                 return LinearForm.constant(counted);
             }
+            // A name given arithmetic over terms the check names is related to that arithmetic (spec
+            // §invariant-discharge-terms). Read through it, as the `let` node above is read through:
+            // the name and the expression it was given are one value, and reading one as an atom of
+            // its own leaves a guard on the name saying nothing about the value it was built from.
+            LinearForm given = givenForm(n, at, k);
+            if (given != null) {
+                return given;
+            }
             String atom = atomOf(n, at, k);
             return atom == null ? null : LinearForm.atom(atom);
         });
+    }
+
+    /**
+     * The form of what a name was given, where the name stands for a term of its own and what it was
+     * given is arithmetic this can read. A name given a location is not this — {@link #atomOf}
+     * answers that with the location, which is what the seeding wrote about.
+     */
+    private LinearForm givenForm(Core e, Denotations at, Known k) {
+        if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Term)
+                || !isNumeric(e.type())) {
+            return null;
+        }
+        Core given = at.valueOf(r.binding());
+        return given == null || given == e ? null : affineOf(given, at, k);
     }
 
     /**

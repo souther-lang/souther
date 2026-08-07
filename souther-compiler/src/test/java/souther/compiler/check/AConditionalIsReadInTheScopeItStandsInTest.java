@@ -87,6 +87,42 @@ class AConditionalIsReadInTheScopeItStandsInTest {
     }
 
     @Test
+    void aBindingGivenArithmeticIsReadAsThatArithmetic() {
+        // `$n` is given `n + 1`, so what the condition settles of `$n` and what the construction is
+        // given are one value. Read as a term of its own, the branch says nothing about what is built.
+        assertEquals(0, warnings(YEN + """
+                let atLeastOne (n: Int) = if n < 1 then 1 else n
+                behavior f : (n: Int) -> Yen constructs Yen
+                let f (n) = Yen(atLeastOne(n + 1))
+                """),
+                "the else branch is at least one, and one is not negative");
+        assertEquals(0, warnings(YEN + """
+                let atLeastOne (n: Int) = if n < 1 then 1 else n
+                let shifted (n: Int) = atLeastOne(n + 1)
+                behavior f : (n: Int) -> Yen constructs Yen
+                let f (n) = Yen(shifted(n))
+                """),
+                "and again through a second expansion");
+    }
+
+    @Test
+    void aConstructionInsideAConditionIsReadInThatScopeToo() {
+        // The condition is read where it stands, and a construction written in one is a construction
+        // like any other: `Yen(n)` here is unguarded, whichever spelling reached it.
+        assertEquals(1, warnings(YEN + """
+                behavior f : (n: Int) -> Yen constructs Yen
+                let f (n) = Yen(if Yen(n).value >= 0 then 0 else 0)
+                """),
+                "written inline, the construction in the condition is reported");
+        assertEquals(1, warnings(YEN + """
+                let h (n: Int) = if Yen(n).value >= 0 then 0 else 0
+                behavior f : (n: Int) -> Yen constructs Yen
+                let f (n) = Yen(h(n))
+                """),
+                "and under a binding it is the same construction, not one nothing can be said of");
+    }
+
+    @Test
     void aBindingIsNotInScopeForItsOwnInitializer() {
         assertEquals(0, warnings(YEN + """
                 behavior f : (n: Int) -> Yen constructs Yen
