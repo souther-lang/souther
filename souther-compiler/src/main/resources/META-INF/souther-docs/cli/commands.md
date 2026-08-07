@@ -8,13 +8,19 @@ souther <command> [args]
 ## compile
 
 ```
-souther compile <file.sou>... -d <outdir> [-cp <path>] [--adequacy off|witness|all]
+souther compile <file.sou>... -d <outdir> [-cp|--class-path <path>]
+                              [--adequacy off|witness|all] [--warnings report|error]
 ```
 
 Type-checks the given files together, resolving imports across them, and writes `.class` files
-under `-d`. `-cp` points at modules another project compiled. `--adequacy` additionally warns about
-what the `example` rows do not cover; it defaults to `off`, and `souther examples` asks the same
-question as a report.
+under `-d`. `-cp` (`--class-path`) points at modules another project compiled. `--adequacy`
+additionally warns about what the `example` rows do not cover; it defaults to `off`, and `souther
+examples` asks the same question as a report.
+
+`--warnings error` refuses the build that warned: nothing is written and the exit code is non-zero.
+It gates every warning and not only the adequacy ones, so a build that wants to fail on coverage
+alone wants `souther examples --strict`, which refuses the same coverage findings and nothing else.
+The default is `report`, which prints them and writes the classes.
 
 <!-- souther-section: run -->
 ## run
@@ -31,7 +37,7 @@ Applies one behavior of one self-contained file to JSON input and prints the JSO
 ## fmt
 
 ```
-souther fmt <file.sou>... [-w] [--check]
+souther fmt <file.sou>... [-w|--write] [--check]
 ```
 
 Prints the canonical form to stdout, rewrites in place with `-w`, or exits non-zero on a file that
@@ -41,16 +47,24 @@ is not formatted with `--check`.
 ## examples
 
 ```
-souther examples <file.sou>... [-cp <path>] [--module <name>] [--behavior <name>]
-                               [--generate [--boundaries]] [--strict]
+souther examples <file.sou>... [-cp|--class-path <path>] [--module <name>]
+                               [--behavior <name>] [--generate [--boundaries]] [--strict]
 ```
 
 Reports how well the `example` rows cover the model — which partitions, boundaries and branch arms
 no row reaches. `--generate` prints commented rows for what nothing covers, `--boundaries` adds
-rows at the untried boundaries, and `--strict` exits non-zero while rows are still waiting.
+rows at the untried boundaries, and `--strict` exits non-zero on a gap the report names.
 
 This is the command worth running on a model you believe is finished. It names gaps that reading
 the rows does not reveal.
+
+The report closes with two answers, and they are different questions. `measurement` says how much of
+itself the measuring could make; `adequacy` says whether what it measured is covered — `satisfied`,
+`not_satisfied`, or `undetermined` where a measure was not asked for or could not be made. `--strict`
+refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy all
+--warnings error` refuses. How many rows are waiting for a `let` is reported and never gated on:
+waiting is the normal state of a model being written, and an injected behavior's recorded row is the
+record of what that behavior owes.
 
 <!-- souther-section: doc -->
 ## doc
@@ -84,7 +98,7 @@ argument it prints everything, which for a library this size is the fastest way 
 ## japi
 
 ```
-souther japi <class-or-package>[#<member>] [-cp <path>]
+souther japi <class-or-package>[#<member>] [-cp|--class-path <path>]
 ```
 
 A dependency's public API, read from its class files without loading them, with javadoc taken from

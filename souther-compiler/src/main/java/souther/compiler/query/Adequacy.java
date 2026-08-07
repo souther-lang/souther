@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.ExampleVerifier;
 import souther.compiler.FixtureReader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
@@ -29,6 +31,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /** How well a module's {@code example} rows cover what it declares. */
@@ -596,6 +599,206 @@ public final class Adequacy {
     }
 
     /**
+     * What one measure found and nothing filled.
+     *
+     * <p>Which of these fails a build is a property of the kind and not of whether it happens to carry
+     * a diagnostic code. The two line up today, and a required finding that nobody gave a code to
+     * would be a build that passes on a gap it printed, so the agreement is held by a test rather than
+     * by reading one off the other.
+     */
+    public enum Kind {
+        /** A case of the output no row expects. */
+        OUTPUT_CASE_UNSPECIFIED(DiagnosticCode.E1913, true),
+        /** A case of an input no row applies the behavior to. */
+        INPUT_CASE_UNSPECIFIED(DiagnosticCode.E1915, true),
+        /** A line some rule draws that no row sits on. */
+        BOUNDARY_UNMET(DiagnosticCode.E1916, true),
+        /** An arm of the body no row goes through. */
+        ARM_UNREACHED(DiagnosticCode.E1918, true),
+        /** A case some row expects and nothing was seen to produce. Not asked of an injected
+         *  behavior, which has no body to produce anything. */
+        OUTPUT_CASE_UNVERIFIED(null, false),
+        /** A class of an axis no row is in. */
+        AXIS_CLASS_UNCOVERED(null, false),
+        /** A position the model draws no line through, which is a fact about the model. */
+        PARTITION_NOT_DERIVABLE(null, false),
+        /** A position left out because the axis limit was reached. */
+        PARTITION_OMITTED(null, false);
+
+        private final DiagnosticCode code;
+        private final boolean adequacyGap;
+
+        Kind(DiagnosticCode code, boolean adequacyGap) {
+            this.code = code;
+            this.adequacyGap = adequacyGap;
+        }
+
+        /** The code a build is told this under, where it is told at all. */
+        public Optional<DiagnosticCode> code() {
+            return Optional.ofNullable(code);
+        }
+
+        /** Whether a model carrying this one has not met what the rows are asked for. */
+        public boolean isAdequacyGap() {
+            return adequacyGap;
+        }
+    }
+
+    /**
+     * One thing a measure established, on the behavior it is about.
+     *
+     * <p>{@code args} are the message's arguments in the order its key takes them, which is also what
+     * a report needs to write the line. Two spellings of the same finding would be two places to fix a
+     * subject that changed name.
+     *
+     * <p>{@code status} is the measurement this came out of. A finding from a measurement that could
+     * not be completed is worth printing — it says a row may be missing — and is not worth failing a
+     * build over, because telling an author to write a row they may already have written is worse than
+     * saying nothing.
+     */
+    public record Finding(Kind kind, String behavior, MeasurementStatus status, SourcePos at,
+                          List<Object> args) {
+
+        public Finding {
+            args = List.copyOf(args);
+        }
+
+        /** Whether this is a gap a build is entitled to refuse: the kind is one, and the measurement
+         *  behind it came to an answer. */
+        public boolean isAdequacyGap() {
+            return kind.isAdequacyGap() && status == MeasurementStatus.COMPLETE;
+        }
+
+        public Optional<DiagnosticCode> code() {
+            return kind.code();
+        }
+    }
+
+    /**
+     * Everything the measures found, by behavior.
+     *
+     * <p>The one statement of what counts as a finding. A report prints these, a build is warned about
+     * the ones that are gaps, and {@code souther examples --strict} refuses on the same ones — three
+     * projections of this and no second reading of the evidence. Computed whether or not the build
+     * asked to be warned, because a report wants them either way; what the level decides is which
+     * measures were made at all.
+     */
+    public record Findings(String name) implements Key<Map<String, List<Finding>>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, List<Finding>>> compute(Db db) {
+            Level level = levelOf(db);
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            if (!prepared.present()) {
+                return Answer.absent();
+            }
+            Map<String, SignatureEvidence> signatures =
+                    level.reports() ? db.ask(new Witnesses(name)).value() : null;
+            Map<String, PartitionEvidence> partitions =
+                    level.measuresArms() ? db.ask(new Coverage(name)).value() : null;
+            Map<String, BranchEvidence> branches =
+                    level.measuresArms() ? db.ask(new BranchCoverage(name)).value() : null;
+
+            Map<String, List<Finding>> out = new LinkedHashMap<>();
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                List<Finding> found = new ArrayList<>();
+                signatureFindings(behavior, prepared.value(),
+                        signatures == null ? null : signatures.get(behavior.name()), found);
+                partitionFindings(behavior,
+                        partitions == null ? null : partitions.get(behavior.name()), found);
+                armFindings(behavior,
+                        branches == null ? null : branches.get(behavior.name()), found);
+                out.put(behavior.name(), List.copyOf(found));
+            }
+            return Answer.of(Map.copyOf(out));
+        }
+
+        /** What the rows say about the cases of the signature. Carried at the measurement's own status:
+         *  a case nothing here claims is, where some row could not be read, a case nothing *seen*
+         *  claims. */
+        private static void signatureFindings(Ast.BehaviorDef behavior, Ast.Module module,
+                                              SignatureEvidence signature, List<Finding> out) {
+            if (signature == null || signature.status() == MeasurementStatus.UNAVAILABLE) {
+                return;
+            }
+            MeasurementStatus status = signature.status();
+            OutputCaseEvidence output = signature.output();
+            for (TypeName missing : output.unspecified()) {
+                out.add(new Finding(Kind.OUTPUT_CASE_UNSPECIFIED, behavior.name(), status,
+                        behavior.pos(), List.of(missing.name(), behavior.name())));
+            }
+            // An injected behavior produces nothing, so every case of its output is unverified and
+            // saying so of each says nothing. Left out here rather than at the printing, so that what
+            // a report shows and what a build is told come from one list.
+            if (!ExampleVerifier.isPending(module, behavior.name())) {
+                for (TypeName missing : output.unverified()) {
+                    if (!output.unspecified().contains(missing)) {
+                        out.add(new Finding(Kind.OUTPUT_CASE_UNVERIFIED, behavior.name(), status,
+                                behavior.pos(), List.of(missing.name(), behavior.name())));
+                    }
+                }
+            }
+            for (int i = 0; i < signature.inputs().size(); i++) {
+                for (TypeName missing : signature.inputs().get(i).unspecified()) {
+                    out.add(new Finding(Kind.INPUT_CASE_UNSPECIFIED, behavior.name(), status,
+                            behavior.pos(), List.of(missing.name(), i + 1, behavior.name())));
+                }
+            }
+        }
+
+        /** What the rows reach of what the model distinguishes. A boundary is named only where the
+         *  position was read on every row: a row writing the very number the rule names, whose
+         *  observation was cut short elsewhere in the same input, is not a row that missed. */
+        private static void partitionFindings(Ast.BehaviorDef behavior, PartitionEvidence partition,
+                                              List<Finding> out) {
+            if (partition == null) {
+                return;
+            }
+            for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+                for (String missing : axis.uncovered()) {
+                    out.add(new Finding(Kind.AXIS_CLASS_UNCOVERED, behavior.name(), axis.status(),
+                            behavior.pos(), List.of(missing)));
+                }
+            }
+            for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
+                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()) {
+                    out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(), boundary.status(),
+                            behavior.pos(),
+                            List.of(boundary.axis(), boundary.value(), boundary.origin())));
+                }
+            }
+            for (String position : partition.notDerivable()) {
+                out.add(new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
+                        MeasurementStatus.COMPLETE, behavior.pos(), List.of(position)));
+            }
+            for (Incompleteness dropped : partition.omitted()) {
+                out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
+                        MeasurementStatus.COMPLETE, behavior.pos(), List.of(dropped.subject())));
+            }
+        }
+
+        /** An arm no row goes through, at the arm and not at the declaration: what to do about it is
+         *  written there. Named only where every row was read — an arm a row that never finished might
+         *  have gone through is undecided, and calling it unreached sends the author after a row that
+         *  exists. */
+        private static void armFindings(Ast.BehaviorDef behavior, BranchEvidence branch,
+                                        List<Finding> out) {
+            if (branch == null || branch.status() != MeasurementStatus.COMPLETE) {
+                return;
+            }
+            for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
+                out.add(new Finding(Kind.ARM_UNREACHED, behavior.name(), branch.status(),
+                        arm.at().pos(), List.of(arm.label(), arm.behavior())));
+            }
+        }
+    }
+
+    /**
      * What a build asked to be told, as warnings on the declarations they are about.
      *
      * <p>Only what a person can act on. A position the model draws no line through is named in the
@@ -622,98 +825,53 @@ public final class Adequacy {
             if (!asked.warn() || !level.reports()) {
                 return Answer.of(true);
             }
-            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
-            if (!prepared.present()) {
+            Answer<Map<String, List<Finding>>> found = db.ask(new Findings(name));
+            if (!found.present()) {
                 return Answer.absent();
             }
-            Map<String, SignatureEvidence> signatures = db.ask(new Witnesses(name)).value();
-            Map<String, PartitionEvidence> partitions =
-                    level.measuresArms() ? db.ask(new Coverage(name)).value() : null;
-            Map<String, BranchEvidence> branches =
-                    level.measuresArms() ? db.ask(new BranchCoverage(name)).value() : null;
-
             List<Report> reports = new ArrayList<>();
-            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
-                SignatureEvidence signature =
-                        signatures == null ? null : signatures.get(behavior.name());
-                signatureGaps(behavior, signature, reports);
-                if (partitions != null) {
-                    boundaryGaps(behavior, partitions.get(behavior.name()), reports);
-                }
-                if (branches != null) {
-                    armGaps(branches.get(behavior.name()), reports);
+            for (List<Finding> ofBehavior : found.value().values()) {
+                for (Finding finding : ofBehavior) {
+                    if (finding.isAdequacyGap()) {
+                        reports.add(warning(finding));
+                    }
                 }
             }
             return Answer.of(true, reports);
         }
 
-        /** A case of the signature no row says anything about, on the declaration that owes it. */
-        private static void signatureGaps(Ast.BehaviorDef behavior, SignatureEvidence signature,
-                                          List<Report> reports) {
-            if (signature == null || signature.status() != MeasurementStatus.COMPLETE) {
-                return;
-            }
-            for (TypeName missing : signature.output().unspecified()) {
-                reports.add(warning(DiagnosticCode.E1913, "check.example.witness.out",
-                        "check.example.witness.out.hint", List.of(missing.name()), behavior,
-                        missing.name(), behavior.name()));
-            }
-            for (int i = 0; i < signature.inputs().size(); i++) {
-                for (TypeName missing : signature.inputs().get(i).unspecified()) {
-                    reports.add(warning(DiagnosticCode.E1915, "check.example.witness.in", null, List.of(),
-                            behavior, missing.name(), i + 1, behavior.name()));
-                }
-            }
-        }
-
-        private static void boundaryGaps(Ast.BehaviorDef behavior, PartitionEvidence partition,
-                                         List<Report> reports) {
-            if (partition == null) {
-                return;
-            }
-            for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
-                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()) {
-                    reports.add(warning(DiagnosticCode.E1916, "check.example.boundary",
-                            "check.example.boundary.hint", List.of(), behavior,
-                            boundary.axis(), boundary.value(), boundary.origin()));
-                }
-            }
-        }
-
-        /** An arm no row goes through, quoted at the arm and not at the declaration: what to do about
-         * it is written there. */
-        private static void armGaps(BranchEvidence branch, List<Report> reports) {
-            if (branch == null || branch.status() != MeasurementStatus.COMPLETE) {
-                return;
-            }
-            for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
-                reports.add(Report.of(souther.compiler.diag.Diagnostic
-                        .of(DiagnosticCode.E1918, "check.example.unreachedarm").warning()
-                        .at(arm.at().pos())
-                        .args(arm.label(), arm.behavior())
-                        .hint("check.example.unreachedarm.hint")
-                        .build()));
-            }
-        }
-
         /**
-         * One warning on a behavior's declaration.
+         * One finding as the warning a build reads.
          *
-         * <p>{@code hint} is null where the message says all there is to say. Written out at the call
-         * site rather than derived from the message's key, so that a scan for the keys this names
-         * finds them — a key built by concatenation is one nothing can see is used.
+         * <p>The message keys are written out per kind rather than derived from the code's name, so
+         * that a scan for the keys this names finds them — a key built by concatenation is one nothing
+         * can see is used. Which findings get here is {@link Finding#isAdequacyGap()}'s answer and not
+         * this method's.
          */
-        private static Report warning(DiagnosticCode code, String key, String hint,
-                                      List<Object> hintArgs, Ast.BehaviorDef behavior,
-                                      Object... args) {
+        private static Report warning(Finding finding) {
+            DiagnosticCode code = finding.code().orElseThrow();
             souther.compiler.diag.Diagnostic.Builder built =
-                    souther.compiler.diag.Diagnostic.of(code, key).warning()
-                            .at(behavior.pos())
-                            .args(args);
-            if (hint != null) {
-                built.hint(hint, hintArgs.toArray());
+                    souther.compiler.diag.Diagnostic.of(code, messageKey(finding.kind())).warning()
+                            .at(finding.at())
+                            .args(finding.args().toArray());
+            switch (finding.kind()) {
+                case OUTPUT_CASE_UNSPECIFIED ->
+                        built.hint("check.example.witness.out.hint", finding.args().get(0));
+                case BOUNDARY_UNMET -> built.hint("check.example.boundary.hint");
+                case ARM_UNREACHED -> built.hint("check.example.unreachedarm.hint");
+                default -> { }   // the message says all there is to say
             }
             return Report.of(built.build());
+        }
+
+        private static String messageKey(Kind kind) {
+            return switch (kind) {
+                case OUTPUT_CASE_UNSPECIFIED -> "check.example.witness.out";
+                case INPUT_CASE_UNSPECIFIED -> "check.example.witness.in";
+                case BOUNDARY_UNMET -> "check.example.boundary";
+                case ARM_UNREACHED -> "check.example.unreachedarm";
+                default -> throw new IllegalArgumentException("no message for " + kind);
+            };
         }
     }
 

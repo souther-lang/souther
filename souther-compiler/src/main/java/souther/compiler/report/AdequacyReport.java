@@ -38,11 +38,33 @@ import java.util.Set;
  * against a shape, and a shape that changes without saying so breaks it silently. So is
  * {@code status}: an evaluation that could not read everything must not be read as one that found
  * nothing, and the difference is not visible in the numbers.
+ *
+ * <p>{@code askedLevel} is what the measures were asked for, and it is here because the evidence
+ * cannot be read without it. A measure nobody asked for and a measure that could not be made both
+ * come back {@code UNAVAILABLE}; only what was asked tells the two apart, and {@link #adequacy()}
+ * answers differently for each. It is an input carried through rather than a value derived from the
+ * modules, so filtering the report leaves it alone.
  */
-public record AdequacyReport(int schemaVersion, String compilerVersion, MeasurementStatus status,
-                             List<ModuleReport> modules) {
+public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy.Level askedLevel,
+                             MeasurementStatus status, List<ModuleReport> modules) {
 
     public static final int SCHEMA_VERSION = 1;
+
+    /**
+     * Whether the rows meet what the asked measures require of them.
+     *
+     * <p>Apart from {@code status}, which says whether the measurement could be made at all. A
+     * measurement that came back complete over a model with an arm nothing reaches is a measurement
+     * that worked and a model that does not satisfy it, and one word cannot say both.
+     */
+    public enum AdequacyStatus {
+        /** Every asked measure came to an answer, and none of them found a gap. */
+        SATISFIED,
+        /** Some asked measure found a gap. One is enough, whatever else could not be measured. */
+        NOT_SATISFIED,
+        /** No measure that could find a gap was asked, or one was asked and could not be made. */
+        UNDETERMINED
+    }
 
     public record ModuleReport(String module, MeasurementStatus status,
                                List<Incompleteness> incompleteness, List<BehaviorReport> behaviors) {
@@ -57,12 +79,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
      * @param rows      how many {@code example} rows name it, across every source that writes one
      * @param pending   how many of those are recorded rather than evaluated
      * @param signature what those rows establish about the cases of its inputs and its output
+     * @param findings  what the measures found and nothing filled, which is what the lines under this
+     *                  behavior print and what a build is warned about — one list, read three ways
      */
     public record BehaviorReport(String name, boolean injected, int rows, int pending,
                                  MeasurementStatus status,
                                  Adequacy.SignatureEvidence signature,
                                  PartitionEvidence partition,
-                                 Adequacy.BranchEvidence branch) {}
+                                 Adequacy.BranchEvidence branch,
+                                 List<Adequacy.Finding> findings) {
+        public BehaviorReport {
+            findings = List.copyOf(findings);
+        }
+
+        /** The findings of one kind, in the order the measure produced them. */
+        public List<Adequacy.Finding> of(Adequacy.Kind kind) {
+            return findings.stream().filter(f -> f.kind() == kind).toList();
+        }
+    }
 
     /** Reads a finished compile. {@link Compilation#answerEverything()} must have been asked first;
      * otherwise there is nothing to read and every behavior looks unexampled. */
@@ -78,8 +112,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             modules.add(report);
             overall = overall.and(report.status());
         }
-        return new AdequacyReport(SCHEMA_VERSION, ModuleMetadata.compilerVersion(), overall,
-                List.copyOf(modules));
+        Adequacy.Asked asked = compilation.db().ask(new Adequacy.Requested()).value();
+        return new AdequacyReport(SCHEMA_VERSION, ModuleMetadata.compilerVersion(),
+                asked == null ? Adequacy.Level.OFF : asked.level(), overall, List.copyOf(modules));
     }
 
     /**
@@ -113,8 +148,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         // The same rows every measure beside them reads. Two evaluations of
         // one model can disagree — a row that ran out of time under the instrumented one and held
         // under the other — and a report whose counts came from one while its coverage came from the
-        // other would say a case is verified and its arm unreached in the same breath. It is also
-        // what `--strict` exits on, so the exit code and the numbers printed above it agree.
+        // other would say a case is verified and its arm unreached in the same breath. The findings
+        // `--strict` exits on come from these same rows, so the exit code and what is printed agree.
         for (String sourceId : compilation.exampleSourcesOf(name)) {
             Output.Examples.Of observed =
                     compilation.db().ask(Output.Examples.asked(compilation.db(), name, sourceId)).value();
@@ -142,6 +177,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
+        // The lines this report prints and the warnings a build is given are the same list, asked for
+        // once here. A second reading of the evidence would be a second statement of what a gap is.
+        Map<String, List<Adequacy.Finding>> findings =
+                compilation.db().ask(new Adequacy.Findings(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef behavior : module.behaviors()) {
             List<RowOutcome> rows = byTarget.getOrDefault(behavior.name(), List.of());
@@ -162,7 +201,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             behaviors.add(new BehaviorReport(behavior.name(),
                     ExampleVerifier.isPending(module, behavior.name()), rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
-                    signature, partition, branch));
+                    signature, partition, branch,
+                    findings == null ? List.of()
+                            : findings.getOrDefault(behavior.name(), List.of())));
         }
         MeasurementStatus status = incompleteness.isEmpty()
                 ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
@@ -204,13 +245,83 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             kept.add(new ModuleReport(m.module(), status, gaps, behaviors));
             overall = overall.and(status);
         }
-        return new AdequacyReport(schemaVersion, compilerVersion, overall, List.copyOf(kept));
+        return new AdequacyReport(schemaVersion, compilerVersion, askedLevel, overall,
+                List.copyOf(kept));
     }
 
-    /** How many rows are recorded and waiting for a {@code let}, across everything reported. */
+    /** How many rows are recorded and waiting for a {@code let}, across everything reported.
+     *
+     * <p>Reported and never gated on. Waiting is the normal state of a model being written, and a
+     * build that refused one would refuse the practice of recording what an injected behavior owes. */
     public int pendingRows() {
         return modules.stream().flatMap(m -> m.behaviors().stream())
                 .mapToInt(BehaviorReport::pending).sum();
+    }
+
+    /** Everything the measures found, across everything reported. */
+    public List<Adequacy.Finding> findings() {
+        return modules.stream().flatMap(m -> m.behaviors().stream())
+                .flatMap(b -> b.findings().stream()).toList();
+    }
+
+    /** The findings a build is entitled to refuse: an asked measure came to an answer and the answer
+     *  was that something the rows are asked for is not there. */
+    public List<Adequacy.Finding> adequacyGaps() {
+        return findings().stream().filter(Adequacy.Finding::isAdequacyGap).toList();
+    }
+
+    /**
+     * Whether the rows meet what the asked measures require.
+     *
+     * <p>Derived on every call rather than held, because {@link #only(String, String)} makes a report
+     * of part of this one and a verdict about the whole would be a verdict about behaviors that report
+     * does not show.
+     *
+     * <p>The empty case is answered first. Asking nothing that could find a gap and finding none are
+     * not the same answer, and {@code allMatch} over no measures is true.
+     */
+    public AdequacyStatus adequacy() {
+        List<MeasurementStatus> required = requiredMeasures();
+        if (required.isEmpty()) {
+            return AdequacyStatus.UNDETERMINED;
+        }
+        if (!adequacyGaps().isEmpty()) {
+            return AdequacyStatus.NOT_SATISFIED;
+        }
+        boolean unread = modules.stream().anyMatch(m -> !m.incompleteness().isEmpty());
+        return !unread && required.stream().allMatch(m -> m == MeasurementStatus.COMPLETE)
+                ? AdequacyStatus.SATISFIED : AdequacyStatus.UNDETERMINED;
+    }
+
+    /**
+     * The status of every measure that was asked for and could have found a gap.
+     *
+     * <p>Which measures those are is what {@code askedLevel} says, and not what the evidence looks
+     * like: a behavior whose arms were never asked about and one whose arms could not be measured both
+     * carry an {@code UNAVAILABLE} branch, and only the first of them leaves the rows adequate.
+     *
+     * <p>An injected behavior is not asked about its arms. It has no body, so there is no arm for a row
+     * to reach and nothing there for a measure to fail at.
+     */
+    private List<MeasurementStatus> requiredMeasures() {
+        List<MeasurementStatus> measures = new ArrayList<>();
+        for (ModuleReport module : modules) {
+            for (BehaviorReport behavior : module.behaviors()) {
+                if (askedLevel.reports() && behavior.signature() != null) {
+                    measures.add(behavior.signature().status());
+                }
+                if (!askedLevel.measuresArms()) {
+                    continue;
+                }
+                if (behavior.branch() != null && !behavior.injected()) {
+                    measures.add(behavior.branch().status());
+                }
+                if (behavior.partition() != null) {
+                    behavior.partition().boundaries().forEach(b -> measures.add(b.status()));
+                }
+            }
+        }
+        return measures;
     }
 
     // --- rendering --------------------------------------------------------------------------------
@@ -220,7 +331,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         int implemented = 0;
         int injected = 0;
         for (ModuleReport module : modules) {
-            out.append(String.format("%-56s status: %s%n", module.module(),
+            out.append(String.format("%-56s measurement: %s%n", module.module(),
                     module.status().name().toLowerCase(java.util.Locale.ROOT)));
             for (BehaviorReport behavior : module.behaviors()) {
                 if (behavior.injected()) {
@@ -244,6 +355,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         out.append(String.format("%n%d %s: %d implemented, %d injected; %d %s waiting for a `let`.%n",
                 total, total == 1 ? "behavior" : "behaviors", implemented, injected,
                 pendingRows(), pendingRows() == 1 ? "row" : "rows"));
+        // Last, and its own line. What the measurement managed is said above, per module; this is the
+        // other question, and the two were one word until they disagreed in front of a reader.
+        out.append(String.format("adequacy: %s%n",
+                adequacy().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ')));
         return out.toString();
     }
 
@@ -260,11 +375,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         if (signature == null || signature.status() == MeasurementStatus.UNAVAILABLE) {
             return;
         }
-        // Where some rows could not be read, a case nothing here claims is a case nothing *seen*
-        // claims. The summary already says partial; each line has to say it too, or the lines read as
-        // the finding and the word in the margin as a footnote.
         boolean decided = signature.status() == MeasurementStatus.COMPLETE;
-        String noRow = decided ? "no row " : "undecided whether a row ";
         OutputCaseEvidence output = signature.output();
         if (!output.declared().isEmpty()) {
             out.append(String.format("    signature   out specified %d/%d  observed %d/%d "
@@ -273,15 +384,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                     output.observed().size(), output.declared().size(),
                     output.verified().size(), output.declared().size(),
                     decided ? "" : "   (partial)"));
-            for (TypeName missing : output.unspecified()) {
-                out.append(String.format("      · %sexpects `%s`%n", noRow, missing.name()));
+            for (Adequacy.Finding f : behavior.of(Adequacy.Kind.OUTPUT_CASE_UNSPECIFIED)) {
+                out.append(String.format("      · %sexpects `%s`%n", noRow(f), f.args().get(0)));
             }
-            if (!behavior.injected()) {
-                for (TypeName missing : output.unverified()) {
-                    if (!output.unspecified().contains(missing)) {
-                        out.append(String.format("      · %sconfirms `%s`%n", noRow, missing.name()));
-                    }
-                }
+            for (Adequacy.Finding f : behavior.of(Adequacy.Kind.OUTPUT_CASE_UNVERIFIED)) {
+                out.append(String.format("      · %sconfirms `%s`%n", noRow(f), f.args().get(0)));
             }
         }
         for (int i = 0; i < signature.inputs().size(); i++) {
@@ -291,10 +398,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             }
             out.append(String.format("                in #%d specified %d/%d%n", i + 1,
                     input.specified().size(), input.declared().size()));
-            for (TypeName missing : input.unspecified()) {
-                out.append(String.format("      · %suses `%s`%n", noRow, missing.name()));
+            int position = i + 1;
+            for (Adequacy.Finding f : behavior.of(Adequacy.Kind.INPUT_CASE_UNSPECIFIED)) {
+                if (f.args().get(1).equals(position)) {
+                    out.append(String.format("      · %suses `%s`%n", noRow(f), f.args().get(0)));
+                }
             }
         }
+    }
+
+    /**
+     * How a finding names what nothing did, given how far its measure got.
+     *
+     * <p>Where some rows could not be read, a case nothing here claims is a case nothing *seen*
+     * claims. The summary already says partial; each line has to say it too, or the lines read as the
+     * finding and the word in the margin as a footnote.
+     */
+    private static String noRow(Adequacy.Finding finding) {
+        return finding.status() == MeasurementStatus.COMPLETE
+                ? "no row " : "undecided whether a row ";
     }
 
     /**
@@ -313,12 +435,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         int covered = partition.axes().stream().mapToInt(a -> a.covered().size()).sum();
         out.append(String.format("    partition   axes %d   single-axis %d/%d%s%n",
                 partition.axes().size(), covered, classes, pairs(partition.pairs())));
-        for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
-            for (String missing : axis.uncovered()) {
-                out.append(String.format("      · %s `%s`%n",
-                        axis.status() == MeasurementStatus.PARTIAL
-                                ? "undecided whether a row is in" : "no row is in", missing));
-            }
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.AXIS_CLASS_UNCOVERED)) {
+            out.append(String.format("      · %s `%s`%n",
+                    f.status() == MeasurementStatus.PARTIAL
+                            ? "undecided whether a row is in" : "no row is in", f.args().get(0)));
         }
         List<PartitionEvidence.BoundaryCoverage> measured = partition.boundaries().stream()
                 .filter(b -> b.status() != MeasurementStatus.UNAVAILABLE).toList();
@@ -329,19 +449,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         out.append(String.format("    boundary    %d/%d%s%s%n", met, measured.size(),
                 deferred == 0 ? "" : "   (" + deferred + " not measured until branches are)",
                 undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
-        // Named only where the position was read on every row. A row writing the very number the rule
-        // names, whose observation was cut short elsewhere in the same input, is not a row that missed.
-        for (PartitionEvidence.BoundaryCoverage boundary : measured) {
-            if (!boundary.hit() && boundary.status() == MeasurementStatus.COMPLETE) {
-                out.append(String.format("      · no row is at %s = %s (%s)%n", boundary.axis(),
-                        boundary.value(), boundary.origin()));
-            }
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
+            out.append(String.format("      · no row is at %s = %s (%s)%n",
+                    f.args().get(0), f.args().get(1), f.args().get(2)));
         }
-        for (String position : partition.notDerivable()) {
-            out.append(String.format("      · not derivable: %s%n", position));
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
+            out.append(String.format("      · not derivable: %s%n", f.args().get(0)));
         }
-        for (Incompleteness dropped : partition.omitted()) {
-            out.append(String.format("      · omitted: %s (axis limit)%n", dropped.subject()));
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
+            out.append(String.format("      · omitted: %s (axis limit)%n", f.args().get(0)));
         }
     }
 
@@ -371,9 +487,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         if (!decided) {
             return;
         }
-        for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
-            out.append(String.format("      · no row goes through `%s` (%s)%n", arm.label(),
-                    arm.at().pos()));
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.ARM_UNREACHED)) {
+            out.append(String.format("      · no row goes through `%s` (%s)%n",
+                    f.args().get(0), f.at()));
         }
     }
 
@@ -408,6 +524,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         root.put("schemaVersion", schemaVersion);
         root.put("compilerVersion", compilerVersion);
         root.put("status", status.name().toLowerCase(java.util.Locale.ROOT));
+        root.put("adequacy", adequacy().name().toLowerCase(java.util.Locale.ROOT));
         ArrayNode modulesOut = root.putArray("modules");
         for (ModuleReport module : modules) {
             ObjectNode m = modulesOut.addObject();

@@ -4,7 +4,7 @@
   "title": "Souther adequacy report",
   "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it.",
   "type": "object",
-  "required": ["schemaVersion", "compilerVersion", "status", "modules"],
+  "required": ["schemaVersion", "compilerVersion", "status", "adequacy", "modules"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {
@@ -18,6 +18,10 @@
     "status": {
       "$ref": "#/$defs/status",
       "description": "The weakest status among the modules. `partial` means something could not be read, so an absent number is not evidence of a gap."
+    },
+    "adequacy": {
+      "enum": ["satisfied", "not_satisfied", "undetermined"],
+      "description": "Whether the rows meet what the asked measures require, which is not what `status` says. `undetermined` is a measure that was not asked for or could not be made; a build that gates on this refuses `not_satisfied` and nothing else."
     },
     "modules": {
       "type": "array",
