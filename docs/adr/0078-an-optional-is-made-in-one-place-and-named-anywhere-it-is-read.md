@@ -107,8 +107,10 @@ could not compose (E1701).
 **The rule does not depend on `exposing`.** It is asked of every behavior signature, as the other
 boundary obligations are. Depending on visibility would mean a signature that is legal until `exposing`
 names it, at which point the type itself becomes illegal, which ties what a behavior means to how it is
-published. The Java-facing signature corroborates the rule rather than grounding it: a behavior that is
-not exposed generates none, and the rule holds there too.
+published. The Java-facing signature corroborates the rule where such a boundary is reachable from
+Java; it does not ground it, and the rule applies independently of publication. `exposing` is not that
+line in any case — an injected behavior's abstract base is public whatever `exposing` says, and it
+carries the behavior's input and output types with it.
 
 ## Consequences
 
@@ -132,6 +134,12 @@ behavior signature in the bench corpus or in souther-examples names `Option`; So
 these repositories has not been measured. It also empties the two branches in `Runner` that refused a
 type the checker admitted, `run.decode.unsupported` and `run.encode.unsupported` — what the runner
 should say about a type that can no longer arrive is issue #446.
+
+`Backend.BOUNDARY_VERSION` moves 6 → 7. A reader takes an imported declaration as one the writer was
+held to, so a jar built while a parameter could be written `Option<Int>` carries a signature this
+compiler refuses in source and would otherwise call across the boundary regardless — measured, a
+module compiled by the earlier compiler with such a parameter was imported and called by this one
+without complaint. Held to the earlier number the rule would reach source compilation only.
 
 ## References
 

@@ -246,6 +246,29 @@ class OptionAsAWrittenTypeTest {
     }
 
     @Test
+    void anOptionalAsASetElementIsRefused() {
+        CompileException e = err(HEAD + """
+                behavior bill : (a: Amount) -> Set<Option<Int>>
+                let bill (a) = Set.singleton(List.get(0, [ 1 ]))
+                """);
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+    }
+
+    @Test
+    void anOptionalAsAMapKeyIsRefusedAsAnOptionalFirst() {
+        // Both this rule and the one about what may key a Map that crosses have something to say. The
+        // optional is asked about first, so the report names the type the author wrote rather than the
+        // position it happened to be in.
+        CompileException e = err(HEAD + """
+                behavior bill : (m: Map<Option<Int>, String>) -> Receipt
+                    constructs Receipt, Amount
+                let bill (m) = Receipt { total = Amount(Map.size(m)) }
+                """);
+        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
+        assertTrue(e.getMessage().contains("E1313"), e.getMessage());
+    }
+
+    @Test
     void anOptionalInsideAnInputIsRefusedToo() {
         CompileException e = err(HEAD + """
                 behavior bill : (os: List<Option<Int>>) -> Receipt
