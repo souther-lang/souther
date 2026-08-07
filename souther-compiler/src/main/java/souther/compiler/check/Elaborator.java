@@ -123,13 +123,13 @@ public final class Elaborator {
                 Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.tuple.pattern").title("check.type.mismatch.title")
+                            Diagnostic.of(DiagnosticCode.E1320, "check.tuple.pattern")
                                     .at(tg.pos()).args(Type.show(tt)).build(),
                             "a tuple pattern needs a tuple, got " + tt);
                 }
                 if (to.elements().size() != tg.arity()) {   // exact arity, in either direction (Elm)
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.tuple.arity").title("check.type.mismatch.title")
+                            Diagnostic.of(DiagnosticCode.E1320, "check.tuple.arity")
                                     .at(tg.pos()).args(tg.arity(), to.elements().size()).build(),
                             "this pattern binds " + tg.arity()
                                     + " name(s) but the tuple has " + to.elements().size() + " element(s)");
@@ -142,8 +142,7 @@ public final class Elaborator {
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.neg.msg")
-                                    .title("check.neg.title")
+                            Diagnostic.of(DiagnosticCode.E1319, "check.neg.msg")
                                     .at(new Region(neg.pos(), region(neg.operand()).end()))
                                     .args(Type.show(t))
                                     .build(),
@@ -283,8 +282,7 @@ public final class Elaborator {
                     yield new Core.If(cond, then, els, joined, iff.pos());
                 }
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.if.msg")
-                                .title("check.if.title")
+                        Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
                                 .at(iff.pos(), 2)
                                 .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())),
                                         "check.if.then", Type.show(tt))
@@ -331,8 +329,7 @@ public final class Elaborator {
                     Type next = TypeOps.join(joined, body.type());
                     if (next == null) {
                         throw CompileException.of(
-                                Diagnostic.uncoded("check.if.msg")
-                                        .title("check.if.title")
+                                Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
                                         .at(ic.pos(), 2)
                                         .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
                                                 "check.if.then", Type.show(then.type()))
@@ -418,8 +415,7 @@ public final class Elaborator {
                     without.add(c.name());
                 }
             }
-            Diagnostic.Builder d = Diagnostic.uncoded("check.access.sum")
-                    .title("check.type.mismatch.title")
+            Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1321, "check.access.sum")
                     .at(fa.name().region()).args(fa.field(), Type.show(target));
             if (!without.isEmpty()) {
                 d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
@@ -434,7 +430,7 @@ public final class Elaborator {
                             + "`: a sum has no fields of its own; open it with `match`");
         }
         throw CompileException.of(
-                Diagnostic.uncoded("check.access").title("check.type.mismatch.title")
+                Diagnostic.of(DiagnosticCode.E1321, "check.access")
                         .at(fa.name().region()).args(fa.field()).build(),
                 "cannot access field `" + fa.field() + "` on this value");
     }
@@ -620,7 +616,7 @@ public final class Elaborator {
             return;
         }
         throw CompileException.of(
-                Diagnostic.uncoded("check.let.annotation").title("check.type.mismatch.title")
+                Diagnostic.of(DiagnosticCode.E1317, "check.let.annotation")
                         .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
                         .diff(Type.show(valueType, declared), Type.show(declared, valueType)).build(),
                 "the binding `" + li.name() + "` declares " + Type.show(declared)
@@ -1317,8 +1313,7 @@ public final class Elaborator {
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
             throw CompileException.of(
-                    Diagnostic.uncoded("check.type.mismatch.msg")
-                            .title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1317, "check.type.mismatch.msg")
                             .at(region(e))
                             .args(what)
                             .diff(Type.show(actual, expected), Type.show(expected, actual))
@@ -1370,13 +1365,12 @@ public final class Elaborator {
         };
         if (denotes != null) {
             return CompileException.of(
-                    Diagnostic.uncoded("check.notavalue").title("check.unknown.title")
+                    Diagnostic.of(DiagnosticCode.E1024, "check.notavalue")
                             .at(v.written().region()).args(v.name(), denotes).build(),
                     "`" + v.name() + "` is " + denotes + ", and cannot be held as a value here");
         }
         return CompileException.of(
-                Diagnostic.uncoded("check.unknown.name.msg")
-                        .title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                         .at(v.written().region())
                         .args(v.name())
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))

@@ -662,7 +662,7 @@ final class BodyGen {
                 case Core.Read v -> {
                     Var var = locals.get(v.binding());
                     if (var == null) {
-                        throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
+                        throw new IllegalStateException("unbound identifier `" + v.name() + "`");
                     }
                     load(code, var.slot(), var.type());
                 }
@@ -743,7 +743,7 @@ final class BodyGen {
                     genExpr(li.body(), expected);
                 }
                 // a block has no value of its own; it is inlined by the call it is passed to
-                case Core.Block b -> throw new CompileException(b.pos(), "a block is not a value");
+                case Core.Block b -> throw new IllegalStateException("a block is not a value");
             }
             // `unreachable` is typed Never, and what is on the stack is the shape the position asked
             // for, so that is what the caller is told is there.
@@ -1219,7 +1219,7 @@ final class BodyGen {
                     } else if (ctx.calleeSig(call.fn()) != null) {
                         behaviorCall(call);
                     } else {
-                        throw new CompileException(call.pos(), "unknown function `" + call.fn() + "`");
+                        throw new IllegalStateException("unknown function `" + call.fn() + "`");
                     }
                 }
             }

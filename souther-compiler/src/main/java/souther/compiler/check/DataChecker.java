@@ -83,8 +83,7 @@ public final class DataChecker {
             String name = clause.name().orElse(null);
             if (name != null && !seen.add(name)) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.invariant.duplicate")
-                                .title("check.invariant.invalid.title")
+                        Diagnostic.of(DiagnosticCode.E1103, "check.invariant.duplicate")
                                 .at(clause.pos()).args(name, data.name()).build(),
                         "two invariant clauses of `" + data.name() + "` are named `" + name + "`");
             }
@@ -678,7 +677,7 @@ public final class DataChecker {
             Type vt = value.type();
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.field.type").title("check.type.mismatch.title")
+                        Diagnostic.of(DiagnosticCode.E1317, "check.field.type")
                                 .at(init.written().region())
                                 .args(init.name(), Type.show(ft), Type.show(vt))
                                 .diff(Type.show(vt, ft), Type.show(ft, vt)).build(),

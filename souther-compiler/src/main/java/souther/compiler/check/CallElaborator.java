@@ -84,7 +84,7 @@ public final class CallElaborator {
             return;
         }
         throw CompileException.of(
-                Diagnostic.uncoded("check.ordered.key").title("check.type.mismatch.title")
+                Diagnostic.of(DiagnosticCode.E1805, "check.ordered.key")
                         .at(call.pos()).args(call.written(), Type.show(answered))
                         .hint("check.ordered.hint").build(),
                 call.written() + "'s key must be an ordered value (Int, String, Decimal, Date, DateTime,"
@@ -558,7 +558,7 @@ public final class CallElaborator {
                 // wrong with it is that it is not a function, which is what the report below says.
                 if (library || call.reaches().indexOf('.') >= 0) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.stdlib.notfunction").title("check.unknown.title")
+                            Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
                                     .at(call.name().region()).args(call.written()).build(),
                             "`" + call.written() + "` is not a standard-library function.");
                 }
@@ -574,8 +574,7 @@ public final class CallElaborator {
                     String qualified = Prelude.qualifiedFor(call.written());
                     if (qualified != null) {
                         throw CompileException.of(
-                                Diagnostic.uncoded("check.stdlib.qualified.msg")
-                                        .title("check.unknown.title").at(call.name().region())
+                                Diagnostic.of(DiagnosticCode.E1025, "check.stdlib.qualified.msg").at(call.name().region())
                                         .args(call.written(), qualified).build(),
                                 "`" + call.written() + "` is a standard-library function and must be called"
                                         + " qualified, as `" + qualified + "` (spec §stdlib).");
@@ -615,7 +614,7 @@ public final class CallElaborator {
         String pattern = ConstEval.evalString(e).orElse(null);
         if (pattern == null) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.matches.constant").title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1323, "check.matches.constant")
                             .at(e.pos()).build(),
                     "the pattern of `String.matches` must evaluate to a string at compile time — a"
                             + " string literal, or literals and values named by a top-level `let`"
@@ -627,7 +626,7 @@ public final class CallElaborator {
             // getDescription() is the one-line reason ("Unclosed character class near index 3");
             // getMessage() would also dump the pattern and a caret, which the source region already shows.
             throw CompileException.of(
-                    Diagnostic.uncoded("check.matches.regex").title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1323, "check.matches.regex")
                             .at(e.pos()).args(ex.getDescription()).build(),
                     "`String.matches` pattern is not a valid regular expression: " + ex.getDescription());
         }
@@ -638,7 +637,7 @@ public final class CallElaborator {
     static CompileException expects(SourcePos pos, String subject, String kindKey, Type actual,
                                             String legacy) {
         return CompileException.of(
-                Diagnostic.uncoded("check.expects").title("check.type.mismatch.title").at(pos)
+                Diagnostic.of(DiagnosticCode.E1317, "check.expects").at(pos)
                         .args(subject, Localizable.of(kindKey), Type.show(actual)).build(),
                 legacy);
     }
@@ -682,7 +681,7 @@ public final class CallElaborator {
                                 + " (`let total: Decimal = " + call.written() + "([])`)");
             }
             throw CompileException.of(
-                    Diagnostic.uncoded("check.numeric.result").title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1317, "check.numeric.result")
                             .at(call.name().region())
                             .args(call.written(), Type.show(position))
                             .hint("check.numeric.result.hint").build(),
@@ -692,7 +691,7 @@ public final class CallElaborator {
                             + " other type has no place for one");
         }
         throw CompileException.of(
-                Diagnostic.uncoded("check.numeric").title("check.type.mismatch.title")
+                Diagnostic.of(DiagnosticCode.E1806, "check.numeric")
                         .at(call.name().region())
                         .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
                         .hint("check.numeric.hint").build(),
@@ -711,7 +710,7 @@ public final class CallElaborator {
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
     static CompileException needsOrdered(SourcePos pos, String subject, Type element, String legacy) {
         return CompileException.of(
-                Diagnostic.uncoded("check.ordered").title("check.type.mismatch.title").at(pos)
+                Diagnostic.of(DiagnosticCode.E1806, "check.ordered").at(pos)
                         .args(subject, Localizable.of("kind.ordered.list"), Type.show(element))
                         .hint("check.ordered.hint").build(),
                 legacy);
@@ -726,7 +725,7 @@ public final class CallElaborator {
         boolean isDate = "Date".equals(call.reaches());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.temporal.literal").title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1322, "check.temporal.literal")
                             .at(call.name().region()).args(call.written()).build(),
                     "`" + call.written() + "(...)` takes a written string, e.g. "
                             + (isDate ? "Date(\"2026-07-01\")" : "DateTime(\"2026-07-01T09:00\")"));
@@ -744,7 +743,7 @@ public final class CallElaborator {
                     : java.time.LocalDateTime.parse(text);
         } catch (java.time.format.DateTimeParseException _) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.temporal.malformed").title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1322, "check.temporal.malformed")
                             .at(pos, fn.length()).args(fn, text).build(),
                     "`" + text + "` is not a " + fn + " (expected "
                             + (fn.equals("Date") ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm[:ss]") + ")");

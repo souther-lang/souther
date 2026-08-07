@@ -16,8 +16,6 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a diagnostic code is, held as an invariant rather than as a convention.
@@ -157,37 +155,30 @@ class EveryDiagnosticCodeIsReadableTest {
         assertEquals(Set.of(), missing, "a code is shown under a title nothing defines");
     }
 
+
     /**
-     * The migration, held to a number that only goes down.
+     * The way back is closed. A check that refuses a program raises a {@link Diagnostic} through
+     * {@link Diagnostic#of}, which takes a {@link DiagnosticCode} — there is no builder that does
+     * not, so a diagnostic a reader cannot look up cannot be written.
      *
-     * <p>{@link Diagnostic#uncoded} is what a site reaches for when its diagnostic has not been
-     * mapped onto a rule yet: it renders a title and nothing a reader can look up. There is no
-     * reason to add one — a new diagnostic reports a rule, and a rule has an anchor and a code — so
-     * the count is a ceiling, and this test is what stops the set from growing back while it is
-     * being emptied.
+     * <p>{@link Diagnostic#literal} is the exception and is not a check raising one: it wraps a
+     * message the compiler was handed — a failure surfacing as a report — where there is no rule to
+     * name because nothing decided the program was wrong. Held to the one site that does that, so the next `+literal+` in a checker is a
+     * failing test rather than a diagnostic quietly losing its identity again.
      */
     @Test
-    void theUncodedSitesOnlyGoDown() throws IOException {
-        int remaining = 0;
+    void nothingRaisesADiagnosticWithoutACode() throws IOException {
+        Set<String> raising = new TreeSet<>();
         for (java.nio.file.Path source : MessageCatalogFormatTest.mainSources()) {
-            Matcher m = Pattern.compile("\\.uncoded\\(")
-                    .matcher(java.nio.file.Files.readString(source, StandardCharsets.UTF_8));
-            while (m.find()) {
-                remaining++;
+            String text = java.nio.file.Files.readString(source, StandardCharsets.UTF_8);
+            if (text.contains("Diagnostic.literal(")) {
+                raising.add(source.getFileName().toString());
             }
         }
-        assertFalse(remaining == 0 && UNCODED_CEILING > 0,
-                "no uncoded site is left — drop this test and `Diagnostic.uncoded` with it");
-        assertTrue(remaining <= UNCODED_CEILING,
-                "an uncoded diagnostic was added: " + remaining + " of them, and the ceiling is "
-                        + UNCODED_CEILING + ". A new diagnostic reports a rule, so give it a rule "
-                        + "anchor and a DiagnosticCode.");
-        assertEquals(UNCODED_CEILING, remaining,
-                "uncoded sites were removed — lower the ceiling to " + remaining + " so they cannot come back");
+        assertEquals(Set.of("Report.java"), raising,
+                "a diagnostic was raised with no code; a check reports a rule, so name the rule and"
+                        + " give it a DiagnosticCode");
     }
-
-    /** How many diagnostics are still unmapped. Lower it as they are mapped; never raise it. */
-    private static final int UNCODED_CEILING = 46;
 
     private static String spec() throws IOException {
         try (InputStream in = EveryDiagnosticCodeIsReadableTest.class.getResourceAsStream(SPEC)) {

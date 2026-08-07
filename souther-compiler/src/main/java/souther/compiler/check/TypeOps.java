@@ -589,7 +589,7 @@ public final class TypeOps {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (!assignable(arg, bound, symbols) && !assignable(bound, arg, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.generic.arg").title("check.type.mismatch.title")
+                            Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                                     .at(pos).args(what, Type.show(bound), Type.show(arg))
                                     .diff(Type.show(arg, bound), Type.show(bound, arg)).build(),
                             what + ": expected " + bound + " but got " + arg);
@@ -620,7 +620,7 @@ public final class TypeOps {
             default -> {
                 if (!assignable(arg, param, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.generic.arg").title("check.type.mismatch.title")
+                            Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                                     .at(pos).args(what, Type.show(param), Type.show(arg))
                                     .diff(Type.show(arg, param), Type.show(param, arg)).build(),
                             what + ": expected " + param + " but got " + arg);
@@ -1386,7 +1386,7 @@ public final class TypeOps {
                                 String message) {
         if (ref.arg() == null) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.typearg." + key).title("check.typearg.title")
+                    Diagnostic.of(DiagnosticCode.E1316, "check.typearg." + key)
                             .at(ref.pos(), width).build(),
                     message);
         }
@@ -1429,8 +1429,7 @@ public final class TypeOps {
         }
         Set<String> known = symbols.namesInScope();
         return CompileException.of(
-                Diagnostic.uncoded("check.unknown.type.msg")
-                        .title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.type.msg")
                         .at(written.region())
                         .args(written.quoted())
                         .suggestion(Suggest.candidate(canonical, known))

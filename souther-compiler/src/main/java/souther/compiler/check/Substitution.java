@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
@@ -94,7 +95,7 @@ final class Substitution {
         }
         Type stated = settle(declared);
         throw CompileException.of(
-                Diagnostic.uncoded("check.expects").title("check.type.mismatch.title")
+                Diagnostic.of(DiagnosticCode.E1317, "check.expects")
                         .at(pos).args(what, Type.show(stated, actual), Type.show(actual, stated))
                         .diff(Type.show(actual, stated), Type.show(stated, actual)).build(),
                 what + " expects " + Type.show(stated) + ", but got " + Type.show(actual));
@@ -293,7 +294,7 @@ final class Substitution {
             return;
         }
         throw CompileException.of(
-                Diagnostic.uncoded("check.generic.arg").title("check.type.mismatch.title")
+                Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                         .at(pos).args(what, Type.show(held, at), Type.show(at, held))
                         .diff(Type.show(at, held), Type.show(held, at)).build(),
                 what + ": expected " + Type.show(held) + " but got " + Type.show(at));

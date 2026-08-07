@@ -19,11 +19,11 @@ import java.util.List;
  * — the stable identity a tool keys on. Everything else (title, message, hints, secondary labels)
  * follows the locale.
  *
- * <p>A code is a {@link DiagnosticCode} and carries its own {@code titleKey}, so a coded diagnostic
- * has both and they cannot disagree between two sites reporting the same rule. The remaining
- * {@link #uncoded} sites are the ones not yet mapped onto a rule: they carry a title and no
- * identity, which is what makes them unreadable from a diagnostic a reader is holding, and they are
- * held to a shrinking allowlist until there are none.
+ * <p>Every diagnostic built through {@link #of} carries a {@link DiagnosticCode}, which carries its
+ * own {@code titleKey} — so a code and a title cannot disagree between two sites reporting one rule,
+ * and there is no way to build a diagnostic a reader cannot look up. What is left without one is
+ * {@link #literal}, which is not a diagnostic a check raises: it wraps a message the compiler was
+ * handed.
  */
 public record Diagnostic(Severity severity,
                          String code,
@@ -85,19 +85,11 @@ public record Diagnostic(Severity severity,
         return new Builder(code.name(), messageKey, code.titleKey());
     }
 
-    /**
-     * A builder for a diagnostic not yet mapped onto a rule, and so onto a code. It states a title
-     * and nothing a reader can look up; {@code souther doc} has no answer for one. Every remaining
-     * use is listed in the migration allowlist, and the list only shrinks.
-     */
-    public static Builder uncoded(String messageKey) {
-        return new Builder(null, messageKey, null);
-    }
 
     public static final class Builder {
         private final String code;
         private final String messageKey;
-        private String titleKey;
+        private final String titleKey;
         private Region region;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private Object[] args = new Object[0];
@@ -115,20 +107,6 @@ public record Diagnostic(Severity severity,
         /** Marks this a warning: it is reported but does not fail the build. */
         public Builder warning() {
             this.severity = Severity.WARNING;
-            return this;
-        }
-
-        /**
-         * The title-bar category, for a diagnostic not yet mapped onto a rule. A coded one takes
-         * its title from the code, so that two sites reporting one rule cannot be shown under two
-         * categories; asking for a title here would be asking for that disagreement.
-         */
-        public Builder title(String titleKey) {
-            if (code != null) {
-                throw new IllegalStateException(
-                        code + " takes its title from the code; remove the title() call");
-            }
-            this.titleKey = titleKey;
             return this;
         }
 

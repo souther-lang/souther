@@ -43,7 +43,7 @@ final class Intrinsics {
     static Type emit(BodyGen g, String key, Core.Call call) {
         Emit e = TABLE.get(key);
         if (e == null) {
-            throw new CompileException(call.pos(), "unknown intrinsic `" + key + "`");
+            throw new IllegalStateException("unknown intrinsic `" + key + "`");
         }
         return e.emit(g, key, call);
     }
@@ -163,8 +163,7 @@ final class Intrinsics {
                 // the checker admits these two and nothing else; anything here is this compiler
                 // disagreeing with itself, and emitting the Int kernel for it would answer a wrong
                 // number rather than say so
-                throw new CompileException(call.pos(),
-                        "`" + call.fn() + "` reached the backend answering " + Type.show(result)
+                throw new IllegalStateException("`" + call.fn() + "` reached the backend answering " + Type.show(result)
                                 + ", which is neither Int nor Decimal");
             }
             g.genExpr(call.args().get(0));

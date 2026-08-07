@@ -342,7 +342,7 @@ public final class Names {
             WrittenName written = ref.written();
             String name = written.canonical();
             return Report.raised(
-                    Diagnostic.uncoded("check.unknown.behavior.msg").title("check.unknown.title")
+                    Diagnostic.of(DiagnosticCode.E1023, "check.unknown.behavior.msg")
                             .at(written.region()).args(written.quoted())
                             .suggestion(Suggest.candidate(name, candidates)).build(),
                     "unknown behavior `" + written.quoted() + "` in pipeline"

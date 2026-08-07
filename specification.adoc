@@ -197,6 +197,12 @@ Two hold of the names inside it:
 
 [[a-binding-does-not-shadow-a-builtin]]A binding MUST NOT take the name of a built-in value. A binding is in force over a region and everything outside it is unaffected (<<blocks>>), which is what makes shadowing a model's own names harmless; a built-in has no declaration to read instead, so a binding over one takes it away with nothing to point at.
 
+[[a-name-is-in-scope]]A name written in an expression, a type position or a pipeline MUST be in scope there. The nearest name that is gets suggested, since a name out of scope and a name misspelled read the same.
+
+[[a-name-held-as-a-value-is-a-value]]A name held as a value MUST be one. A behavior, a module qualifier and a type are names of other things, and writing one where a value goes is naming the thing rather than a value of it.
+
+[[a-standard-library-function-is-called-qualified]]A standard-library function is called through its qualifier — `+List.map+`, not `+map+`. The qualifier is the only spelling that reaches the library (<<stdlib>>).
+
 Three things hold of a module before anything in it is read:
 
 * [[a-module-is-declared-in-one-place]]a module is declared once. Two files declaring one name, or a file declaring a module that is also on the path, leave two answers to what that name means;
@@ -484,6 +490,21 @@ An external representation may contain null, but internal data forbids null. nul
 [#builtin-types]
 == Built-in types
 
+
+[[a-value-has-the-type-its-position-requires]]A value MUST have the type its position requires — a field, a parameter, a declared return, an annotated binding, a type argument. This is the rule most others here are a special case of, and it is what a diagnostic falls back to where no narrower one applies.
+
+[[a-lists-elements-have-one-type]]A list literal's elements MUST all have one type. A list is `+List<T>+` for a single `+T+`; a sequence of several types is a list of a sum they are cases of.
+
+[[an-operator-takes-the-types-it-is-defined-for]]An operator MUST be given the types it is defined for: `+++++` joins two lists or two strings, unary minus takes an `+Int+` or a `+Decimal+`, a comparison takes two ordered values of one type, and `+==+` takes values that have something to compare — a function does not (<<equality>>).
+
+[[a-tuple-pattern-matches-its-tuple]]A tuple pattern MUST be written on a tuple, and MUST bind as many names as the tuple has elements.
+
+[[a-field-read-is-declared-by-the-value]]A field read MUST be a field the value has. A sum has no fields of its own — its cases do — and it exposes one only where every case spreads the data declaring it (<<sum-data>>); which case a value is is not known until it is opened.
+
+[[a-temporal-value-is-written-as-a-literal]]`+Date+` and `+DateTime+` are written as literals with the text spelled out (<<temporal-literal>>), so the text can be read at compile time and refused there rather than at run time.
+
+[[a-matches-pattern-is-a-literal-regular-expression]]`+String.matches+` takes a pattern that is a string literal and a valid regular expression. Both are read at compile time, which is the point of writing it out: a pattern computed at run time could not be checked at all.
+
 [#primitives]
 === Primitive types
 
@@ -552,6 +573,9 @@ The `+hashCode+` of a data containing `+Decimal+` is computed after dropping sca
 
 [#newtype-arithmetic]
 ===== Arithmetic on a newtype
+
+
+[[newtype-arithmetic-follows-the-units]]Arithmetic on newtypes MUST follow the units. Two newtypes over one base add and subtract only where they are the same newtype; a product and a quotient answer with what the units make, and where that is not a type the model declares there is nothing for the result to be. The refusal names the rule it is: which of them was broken is what an author needs, and it is not readable from the operand types alone.
 
 A single-value newtype over `+Int+` or `+Decimal+` supports `+{plus}+` and `+-+`, and the result stays in the newtype: `+Money {plus} Money+` and `+Money - Money+` are `+Money+`. The operator opens each operand to its wrapped value, computes on the base, and re-wraps the result — so the result's invariant is re-checked at construction, exactly as any other construction is (<<invariant-mvp>>). A subtraction that leaves the invariant (a non-negative `+Money+` going below zero) *aborts* inside the domain (<<violation-destination>>). To make that a business result, guard it with `+guard ... else+` (<<guard>>); the compiler then confirms the guard discharges the construction (<<invariant-discharge>>).
 
@@ -959,6 +983,10 @@ A value constraint written as a comment in the spec DSL is made executable as an
 [[invariant-expression-is-bool]]An invariant clause states a condition, so its expression MUST have type `+Bool+`.
 
 [[invariant-needs-a-value-to-constrain]]A type an invariant is declared on MUST have a value for it to observe. A unit data has one value and no field, so there is nothing for a clause to read and nothing it could reject.
+
+[[an-invariant-observes-and-does-not-build]]An invariant observes the value being built and MUST NOT build one. A construction inside it would run the built type's own check inside this one, and the answer to whether this value holds would depend on whether another one did.
+
+[[an-invariant-answers-on-every-path]]An invariant MUST answer on every path through it. It is checked on every construction and at every boundary (<<invariant-mvp>>), so it may not reach an `+unreachable+` and may not reach a `+partial+` helper, which publishes no termination guarantee (<<fn-rules>>).
 
 [,text]
 ----
@@ -2726,7 +2754,7 @@ Four more hold of the arms themselves:
 * [[a-match-arm-names-a-case-of-the-subject]]an arm MUST name a case of that sum;
 * [[no-two-arms-match-one-case]]no two arms may match one case, a second one for it being unreachable.
 
-[[match-arms-agree-on-a-type]]The arms MUST agree on a type: the `+match+` answers with one value, so what the arms produce is one thing.
+[[branches-agree-on-a-type]]The arms MUST agree on a type: a `+match+` answers with one value, so what its arms produce is one thing. The same holds of an `+if+`, whose two branches are arms of the same kind.
 
 [[a-pattern-opens-what-the-value-is]]A pattern that opens a value with `+(...)+` MUST be opening something that has one to open, and the type it names MUST be what is inside — a newtype's wrapped value, an optional's payload. This holds wherever the pattern is written, in a `+match+` arm or in a binding (<<binding-patterns>>).
 
@@ -3769,6 +3797,36 @@ Value `ceiling` reaches itself: ceiling -> limit -> ceiling.
 
 Reported wherever the cycle closes (<<a-value-does-not-reach-itself>>). A value with no parameter list is substituted where it is named, so a cycle among them has nothing to substitute first.
 
+[#e1023]
+=== A name is not in scope
+
+[,text]
+----
+I cannot find a value named `estimatdCost` in scope.
+----
+
+Reported at the name (<<a-name-is-in-scope>>), with the nearest name in scope suggested. A value, a type and a behavior each say which of the three was being looked for, because that is what narrows where to look.
+
+[#e1024]
+=== A name is held as a value and is not one
+
+[,text]
+----
+`submit` is a behavior, and cannot be held as a value here.
+----
+
+Reported at the name (<<a-name-held-as-a-value-is-a-value>>). A behavior, a module qualifier and a type are names of other things; writing one where a value goes names the thing rather than a value of it.
+
+[#e1025]
+=== A standard-library function is written bare
+
+[,text]
+----
+`map` is a standard-library function and must be called qualified, as `List.map`.
+----
+
+Reported at the name (<<a-standard-library-function-is-called-qualified>>). The qualifier is what reaches the library, and it is also what tells `+List.length+` from `+String.length+`.
+
 [#e1101]
 === Invariant type mismatch
 
@@ -3810,6 +3868,28 @@ answered by `| _ -> ...`.
 ----
 
 Reported where a clause is written `+invariant _ = …+` (<<invariant-clause-name-is-not-underscore>>). `+| _ -> …+` answers the clauses carrying no name, so a clause holding that name as its own could never be the one it answered.
+
+[#e1105]
+=== An invariant constructs a data
+
+[,text]
+----
+The invariant of `QuoteLines` constructs `Line`, but an invariant may not construct a data — it
+observes the value being built, it does not build one.
+----
+
+Reported at the construction (<<an-invariant-observes-and-does-not-build>>), naming the clause it is written in or reached from. Building inside a check would run that type's own check inside this one, so whether this value holds would depend on whether another one did.
+
+[#e1106]
+=== An invariant does not answer on every path
+
+[,text]
+----
+The invariant of `Amount` reaches the `partial` helper `spin`, which carries no termination
+guarantee; an invariant is checked on every construction.
+----
+
+Reported at the clause (<<an-invariant-answers-on-every-path>>). An invariant runs at every construction and at every boundary, so a path through it that answers nothing — an `+unreachable+`, or a `+partial+` helper that may not stop — is a check that may not come back.
 
 [#e1201]
 === Non-exhaustive match
@@ -4027,6 +4107,89 @@ Reported at the collection (<<a-collection-member-supports-equality>>). A `+Set+
 ----
 
 Reported at the type (<<a-generic-type-is-given-its-arguments>>). The bare qualifier names the module whose functions reach the collection (<<stdlib>>), which is why writing it where a type goes is not a shorthand for anything.
+
+[#e1317]
+=== A value does not have the type its position requires
+
+[,text]
+----
+Field `estimatedCost` expects Amount, but got Int.
+----
+
+Reported at the value (<<a-value-has-the-type-its-position-requires>>). The rule most of the others in this range are a special case of, and what a diagnostic says where no narrower one applies: a field, a parameter, a declared return, an annotated binding, a type argument.
+
+[#e1318]
+=== A list's elements do not all have one type
+
+[,text]
+----
+The elements of this list do not all have the same type.
+Hint: One element is Amount and another is Int; make every element the same type.
+----
+
+Reported at the list (<<a-lists-elements-have-one-type>>). A list is `+List<T>+` for a single `+T+`; a sequence of several types is a list of a sum they are cases of.
+
+[#e1319]
+=== An operator is given types it is not defined for
+
+[,text]
+----
+`++` joins two lists or two strings, but the operands are Int and String.
+----
+
+Reported at the operator or at the operand it is about (<<an-operator-takes-the-types-it-is-defined-for>>) — at the operator where the rule is about the pair, as comparing two unrelated types is.
+
+[#e1320]
+=== A tuple pattern does not match its tuple
+
+[,text]
+----
+This pattern binds 2 name(s), but the tuple has 3 element(s).
+----
+
+Reported at the pattern (<<a-tuple-pattern-matches-its-tuple>>).
+
+[#e1321]
+=== A field is read off a value that does not have it
+
+[,text]
+----
+I cannot read a field `submittedAt` on `TravelRequest`: a sum has no fields of its own, its cases
+do, and which case this is is not known until it is opened.
+----
+
+Reported at the read (<<a-field-read-is-declared-by-the-value>>). A sum exposes a field only where every case spreads the data declaring it (<<sum-data>>), so the message says which of the two it is: no case has the field, or each case declares its own and nothing is shared.
+
+[#e1322]
+=== A temporal value is not written as a literal
+
+[,text]
+----
+`2026-13-01` is not a Date. Write `Date("2026-07-01")` / `DateTime("2026-07-01T09:00")`.
+----
+
+Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text is spelled out so it can be read at compile time, which is what lets a malformed one be refused here instead of at run time.
+
+[#e1323]
+=== A `String.matches` pattern is not a literal regular expression
+
+[,text]
+----
+The pattern of `String.matches` must evaluate to a string at compile time, so it can be validated
+there: write a string literal.
+----
+
+Reported at the pattern (<<a-matches-pattern-is-a-literal-regular-expression>>). A pattern computed at run time could not be checked at all, so writing it out is what makes the check possible; the same code says when what was written is not a valid expression.
+
+[#e1324]
+=== Newtype arithmetic does not follow the units
+
+[,text]
+----
+`Amount` and `Rate` are newtypes over Int, and adding them would answer with neither.
+----
+
+Reported at the operator (<<newtype-arithmetic-follows-the-units>>). Which rule was broken — same-newtype addition, a product's units, a quotient's, a scalar, a reciprocal — is what an author needs and is not readable from the operand types, so the refusal names its own rule rather than reporting a type mismatch.
 
 [#e1401]
 === Arbitrary Java calls

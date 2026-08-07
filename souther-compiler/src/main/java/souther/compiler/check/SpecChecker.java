@@ -318,7 +318,7 @@ public final class SpecChecker {
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.behavior.return").title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1317, "check.behavior.return")
                             .at(body.pos()).args(spec.name(), Type.show(output), Type.show(rt))
                             .diff(Type.show(rt, output), Type.show(output, rt)).build(),
                     "behavior `" + spec.name() + "` returns " + output + " but its `let` body is " + rt);

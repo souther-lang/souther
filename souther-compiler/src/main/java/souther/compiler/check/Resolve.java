@@ -907,7 +907,7 @@ public final class Resolve {
             return null;
         }
         return CompileException.of(
-                Diagnostic.uncoded("check.stdlib.notfunction").title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
                         .at(written.region()).args(written.quoted()).build(),
                 "`" + written.quoted() + "` is not a standard-library function.");
     }
@@ -925,7 +925,7 @@ public final class Resolve {
         }
         List<String> candidates = reachable(bound);
         return CompileException.of(
-                Diagnostic.uncoded("check.unknown.name.msg").title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                         .at(written.region()).args(written.quoted())
                         .suggestion(Suggest.candidate(name, candidates)).build(),
                 "unknown identifier `" + written.quoted() + "`" + Suggest.hint(name, candidates));
@@ -944,7 +944,7 @@ public final class Resolve {
         String qualified = Prelude.qualifiedFor(name);
         if (qualified != null) {
             return CompileException.of(
-                    Diagnostic.uncoded("check.stdlib.qualified.msg").title("check.unknown.title")
+                    Diagnostic.of(DiagnosticCode.E1025, "check.stdlib.qualified.msg")
                             .at(written.region()).args(written.quoted(), qualified)
                             .build(),
                     "`" + written.quoted() + "` is a standard-library function and must be called"

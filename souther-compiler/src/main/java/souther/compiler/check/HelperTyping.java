@@ -187,7 +187,7 @@ public final class HelperTyping {
             HelperParams.OpenUse left = openUses.get(idx);
             boolean field = left != null && left.readAField();
             String key = field ? "check.helper.infer.field" : "check.helper.infer";
-            Diagnostic.Builder d = Diagnostic.uncoded(key).title("check.helper.title")
+            Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1811, key)
                     .at(p.written().region()).args(h.name(), p.name());
             if (left != null) {
                 d.secondary(Region.ofWidth(left.use().pos(), Elaborator.width(left.use())),
@@ -269,7 +269,7 @@ public final class HelperTyping {
         String rendered = "invariant -> " + PartialReachability.render(path);
         Ast.Apply at = firstCallTo(e, path.get(0));
         throw CompileException.of(
-                Diagnostic.uncoded("check.invariant.partial").title("check.invariant.invalid.title")
+                Diagnostic.of(DiagnosticCode.E1106, "check.invariant.partial")
                         .at(at == null ? null : at.name().region()).args(data, reached, rendered).build(),
                 "the invariant of `" + data + "` reaches the `partial` helper `" + reached
                         + "` (" + rendered + "), which carries no termination guarantee; an invariant is"
@@ -310,8 +310,9 @@ public final class HelperTyping {
             String constructed = nd.typeName().written();
             String named = clause.name().orElse(null);
             Diagnostic.Builder b = Diagnostic
-                    .uncoded(named == null ? "check.invariant.construct" : "check.invariant.construct.named")
-                    .title("check.invariant.invalid.title")
+                    .of(DiagnosticCode.E1105,
+                            named == null ? "check.invariant.construct"
+                                    : "check.invariant.construct.named")
                     .at(nd.pos(), constructed.length())
                     .args(data, constructed, named);
             if (nd.pos().line() != clause.pos().line()) {
@@ -341,8 +342,7 @@ public final class HelperTyping {
         if (e instanceof Ast.Unreachable u) {
             String named = clause.name().orElse(null);
             throw CompileException.of(
-                    Diagnostic.uncoded("check.invariant.unreachable")
-                            .title("check.invariant.invalid.title")
+                    Diagnostic.of(DiagnosticCode.E1106, "check.invariant.unreachable")
                             .at(u.pos(), "unreachable".length())
                             .args(data, named).build(),
                     "the invariant " + (named == null ? "" : "`" + named + "` ") + "of `" + data

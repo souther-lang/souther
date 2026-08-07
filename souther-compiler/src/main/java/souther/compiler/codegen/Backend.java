@@ -887,7 +887,7 @@ public final class Backend {
             if (collidesWith != null) {
                 String other = localTypes.contains(bridge) ? bridge : behaviorClassOwner.get(bridge);
                 throw CompileException.of(
-                        Diagnostic.uncoded(collidesWith).title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E2105, collidesWith)
                                 .at(pos).args(what, member.name(), bridge, other)
                                 .hint("check.bridge.collision.hint", bridge).build(),
                         "the output of `" + what + "` has the member `" + member.name() + "`, which"
