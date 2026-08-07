@@ -198,18 +198,28 @@ public final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     private void walk(Core e, Known k, Denotations at, int depth) {
-        Core.If value = conditionalValueIn(e);
-        if (value != null && depth < BRANCHES_OPENED) {
+        ConditionalSite site = conditionalValueIn(e);
+        if (site != null && depth < BRANCHES_OPENED) {
             // A conditional in a value position is one of its two branches, and which one is decided
             // by its condition. So this is read once with each standing there, under that condition,
             // and what the two readings find is said once. Every place a conditional can be given —
             // to a field, to a name, to a guard — is this one place.
+            Core.If value = site.conditional();
             walk(value.cond(), k, at, depth);
-            Set<Core> alike = sameConditional(e, value, at);
+            // The condition is read where it stands, which is inside every binding on the way down to
+            // it, and not at the outer place the reading is decided on. Read at the outer place it
+            // names bindings nothing has entered, and a condition over those settles nothing — the
+            // two readings would come out alike and the conditional would decide nothing.
+            Entered inside = scopeOf(site, k, at);
+            Known within = inside.known();
+            Denotations there = inside.at();
+            Set<Core> alike = sameConditional(e, value, there);
+            // The readings take the outer environment, not this one: the tree each is given still
+            // holds those bindings, and walking it enters them again on the way in.
             say(reading(without(e, alike, value.then()),
-                            predicates.assumeCond(value.cond(), k, at, true), at, depth),
+                            predicates.assumeCond(value.cond(), within, there, true), at, depth),
                     reading(without(e, alike, value.els()),
-                            predicates.assumeCond(value.cond(), k, at, false), at, depth));
+                            predicates.assumeCond(value.cond(), within, there, false), at, depth));
             return;
         }
         checkIfConstruction(e, k, at, false);
@@ -244,24 +254,8 @@ public final class InvariantChecker {
                 if (!(li.value() instanceof Core.Block)) {
                     walk(li.value(), k, at, depth);
                 }
-                // The name is an alias for what its initializer denotes, so what is recorded about it
-                // is recorded under that denotation and not under the binding. Recording it under the
-                // binding is what made a named subexpression a term of its own, answering differently
-                // from the very expression it was given.
-                Denotes what = terms.denotationOf(li.value(), at, k);
-                Known k2 = k;
-                // A binding that denotes what it was given is an alias and introduces no value, so
-                // there is nothing to record of it: what holds of what it names already holds.
-                // Recording it anyway assigns that name its own form, and an assignment drops what
-                // was known of what it assigns to — the bound on it would be lost to the copy. A
-                // location is always this; a term is where the form is that term's own atom.
-                if (what instanceof Denotes.Term term && terms.isNumeric(li.value().type())) {
-                    LinearForm vf = terms.affineOf(li.value(), at, k);
-                    if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
-                        k2 = k2.assigning(term.key(), vf);
-                    }
-                }
-                walk(li.body(), k2, at.binding(li.binder().id(), li.value(), what), depth);
+                Entered in = bindLet(li, k, at);
+                walk(li.body(), in.known(), in.at(), depth);
             }
             case Core.Match m -> {
                 walk(m.scrutinee(), k, at, depth);
@@ -600,12 +594,36 @@ public final class InvariantChecker {
     }
 
     /**
+     * A conditional a value is handed, and the bindings in scope where it stands. The two go
+     * together: a node is found by searching down from the outside, and what it means is settled by
+     * where it was found, so a search that answered with the node alone would leave the reading to
+     * work the scope out again — which is what it got wrong.
+     *
+     * <p>Only the bindings a {@code let} writes are carried. A value a {@code match} arm or an
+     * attempted construction binds is not one a construction site can be read against, so a
+     * construction over one says nothing whatever is in scope for it; those binders are on no path
+     * this can reach. That is a fact about which construction sites are representable, not about
+     * which binders exist — should that boundary move, this has to widen with it.
+     */
+    private record ConditionalSite(Core.If conditional, List<Core.LetIn> scope) {
+
+        /** The same site, read from outside {@code li} — so {@code li} is the outermost of what it is
+         * inside. */
+        ConditionalSite under(Core.LetIn li) {
+            List<Core.LetIn> outer = new ArrayList<>();
+            outer.add(li);
+            outer.addAll(scope);
+            return new ConditionalSite(conditional, List.copyOf(outer));
+        }
+    }
+
+    /**
      * The first conditional {@code e} gives a value to, or {@code null} where it gives none. A
      * conditional in tail position — an {@code if}'s own branches, a {@code let}'s body, a case's
      * body — is where the walk goes next rather than a value it is handed, and a closure's body is
      * read where the closure is applied.
      */
-    private static Core.If conditionalValueIn(Core e) {
+    private static ConditionalSite conditionalValueIn(Core e) {
         return switch (e) {
             // Where the walk goes next is not a value it is handed: an `if`'s own branches, a `let`'s
             // body and a case's body are read after this, each with what is known there.
@@ -617,17 +635,27 @@ public final class InvariantChecker {
         };
     }
 
-    /** The first conditional inside a value. Everything under one is part of it, including the body
-     * of a binding an expansion introduced — {@code let $0 = r in if $0.a > b then ...} is a helper
-     * called on an argument, which is one value however many bindings writing it took. */
-    private static Core.If conditionalIn(Core e) {
+    /** The first conditional inside a value, with what it is inside. Everything under one is part of
+     * it, including the body of a binding an expansion introduced — {@code let $0 = r in if $0.a > b
+     * then ...} is a helper called on an argument, which is one value however many bindings writing
+     * it took. Those bindings are what the conditional is read in the scope of; a binding is not in
+     * scope for the value it is itself given, so a conditional found there is inside nothing. */
+    private static ConditionalSite conditionalIn(Core e) {
         if (e instanceof Core.If iff) {
-            return iff;
+            return new ConditionalSite(iff, List.of());
         }
         if (e instanceof Core.Block) {
             return null;   // read where the closure is applied
         }
-        Core.If[] found = {null};
+        if (e instanceof Core.LetIn li) {
+            ConditionalSite given = conditionalIn(li.value());
+            if (given != null) {
+                return given;
+            }
+            ConditionalSite inside = conditionalIn(li.body());
+            return inside == null ? null : inside.under(li);
+        }
+        ConditionalSite[] found = {null};
         Core.forEachChild(e, child -> {
             if (found[0] == null) {
                 found[0] = conditionalIn(child);
@@ -664,9 +692,16 @@ public final class InvariantChecker {
         return made;
     }
 
-    /** Every conditional in {@code e} that computes what {@code value} computes, {@code value}
+    /**
+     * Every conditional in {@code e} that computes what {@code value} computes, {@code value}
      * included. Asked once for the two readings, since which nodes those are does not depend on which
-     * branch is being read. */
+     * branch is being read.
+     *
+     * <p>{@code at} is where {@code value} stands, which is what keying it needs. A candidate
+     * elsewhere in {@code e} is keyed there too rather than in its own scope, so two conditionals
+     * that compute the same value under different bindings are read as two — which is the thing this
+     * exists to prevent, still unanswered for that shape.
+     */
     private Set<Core> sameConditional(Core e, Core.If value, Denotations at) {
         Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
         alike.add(value);
@@ -728,6 +763,46 @@ public final class InvariantChecker {
      * be named without being seeded.
      */
     private record Entered(Known known, Denotations at) {}
+
+    /**
+     * The environment a binding's body is read in. Both places a body is read reach it through here:
+     * the walk on its way into one, and a conditional hoisted out of one. The bug this answers came
+     * from those two working the scope rule out separately, so there is one of it.
+     *
+     * <p>The initializer is not read here. The walk reads it before it gets here, and a hoisted
+     * conditional was found past it.
+     *
+     * <p>The name is an alias for what its initializer denotes, so what is recorded about it is
+     * recorded under that denotation and not under the binding. Recording it under the binding is
+     * what made a named subexpression a term of its own, answering differently from the very
+     * expression it was given.
+     */
+    private Entered bindLet(Core.LetIn li, Known k, Denotations at) {
+        Denotes what = terms.denotationOf(li.value(), at, k);
+        Known out = k;
+        // A binding that denotes what it was given is an alias and introduces no value, so there is
+        // nothing to record of it: what holds of what it names already holds. Recording it anyway
+        // assigns that name its own form, and an assignment drops what was known of what it assigns
+        // to — the bound on it would be lost to the copy. A location is always this; a term is where
+        // the form is that term's own atom.
+        if (what instanceof Denotes.Term term && terms.isNumeric(li.value().type())) {
+            LinearForm vf = terms.affineOf(li.value(), at, k);
+            if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
+                out = out.assigning(term.key(), vf);
+            }
+        }
+        return new Entered(out, at.binding(li.binder().id(), li.value(), what));
+    }
+
+    /** Where {@code site}'s conditional stands: {@code k} and {@code at} with every binding it is
+     * inside entered, outermost first. */
+    private Entered scopeOf(ConditionalSite site, Known k, Denotations at) {
+        Entered in = new Entered(k, at);
+        for (Core.LetIn li : site.scope()) {
+            in = bindLet(li, in.known(), in.at());
+        }
+        return in;
+    }
 
     /**
      * Introduces {@code root} as a location: somewhere nothing else names, holding a value of its
