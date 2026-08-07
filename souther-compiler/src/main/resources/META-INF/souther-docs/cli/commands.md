@@ -127,9 +127,13 @@ for.
 
 A long answer arrives in parts. Every tool hands back as much as one answer carries — at most
 16,000 characters, the line saying how to carry on included — and ends with how much is left and
-the call that reaches it; send that `cursor` back with the same arguments. How much arrives at once
-is a question about this wire rather than about any one answer on it, so the argument is on every
-tool and not only the ones expected to be long.
+the `cursor` that reaches it; ask the same tool again with the same arguments and that `cursor`.
+How much arrives at once is a question about this wire rather than about any one answer on it, so
+the argument is on every tool and not only the ones expected to be long.
+
+That line names the cursor and not the call, because the call is the caller's. Written back out, a
+caller's own arguments would be inside an answer whose size this server is promising to bound, and
+arguments can be longer than the bound.
 
 A part stops where the document says to: a heading, failing that a blank line, failing that the end
 of a line. A line or a code block longer than one answer carries has no such place in it, and is

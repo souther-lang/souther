@@ -34,8 +34,13 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /** What a part that is not the last one ends with, and the cursor that carries it on. */
-    private static final Pattern CARRIES_ON = Pattern.compile(
-            "(?s)^(.*)\n… (\\d+) more characters; `doc_read (\\{.*?})` for what follows\n$");
+    private static final Pattern CARRIES_ON = carriesOn("doc_read");
+
+    /** The same, for whichever tool was asked. */
+    private static Pattern carriesOn(String tool) {
+        return Pattern.compile("(?s)^(.*)\n… (\\d+) more characters; ask `" + tool + "` again with"
+                + " the same arguments and `cursor: \"([A-Za-z0-9_-]+)\"` for what follows\n$");
+    }
 
     /** A name whose answer is the longest there is, and one whose answer is ordinary. */
     private static final String LONG = "compile-errors";
@@ -63,23 +68,38 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     }
 
     /** Follows a call to the end, holding every answer against the count. Answers how many. */
-    private int counted(String tool, String arguments) {
+    private int counted(String tool, String base) {
         int parts = 0;
+        String arguments = base;
         while (true) {
             String said = text(called(tool, arguments).get("result"));
             parts++;
             assertTrue(said.length() <= Continuation.MOST,
                     tool + " answered with " + said.length() + " characters — the line that carries"
                             + " a part on is part of the answer and comes out of the count");
-            Matcher carriesOn = Pattern.compile(
-                    "(?s)^.*\n… \\d+ more characters; `" + tool + " (\\{.*?})` for what follows\n$")
-                    .matcher(said);
+            Matcher carriesOn = carriesOn(tool).matcher(said);
             if (!carriesOn.matches()) {
                 return parts;
             }
-            arguments = carriesOn.group(1).replaceAll("(\\w+):", "\"$1\":");
+            arguments = withCursor(base, carriesOn.group(3));
             assertTrue(parts < 100, "the walk is not advancing");
         }
+    }
+
+    /** The call that was made, made again with the cursor that carries it on. */
+    private String withCursor(String arguments, String cursor) {
+        return arguments.substring(0, arguments.length() - 1)
+                + (arguments.length() > 2 ? "," : "") + "\"cursor\":\"" + cursor + "\"}";
+    }
+
+    @Test
+    void aCallerCannotWriteItsOwnArgumentsIntoAnAnswerAndPushItPastTheCount() {
+        // The caller's arguments are the caller's, and there is no length a schema can name that
+        // makes them safe to put inside an answer this server is promising to bound. What carries
+        // an answer on names only what this server issued.
+        int parts = counted("doc_search", "{\"term\":\"" + "x".repeat(20_000) + "\",\"limit\":0}");
+
+        assertTrue(parts > 1, "a term longer than the count is answered in parts like anything else");
     }
 
     @Test
@@ -185,8 +205,7 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     void aCursorMeasuredAgainstAnotherAnswerIsRefusedRatherThanResumedAt() {
         Matcher first = CARRIES_ON.matcher(text(call("{\"name\":\"" + LONG + "\"}")));
         assertTrue(first.matches());
-        String elsewhere = JSON.readTree(first.group(3).replace("name:", "\"name\":")
-                .replace("cursor:", "\"cursor\":")).get("cursor").asString();
+        String elsewhere = first.group(3);
 
         JsonNode answer = called("{\"name\":\"stdlib\",\"cursor\":\"" + elsewhere + "\"}");
 
@@ -225,8 +244,7 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
             assertEquals(Integer.parseInt(carriesOn.group(2)),
                     printed(name).length() - String.join("", parts).length(),
                     "a part says how much of the document is still to come");
-            arguments = carriesOn.group(3).replace("name:", "\"name\":")
-                    .replace("cursor:", "\"cursor\":");
+            arguments = withCursor("{\"name\":\"" + name + "\"}", carriesOn.group(3));
             assertTrue(parts.size() < 100, "the walk is not advancing");
         }
     }

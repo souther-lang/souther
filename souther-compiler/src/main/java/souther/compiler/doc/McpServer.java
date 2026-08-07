@@ -481,34 +481,28 @@ public final class McpServer {
         // of the count before the text is cut and not after. What it will say is not known until
         // the cut is made, so what is set aside is the longest it could be: a cursor of the length
         // this server issues, and a count of every character there could be.
-        int reserve = carriesOn(tool, arguments, "x".repeat(64), Integer.MAX_VALUE).length();
+        int reserve = carriesOn(tool, "x".repeat(64), Integer.MAX_VALUE).length();
         Continuation.Part part = Continuation.of(said, cursor == null ? null : cursor.asString(),
-                Math.max(1, Continuation.MOST - reserve));
+                Continuation.MOST - reserve);
         if (part.cursor() == null) {
             return part.text();
         }
-        return part.text() + carriesOn(tool, arguments, part.cursor(), part.remaining());
+        return part.text() + carriesOn(tool, part.cursor(), part.remaining());
     }
 
-    /** What a part that is not the last one ends with. */
-    private static String carriesOn(Tool tool, JsonNode arguments, String cursor, int remaining) {
-        return "\n… " + remaining + " more characters; `" + tool.name() + " "
-                + askedAgain(tool, arguments, cursor) + "` for what follows\n";
-    }
-
-    /** The arguments this call was made with, and the cursor that carries it on. */
-    private static String askedAgain(Tool tool, JsonNode arguments, String cursor) {
-        StringBuilder written = new StringBuilder("{");
-        for (Param param : tool.params()) {
-            JsonNode value = arguments == null || param.name().equals("cursor")
-                    ? null : arguments.get(param.name());
-            if (value != null) {
-                written.append(written.length() > 1 ? ", " : "")
-                        .append(param.name()).append(": ").append(JSON.writeValueAsString(value));
-            }
-        }
-        return written.append(written.length() > 1 ? ", " : "")
-                .append("cursor: \"").append(cursor).append("\"}").toString();
+    /**
+     * What a part that is not the last one ends with.
+     *
+     * <p>It names the operation and the cursor, and says the rest of the call is the one the caller
+     * just made. Writing that call back out instead would put the caller's own arguments inside an
+     * answer whose size this server is promising to bound, and a caller can send arguments longer
+     * than the bound: an answer would then be cut to nothing and the line saying so would run past
+     * the count on its own. What is echoed here is this server's, and its length is this server's
+     * to know.
+     */
+    private static String carriesOn(Tool tool, String cursor, int remaining) {
+        return "\n… " + remaining + " more characters; ask `" + tool.name() + "` again with the same"
+                + " arguments and `cursor: \"" + cursor + "\"` for what follows\n";
     }
 
     private static ObjectNode failed(String said) {
