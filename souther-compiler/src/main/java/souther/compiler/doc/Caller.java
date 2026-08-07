@@ -14,6 +14,12 @@ package souther.compiler.doc;
  * <p>These are the offers a command composes. A document that sends its reader somewhere writes
  * the same kind of offer in its own text, as an {@link Affordance}, and this is what picks its
  * spelling too.
+ *
+ * <p>How to ask for something is the whole of what varies here. Which documents there are, and
+ * which names a listing gives, are the same over every wire: a caller with no way to invoke a
+ * command still gets the manual for it, with whatever that manual sends its reader to spelled as a
+ * call that caller can make. Holding a topic back from one listing would answer a reader who has no
+ * other map with a smaller world rather than with a spelling of its own.
  */
 enum Caller {
 

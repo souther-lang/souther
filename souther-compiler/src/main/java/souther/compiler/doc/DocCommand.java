@@ -44,13 +44,8 @@ public final class DocCommand {
                 out.println(s.anchor() + "\t" + "  ".repeat(s.level() - 2) + s.title());
             }
             for (LibraryDocs.Topic topic : shipped.topics()) {
-                // The listing is the map a caller navigates by, so it names what this one can use.
-                // A topic left out of it is still read by name, which is how a reader who is asking
-                // about the toolchain rather than about their next step still arrives at it.
-                if (topic.listedFor(caller)) {
-                    out.println(topic.name() + "\t"
-                            + "  ".repeat(Math.max(0, topic.depth() - 1)) + topic.title());
-                }
+                out.println(topic.name() + "\t"
+                        + "  ".repeat(Math.max(0, topic.depth() - 1)) + topic.title());
             }
             return 0;
         }

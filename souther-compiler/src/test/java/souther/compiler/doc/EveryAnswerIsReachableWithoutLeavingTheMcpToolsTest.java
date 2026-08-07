@@ -9,6 +9,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -22,34 +27,63 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>These tests ask for each answer the way a client would have to, over the protocol, and hold
  * it against what the same command prints at a prompt.
+ *
+ * <p>The two differ in how an operation is asked for and in nothing else. Which documents there
+ * are, and which names a listing gives, are the same over both wires: a caller that cannot invoke
+ * a command still gets the manual for it, with whatever that manual sends the reader to spelled as
+ * a call this caller can make. A name held back from one listing would be a hole in the only map a
+ * client has, and a name it cannot see is content that does not exist for it.
  */
 class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** A document sending a client to one name: {@code `doc_read {name: "sum-discrimination"}`}. */
+    private static final Pattern SENT_TO = Pattern.compile("`doc_read \\{name: \"([^\"]+)\"}`");
+
     @Test
-    void aClientThatKnowsNoNameIsGivenEveryNameItCanUse() {
+    void aClientThatKnowsNoNameIsGivenEveryNameThereIs() {
         String listing = text(call("doc_read", "{}"));
 
+        assertEquals(printed(new String[]{}), listing,
+                "the listing a reader gets for no argument is the listing a client gets for no name");
         assertTrue(listing.lines().count() > 300, "every section and every shipped topic, not a page of them");
         assertTrue(listing.contains("cli/start-here"),
                 "including the topic written for a reader who has never written Souther");
-
-        List<String> onlyAtAPrompt = printed(new String[]{}).lines()
-                .filter(line -> !listing.contains(line)).toList();
-        assertEquals(List.of("cli/run\tRunning a behavior: `souther run`"), onlyAtAPrompt,
-                "the listing is this caller's map, and what it leaves out is a manual for a"
-                        + " command this caller has no way to invoke");
     }
 
+    /**
+     * A client that starts at the listing and follows what it reads has to stay inside the set the
+     * listing named. A document pointing out of it is an answer reachable only by a reader who was
+     * already holding the document that points there, which is not the reader this listing is for.
+     */
     @Test
-    void aTopicTheListingLeavesOutIsStillReadByName() {
-        JsonNode answer = call("doc_read", "{\"name\":\"cli/run\"}");
+    void everyNameADocumentSendsThisClientToIsOnTheListingItStartedFrom() {
+        Set<String> listed = new TreeSet<>();
+        text(call("doc_read", "{}")).lines()
+                .forEach(line -> listed.add(DocName.canonical(line.substring(0, line.indexOf('\t')))));
 
-        assertFalse(answer.get("isError").asBoolean(),
-                "not being on the map is not being unreachable — what the toolchain is stays"
-                        + " worth knowing to a client that asks about it");
-        assertTrue(text(answer).contains("--behavior"), text(answer));
+        Set<String> sentTo = new TreeSet<>();
+        LibraryDocs docs = LibraryDocs.on(getClass().getClassLoader(), Caller.MCP);
+        docs.topics().forEach(topic -> namesIn(docs.read(topic.name()), sentTo));
+        SpecDocument.bundled(Caller.MCP).sections()
+                .forEach(section -> namesIn(section.body(), sentTo));
+
+        assertFalse(sentTo.isEmpty(), "there are names to follow, so this is not passing on silence");
+        assertEquals(Set.of(),
+                sentTo.stream().filter(name -> !listed.contains(DocName.canonical(name)))
+                        .collect(Collectors.toCollection(TreeSet::new)),
+                "a document sends this client to these and the listing it starts from does not name them");
+    }
+
+    /** The names {@code text} sends a client to, leaving out one standing in for a name it supplies. */
+    private void namesIn(String text, Set<String> found) {
+        Matcher sent = SENT_TO.matcher(text);
+        while (sent.find()) {
+            if (!sent.group(1).contains("<")) {
+                found.add(sent.group(1));
+            }
+        }
     }
 
     @Test
