@@ -148,7 +148,7 @@ class EveryDiagnosticCodeIsReadableTest {
     @Test
     void nothingRaisesADiagnosticWithoutACode() throws IOException {
         List<String> raising = new ArrayList<>();
-        for (java.nio.file.Path source : MessageCatalogFormatTest.mainSources()) {
+        for (java.nio.file.Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
             String text = java.nio.file.Files.readString(source, StandardCharsets.UTF_8);
             Matcher m = Pattern.compile("Diagnostic\\.literal\\(").matcher(text);
             while (m.find()) {
@@ -181,7 +181,7 @@ class EveryDiagnosticCodeIsReadableTest {
     void everyCodeIsNamedByCompilerSource() throws IOException {
         Set<String> referenced = new TreeSet<>();
         Pattern named = Pattern.compile("DiagnosticCode\\.(E[0-9]{4})");
-        for (java.nio.file.Path source : MessageCatalogFormatTest.mainSources()) {
+        for (java.nio.file.Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
             if (source.getFileName().toString().equals("DiagnosticCode.java")) {
                 continue;   // the declaration is not a use
             }
@@ -217,7 +217,7 @@ class EveryDiagnosticCodeIsReadableTest {
         Pattern emission = Pattern.compile(
                 "DiagnosticCode\\.(E[0-9]{4})\\s*,\\s*\\n?\\s*(?:[^;]{0,160}?)\"(e([0-9]{4})\\.[a-z.]+)\"");
         List<String> disagreeing = new ArrayList<>();
-        for (java.nio.file.Path source : MessageCatalogFormatTest.mainSources()) {
+        for (java.nio.file.Path source : EveryShippedMessageCatalogIsCompleteAndValidTest.mainSources()) {
             Matcher m = emission.matcher(
                     java.nio.file.Files.readString(source, StandardCharsets.UTF_8));
             while (m.find()) {

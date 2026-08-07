@@ -18,22 +18,45 @@ cannot be evidence about the reader, because most values of it select an answer 
 it to read.
 
 The rule this leaves is about the default and only the default: when nothing names a language, a
-diagnostic is answered in the language the shipped documentation is written in. It is not the
-stronger rule that every answer is in a documented language, and the code does not hold that one.
-`resolveLocale` takes whatever language tag it is handed, `--lang ja` answers out of a catalog with
-no Japanese documents behind it, and nothing checks a catalog's language against the documents.
-So a `messages_fr.properties` added beside English-only documents, reached by `SOUTHER_LANG=fr`,
-would put French diagnostics and English documents back in the same session. Constraining which
-catalogs may exist is a separate mechanism — a build-time check that the languages the catalogs
-offer are ones the documentation is written in — and is not part of this revision.
+diagnostic is answered in the language the shipped documentation is written in. Naming one is a
+different act, and there are three sources of a language, not one.
 
-`messages_ja.properties` stays and `--lang ja` still answers out of it. A reader who names a
-language has said which one they read, which is a different claim from a machine having a locale;
-what no longer answers is the second. Readers who were being served Japanese by default keep it with
-`SOUTHER_LANG=ja` in a shell profile.
+- Nothing names one — English, because that is the language the shipped core documentation is
+  written in.
+- Something names one: `--lang`, `SOUTHER_LANG`, or an adapter's own option — that language,
+  whether or not documentation exists in it.
+- The machine's locale — never, at any entry point.
 
-Amending in place rather than superseding: what changed is a default and the reason for it, not the
-shape of the decision — diagnostics are still data rendered by a locale-aware layer, and the code
+`SOUTHER_LANG` belongs to the second and not the third. It is Souther's own variable, not `LANG`:
+nothing has a value for it until somebody writes one, so a session answered in French is a session
+that was configured for French. What the JVM default supplied was a language nobody chose, which is
+the whole of what was withdrawn.
+
+So `messages_ja.properties` stays and `--lang ja` still answers out of it. What ships in Japanese is
+diagnostic rendering; the language of the documentation is the reason English is the default, and
+not a ceiling on which languages may be rendered. The two need not move together because the code
+holds them apart: `E2011` is the same string in every language, and `souther doc e2011` answers out
+of the specification in English, so a reader answered in a language the documents are not written in
+still has the way back. Requiring the catalogs to offer only languages the documentation is written
+in would be a policy about what may be translated first, and nothing here argues for one. Readers
+who were being served Japanese by default keep it with `SOUTHER_LANG=ja` in a shell profile.
+
+What does bind is each catalog on its own: every catalog that ships defines the base's complete key
+set, and is valid on its own terms — no duplicate key, every message a well-formed `MessageFormat`
+pattern, every standard-library name it quotes one the library publishes. The build discovers the
+catalogs from the tree rather than naming them, so a catalog added tomorrow is under all of it.
+
+That narrows what the fallback is for. It was the migration mechanism — a message became Japanese as
+it was migrated and read English until then, and a catalog was allowed to ship half-written. It is
+now a fail-safe: `ResourceBundle` still answers from the base for a key a locale is missing, and a
+key missing everywhere still renders as itself rather than stopping a compile, but no catalog that
+ships may depend on either. An incomplete catalog does not fail where anyone can see it; it answers
+one diagnostic half in each language, the title and the hint from the base and the message from the
+catalog, which is what a third catalog of three keys was found doing.
+
+Amending in place rather than superseding: what changed is a default, the reason for it, and what a
+catalog has to be to ship — not the shape of the decision. Diagnostics are still data rendered by a
+locale-aware layer, and the code
 and type strings are still locale-independent, which is what makes a code a lookup that survives
 being answered in a language the reader does not read. Two surfaces still name a language of their
 own and are untouched here: the LSP renders in English because a language server is not told the
@@ -73,7 +96,8 @@ suggestion. A `DiagnosticRenderer` turns it into text — `HumanRenderer` (Elm-s
 stderr is a TTY) or `JsonRenderer`. Prose comes from a `ResourceBundle` catalog: `messages_ja`
 (default) over an English base (`messages.properties`); a key missing from Japanese falls back to
 English, a key missing from both renders as itself, so the compiler never crashes on an unmigrated
-site. Locale is resolved once: `--lang` > `SOUTHER_LANG` > the JVM default > Japanese — the last two steps
+site — the standing of that fallback is narrowed by the *Revision* above, which keeps it as a
+fail-safe and forbids a shipped catalog from depending on it. Locale is resolved once: `--lang` > `SOUTHER_LANG` > the JVM default > Japanese — the last two steps
 withdrawn by the *Revision* above. The code and
 the type strings are locale-independent — the stable identity; titles, messages, hints, and labels
 follow the locale.
@@ -111,7 +135,9 @@ Two decisions bound the scope.
   without breaking anything that keys on the code.
 - Full Japanese coverage of all ~180 messages is a follow-through, not a single change: the mechanism
   and the high-value messages ship bilingual, and each remaining message becomes Japanese as it is
-  migrated, falling back to English until then.
+  migrated, falling back to English until then. That was how the coverage was reached; the *Revision*
+  above makes the end state of it a requirement on every catalog that ships, so the next language
+  arrives complete rather than filling in over releases.
 - A multi-file build has no per-diagnostic file identity (SourcePos carries no file), so a snippet is
   quoted only for a single-file compile; a linked build renders the frame and message without the
   source line until a file handle is added to the position.

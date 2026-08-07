@@ -7,14 +7,21 @@ import java.util.ResourceBundle;
 
 /**
  * The diagnostic message catalog. Prose lives in {@code messages.properties} (the English base) and
- * {@code messages_ja.properties}; a key missing from the Japanese bundle falls back to the English
- * base automatically. A key missing from both renders as the key itself, so a not-yet-migrated site
- * never crashes the compiler.
+ * {@code messages_ja.properties}.
+ *
+ * <p>A key missing from a locale's bundle falls back to the English base, and a key missing from
+ * both renders as the key itself, so a half-migrated bundle on a branch still compiles and an
+ * unmigrated site never crashes anything. That is a fail-safe and not a way to ship: a catalog that
+ * ships defines every key the base defines, which the build holds it to, because a catalog that
+ * relies on the fallback answers one diagnostic half in each language.
  *
  * <p>Locale is resolved once, highest precedence first: an explicit {@code --lang} value, the
- * {@code SOUTHER_LANG} environment variable, then English.
+ * {@code SOUTHER_LANG} environment variable, then English. A language named this way is answered in
+ * whether or not the documents are written in it — the reader said which one they read, and the
+ * code a diagnostic carries is the same string in every language, so the English documents stay
+ * reachable from an answer in any of them.
  *
- * <p>The JVM default locale is not consulted. It says which language the machine's own interface is
+ * <p>The machine's locale is not consulted. It says which language the machine's own interface is
  * in, which is not evidence about the reader: everything the toolchain ships to read — the
  * specification, the bundled library topics, the CLI's own topics — is written in English, so a
  * reader who chose nothing is answered in the language the answer can be followed up in. Reading

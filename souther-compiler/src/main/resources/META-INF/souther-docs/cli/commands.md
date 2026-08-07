@@ -117,3 +117,7 @@ one no tool declares is refused rather than dropped.
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 
 These apply to `compile`, `run` and `examples`. Passing them to another command is an error.
+
+`--lang` chooses the language a compile error is written in, and nothing else. The documents `souther
+doc` answers from are in English whichever language is chosen; a diagnostic's code is the same string
+in every language, so it stays the name to look the answer up by.
