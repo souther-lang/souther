@@ -1337,8 +1337,7 @@ public interface Ast {
          */
         public String bare() {
             if (denotes == null) {
-                new Throwable("UNRESOLVED reaches() " + name()).printStackTrace();
-                return name();
+                throw new IllegalStateException("`" + name() + "` was never resolved");
             }
             return denotes.name();
         }
