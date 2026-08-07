@@ -17,7 +17,6 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
-import souther.compiler.check.MatchElaborator;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
@@ -744,7 +743,7 @@ final class BodyGen {
                     genExpr(li.body(), expected);
                 }
                 // a block has no value of its own; it is inlined by the call it is passed to
-                case Core.Block b -> throw new IllegalStateException("a block is not a value");
+                case Core.Block _ -> throw new IllegalStateException("a block is not a value");
             }
             // `unreachable` is typed Never, and what is on the stack is the shape the position asked
             // for, so that is what the caller is told is there.

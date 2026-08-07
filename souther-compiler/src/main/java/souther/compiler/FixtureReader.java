@@ -279,17 +279,6 @@ public final class FixtureReader {
         return null;   // a literal expected (a primitive output)
     }
 
-    /** The concrete type a fixture stands for — the case it constructs — or {@code declared} where
-     * nothing in it names one (a literal, a collection). A sum-returning dependency's fake row names one
-     * case, so its output decodes against that case, not the declared sum (which, written inline, has no
-     * decoder at all). */
-    private Type fixtureType(Ast.Expr e, Type declared) {
-        TypeName named = constructedCase(e);
-        // a fixture naming nothing this target can produce is reported by the arm check; decoding it
-        // against the declared type is what turns it into that diagnostic rather than a crash
-        return named != null ? Type.ref(named) : declared;
-    }
-
     /**
      * The case a fixture stands for: the one a construction names, and for a name, the one the value it
      * denotes constructs.

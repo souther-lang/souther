@@ -7,7 +7,6 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
@@ -27,7 +26,6 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.IntFunction;
-import java.util.function.Predicate;
 
 /**
  * Expands calls to helper {@code fn}s inline (spec 12.5: a named helper is the same as an inline block).

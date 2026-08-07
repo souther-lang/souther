@@ -1,7 +1,6 @@
 package souther.compiler.codegen;
 
 import souther.compiler.Prelude;
-import souther.compiler.diag.CompileException;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.core.Core;
@@ -255,7 +254,6 @@ final class Intrinsics {
     private static Map<String, Emit> buildTable() {
         ClassDesc bool = ConstantDescs.CD_boolean;
         ClassDesc lng = ConstantDescs.CD_long;
-        ClassDesc intCd = ConstantDescs.CD_int;
         Map<String, Emit> t = new java.util.LinkedHashMap<>();
 
         // String — JDK-native instance methods (explicit descriptor); receiver is the last Souther arg.

@@ -112,12 +112,6 @@ class CompilePartialAdequacyTest {
         return measured(source, (Deadline) null);
     }
 
-    /** As {@link #measured(String)}, for a model whose rows do not come back: waiting out the default
-     * budget reaches the same answer, later. */
-    private static Compilation measured(String source, Duration budget) {
-        return compiled("report:", source, budget, Adequacy.Asked.reportOnly());
-    }
-
     private static Compilation warned(String source) {
         return warned(source, null);
     }

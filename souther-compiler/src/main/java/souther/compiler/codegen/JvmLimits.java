@@ -8,7 +8,6 @@ import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 
 import java.util.HashSet;

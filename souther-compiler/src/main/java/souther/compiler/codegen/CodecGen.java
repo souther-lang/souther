@@ -2,7 +2,6 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
-import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -706,7 +705,7 @@ final class CodecGen {
      * {@code flatMapWithPath}, which answers the plain {@link Decoder}. Its clauses are refined instead.
      */
     private static boolean leafStaysTyped(Ast.DecoderDef dec) {
-        if (!(dec instanceof Ast.NewtypeDecoder nt)) {
+        if (!(dec instanceof Ast.NewtypeDecoder)) {
             return true;   // a prim leaf is typed; an object decoder maps nothing either way
         }
         // A newtype over a map keeps its typed leaf: the key remap is appended *after* the
@@ -1213,7 +1212,7 @@ final class CodecGen {
                 code.invokedynamic(setFromListCallSite());                   // Function: List -> Set
                 code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);  // Decoder<I, Set<T>> (dedup)
             }
-            case Ast.OptionDecRef o -> throw new IllegalStateException("optional is only supported as a direct object field");
+            case Ast.OptionDecRef _ -> throw new IllegalStateException("optional is only supported as a direct object field");
             case Ast.MapDecRef mp -> {
                 emitDecoderObject(code, mp.value(), src);
                 code.invokestatic(srcListOwner(src), "map", MTD_mapDec);   // Decoder<I, Map<String,V>>

@@ -348,7 +348,6 @@ public final class AstBuilder {
     }
 
     private Ast.Field field(SyntaxNode n) {
-        String name = firstIdentText(n);
         Ast.TypeTerm type = typeTerm(typeChild(n));
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
             type = new Ast.TypeRef("Option", type, type.pos());   // `T?` → Option<T>

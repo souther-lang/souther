@@ -19,10 +19,8 @@ import souther.compiler.Reserved;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Says once, for a whole module, what every written type name denotes.
@@ -91,11 +89,6 @@ public final class Resolve {
         return new Answered(
                 new Ast.Binder.Bound(binder.written(), id, binder.pos()),
                 bound.and(binder.name(), new ValueName.Local(binder.name(), id)));
-    }
-
-    /** The bindings under {@code binder}, where the binder itself is not carried on. */
-    private Bindings binding(Bindings bound, Ast.Binder binder) {
-        return bind(bound, binder).bound();
     }
 
     /** Several binders answered, and the bindings that hold under all of them. */

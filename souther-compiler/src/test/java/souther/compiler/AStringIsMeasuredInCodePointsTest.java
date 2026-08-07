@@ -31,10 +31,6 @@ class AStringIsMeasuredInCodePointsTest {
 
     /** A supplementary-plane kanji: one code point, two UTF-16 units. */
     private static final String YOSHI = "𠮷";
-    /** A base letter and a combining acute accent — two code points, and NFD, so a boundary
-     *  canonicalizes it to the one composed code point. Written as escapes because the difference
-     *  this test is about is invisible in the glyph. */
-    private static final String DECOMPOSED = "e\u0301";
     /** 葛 followed by a variation selector: two code points, one character to a reader, and stable
      *  under every normalization form — so it stays two after a boundary. */
     private static final String VARIANT = "\u845b\udb40\udd01";
