@@ -39,7 +39,8 @@ public final class NewtypeDesugar {
             fns.add(fn.withBody(body));
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                m.defs(), m.behaviors(), fns, m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+                m.defs(), m.behaviors(), fns, m.takenOn(), m.examples(), m.fakes(),
+                m.exampleFileTarget(), m.pos());
     }
 
     /**
@@ -60,7 +61,8 @@ public final class NewtypeDesugar {
             }
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                defs, m.behaviors(), m.fns(), m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+                defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
+                m.exampleFileTarget(), m.pos());
     }
 
     private static Ast.Expr go(Ast.Expr e, Symbols symbols) {

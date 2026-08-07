@@ -104,7 +104,7 @@ public final class Shapes {
                 return m;
             }
             return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                    List.copyOf(kept), m.behaviors(), m.fns(), m.examples(), m.fakes(),
+                    List.copyOf(kept), m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
                     m.exampleFileTarget(), m.pos());
         }
     }
@@ -269,10 +269,12 @@ public final class Shapes {
                 if (injected.isEmpty()) {
                     return Answer.of(m);
                 }
-                List<Ast.FnDef> fns = new ArrayList<>(m.fns());
-                fns.addAll(injected.values());
+                // Beside what the module declared, not among it. Both are emitted and only the first
+                // was written here, and a reader asking which is which asks the component it is in
+                // rather than the shape of a name.
                 return Answer.of(new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(),
-                        m.imports(), m.defs(), m.behaviors(), fns, m.examples(), m.fakes(),
+                        m.imports(), m.defs(), m.behaviors(), m.fns(),
+                        List.copyOf(injected.values()), m.examples(), m.fakes(),
                         m.exampleFileTarget(), m.pos()));
             } catch (CompileException e) {
                 return Answer.absent(e);

@@ -86,9 +86,11 @@ public final class Lower {
         return bindings;
     }
 
-    /** {@code module} with {@code fns} as its fns and every data invariant desugared — the tree the
-     * backend emits from. */
-    public static Ast.Module lowered(Ast.Module module, List<Ast.FnDef> fns) {
+    /** {@code module} with {@code fns} as its declarations, {@code takenOn} as what it emits without
+     * having declared, and every data invariant desugared — the tree the backend emits from. The two
+     * stay apart down here: both become methods, and only the first is this module's to answer for. */
+    public static Ast.Module lowered(Ast.Module module, List<Ast.FnDef> fns,
+                                     List<Ast.FnDef> takenOn) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
@@ -100,7 +102,7 @@ public final class Lower {
             }
         }
         return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                module.imports(), defs, module.behaviors(), fns,
+                module.imports(), defs, module.behaviors(), fns, takenOn,
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 

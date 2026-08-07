@@ -91,8 +91,11 @@ public final class HelperNames {
             }
             fakes.add(new Ast.Fake(fake.target(), rows, fake.pos()));
         }
+        // Nothing is taken on until the pass below this one works out what the module reaches, so
+        // there is none here to qualify — and what arrives there is already named by the name this
+        // module reaches it by, which is what it will be emitted under.
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
-                m.behaviors(), fns, examples, fakes, m.exampleFileTarget(), m.pos());
+                m.behaviors(), fns, m.takenOn(), examples, fakes, m.exampleFileTarget(), m.pos());
     }
 
     /** {@code m} with the foreign names in its invariants written qualified, and nothing else
@@ -102,8 +105,8 @@ public final class HelperNames {
         List<Ast.Def> defs = qualifiedInvariants(m);
         return defs.equals(m.defs()) ? m
                 : new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
-                        m.behaviors(), m.fns(), m.examples(), m.fakes(), m.exampleFileTarget(),
-                        m.pos());
+                        m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
+                        m.exampleFileTarget(), m.pos());
     }
 
     /** {@code m}'s declarations with every name in an invariant that denotes another module's

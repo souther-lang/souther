@@ -280,8 +280,12 @@ public final class Front {
                     }
                 }
             }
+            // An attached file writes rows and the values they name, which are declarations of the
+            // target module. What that module takes on to emit is worked out further down and is
+            // nothing an attached file adds to.
             return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), m.defs(),
-                    m.behaviors(), fns, examples, fakes, m.exampleFileTarget(), m.pos());
+                    m.behaviors(), fns, m.takenOn(), examples, fakes, m.exampleFileTarget(),
+                    m.pos());
         }
     }
 

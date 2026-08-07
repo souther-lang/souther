@@ -103,7 +103,8 @@ public final class HelperInvariants {
             }
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
-                defs, m.behaviors(), m.fns(), m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+                defs, m.behaviors(), m.fns(), m.takenOn(), m.examples(), m.fakes(),
+                m.exampleFileTarget(), m.pos());
     }
 
     /** The conjuncts of an invariant expression, flattened, in the order they are written — what a

@@ -51,7 +51,7 @@ public final class Deriver {
             });
         }
         return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                module.imports(), defs, module.behaviors(), module.fns(),
+                module.imports(), defs, module.behaviors(), module.fns(), module.takenOn(),
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
