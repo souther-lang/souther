@@ -30,6 +30,7 @@
   },
   "$defs": {
     "status": {
+      "description": "Whether a measure has a number. `unavailable` says only that it has none; the `reason` beside it says why, and the two are not read off one another.",
       "enum": ["complete", "partial", "unavailable"]
     },
     "module": {
@@ -81,9 +82,10 @@
       "required": ["status", "arms", "covered", "unreached"],
       "additionalProperties": false,
       "properties": {
-        "status": {
-          "$ref": "#/$defs/status",
-          "description": "`unavailable` where nothing measured the arms: a behavior with no `let`, one no row names, or a run whose instrumentation could not be tied back to the body."
+        "status": { "$ref": "#/$defs/status" },
+        "reason": {
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_body` is a behavior that has no arms to measure at all — a `>->` composition or one with no `let` — rather than arms nothing measured; `not_asked` is a build that did not ask for them; `unreadable` is a run whose instrumentation could not be tied back to the body; `no_rows` is a behavior no row names.",
+          "enum": ["no_body", "not_asked", "unreadable", "no_rows"]
         },
         "arms": { "type": "integer", "minimum": 0 },
         "covered": { "type": "integer", "minimum": 0 },
@@ -138,7 +140,11 @@
                 }
               },
               "unclassifiedRows": { "type": "integer", "minimum": 0 },
-              "status": { "$ref": "#/$defs/status" }
+              "status": { "$ref": "#/$defs/status" },
+              "reason": {
+                "description": "Why there is no number, present exactly where `status` is `unavailable`. A behavior no row names was not measured here, so the classes nothing sits in are not classes nothing reaches.",
+                "enum": ["no_rows"]
+              }
             }
           }
         },
@@ -154,9 +160,10 @@
               "side": { "enum": ["below", "at", "above"] },
               "value": { "type": "string" },
               "hit": { "type": "boolean" },
-              "status": {
-                "$ref": "#/$defs/status",
-                "description": "`unavailable` for a guard's boundary: meeting it takes the comparison having run, which nothing measures until the arms are instrumented."
+              "status": { "$ref": "#/$defs/status" },
+              "reason": {
+                "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a guard's line only, which is met by reaching the comparison rather than by writing the value; an invariant's line is met by writing it and is never waiting on the arms.",
+                "enum": ["arms_not_asked", "arms_unreadable", "no_rows"]
               }
             }
           }
@@ -184,6 +191,10 @@
             "$ref": "#/$defs/status",
             "description": "`partial` where some rows were not read at all: a combination none of the rows seen reaches has not been left untried by anybody."
           },
+          "reason": {
+            "description": "Why there are no numbers, present exactly where `status` is `unavailable`. How large the space is says nothing about a behavior no row names.",
+            "enum": ["no_rows"]
+          },
           "truncated": { "type": "boolean" }
           }
         },
@@ -206,6 +217,10 @@
       "additionalProperties": false,
       "properties": {
         "status": { "$ref": "#/$defs/status" },
+        "reason": {
+          "description": "Why there is no number, present exactly where `status` is `unavailable`.",
+          "enum": ["no_rows"]
+        },
         "output": {
           "type": "object",
           "required": ["declared", "specified", "observed", "verified", "unclassifiedRows"],

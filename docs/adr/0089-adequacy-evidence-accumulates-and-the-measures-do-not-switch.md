@@ -50,6 +50,14 @@ replaces *observed*, because applying a behavior to a value claims nothing about
 A measure that could not be made says so, as a third value beside met and unmet. A row whose value
 could not be read leaves that position undecided, not uncovered.
 
+An unavailable measurement must expose why no value exists. The reason is stored when it would
+otherwise be lost, and derived when it is already encoded by the evidence — what the contract
+requires is the meaning, not a field. Consumers may interpret evidence but must not reconstruct
+measurement meaning from declarations or unrelated report state. Structural non-applicability is
+currently represented as `UNAVAILABLE` with a reason of `NO_BODY`, to keep `MeasurementStatus`
+stable; that encoding must remain encapsulated by the evidence model, and callers ask
+`applicable()` rather than reading the constant.
+
 Nothing is reduced to a single score, at any level.
 
 ## Consequences
@@ -69,6 +77,14 @@ nothing confirms it; the model gives it.
 
 Undecided as a third value means every consumer handles three states. A report that collapsed it into
 unmet would send authors after rows they may already have written.
+
+The reason costs a field on most measures and a check wherever one is built. It is paid because
+without it the layer that has to choose a sentence works the reason out from whatever else is to
+hand — the row count, whether the behavior is injected, whether the declaration has a body. Each of
+those correlates with the reason and is not it, so each such rule is right about the cases it was
+written against and wrong about one nobody had in mind: a `>->` composition is implemented, carries
+rows, and has no arms all the same. Keeping the reason where the measurement is made is also what
+lets `NOT_APPLICABLE` be added to `MeasurementStatus` later without touching a consumer.
 
 Comparing two runs is left out. Quantifying "how much did implementing this behavior reveal?" needs
 the two reports matched arm by arm, and an arm has no identity that survives an edit

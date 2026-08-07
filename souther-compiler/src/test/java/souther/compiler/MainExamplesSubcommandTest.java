@@ -195,6 +195,53 @@ class MainExamplesSubcommandTest {
         JsonNode behaviorDef = schema.get("$defs").get("behavior");
         agrees(module.get("behaviors").get(0), behaviorDef.get("properties"),
                 behaviorDef.get("required"));
+
+        // Down to where the measures are. What each of them says about itself is the part that has
+        // grown, and a check that stopped at the behavior would not have seen any of it arrive.
+        for (JsonNode behavior : module.get("behaviors")) {
+            for (String measure : List.of("signature", "partition", "branch")) {
+                if (behavior.has(measure)) {
+                    JsonNode def = schema.get("$defs").get(measure);
+                    agrees(behavior.get(measure), def.get("properties"), def.get("required"));
+                }
+            }
+            if (!behavior.has("partition")) {
+                continue;
+            }
+            JsonNode partitionDef = schema.get("$defs").get("partition").get("properties");
+            JsonNode partition = behavior.get("partition");
+            for (String each : List.of("axes", "boundaries")) {
+                JsonNode itemDef = partitionDef.get(each).get("items");
+                for (JsonNode item : partition.get(each)) {
+                    agrees(item, itemDef.get("properties"), itemDef.get("required"));
+                }
+            }
+            JsonNode pairsDef = partitionDef.get("pairs");
+            agrees(partition.get("pairs"), pairsDef.get("properties"), pairsDef.get("required"));
+        }
+    }
+
+    /**
+     * A measure with no number says why, in the emitted document and not only in the evidence.
+     *
+     * <p>Both directions. A reader told the arms are unavailable and left to work out whether that is
+     * a behavior with none or a run that failed is the reader this field exists for, and a reason
+     * printed beside a number would say a value is missing and give it in the same breath.
+     */
+    @Test
+    void everyUnavailableMeasureInTheJsonSaysWhy() throws Exception {
+        JsonNode root = JSON.readTree(run("--format", "json"));
+        int seen = 0;
+        for (JsonNode node : root.findParents("status")) {
+            if (!node.has("reason") && !"unavailable".equals(node.get("status").asString())) {
+                continue;
+            }
+            seen++;
+            assertEquals("unavailable", node.get("status").asString(),
+                    "a reason is given beside a number: " + node);
+            assertTrue(node.has("reason"), "no number and no reason: " + node);
+        }
+        assertTrue(seen > 0, "the model under test has a measure with no number: " + root);
     }
 
     /**

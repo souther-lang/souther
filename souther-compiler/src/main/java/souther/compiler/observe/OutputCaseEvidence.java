@@ -52,4 +52,18 @@ public record OutputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified
     public MeasurementStatus status() {
         return Evidence.status(declared, unclassifiedRows);
     }
+
+    /** Why there are no numbers, where there are none. Derived rather than held: what makes this
+     * measure unavailable is that {@link #declared} is empty, so a field beside it would be a second
+     * copy of a fact this record already carries and a second thing to keep true. */
+    public Reason reason() {
+        return declared.isEmpty() ? Reason.NOT_A_SUM : null;
+    }
+
+    /** Why a behavior's output cases have no numbers. */
+    public enum Reason {
+        /** The output is one data rather than a sum, so there is no case to cover and no row can
+         *  fail to cover it. */
+        NOT_A_SUM
+    }
 }

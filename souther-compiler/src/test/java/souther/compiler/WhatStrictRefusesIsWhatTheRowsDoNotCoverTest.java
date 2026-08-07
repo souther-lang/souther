@@ -228,7 +228,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
         PartitionEvidence.BoundaryCoverage met = new PartitionEvidence.BoundaryCoverage(
                 "weigh/w.a", "guard", BoundaryObligation.BoundarySide.AT, "100", true,
-                MeasurementStatus.COMPLETE);
+                MeasurementStatus.COMPLETE, null);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");
@@ -254,7 +254,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     /** What one behavior's partition makes of the whole report, with nothing else asked about. */
     private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
         AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
-                "weigh", false, true, 1, 0, MeasurementStatus.COMPLETE, null, partition,
+                "weigh", false, 1, 0, MeasurementStatus.COMPLETE, null, partition,
                 null, List.of());
         return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
                 MeasurementStatus.COMPLETE,

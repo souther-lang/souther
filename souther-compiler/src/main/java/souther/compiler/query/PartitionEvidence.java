@@ -58,10 +58,24 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
      *                  is not reached is then undecided rather than untried
      */
     public record PairSpace(int total, int covered, int witnessedFeasible, int provenInfeasible,
-                            int unknown, boolean truncated, MeasurementStatus status) {
+                            int unknown, boolean truncated, MeasurementStatus status, Reason reason) {
+
+        /** Why the combinations have no numbers. */
+        public enum Reason {
+            /** No row names this behavior, so nothing sits anywhere. */
+            NO_ROWS
+        }
 
         public static final PairSpace NONE =
-                new PairSpace(0, 0, 0, 0, 0, false, MeasurementStatus.COMPLETE);
+                new PairSpace(0, 0, 0, 0, 0, false, MeasurementStatus.COMPLETE, null);
+
+        public static PairSpace unavailable(int total, Reason reason) {
+            return new PairSpace(total, 0, 0, 0, total, false, MeasurementStatus.UNAVAILABLE, reason);
+        }
+
+        public PairSpace {
+            Unavailable.check(status, reason);
+        }
 
         /** Whether a single ratio would say anything. With unknowns in the denominator it would not. */
         public boolean decided() {
@@ -95,12 +109,28 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
      */
     public record AxisCoverage(String axis, String path, List<String> classes, Set<String> covered,
                                List<ExcludedClass> excluded, int unclassifiedRows,
-                               MeasurementStatus status) {
+                               MeasurementStatus status, Reason reason) {
+
+        /** Why a position has no coverage numbers. */
+        public enum Reason {
+            /** No row names this behavior. An absence of evidence is not a set of gaps, so the classes
+             *  nothing sits in are not classes nothing reaches. */
+            NO_ROWS
+        }
+
+        /** What the body rules out is still said. Which classes there are and which the body answers
+         * for are facts about the model, and no row has to exist for either. */
+        public static AxisCoverage unavailable(String axis, String path, List<String> classes,
+                                               List<ExcludedClass> excluded, Reason reason) {
+            return new AxisCoverage(axis, path, classes, Set.of(), excluded, 0,
+                    MeasurementStatus.UNAVAILABLE, reason);
+        }
 
         public AxisCoverage {
             classes = List.copyOf(classes);
             covered = Set.copyOf(covered);
             excluded = List.copyOf(excluded);
+            Unavailable.check(status, reason);
         }
 
         public List<String> uncovered() {
@@ -111,10 +141,30 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
     /**
      * One value a row has to be written at, and whether one was.
      *
-     * @param status {@code UNAVAILABLE} where the rule is a guard: meeting it takes more than writing
-     *               the value — the comparison has to have been evaluated — and nothing measures that
-     *               until the branches are instrumented.
+     * @param reason why it could not be told, where it could not. A guard's line and an invariant's
+     *               are not measured the same way and do not fail to be measured for the same
+     *               reasons, which is why the two are built along separate paths
      */
     public record BoundaryCoverage(String axis, String origin, BoundaryObligation.BoundarySide side,
-                                   String value, boolean hit, MeasurementStatus status) {}
+                                   String value, boolean hit, MeasurementStatus status,
+                                   Reason reason) {
+
+        /** Why a line has no answer. */
+        public enum Reason {
+            /** The build did not ask for the arms, and a guard's line is met by reaching the
+             *  comparison rather than by writing the value. Never a reason for an invariant's line,
+             *  which needs no arms. */
+            ARMS_NOT_ASKED,
+            /** The rows ran without instrumentation, so no row can be shown to have reached the
+             *  comparison. Never a reason for an invariant's line. */
+            ARMS_UNREADABLE,
+            /** No row names this behavior. */
+            NO_ROWS
+        }
+
+        public BoundaryCoverage {
+            Unavailable.check(status, reason);
+        }
+    }
+
 }

@@ -125,9 +125,22 @@ public final class Adequacy {
 
     /** What the rows say about one behavior's signature. */
     public record SignatureEvidence(OutputCaseEvidence output, List<InputCaseEvidence> inputs,
-                                    MeasurementStatus status) {
+                                    MeasurementStatus status, Reason reason) {
+
+        /** Why the signature has no numbers. */
+        public enum Reason {
+            /** No row names this behavior, so nothing was established about it either way. */
+            NO_ROWS
+        }
+
+        public static SignatureEvidence unavailable(OutputCaseEvidence output,
+                                                    List<InputCaseEvidence> inputs, Reason reason) {
+            return new SignatureEvidence(output, inputs, MeasurementStatus.UNAVAILABLE, reason);
+        }
+
         public SignatureEvidence {
             inputs = List.copyOf(inputs);
+            Unavailable.check(status, reason);
         }
     }
 
@@ -256,8 +269,11 @@ public final class Adequacy {
                     continue;
                 }
                 Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
+                // Asked and readable are handed over apart. A line nobody asked about and one whose
+                // instrumentation was lost are both unmeasured, and only the second is a run that
+                // failed at it; one boolean for the pair leaves the measure unable to say which.
                 out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
-                        plan, seen, armsMeasured && !seen.armsUnseen(),
+                        plan, seen, armsMeasured,
                         excluded == null ? Exclusions.NONE
                                 : excluded.getOrDefault(spec.name(), Exclusions.NONE)));
             }
@@ -283,14 +299,55 @@ public final class Adequacy {
      * @param covered the ones a row went through
      */
     public record BranchEvidence(List<souther.compiler.coverage.CoverageSites.Site> all,
-                                 Set<Integer> covered, MeasurementStatus status) {
+                                 Set<Integer> covered, MeasurementStatus status, Reason reason) {
 
-        public static final BranchEvidence UNAVAILABLE =
-                new BranchEvidence(List.of(), Set.of(), MeasurementStatus.UNAVAILABLE);
+        /**
+         * Why a behavior's arms have no number, in the order the measurement asks.
+         *
+         * <p>The first gate that did not open is the answer. They are asked in that order because that
+         * is the order the work happens in: a body has to exist before anything can be asked about it,
+         * the build has to ask before the classes are generated, the classes have to survive before a
+         * row can carry what it went through, and a row has to name the behavior before any of it is
+         * about this one.
+         */
+        public enum Reason {
+            /** A {@code >->} composition or a behavior with no {@code let}. It has no arms of its own,
+             *  so the measure does not apply rather than failing. */
+            NO_BODY,
+            /** The build did not ask for the arms, which cost a second run of every row. */
+            NOT_ASKED,
+            /** The rows ran without instrumentation, so what they went through went with it. */
+            UNREADABLE,
+            /** No row names this behavior. The measurement is opted into by writing one, and reaching
+             *  the behavior through somebody else's row is not opting in. */
+            NO_ROWS
+        }
+
+        public static BranchEvidence unavailable(Reason reason) {
+            return new BranchEvidence(List.of(), Set.of(), MeasurementStatus.UNAVAILABLE, reason);
+        }
+
+        public static BranchEvidence measured(List<souther.compiler.coverage.CoverageSites.Site> all,
+                                              Set<Integer> covered, MeasurementStatus status) {
+            return new BranchEvidence(all, covered, status, null);
+        }
 
         public BranchEvidence {
             all = List.copyOf(all);
             covered = Set.copyOf(covered);
+            Unavailable.check(status, reason);
+        }
+
+        /**
+         * Whether this behavior has arms for the measure to be about.
+         *
+         * <p>Asked instead of reading {@link Reason#NO_BODY} at each caller. Having nothing to measure
+         * is not the same as failing to measure, and {@link MeasurementStatus} has no word for the
+         * first; {@code NO_BODY} is where that distinction is kept until it does. A caller that read
+         * the constant would be holding the encoding rather than the question.
+         */
+        public boolean applicable() {
+            return reason != Reason.NO_BODY;
         }
 
         public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
@@ -345,12 +402,10 @@ public final class Adequacy {
                 List<souther.compiler.coverage.CoverageSites.Site> arms = plan.sites().stream()
                         .filter(site -> site.behavior().equals(behavior.name())).toList();
                 Observed observed = byTarget.getOrDefault(behavior.name(), Observed.NONE);
-                if (!measured || observed.armsUnseen() || !withBodies.contains(behavior.name())
-                        || observed.rows().isEmpty()) {
-                    // Nothing to measure, or nothing asking. A behavior with no body has no arms; one
-                    // no row names has not been opted into the measurement, and reaching it through
-                    // somebody else's row is not opting in.
-                    out.put(behavior.name(), BranchEvidence.UNAVAILABLE);
+                BranchEvidence.Reason absent =
+                        whyNoArms(behavior.name(), withBodies, measured, observed);
+                if (absent != null) {
+                    out.put(behavior.name(), BranchEvidence.unavailable(absent));
                     continue;
                 }
                 Set<Integer> covered = new LinkedHashSet<>(lit);
@@ -361,10 +416,40 @@ public final class Adequacy {
                 // unreached, and the whole measure says so — the arms that were lit are still lit.
                 boolean partial = !observed.complete() || observed.rows().stream()
                         .anyMatch(row -> row.disposition() == Disposition.INCOMPLETE);
-                out.put(behavior.name(), new BranchEvidence(arms, covered,
+                out.put(behavior.name(), BranchEvidence.measured(arms, covered,
                         partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE));
             }
             return Answer.of(Ordered.map(out));
+        }
+
+        /**
+         * The first gate the arm measurement did not get through, or null where it got through them
+         * all.
+         *
+         * <p>One gate per condition, in the order the work happens in, so that what a caller reads back
+         * is the thing that stopped it rather than whichever condition an expression happened to test
+         * first. The bodies say which behaviors have arms; the arm count cannot, since a body with no
+         * fork in it also has none.
+         */
+        private static BranchEvidence.Reason whyNoArms(String behavior, Set<String> withBodies,
+                                                       boolean measured, Observed observed) {
+            if (!withBodies.contains(behavior)) {
+                return BranchEvidence.Reason.NO_BODY;
+            }
+            if (!measured) {
+                return BranchEvidence.Reason.NOT_ASKED;
+            }
+            if (observed.armsUnseen()) {
+                return BranchEvidence.Reason.UNREADABLE;
+            }
+            // Nothing read is not the same as nothing written. Where a source could not be evaluated
+            // at all, the rows this behavior is waiting on may be sitting in it, and answering
+            // `NO_ROWS` would tell an author to write what is already there. The measure goes ahead
+            // on what was seen and comes back undecided, which is what it is.
+            if (observed.rows().isEmpty() && !observed.someRowsUnseen()) {
+                return BranchEvidence.Reason.NO_ROWS;
+            }
+            return null;
         }
     }
 
@@ -812,6 +897,12 @@ public final class Adequacy {
                 return;
             }
             for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+                // A class nothing sits in, where nothing was measured, is not a class no row is in.
+                // Stopped here rather than where the line is printed: a finding is something a measure
+                // established, and one from a measure that was never made is not established at all.
+                if (axis.status() == MeasurementStatus.UNAVAILABLE) {
+                    continue;
+                }
                 for (String missing : axis.uncovered()) {
                     out.add(new Finding(Kind.AXIS_CLASS_UNCOVERED, behavior.name(), axis.status(),
                             behavior.pos(), List.of(missing)));
@@ -1035,10 +1126,11 @@ public final class Adequacy {
         // counted, above: its state is dropped rather than read, so it has no arm and no input case
         // and shows up as one nothing could classify.
         partial |= seen.someRowsUnseen();
-        MeasurementStatus status = rows.isEmpty() && seen.complete()
-                ? MeasurementStatus.UNAVAILABLE
-                : partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
-        return new SignatureEvidence(output, inputs, status);
+        if (rows.isEmpty() && seen.complete()) {
+            return SignatureEvidence.unavailable(output, inputs, SignatureEvidence.Reason.NO_ROWS);
+        }
+        return new SignatureEvidence(output, inputs,
+                partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE, null);
     }
 
     private Adequacy() {}
