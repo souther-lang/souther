@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Classification;
@@ -262,11 +263,18 @@ public final class Generator {
             }
             List<FixtureTemplate> inputs = new ArrayList<>();
             UnresolvedCombination left = null;
+            // What the rest of the row has to sit beside. A field of a record is not chosen from its
+            // own type once another field of that record is fixed: the rule relating them says what
+            // is left, and taking the bottom of the type's range instead is how a boundary that can
+            // be written came back as one every value tried was refused at.
+            BigDecimal settledAt = numberOf(each.value());
+            Map<String, BigDecimal> settled = settledAt == null ? Map.of()
+                    : Map.of(axis.path().toString(), settledAt);
             for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
                 Map<String, List<FixtureTemplate>> here =
                         TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
                                 ? Map.of(axis.path().toString(), List.of(at)) : Map.of();
-                Outcome tried = valueAt(subject, p, here, check);
+                Outcome tried = valueAt(subject, p, here, settled, check);
                 if (tried.value() == null) {
                     left = new UnresolvedCombination(List.of(label), tried.reason(), tried.detail());
                     break;
@@ -540,15 +548,16 @@ public final class Generator {
                 here.put(axis.path().toString(), decided.get(axis.path().toString()));
             }
         }
-        return valueAt(subject, p, here, check);
+        return valueAt(subject, p, here, Map.of(), check);
     }
 
     /** One parameter's value, with the positions the caller fixed already decided. */
     private static Outcome valueAt(Subject subject, int p,
                                    Map<String, List<FixtureTemplate>> decided,
+                                   Map<String, BigDecimal> settled,
                                    CandidateCheck check) {
         Choices choices = choicesOf(subject.types().get(p),
-                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided);
+                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided, settled);
         return choices.missingAt() != null
                 ? new Outcome(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
                         choices.missingAt())
@@ -582,17 +591,20 @@ public final class Generator {
      *                to be reached at
      */
     private static Choices choicesOf(Type type, TermPath at, Symbols symbols,
-                                     Map<String, List<FixtureTemplate>> decided) {
+                                     Map<String, List<FixtureTemplate>> decided,
+                                     Map<String, BigDecimal> settled) {
         List<String> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
-        String missing = choicesUnder(type, at, symbols, 0, paths, values);
+        String missing = choicesUnder(type, at, symbols, 0, paths, values, settled, null);
         return missing != null ? Choices.missing(missing) : new Choices(paths, values, null);
     }
 
     /** The positions under one parameter, appended in the order they are composed. Returns the path
      * nothing can be written at, where there is one. */
     private static String choicesUnder(Type type, TermPath at, Symbols symbols, int depth,
-                                       List<String> paths, List<List<FixtureTemplate>> values) {
+                                       List<String> paths, List<List<FixtureTemplate>> values,
+                                       Map<String, BigDecimal> settled,
+                                       souther.compiler.numeric.NumericDomain.Bounds within) {
         if (paths.contains(at.toString())) {
             return null;   // an axis decides here
         }
@@ -600,9 +612,11 @@ public final class Generator {
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
             Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
             if (!fields.isEmpty()) {
+                FieldDomains left = FieldDomains.of(ref.name(), data, symbols,
+                        settledUnder(at, fields.keySet(), settled));
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
                     String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
-                            depth + 1, paths, values);
+                            depth + 1, paths, values, settled, left.at(field.getKey()));
                     if (missing != null) {
                         return missing;
                     }
@@ -610,7 +624,7 @@ public final class Generator {
                 return null;
             }
         }
-        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols);
+        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols, within);
         if (stands.isEmpty()) {
             // Nothing could be written at all: a position of a type nothing stands for. Which is not
             // the same as a value that was written and refused, and reporting it as one sends the
@@ -620,6 +634,22 @@ public final class Generator {
         paths.add(at.toString());
         values.add(stands);
         return null;
+    }
+
+    /** The fields of the record at {@code at} that the caller has already fixed a number at. */
+    private static Map<String, BigDecimal> settledUnder(TermPath at, Set<String> fields,
+                                                        Map<String, BigDecimal> settled) {
+        if (settled.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, BigDecimal> out = new LinkedHashMap<>();
+        for (String field : fields) {
+            BigDecimal number = settled.get(at.then(field).toString());
+            if (number != null) {
+                out.put(field, number);
+            }
+        }
+        return out;
     }
 
     /** What came of trying the assignments for one parameter: its value, or why there is none. */

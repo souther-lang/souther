@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeName;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -38,10 +39,23 @@ public final class FieldDomains {
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
     public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols) {
+        return of(named, data, symbols, Map.of());
+    }
+
+    /**
+     * The same, with some fields already settled at a value.
+     *
+     * <p>Projecting a range and completing an assignment are two questions of one rule set. A row at
+     * {@code startsAt = 1439} needs an {@code endsAt} the record will accept beside it, and that is
+     * not read off {@code endsAt}'s own range — which still runs from 1 — but off what is left of it
+     * once the other end is fixed, which is 1440 and nothing else.
+     */
+    public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
+                                  Map<String, BigDecimal> settled) {
         if (data.newtype()) {
             return NONE;   // a newtype's value is the same position it is; there are no siblings
         }
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols);
+        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, settled);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);

@@ -14,6 +14,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -242,6 +243,18 @@ public final class InvariantChecker {
     /** {@link Seeded} for one declaration. Never throws: a declaration this cannot read is one whose
      * fields it says nothing about, which is the same answer as a declaration with no rules. */
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols) {
+        return seedFields(named, data, symbols, Map.of());
+    }
+
+    /**
+     * {@link Seeded} with some of the fields already settled at a value.
+     *
+     * <p>What is left for the others, given those. The same domain and the same closure — settling a
+     * field is one more assertion into it — so what comes back is the range each remaining field can
+     * still take, which is where a row completing that assignment has to look.
+     */
+    static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
+                             Map<String, BigDecimal> settled) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(data);
@@ -285,7 +298,20 @@ public final class InvariantChecker {
                 atoms.put(field.getKey(), atom);
             }
         }
-        return new Seeded(k.numbers(), atoms,
+        NumericDomain numbers = k.numbers();
+        for (Map.Entry<String, BigDecimal> each : settled.entrySet()) {
+            String atom = atoms.get(each.getKey());
+            Type type = fields.get(each.getKey());
+            if (atom == null || type == null) {
+                continue;
+            }
+            numbers = numbers.assume(
+                    NumericDomain.LinearForm.atom(atom)
+                            .minus(NumericDomain.LinearForm.constant(each.getValue())),
+                    NumericDomain.Rel.EQ,
+                    Map.of(atom, c.terms.granularityOf(type)));
+        }
+        return new Seeded(numbers, atoms,
                 read && everyRuleIsDerivable(named, data, symbols, 0, new HashSet<>()));
     }
 

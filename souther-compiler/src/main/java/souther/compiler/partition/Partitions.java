@@ -429,6 +429,18 @@ public final class Partitions {
      * inner value of a newtype, a field no axis divides. A record is not one of these: its fields are
      * composed, which is the generator's work and not a value this can hand over. */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols) {
+        return representativesOf(type, symbols, null);
+    }
+
+    /**
+     * The same, for a position the record it sits in has already narrowed.
+     *
+     * <p>{@code within} is what is left of the position once the rest of the assignment is settled:
+     * an {@code endsAt} beside a {@code startsAt} of 1439 can only be 1440, and the value this offers
+     * has to come from there rather than from the bottom of the type's own range.
+     */
+    static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
+                                                   NumericDomain.Bounds within) {
         if (type == null) {
             return List.of();
         }
@@ -469,7 +481,7 @@ public final class Partitions {
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
                 && data.newtype()) {
-            return insideTheNewtype(ref.name(), symbols).stream()
+            return insideTheNewtype(ref.name(), symbols, within).stream()
                     .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
@@ -491,10 +503,15 @@ public final class Partitions {
      * other.
      */
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
+        return insideTheNewtype(newtype, symbols, null);
+    }
+
+    private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols,
+                                                          NumericDomain.Bounds within) {
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
-        Bounds bounds = boundsOf(new Type.Ref(newtype), symbols);
+        Bounds bounds = narrowed(boundsOf(new Type.Ref(newtype), symbols), within);
         if (bounds != null && !bounds.isEmpty()) {
             candidates.add(bounds.decimal()
                     ? FixtureTemplate.decimal(inside(bounds))

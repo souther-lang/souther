@@ -52,20 +52,26 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
             """;
 
     private static List<String> boundariesOf(String model) throws Exception {
+        return reportOn(model).lines()
+                .map(String::trim)
+                .filter(line -> line.startsWith("· no row is at"))
+                .toList();
+    }
+
+    private static String reportOn(String model, String... extra) throws Exception {
         Path file = Files.createTempDirectory("souther-boundary").resolve("model.sou");
         Files.writeString(file, model);
+        List<String> args = new java.util.ArrayList<>(List.of("examples", file.toString()));
+        args.addAll(List.of(extra));
         PrintStream was = System.out;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
         try {
-            Main.main(new String[] {"examples", file.toString()});
+            Main.main(args.toArray(String[]::new));
         } finally {
             System.setOut(was);
         }
-        return out.toString(StandardCharsets.UTF_8).lines()
-                .map(String::trim)
-                .filter(line -> line.startsWith("· no row is at"))
-                .toList();
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     @Test
@@ -96,6 +102,27 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 0")
                         && l.contains("(invariant MinuteOfDay (min))")),
                 () -> "an end the record left alone names only the rule that put it there: " + asked);
+    }
+
+    /**
+     * A row offered at one of these boundaries is one the decoder accepts.
+     *
+     * <p>The other end of the interval is chosen beside the one being fixed and not from its own
+     * type: a {@code startsAt} of 1439 leaves exactly 1440 for {@code endsAt}, and taking the bottom
+     * of the type's range instead is how a boundary that can be written came back as one every value
+     * tried was refused at.
+     */
+    @Test
+    void aRowIsOfferedAtEachOfThem() throws Exception {
+        String report = reportOn(TIMESHEET, "--generate", "--boundaries");
+
+        assertTrue(report.contains(
+                        "startsAt = MinuteOfDay(1439), endsAt = MinuteOfDay(1440)"),
+                () -> "1439 is only writable beside 1440:\n" + report);
+        assertTrue(report.contains("startsAt = MinuteOfDay(0), endsAt = MinuteOfDay(1)"),
+                () -> "and 0 beside anything above it:\n" + report);
+        assertFalse(report.contains("every value tried was refused"),
+                () -> "nothing here is out of reach:\n" + report);
     }
 
     /** The same two fields with the rule removed keep the whole of their type's range, so the
