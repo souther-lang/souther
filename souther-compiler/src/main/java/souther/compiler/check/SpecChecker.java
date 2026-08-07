@@ -595,6 +595,47 @@ public final class SpecChecker {
                     + " a data, or name it as a case of a sum, which where the whole output is the"
                     + " optional is written directly as `-> A | Missing`";
 
+    /**
+     * A behavior's boundary carries types a model declared. The language declares vocabulary of its
+     * own — what a division by zero answers with, what a rounding takes, the reserved {@code Raw} —
+     * and each of those says what one of the language's operations can answer or take. A behavior with
+     * the same thing to report declares the case itself, so that what it publishes stays its own when
+     * the language's account of itself changes.
+     *
+     * <p>Asked of the boundary's shape, so a collection carrying such a name is subject to it and a
+     * member of an output union is too. A data a model declared crosses as itself whatever it holds
+     * inside, which is where the walk stops.
+     */
+    static void rejectForeignBoundaryName(Ast.SpecBehavior spec, Symbols symbols) {
+        for (Ast.Param p : spec.params()) {
+            TypeName foreign =
+                    TypeOps.foreignNameInBoundaryShape(TypeOps.successType(p.type(), symbols), symbols);
+            if (foreign != null) {
+                throw CompileException.of(
+                        Diagnostic.of(DiagnosticCode.E1325, "check.param.foreignname")
+                                .at(p.written().region()).args(p.name(), foreign.name())
+                                .hint("check.foreignname.hint").build(),
+                        "parameter `" + p.name() + "` takes `" + foreign.name() + "`, which the"
+                                + " language declares rather than this model; " + FOREIGN_NAME_ADVICE);
+            }
+        }
+        TypeName foreign =
+                TypeOps.foreignNameInBoundaryShape(TypeOps.successType(spec.ret(), symbols), symbols);
+        if (foreign != null) {
+            throw CompileException.of(
+                    Diagnostic.of(DiagnosticCode.E1325, "check.output.foreignname")
+                            .at(spec.pos()).args(spec.name(), foreign.name())
+                            .hint("check.foreignname.hint").build(),
+                    "`" + spec.name() + "` answers `" + foreign.name() + "`, which the language"
+                            + " declares rather than this model; " + FOREIGN_NAME_ADVICE);
+        }
+    }
+
+    /** What to write instead. Said as declaring the case rather than as supplying a codec: the name is
+     *  refused for whose vocabulary it is, and a codec for it would not change that. */
+    private static final String FOREIGN_NAME_ADVICE =
+            "declare the case this model has to report and answer that";
+
     /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
      * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the
      * same rule, read where it applies. */

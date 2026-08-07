@@ -11,7 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code RoundingMode} is ordinary data for typing, evaluation, composition and ordering, but it
  * provides no codec, so it cannot appear where a codec is required. The absence is intentional: a
  * rounding policy is a computation's input, not a value that crosses a serialization boundary, and
- * these tests pin the refusal so the type never quietly gains an external representation.
+ * these tests pin the refusal so the type never quietly gains an external representation. It is also
+ * the language's own vocabulary — it says what {@code Decimal.round} takes — which is what a
+ * behavior's boundary is refused for, and that refusal comes first.
  */
 class CompileRoundingModeBoundaryTest {
 
@@ -27,9 +29,13 @@ class CompileRoundingModeBoundaryTest {
         assertTrue(e.getMessage().contains("RoundingMode"), e.getMessage());
     }
 
-    /** An example fixture would have to decode the mode, and there is no decoder to call. */
+    /**
+     * A behavior taking the mode is refused where it is declared, not later. It used to compile and
+     * fail only where something asked for the decoder — an example fixture, or `souther run` reaching
+     * for it by reflection — so what a reader was shown depended on what they happened to write next.
+     */
     @Test
-    void anExampleOverARoundingModeParameterIsRefused() {
+    void aBehaviorTakingARoundingModeIsRefusedAtItsSignature() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
 
@@ -42,7 +48,7 @@ class CompileRoundingModeBoundaryTest {
                     | "rounds up at the half" :
                         (HALF_UP, 2.5m) -> Out { n = 3 }
                 """));
-        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("no decoder for `RoundingMode`"), e.getMessage());
+        assertTrue(e.getMessage().contains("E1325"), e.getMessage());
+        assertTrue(e.getMessage().contains("RoundingMode"), e.getMessage());
     }
 }
