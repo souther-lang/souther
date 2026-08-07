@@ -448,8 +448,7 @@ public final class HelperInliner {
                         HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)));
     }
 
-    /** The module these helpers belong to — what {@link HelperNames#keyIn} compares a name's
-     * declaring module against. */
+    /** The module these helpers belong to — the one whose bodies this expands into. */
     public String moduleName() {
         return table.module();
     }
@@ -489,7 +488,7 @@ public final class HelperInliner {
         for (int supplied : rewrite.supplied()) {
             args.add(new Ast.IntLit(supplied, call.pos()));
         }
-        return new Ast.Apply(rewrite.target(), new ValueName.Stdlib(rewrite.target()), args,
+        return new Ast.Apply(rewrite.target().qualified(), rewrite.target(), args,
                 ConstructionOrigin.own(),
                 call.pos());
     }
@@ -655,7 +654,7 @@ public final class HelperInliner {
     private List<Ast.FnParam> declaredParams(Ast.Apply call) {
         Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
         if (rewrite != null && call.args().size() == rewrite.keptArgs()) {
-            Ast.FnDef target = table.reached(rewrite.target());
+            Ast.FnDef target = table.reached(rewrite.target().qualified());
             return target == null ? null : target.params().subList(0, rewrite.keptArgs());
         }
         Ast.FnDef helper = table.reached(call.reaches());

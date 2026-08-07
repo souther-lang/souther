@@ -35,9 +35,11 @@ import java.util.function.Predicate;
  */
 final class DischargeRules {
 
-    /** The library operation written {@code qualified}, as what a name reaching it denotes. */
-    private static ValueName op(String qualified) {
-        return new ValueName.Stdlib(qualified);
+    /** The operation {@code name} of the library module published as {@code alias}, as what a name
+     * reaching it denotes. Written as the two values it is, so that a row here says which library it
+     * is about without a reader splitting a spelling to find out. */
+    private static ValueName op(String alias, String name) {
+        return new ValueName.Stdlib(alias, name);
     }
 
     /** The pure, total stdlib calls whose result is a number the domain can name: the size of a
@@ -46,7 +48,7 @@ final class DischargeRules {
      * name the same atom, and the guard discharges the clause. The argument must be a nameable path:
      * {@code List.length(List.map(f, xs))} is not this atom, and nothing relates the two. */
     private static final Set<ValueName> SIZE_CALLS = Set.of(
-            op("List.length"), op("String.length"), op("Set.size"), op("Map.size"));
+            op("List", "length"), op("String", "length"), op("Set", "size"), op("Map", "size"));
 
     /**
      * What a construction of a container keeps of the elements of the container it was built from.
@@ -139,7 +141,7 @@ final class DischargeRules {
         private static Combinators.Combinator handing(ValueName operation, String part) {
             Combinators.Combinator handed = Combinators.of(operation);
             if (handed == null) {
-                throw new IllegalStateException("a rule about " + operation.name() + " names " + part
+                throw new IllegalStateException("a rule about " + operation + " names " + part
                         + " of what it hands its closure, and its signature says it hands one nothing"
                         + " a container holds");
             }
@@ -168,30 +170,30 @@ final class DischargeRules {
     record Source(Core container, Shape shape, Cardinality size) {}
 
     private static final Map<ValueName, Built> BUILT_FROM = Map.ofEntries(
-            Map.entry(op("List.reverse"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
-            Map.entry(op("List.sort"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
-            Map.entry(op("List.sortBy"), new Built(CONTAINER, Shape.PERMUTES, Cardinality.SAME)),
-            Map.entry(op("List.map"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
-            Map.entry(op("List.mapIndexed"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
-            Map.entry(op("Map.mapValues"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
-            Map.entry(op("List.filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List.distinct"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List.take"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List.drop"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set.filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map.filterEntries"),
+            Map.entry(op("List", "reverse"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
+            Map.entry(op("List", "sort"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
+            Map.entry(op("List", "sortBy"), new Built(CONTAINER, Shape.PERMUTES, Cardinality.SAME)),
+            Map.entry(op("List", "map"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("List", "mapIndexed"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("Map", "mapValues"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("List", "filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List", "distinct"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List", "take"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List", "drop"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set", "filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map", "filterEntries"),
                     new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("List.distinctBy"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map.remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set.remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map.intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map.difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set.intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Set.difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
-            Map.entry(op("Map.updateIfPresent"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
-            Map.entry(op("List.filterMap"),
+            Map.entry(op("List", "distinctBy"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map", "remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set", "remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map", "intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map", "difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set", "intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set", "difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map", "updateIfPresent"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("List", "filterMap"),
                     new Built(CONTAINER, Shape.COLLAPSES, Cardinality.AT_MOST)),
-            Map.entry(op("Set.map"), new Built(CONTAINER, Shape.COLLAPSES, Cardinality.AT_MOST)));
+            Map.entry(op("Set", "map"), new Built(CONTAINER, Shape.COLLAPSES, Cardinality.AT_MOST)));
 
     /**
      * The containers a construction's result is never smaller than.
@@ -210,11 +212,11 @@ final class DischargeRules {
      * what they share, and it is what a lower-bound invariant asks for.
      */
     private static final Map<ValueName, List<Reads>> NO_SMALLER_THAN = Map.of(
-            op("List.append"), List.of(at(0), at(1)),
-            op("Set.union"), List.of(at(0), at(1)),
-            op("Map.union"), List.of(at(0), at(1)),
-            op("Set.insert"), List.of(at(1)),
-            op("Map.insert"), List.of(at(2)));
+            op("List", "append"), List.of(at(0), at(1)),
+            op("Set", "union"), List.of(at(0), at(1)),
+            op("Map", "union"), List.of(at(0), at(1)),
+            op("Set", "insert"), List.of(at(1)),
+            op("Map", "insert"), List.of(at(2)));
 
     /**
      * The constructions this says nothing of, in three groups. Each reason is about what a shape can
@@ -238,11 +240,11 @@ final class DischargeRules {
      * spans kinds is what would have to exist first.
      */
     static final Set<ValueName> NOTHING_KEPT = Set.of(
-            op("Map.keys"), op("Map.toList"), op("Map.fromList"), op("List.groupBy"),
-            op("List.concat"), op("List.zipShortest"), op("List.flatMap"),
-            op("Map.insert"), op("Set.insert"), op("Map.union"), op("Set.union"),
-            op("List.append"), op("Map.updateOrInsert"),
-            op("Map.values"), op("Set.toList"), op("Set.fromList"), op("List.indexBy"));
+            op("Map", "keys"), op("Map", "toList"), op("Map", "fromList"), op("List", "groupBy"),
+            op("List", "concat"), op("List", "zipShortest"), op("List", "flatMap"),
+            op("Map", "insert"), op("Set", "insert"), op("Map", "union"), op("Set", "union"),
+            op("List", "append"), op("Map", "updateOrInsert"),
+            op("Map", "values"), op("Set", "toList"), op("Set", "fromList"), op("List", "indexBy"));
 
     /** Where a predicate reads its container, and which shapes of construction carry it there.
      * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
@@ -250,12 +252,12 @@ final class DischargeRules {
     record Carried(Reads container, Set<Shape> through) {}
 
     private static final Map<ValueName, Carried> CARRIED = Map.of(
-            op("List.all"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            op("List.allDistinctBy"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            op("List.any"), new Carried(CONTAINER, Set.of(Shape.PERMUTES)),
-            op("List.contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
-            op("Set.contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
-            op("Map.containsKey"), new Carried(at(1), Set.of(Shape.PERMUTES)));
+            op("List", "all"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
+            op("List", "allDistinctBy"), new Carried(CONTAINER, Set.of(Shape.PERMUTES, Shape.SUBSET)),
+            op("List", "any"), new Carried(CONTAINER, Set.of(Shape.PERMUTES)),
+            op("List", "contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
+            op("Set", "contains"), new Carried(at(1), Set.of(Shape.PERMUTES)),
+            op("Map", "containsKey"), new Carried(at(1), Set.of(Shape.PERMUTES)));
 
     /** Where a predicate reads its container at a call, and how far its statement travels. */
     record Carrying(Core.PreservedCall stated, Reads at, Set<Shape> through) {
@@ -267,8 +269,8 @@ final class DischargeRules {
         /** {@code call} — a call to the same operation — with the container it reads replaced. */
         Core.PreservedCall over(Core.PreservedCall call, Core container) {
             if (!call.operation().equals(stated.operation())) {
-                throw new IllegalStateException("a rule read for " + stated.operation().name()
-                        + " was asked to rewrite a call to " + call.operation().name());
+                throw new IllegalStateException("a rule read for " + stated.operation()
+                        + " was asked to rewrite a call to " + call.operation());
             }
             return at.replacedIn(call, container);
         }
@@ -278,7 +280,7 @@ final class DischargeRules {
      * the closure copies that field from the element unchanged, so the predicate holds of the mapped
      * list exactly when it holds of what was mapped, over the field it came from. */
     private static final Map<ValueName, Reads> PROJECTION_OF =
-            Map.of(op("List.allDistinctBy"), CLOSURE);
+            Map.of(op("List", "allDistinctBy"), CLOSURE);
 
     /** The projection a predicate at a call is stated over, as the block it answers with. */
     record Projection(Core.PreservedCall stated, Reads at, Core.Block projection) {
@@ -294,7 +296,7 @@ final class DischargeRules {
      * and which the container is what {@link Combinators} already answers of any combinator, and how
      * far the statement travels is what {@link #carried} already answers of any predicate — so a
      * quantifier is the name and nothing else. {@code List.all} is the only one the library has. */
-    private static final Set<ValueName> QUANTIFIERS = Set.of(op("List.all"));
+    private static final Set<ValueName> QUANTIFIERS = Set.of(op("List", "all"));
 
     /** Emptiness, by the size call it means. This is not a rule about what an operation does to a
      * property but about what a predicate <em>says</em>: {@code List.isEmpty(xs)} and
@@ -302,10 +304,10 @@ final class DischargeRules {
      * writing the other. Without it the two would be unrelated, which is an accident of which one the
      * author reached for. */
     private static final Map<ValueName, ValueName> EMPTINESS = Map.of(
-            op("List.isEmpty"), op("List.length"),
-            op("Set.isEmpty"), op("Set.size"),
-            op("Map.isEmpty"), op("Map.size"),
-            op("String.isEmpty"), op("String.length"));
+            op("List", "isEmpty"), op("List", "length"),
+            op("Set", "isEmpty"), op("Set", "size"),
+            op("Map", "isEmpty"), op("Map", "size"),
+            op("String", "isEmpty"), op("String", "length"));
 
     /** The predicates whose statement this carries nowhere. A predicate over a string states
      * something of the characters it holds in the order it holds them, and what would carry such a
@@ -313,9 +315,9 @@ final class DischargeRules {
      * its length being all this names of it. An emptiness check states a size, which travels as a
      * size does ({@link #EMPTINESS}) and not as a property of elements. */
     static final Set<ValueName> NOTHING_CARRIED = Set.of(
-            op("String.contains"), op("String.startsWith"), op("String.endsWith"),
-            op("String.matches"),
-            op("List.isEmpty"), op("Set.isEmpty"), op("Map.isEmpty"), op("String.isEmpty"));
+            op("String", "contains"), op("String", "startsWith"), op("String", "endsWith"),
+            op("String", "matches"),
+            op("List", "isEmpty"), op("Set", "isEmpty"), op("Map", "isEmpty"), op("String", "isEmpty"));
 
     /** The predicates of a single container that are not emptiness checks. The library has none:
      * every one-argument predicate it declares over a container or a string is one, and one that was
@@ -325,7 +327,7 @@ final class DischargeRules {
     /** The predicates that apply a predicate to what a container holds without stating it of every
      * element. {@code List.any} states it of some, so what it says of the container says nothing
      * about the element a closure is handed. */
-    static final Set<ValueName> NOT_A_QUANTIFIER = Set.of(op("List.any"));
+    static final Set<ValueName> NOT_A_QUANTIFIER = Set.of(op("List", "any"));
 
     /** The predicates that compute something other than a truth value from each element and are not
      * stated over it. The library has none: {@code allDistinctBy} is the only such predicate and its
@@ -343,22 +345,22 @@ final class DischargeRules {
      * {@code divide} is absent: it answers a union rather than a number.
      */
     private static final Map<ValueName, Ast.BinOp> OPERATOR_CALLS = Map.of(
-            op("Int.add"), Ast.BinOp.ADD,
-            op("Int.subtract"), Ast.BinOp.SUB,
-            op("Int.multiply"), Ast.BinOp.MUL,
-            op("Decimal.add"), Ast.BinOp.ADD,
-            op("Decimal.subtract"), Ast.BinOp.SUB,
-            op("Decimal.multiply"), Ast.BinOp.MUL);
+            op("Int", "add"), Ast.BinOp.ADD,
+            op("Int", "subtract"), Ast.BinOp.SUB,
+            op("Int", "multiply"), Ast.BinOp.MUL,
+            op("Decimal", "add"), Ast.BinOp.ADD,
+            op("Decimal", "subtract"), Ast.BinOp.SUB,
+            op("Decimal", "multiply"), Ast.BinOp.MUL);
 
     /** The operations over two numbers that are the function form of no operator: the language
      * writes no {@code min}, {@code max}, {@code floorMod} or {@code compare}, so there is no second
      * spelling for a term to be read as one of. */
     static final Set<ValueName> NOT_AN_OPERATOR = Set.of(
-            op("Int.min"), op("Int.max"), op("Int.floorMod"), op("Int.compare"),
-            op("Decimal.min"), op("Decimal.max"));
+            op("Int", "min"), op("Int", "max"), op("Int", "floorMod"), op("Int", "compare"),
+            op("Decimal", "min"), op("Decimal", "max"));
 
     /** Denial, which the analysis representation keeps as the call it is. */
-    static final ValueName NOT = op("Bool.not");
+    static final ValueName NOT = op("Bool", "not");
 
     /** The operations each table has a rule for. What is asked of them is {@link Question}'s to
      * settle; these are so it can hold a rule to being one an operation is asked for. */
@@ -383,7 +385,8 @@ final class DischargeRules {
     static Set<String> constructionKinds() {
         Set<String> kinds = new LinkedHashSet<>();
         Bound.BUILDINGS.forEach((operation, built) -> {
-            Prelude.PreludeEntry entry = Prelude.entry(operation.name());
+            Prelude.PreludeEntry entry = operation instanceof ValueName.Stdlib library
+                    ? Prelude.entry(library.qualified()) : null;
             String kind = entry == null ? null : kindOf(entry.signature().result());
             if (kind != null) {
                 kinds.add(kind + "." + built.shape());
@@ -427,7 +430,7 @@ final class DischargeRules {
      * it discharges. */
     static Set<String> builtNames() {
         Set<String> names = new LinkedHashSet<>();
-        builtOperations().forEach(operation -> names.add(operation.name()));
+        builtOperations().forEach(operation -> names.add(operation.toString()));
         return names;
     }
 
@@ -483,26 +486,33 @@ final class DischargeRules {
     static <T> Map<ValueName, T> bind(Map<ValueName, T> rules, Function<T, Reads> reads,
                                       Reads derived, Predicate<Type> required, String what) {
         rules.forEach((operation, rule) -> {
-            Prelude.PreludeEntry entry = Prelude.entry(operation.name());
+            // Every row here is about an operation the library declares, so the key says which
+            // library and which operation rather than a spelling this would have to take apart.
+            if (!(operation instanceof ValueName.Stdlib library)) {
+                throw new IllegalStateException("a rule about " + what + " is written for "
+                        + operation + ", which is not a library operation");
+            }
+            Prelude.PreludeEntry entry = Prelude.entry(library.qualified());
             if (entry == null) {
                 throw new IllegalStateException("a rule about " + what + " is written for "
-                        + operation.name() + ", which the library does not declare");
+                        + library.qualified() + ", which the library does not declare");
             }
             List<Type> params = entry.signature().params();
             Reads at = reads.apply(rule);
             int position = at.positionIn(operation);
             if (position < 0 || position >= params.size()) {
-                throw new IllegalStateException(operation.name() + " takes " + params.size()
+                throw new IllegalStateException(library.qualified() + " takes " + params.size()
                         + " argument(s), and the rule about " + what + " reads argument "
                         + (position + 1));
             }
             if (!required.test(params.get(position))) {
                 throw new IllegalStateException("argument " + (position + 1) + " of "
-                        + operation.name() + " is not " + what);
+                        + library.qualified() + " is not " + what);
             }
             if (at instanceof Reads.At && Combinators.of(operation) != null
                     && derived.positionIn(operation) == position) {
-                throw new IllegalStateException("the rule about " + what + " for " + operation.name()
+                throw new IllegalStateException("the rule about " + what + " for "
+                        + library.qualified()
                         + " writes the argument its signature already answers — say which part it is"
                         + " rather than where, so the two cannot come apart");
             }

@@ -24,7 +24,7 @@ class AnUnexpandedCallIsOnlyTypedWhereARepresentationKeepsItTest {
 
     @Test
     void aStandardLibraryCallLeftStandingIsNotSomethingToType() {
-        Ast.Expr call = new Ast.Apply("List.map", new ValueName.Stdlib("List.map"),
+        Ast.Expr call = new Ast.Apply("List.map", new ValueName.Stdlib("List", "map"),
                 List.of(new Ast.IntLit(1, POS)), ConstructionOrigin.own(), POS);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,

@@ -142,7 +142,51 @@ class ResolvedValueNamesTest {
                 let f (xs) = List.length(xs)
                 """;
 
-        assertEquals(new ValueName.Stdlib("List.length"), denotationOf(source, "List.length"));
+        assertEquals(new ValueName.Stdlib("List", "length"), denotationOf(source, "List.length"));
+    }
+
+    /**
+     * A library name is reached under an alias, and the alias is no part of what declares the
+     * operation: {@code souther.list} declares {@code foldFrom} and a reader reaches it as
+     * {@code List.foldFrom}. The two are held apart so that no reader downstream has to split a
+     * spelling to get at either — the alias to say which library was written, the name to say which
+     * operation it is.
+     */
+    @Test
+    void aLibraryNameHoldsItsAliasAndItsOperationApart() {
+        String source = """
+                module m.a exposing ( f )
+
+                behavior f : (xs: List<Int>) -> Int
+                let f (xs) = List.length(xs)
+                """;
+
+        ValueName.Stdlib denotes = assertInstanceOf(ValueName.Stdlib.class,
+                denotationOf(source, "List.length"));
+
+        assertEquals("List", denotes.alias());
+        assertEquals("length", denotes.name());
+    }
+
+    /** And what it is reached by is what it was. Holding the two apart is a change to how the answer
+     * is written down, not to the answer: a table keyed by the name a library call reaches is looked
+     * up with the same key it was before. */
+    @Test
+    void aLibraryNameIsStillReachedByItsQualifiedSpelling() {
+        String source = """
+                module m.a exposing ( f )
+
+                behavior f : (xs: List<Int>) -> Int
+                let f (xs) = List.length(xs)
+                """;
+
+        for (Ast.Expr e : named(resolve(source))) {
+            if (e instanceof Ast.Apply call && call.written().equals("List.length")) {
+                assertEquals("List.length", call.reaches());
+                return;
+            }
+        }
+        throw new AssertionError("nothing applied `List.length` in the resolved module");
     }
 
     @Test

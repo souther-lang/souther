@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final ValueName MAP = new ValueName.Stdlib("List.map");
+    private static final ValueName MAP = new ValueName.Stdlib("List", "map");
 
     /** `(Int) -> Int`, standing for whatever the operation was declared as. */
     private static final Type.FnOf SIGNATURE = (Type.FnOf) Type.fn(List.of(Type.INT), Type.INT);
@@ -51,7 +51,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         Preserved keepsMapOnly = keeping(MAP, SIGNATURE);
 
         assertThrows(RuntimeException.class,
-                () -> elaborate(callTo(new ValueName.Stdlib("List.filter")), keepsMapOnly));
+                () -> elaborate(callTo(new ValueName.Stdlib("List", "filter")), keepsMapOnly));
     }
 
     @Test

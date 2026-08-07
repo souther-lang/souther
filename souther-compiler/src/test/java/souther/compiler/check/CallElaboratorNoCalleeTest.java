@@ -98,7 +98,7 @@ class CallElaboratorNoCalleeTest {
     void anUnexpandedCallIsAnInternalError() {
         for (ValueName denotes : List.of(
                 new ValueName.Helper("m", "f"),
-                new ValueName.Stdlib("List.map"),
+                new ValueName.Stdlib("List", "map"),
                 new ValueName.Unresolved("f"))) {
             RuntimeException e = answerFor(denotes);
             assertInstanceOf(IllegalStateException.class, e, denotes.toString());

@@ -119,7 +119,7 @@ public final class Resolve {
      */
     public record Values(String module, Map<String, ValueName.Helper> helpers,
                          Map<String, ValueName.Behavior> behaviors,
-                         Map<String, String> exposed) {
+                         Map<String, ValueName.Stdlib> exposed) {
 
         /**
          * What a module reaches when nothing else is in sight — the core modules, which the library
@@ -722,7 +722,8 @@ public final class Resolve {
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             if (Reserved.isNamespace(values.module()) || !Prelude.isPrivateMember(written)) {
-                return new ValueName.Stdlib(written);
+                return dot < 0 ? ValueName.Stdlib.namespace(written)
+                        : new ValueName.Stdlib(written.substring(0, dot), written.substring(dot + 1));
             }
             return null;
         }
@@ -743,8 +744,7 @@ public final class Resolve {
         // A name an import let this module write without its qualifier. Asked last: an import brings
         // a name in, and everything the module already has — a binding in force, its own
         // declarations — is what that name means here instead.
-        String qualified = values.exposed().get(written);
-        return qualified == null ? null : new ValueName.Stdlib(qualified);
+        return values.exposed().get(written);
     }
 
     /**

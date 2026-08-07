@@ -278,7 +278,7 @@ enum Question {
     boolean asksOfOperation(String qualified) {
         Prelude.Rewrite rewrite = Prelude.rewriteOf(qualified);
         Prelude.PreludeEntry entry =
-                Prelude.entry(rewrite == null ? qualified : rewrite.target());
+                Prelude.entry(rewrite == null ? qualified : rewrite.target().qualified());
         return entry != null && asksOf(entry.signature());
     }
 

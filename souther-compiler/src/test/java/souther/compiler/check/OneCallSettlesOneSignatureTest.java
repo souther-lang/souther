@@ -38,7 +38,7 @@ class OneCallSettlesOneSignatureTest {
     private static Ast.Expr filterOverAnEmptyList() {
         Ast.Block predicate = new Ast.Block(List.of(BINDERS.binder("x", POS)),
                 new Ast.BoolLit(true, POS), POS);
-        return new Ast.Apply("List.filter", new ValueName.Stdlib("List.filter"),
+        return new Ast.Apply("List.filter", new ValueName.Stdlib("List", "filter"),
                 List.of(predicate, new Ast.ListLit(List.of(), POS)), ConstructionOrigin.own(), POS);
     }
 
@@ -126,9 +126,9 @@ class OneCallSettlesOneSignatureTest {
         // holds, so the option beside it is what decides — the other order holds the option to the
         // element type of nothing.
         Ast.Expr call = new Ast.Apply("Option.withDefault",
-                new ValueName.Stdlib("Option.withDefault"),
+                new ValueName.Stdlib("Option", "withDefault"),
                 List.of(new Ast.ListLit(List.of(), POS),
-                        new Ast.Apply("List.get", new ValueName.Stdlib("List.get"),
+                        new Ast.Apply("List.get", new ValueName.Stdlib("List", "get"),
                                 List.of(new Ast.IntLit(0, POS),
                                         new Ast.ListLit(List.of(new Ast.ListLit(
                                                 List.of(new Ast.IntLit(1, POS)), POS)), POS)),

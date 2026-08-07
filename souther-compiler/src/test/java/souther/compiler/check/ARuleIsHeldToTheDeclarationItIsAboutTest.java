@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Prelude;
 import souther.compiler.check.DischargeRules.Built;
 import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carried;
@@ -29,8 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ARuleIsHeldToTheDeclarationItIsAboutTest {
 
+    /** A row written here, including one naming an operation the library does not have — which is
+     * what several of these are for, so it takes the spelling apart rather than asking the library. */
     private static ValueName op(String qualified) {
-        return new ValueName.Stdlib(qualified);
+        int dot = qualified.lastIndexOf('.');
+        return new ValueName.Stdlib(qualified.substring(0, dot), qualified.substring(dot + 1));
     }
 
     private static void bindCarried(String operation, Reads container) {
