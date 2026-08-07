@@ -555,7 +555,7 @@ public final class Adequacy {
             if (classes == null || requirements == null) {
                 return null;
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(module)).value();
+            Map<String, Ast.FnDef> values = db.ask(new Bodies.Reachable(module)).value();
             // `requirements` is asked above as a readiness condition, not as an input: whether a
             // value builds at this module's boundary is the decoder's answer, and nothing here runs.
             return FixtureReader.constructing(written, symbols, classes,

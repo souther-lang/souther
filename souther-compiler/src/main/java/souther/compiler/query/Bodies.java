@@ -490,14 +490,20 @@ public final class Bodies {
     }
 
     /**
-     * The module's helpers, settled — what every body in it expands its calls against.
+     * Every declaration a body of this module can reach by name, settled, keyed by the name it is
+     * reached by here: what the module has as fns of its own, and what its imports publish to it.
+     *
+     * <p>Reachable and not owned. A definition another module publishes is one this module expands at
+     * the call and not one it declares or emits, so a reader asking what the module holds is asking
+     * something else and must not read this. The table a body is expanded against is handed the two
+     * apart, and {@link Expanding} is where that is done.
      *
      * <p>Its own question, and a map of definitions rather than an inliner, because that is what makes
      * it an answer two bodies can share: a helper says what it says whatever the behavior beside it
      * was edited to, so a body that reads this is left alone. An inliner cannot do that job — nothing
      * says when two of them are the same, so every reader of one would run again whatever changed.
      */
-    public record Helpers(String name) implements Key<Map<String, Ast.FnDef>> {
+    public record Reachable(String name) implements Key<Map<String, Ast.FnDef>> {
         @Override
         public String module() {
             return name;
@@ -565,7 +571,7 @@ public final class Bodies {
                 // Closed against everything the declaring module can name, not only what it declares:
                 // a published body may call a helper that module imported in turn, and a chain of
                 // three is where a table of its own definitions leaves the middle one unexpanded.
-                Answer<Map<String, Ast.FnDef>> table = db.ask(new Helpers(imp.module()));
+                Answer<Map<String, Ast.FnDef>> table = db.ask(new Reachable(imp.module()));
                 if (!from.present() || !table.present()) {
                     continue;
                 }
@@ -718,11 +724,17 @@ public final class Bodies {
 
         @Override
         public Answer<Of> compute(Db db) {
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
-            if (!helpers.present()) {
+            Answer<Ast.Module> settled = db.ask(new Settled(name));
+            Answer<Map<String, Ast.FnDef>> imported = db.ask(new ImportedDefinitions(name));
+            if (!settled.present() || !imported.present()) {
                 return Answer.absent();
             }
-            HelperTable table = HelperTable.of(name, helpers.value(), Map.of(), policy);
+            // The two are handed over apart, which is what {@link Reachable} has already joined: a
+            // definition another module publishes is one this module expands and not one it has as a
+            // fn of its own. Joined here, a table built for this module would answer that it holds a
+            // published helper, and the table the check builds — which is handed the same two apart —
+            // would answer that it does not.
+            HelperTable table = HelperTable.of(settled.value(), imported.value(), policy);
             return Answer.of(new Of(table, HelperGraph.of(table)));
         }
     }
@@ -750,7 +762,7 @@ public final class Bodies {
         @Override
         public Answer<Set<String>> compute(Db db) {
             Answer<Ast.Module> settled = db.ask(new Settled(name));
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
+            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Reachable(name));
             if (!settled.present() || !helpers.present()) {
                 return Answer.absent();
             }

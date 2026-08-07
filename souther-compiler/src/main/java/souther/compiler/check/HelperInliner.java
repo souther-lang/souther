@@ -271,21 +271,32 @@ public final class HelperInliner {
     /** The helpers this module's example rows apply, which need a method for that reason alone. */
     private final Set<String> exampleHelpers = new java.util.LinkedHashSet<>();
 
-    /** Walks the module's fn bodies and data invariants, collecting the prelude recursive helpers they
-     * reach transitively — those must be emitted as this module's own methods. */
+    /**
+     * Walks everything the module writes — its fn bodies, its data invariants, its rows — collecting
+     * the recursive helpers it reaches and does not declare. Those it must emit as methods of its own.
+     *
+     * <p>Reached, which is wider than called. A helper written where a value goes is eta-expanded into
+     * a call, and a value's body stands wherever the value is named, so a helper is reached through
+     * either. Both were once left to a caller that joined the definitions this module's imports
+     * publish into what it has as fns of its own: that join answered yes for every published helper
+     * whether this module reached it or not, and so covered what this walk was not finding.
+     */
     private void computeReferencedPreludeRecursive(Ast.Module module) {
         Set<String> named = new LinkedHashSet<>();
+        Deque<Ast.Expr> work = new ArrayDeque<>();
         for (Ast.FnDef fn : module.fns()) {
-            collectHelperCalls(fn.writtenBody(), named);
+            work.add(fn.writtenBody());
         }
         for (Ast.Def d : module.defs()) {
             if (d instanceof Ast.Data data) {
                 for (Ast.InvariantClause clause : data.invariants()) {
-                    collectHelperCalls(clause.expr(), named);
+                    work.add(clause.expr());
                 }
             }
         }
-        forEachExampleExpr(module, e -> collectHelperCalls(e, named));
+        forEachExampleExpr(module, work::add);
+        followingValues(work, table.reachable(),
+                e -> helpersNamedIn(e, table.reachable(), named));
         for (String name : graph.reachedFrom(named)) {
             if (graph.recurses(name) && !table.holds(name)) {
                 referencedPreludeRecursive.add(name);
@@ -333,27 +344,11 @@ public final class HelperInliner {
      */
     public static Set<String> exampleHelpers(Ast.Module module, Map<String, Ast.FnDef> table) {
         Set<String> called = new LinkedHashSet<>();
-        // A row may name a value rather than write the input again (ADR-0072), and that value's body
-        // is read the way the row's own text is — so a helper it applies is applied when the row is
-        // evaluated. The bodies are followed as far as they name each other, which is how a chain of
-        // values holds.
-        Set<String> valuesRead = new LinkedHashSet<>();
         Deque<Ast.Expr> work = new ArrayDeque<>();
         forEachExampleExpr(module, work::add);
-        while (!work.isEmpty()) {
-            Ast.Expr e = work.poll();
-            helperCallsIn(e, table, called);
-            Set<String> named = new LinkedHashSet<>();
-            ValueCycles.valuesRead(e, table, named);
-            for (String value : named) {
-                Ast.FnDef def = table.get(value);
-                if (def != null && def.params().isEmpty()
-                        && def.body() instanceof Ast.FnBody.Written w
-                        && valuesRead.add(value)) {
-                    work.add(w.expr());
-                }
-            }
-        }
+        // What a row applies, so a helper it merely names is not one: a row is a fixture and holds no
+        // function, and the reason a method is emitted here is that the row runs the helper.
+        followingValues(work, table, e -> helperCallsIn(e, table, called));
         Set<String> out = new LinkedHashSet<>();
         for (String name : called) {
             Ast.FnDef helper = table.get(name);
@@ -1676,9 +1671,12 @@ public final class HelperInliner {
         if (!(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }
-        // by the name it is reached by here, which for another module's value is the qualified one
+        // by the name it is reached by here, which for another module's value is the qualified one.
+        // Asked of what the name reaches and not of what this module has as its own fns: a published
+        // value is substituted where it is spread exactly as one declared here is, and it is not one
+        // of this module's fns — nothing emits a value.
         String reached = spread.reaches();
-        Ast.FnDef value = table.fns().get(reached);
+        Ast.FnDef value = table.reached(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reached) ? null : value;
     }
@@ -1704,8 +1702,64 @@ public final class HelperInliner {
         return found[0];
     }
 
-    private void collectHelperCalls(Ast.Expr e, Set<String> out) {
-        helperCallsIn(e, table.reachable(), out);
+    /**
+     * Runs {@code collect} over everything {@code work} reaches, following the values it reads.
+     *
+     * <p>An expression alone stops at the reference. A value is substituted where it is named
+     * (ADR-0072), so the body of a value a body reads stands in that body — what that body names is
+     * named there, and a declaration reached only through a value is reached. The bodies are followed
+     * as far as they name each other, which is how a chain of values holds.
+     *
+     * <p>What is collected is the caller's question and not this walk's: which helpers a row applies
+     * is one question, which declarations a module reaches at all is another. {@code work} is drained,
+     * and what is seeded into it is the caller's too.
+     */
+    static void followingValues(Deque<Ast.Expr> work, Map<String, Ast.FnDef> table,
+                                java.util.function.Consumer<Ast.Expr> collect) {
+        Set<String> read = new LinkedHashSet<>();
+        while (!work.isEmpty()) {
+            Ast.Expr e = work.poll();
+            collect.accept(e);
+            Set<String> named = new LinkedHashSet<>();
+            ValueCycles.valuesRead(e, table, named);
+            for (String value : named) {
+                Ast.FnDef def = table.get(value);
+                if (def != null && def.params().isEmpty()
+                        && def.body() instanceof Ast.FnBody.Written w && read.add(value)) {
+                    work.add(w.expr());
+                }
+            }
+        }
+    }
+
+    /**
+     * The declarations {@code e} names, applied or not.
+     *
+     * <p>Which declarations a module reaches, which is what decides the methods it has to emit. A
+     * recursive helper written where a value goes — {@code apply1(spin, n)} — is reached as surely as
+     * one that is called: the expansion eta-expands it, and what stands there afterwards is a call to
+     * a method that has to be somewhere. Asked of what a name denotes, so a parameter spelled like a
+     * helper is the parameter.
+     */
+    private static void helpersNamedIn(Ast.Expr e, Map<String, Ast.FnDef> table, Set<String> out) {
+        switch (e) {
+            // `List.fold` desugars to `List.foldFrom` before inlining, so a body that folds reaches
+            // the recursive `foldFrom` and not the wrapper it wrote.
+            case Ast.Apply call when !(call.denotes() instanceof ValueName.Local) -> {
+                String fn = "List.fold".equals(call.reaches()) ? "List.foldFrom" : call.reaches();
+                if (table.containsKey(fn)) {
+                    out.add(fn);
+                }
+            }
+            case Ast.Var v when v.denotes() instanceof ValueName.Helper
+                    || v.denotes() instanceof ValueName.Stdlib -> {
+                if (table.containsKey(v.reaches())) {
+                    out.add(v.reaches());
+                }
+            }
+            default -> { }
+        }
+        forEachChild(e, c -> helpersNamedIn(c, table, out));
     }
 
     /**
