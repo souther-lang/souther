@@ -41,15 +41,45 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
     /** A document sending a client to one name: {@code `doc_read {name: "sum-discrimination"}`}. */
     private static final Pattern SENT_TO = Pattern.compile("`doc_read \\{name: \"([^\"]+)\"}`");
 
+    /** An argument standing for one the reader supplies, which is not a name to look for. */
+    private static final Pattern STANDS_IN = Pattern.compile("<[^>]+>");
+
+    /**
+     * The listing is every section of the specification and every topic the shipped sets carry,
+     * which is what a client is told it is. Held against those rather than against the other
+     * caller's listing: two listings agreeing is not either of them being whole, and a name this
+     * one holds and does not print is a name only a reader who already knew it can ask for.
+     *
+     * <p>That the sets themselves hold what their indexes promise is a separate guarantee, kept
+     * where a doc set's own contract is.
+     */
     @Test
     void aClientThatKnowsNoNameIsGivenEveryNameThereIs() {
-        String listing = text(call("doc_read", "{}"));
+        Set<String> listed = names(text(call("doc_read", "{}")));
 
-        assertEquals(printed(new String[]{}), listing,
-                "the listing a reader gets for no argument is the listing a client gets for no name");
-        assertTrue(listing.lines().count() > 300, "every section and every shipped topic, not a page of them");
-        assertTrue(listing.contains("cli/start-here"),
+        Set<String> thereIs = new TreeSet<>();
+        SpecDocument.bundled(Caller.MCP).sections()
+                .forEach(section -> thereIs.add(DocName.canonical(section.anchor())));
+        LibraryDocs.on(getClass().getClassLoader(), Caller.MCP).topics()
+                .forEach(topic -> thereIs.add(DocName.canonical(topic.name())));
+
+        assertTrue(thereIs.size() > 300, "every section and every shipped topic, not a page of them");
+        assertEquals(Set.of(), missing(thereIs, listed),
+                "these are answered by name and the listing that names what there is does not give them");
+        assertEquals(Set.of(), missing(listed, thereIs),
+                "and the listing gives these, which nothing here is");
+        assertTrue(listed.contains("cli/start-here"),
                 "including the topic written for a reader who has never written Souther");
+    }
+
+    /**
+     * A caller is answered in its own spelling, and a document's title is spelled as its text is,
+     * so what the two listings have to agree on is which names they give rather than how each line
+     * reads. Which documents there are is not something a wire decides.
+     */
+    @Test
+    void aClientAndAReaderAtAPromptAreGivenTheSameNames() {
+        assertEquals(names(printed(new String[]{})), names(text(call("doc_read", "{}"))));
     }
 
     /**
@@ -59,9 +89,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
      */
     @Test
     void everyNameADocumentSendsThisClientToIsOnTheListingItStartedFrom() {
-        Set<String> listed = new TreeSet<>();
-        text(call("doc_read", "{}")).lines()
-                .forEach(line -> listed.add(DocName.canonical(line.substring(0, line.indexOf('\t')))));
+        Set<String> listed = names(text(call("doc_read", "{}")));
 
         Set<String> sentTo = new TreeSet<>();
         LibraryDocs docs = LibraryDocs.on(getClass().getClassLoader(), Caller.MCP);
@@ -76,14 +104,27 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
                 "a document sends this client to these and the listing it starts from does not name them");
     }
 
+    /** What {@code asked} holds and {@code given} does not, which is what a failure has to say. */
+    private Set<String> missing(Set<String> asked, Set<String> given) {
+        return asked.stream().filter(name -> !given.contains(name))
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
     /** The names {@code text} sends a client to, leaving out one standing in for a name it supplies. */
     private void namesIn(String text, Set<String> found) {
         Matcher sent = SENT_TO.matcher(text);
         while (sent.find()) {
-            if (!sent.group(1).contains("<")) {
+            if (!STANDS_IN.matcher(sent.group(1)).find()) {
                 found.add(sent.group(1));
             }
         }
+    }
+
+    /** The names a listing gives, each as the lookup itself reads it. */
+    private Set<String> names(String listing) {
+        return listing.lines()
+                .map(line -> DocName.canonical(line.substring(0, line.indexOf('\t'))))
+                .collect(Collectors.toCollection(TreeSet::new));
     }
 
     @Test
