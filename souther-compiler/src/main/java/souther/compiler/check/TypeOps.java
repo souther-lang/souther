@@ -1124,6 +1124,35 @@ public final class TypeOps {
         };
     }
 
+    /**
+     * The first optional standing in {@code t}'s boundary shape, or null when none does — what a
+     * behavior's parameter and its output are checked against.
+     *
+     * <p>The walk is the shape the boundary writes, so it descends the structural types and stops at a
+     * nominal one. An optional a data holds is not in the shape: the data names its own absence on a
+     * `?` field and its decoder reads it, which is where absence belongs. An optional the shape holds
+     * has no such owner — it would arrive as the runtime's `Option`, which is not the model's
+     * vocabulary.
+     *
+     * <p>Asked of the type rather than of the syntax, so `Option<T>` and `T?` are the one thing, and
+     * at every depth rather than at the top, so a `List` carrying one is not a way of writing it that
+     * the rule walks past.
+     */
+    public static Type optionalInBoundaryShape(Type t) {
+        return switch (t) {
+            case Type.OptionOf o -> o;
+            case Type.ListOf l -> optionalInBoundaryShape(l.element());
+            case Type.SetOf s -> optionalInBoundaryShape(s.element());
+            case Type.MapOf m -> {
+                Type inKey = optionalInBoundaryShape(m.key());
+                yield inKey != null ? inKey : optionalInBoundaryShape(m.value());
+            }
+            case Type.TupleOf tu -> tu.elements().stream()
+                    .map(TypeOps::optionalInBoundaryShape).filter(o -> o != null).findFirst().orElse(null);
+            default -> null;
+        };
+    }
+
     public static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();

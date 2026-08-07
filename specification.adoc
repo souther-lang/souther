@@ -480,7 +480,7 @@ What crosses a decoder/encoder boundary is decided by representation, and five o
 
 * [[what-crosses-the-boundary-has-an-external-representation]]a value that crosses MUST have an external representation. A tuple has none and neither does a function, so neither can be a behavior's parameter or output, a data's field, or anything a codec would be derived from;
 * [[a-parameter-names-one-type]]a parameter MUST name a single type. An anonymous union is the shape of one behavior's answer and nobody names it (<<union-member>>), so it is written on an output and not taken as an input;
-* [[a-behavior-does-not-output-an-optional]]a behavior MUST NOT answer with an optional. Absence a caller is handed is a case the model owns and names (<<optional>>), not a value that may not be there;
+* [[an-optional-does-not-stand-in-a-boundary]]an optional MUST NOT stand anywhere in a behavior's boundary shape — neither as a parameter nor as the output, and at any depth inside a collection either. A boundary carries the model's own vocabulary, and absence there is owned by the data that holds it, on a `+?+` field, or by a sum the model names (<<optional>>). The shape is read down to a named type and no further: a data carrying a `+?+` field crosses as that data;
 * [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, `+Date+`, `+DateTime+`, or an enumeration, a sum every one of whose cases is a unit data (<<collections>>). The boundary writes a key as text, and a key with no text is a key nothing can address;
 * [[a-collection-member-supports-equality]]a `+Set+`'s element and a `+Map+`'s key MUST support equality. Both ask whether two of them are the same, and a function has no value to compare (<<equality>>).
 
@@ -4173,14 +4173,14 @@ single named type — declare `data ... = Allocated | OutOfStock` and take that.
 Reported at the parameter (<<a-parameter-names-one-type>>). An anonymous union is the shape of one behavior's answer and introduces no name (<<union-member>>); an input is a type the caller names, so it takes a declared one.
 
 [#e1313]
-=== A behavior outputs an optional
+=== An optional stands in a behavior's boundary
 
 [,text]
 ----
-Behavior `findMember` outputs an optional (`Member?`).
+The output of `findMember` carries an optional (`Member?`).
 ----
 
-Reported at the behavior (<<a-behavior-does-not-output-an-optional>>). Absence a caller is handed is part of the model's vocabulary: declare the case it is — `+Member | NotFound+` — so the caller matches on a name rather than unwrapping.
+Reported at the parameter, or at the behavior for its output (<<an-optional-does-not-stand-in-a-boundary>>). The message names the optional it found, which is the whole of the boundary when it is written as one and a part of it when a collection carries it — so what changes is the position that optional stands in, which is not always the behavior's own type. Absence at a boundary is part of the model's vocabulary: put it on the `+?+` field of the data that carries it, whose own decoder reads it, or name it as a case of a sum so the caller matches on a name rather than unwrapping. Where the whole output is the optional, that sum is written directly — `+-> Member | NotFound+`; a parameter takes a declared name instead, an anonymous union not being a parameter type (<<a-parameter-names-one-type>>).
 
 [#e1314]
 === A Map that crosses the boundary has a key that cannot be written

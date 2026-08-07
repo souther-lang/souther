@@ -1039,8 +1039,14 @@ public final class Backend {
      * §fn-rules), so a reader answers the question off the word on the declaration and does not walk the
      * closure behind it. That only holds if the writer enforced the rule, which is why an older jar —
      * whose unmarked helper may reach a {@code partial} one — is refused rather than read.
+     *
+     * <p>Version 7 narrows what a published behavior's signature may be: an optional does not stand
+     * anywhere in a behavior's boundary shape (spec §external-representation). A reader takes an
+     * imported declaration as one the writer was held to, so a jar built when a parameter could be
+     * written {@code Option<Int>} carries a signature this compiler would refuse, and calling it would
+     * put the runtime's {@code Option} across a boundary that no longer admits one.
      */
-    public static final int BOUNDARY_VERSION = 6;
+    public static final int BOUNDARY_VERSION = 7;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {
