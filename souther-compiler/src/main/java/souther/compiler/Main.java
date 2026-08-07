@@ -21,6 +21,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
+import souther.compiler.report.UnifiedDiff;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -433,8 +434,15 @@ public final class Main {
     /**
      * {@code souther fmt <file.sou>... [-w] [--check]}: rewrites each file into its canonical form
      * (see {@link Formatter}). With no flag the formatted source is printed to stdout; {@code -w}
-     * writes it back in place; {@code --check} writes nothing and exits 1 if any file is not already
-     * formatted, listing those files. A file with a syntax error is reported and left untouched.
+     * writes it back in place; {@code --check} writes no file and exits 1 if any file is not already
+     * formatted, printing each one's difference from its canonical form. A file with a syntax error
+     * is reported and left untouched.
+     *
+     * <p>The difference is printed as the file is judged rather than gathered for the end. The
+     * canonical form is what the verdict is taken against, so a gate that answered with the file's
+     * name alone had computed the whole of what the reader needed and dropped it — leaving them to
+     * write the file over with {@code -w} against a copy, or run the formatter again into a scratch
+     * file, to be told what the gate already knew.
      */
     private static int fmtSubcommand(String[] args) {
         boolean write = false;
@@ -466,7 +474,7 @@ public final class Main {
             System.err.println("formatting multiple files needs `-w` (write in place) or `--check`");
             return 2;
         }
-        List<Path> unformatted = new ArrayList<>();
+        boolean unformatted = false;
         boolean failed = false;
         for (Path file : files) {
             String source;
@@ -502,7 +510,11 @@ public final class Main {
             }
             if (check) {
                 if (!formatted.equals(source)) {
-                    unformatted.add(file);
+                    unformatted = true;
+                    // Here, where both texts are still in hand. Nothing is kept for the end: what the
+                    // run has to remember about a file it has judged is that one of them differed.
+                    System.out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
+                            source, formatted));
                 }
             } else if (write) {
                 if (!formatted.equals(source)) {
@@ -517,12 +529,7 @@ public final class Main {
                 System.out.print(formatted);
             }
         }
-        if (check) {
-            for (Path f : unformatted) {
-                System.out.println(f);
-            }
-        }
-        return failed || (check && !unformatted.isEmpty()) ? 1 : 0;
+        return failed || unformatted ? 1 : 0;
     }
 
     /** {@code souther run <file.sou> [--behavior <name>] [--input <json>]}: compiles the file in
