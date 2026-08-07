@@ -22,9 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * not.
  *
  * <p>This pins what each supports against the same table of types, so adding a capability to one
- * without the others fails here rather than in whatever example happens to use it. Where they do not
- * agree today the divergence is stated, not smoothed over: a test that hides a gap is worse than the
- * gap.
+ * without the others fails here rather than in whatever example happens to use it. A row states that
+ * all three read the type; a row stating that one of them does not would fix a gap in place, and a
+ * test that holds a gap open is worse than the gap.
+ *
+ * <p>What a boundary admits is not this table's to decide. The types below are the ones the checker
+ * lets cross, so a row is a claim about the three readers rather than about the boundary — see
+ * {@code TypeOps} for the rule and {@link EncoderPathAgreementTest} for the writing side.
  */
 class DecoderPathAgreementTest {
 
@@ -76,33 +80,61 @@ class DecoderPathAgreementTest {
                 "[\"2026-01-01\"]", 1L);
     }
 
-    // === where they part ===
-
     /**
-     * A newtype-keyed map crosses the boundary and is written in a fixture, and {@code run} declines
-     * it. {@code Runner.decoderFor} handles only a {@code String} key; its javadoc says so, so this
-     * is a stated limit rather than a surprise — stated here too, so closing it in one place without
-     * the others is caught.
+     * A boundary map is keyed by a {@code String}, a String-backed newtype, {@code Date},
+     * {@code DateTime} or an enumeration, and all three readers read all five. The rows are written
+     * out one kind at a time because the key is where a reader composing its own decoder is most
+     * likely to admit fewer kinds than the boundary does.
      */
     @Test
-    void aNewtypeKeyedMapIsReadByTheBoundaryAndTheFixtureButNotByRun() throws Exception {
-        assertTrue(boundaryReads("Map<Key, Int>", Map.of("a", 1L)), "the derived codec reads it");
-        assertTrue(fixtureReads("Map<Key, Int>", "[ (Key(\"a\"), 1) ]", 1L), "a fixture writes it");
-
-        RuntimeException e = assertThrows(Runner.RunException.class,
-                () -> runReads("Map<Key, Int>", "{\"a\": 1}"));
-        assertTrue(e.getMessage().contains("Map"), e.getMessage());
+    void aNewtypeKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Key, Int>", Map.of("a", 1L), "{\"a\": 1}", 1L);
     }
 
-    /** A temporal-keyed map, added at the boundary by issue #100, is the same story one step later. */
     @Test
-    void aDateKeyedMapIsReadByTheBoundaryAndTheFixtureButNotByRun() throws Exception {
-        assertTrue(boundaryReads("Map<Date, Int>", Map.of("2026-01-01", 1L)),
-                "the derived codec reads it");
-        assertTrue(fixtureReads("Map<Date, Int>", "[ (Date(\"2026-01-01\"), 1) ]", 1L),
-                "a fixture writes it");
+    void aDateKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Date, Int>", Map.of("2026-01-01", 1L), "{\"2026-01-01\": 1}", 1L);
+    }
 
-        assertThrows(Runner.RunException.class, () -> runReads("Map<Date, Int>", "{\"2026-01-01\": 1}"));
+    @Test
+    void aDateTimeKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<DateTime, Int>", Map.of("2026-01-01T09:00", 1L),
+                "{\"2026-01-01T09:00\": 1}", 1L);
+    }
+
+    @Test
+    void anEnumerationKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Outcome, Int>", Map.of("Won", 1L), "{\"Won\": 1}", 1L);
+    }
+
+    /**
+     * A {@code String} key arrives canonical, like every other text a boundary reads. The keys of a
+     * decoded object do not pass the string leaf on their way in, so a reader that leaves them where
+     * they landed hands the domain the one text it never made canonical — and a lookup written the
+     * other way misses a key that is there.
+     */
+    @Test
+    void aStringKeyIsCanonicalWhicheverWayItWasWritten() throws Exception {
+        String composed = "\u304c";              // one code point
+        String decomposed = "\u304b\u3099";      // the base and the combining mark, the same text
+        Path file = dir.resolve("key.sou");
+        Files.writeString(file, """
+                module demo
+                behavior at : (m: Map<String, Int>) -> Int
+                let at (m) = Option.withDefault(0, Map.get("%s", m))
+                """.formatted(composed));
+        assertEquals("7", Runner.run(file, "at", "{\"" + decomposed + "\": 7}").trim(),
+                "the key the module looks up is the key the input carried");
+    }
+
+    /** A key the key type refuses is refused at that key's own path, and every key is read before
+     *  the map is given up on, so a map with two bad keys is answered about both at once. */
+    @Test
+    void aBadKeyIsRefusedWhereItStands() {
+        Runner.RunException refused = assertThrows(Runner.RunException.class,
+                () -> runReads("Map<Bounded, Int>", "{\"ab\": 1, \"cd\": 2}"));
+        assertTrue(refused.getMessage().contains("/ab"), refused.getMessage());
+        assertTrue(refused.getMessage().contains("/cd"), refused.getMessage());
     }
 
     // === the three paths ===
@@ -123,18 +155,31 @@ class DecoderPathAgreementTest {
             case "Date" -> "Date(\"2026-01-31\")";
             case "DateTime" -> "DateTime(\"2026-01-31T09:00\")";
             case "List<Date>" -> "[ Date(\"2026-01-01\") ]";
+            case "Map<Key, Int>" -> "[ (Key(\"a\"), 1) ]";
+            case "Map<Date, Int>" -> "[ (Date(\"2026-01-01\"), 1) ]";
+            case "Map<DateTime, Int>" -> "[ (DateTime(\"2026-01-01T09:00\"), 1) ]";
+            case "Map<Outcome, Int>" -> "[ (Won, 1) ]";
             default -> throw new IllegalArgumentException(type);
         };
     }
+
+    /** The types the rows are written in, declared the same way for all three paths — each path
+     *  reads the same module but for the one line that puts the type in position. */
+    private static final String DECLS = """
+            data Key = String
+            data Wrapped = Int
+            data Outcome = Won | Lost
+            data Bounded = String
+                invariant longEnough = String.length(value) >= 3
+            """;
 
     /** A data with a field of that type, decoded through its generated codec. */
     private boolean boundaryReads(String type, Object neutral) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
-                data Key = String
-                data Wrapped = Int
+                %s
                 data Holder = { v: %s }
-                """.formatted(type)), getClass().getClassLoader());
+                """.formatted(DECLS, type)), getClass().getClassLoader());
         Object decoded = Codecs.decode(loader, "demo.Holder", Map.of("v", neutral));
         return "Ok".equals(decoded.getClass().getSimpleName());
     }
@@ -144,14 +189,13 @@ class DecoderPathAgreementTest {
     private boolean fixtureReads(String type, String fixture, Object expected) {
         Compiler.compile("""
                 module demo
-                data Key = String
-                data Wrapped = Int
+                %s
                 data Out = { n: Int }
                 behavior take : (v: %s) -> Out constructs Out
                 let take (v) = Out { n = %s }
                 example take
                   | "reads it" : (%s) -> Out { n = %s }
-                """.formatted(type, sizeExprFor(type), fixture, expected));
+                """.formatted(DECLS, type, sizeExprFor(type), fixture, expected));
         return true;
     }
 
@@ -160,11 +204,10 @@ class DecoderPathAgreementTest {
         Path file = dir.resolve("run" + Math.abs(type.hashCode()) + ".sou");
         Files.writeString(file, """
                 module demo
-                data Key = String
-                data Wrapped = Int
+                %s
                 behavior take : (v: %s) -> Int
                 let take (v) = %s
-                """.formatted(type, sizeExprFor(type)));
+                """.formatted(DECLS, type, sizeExprFor(type)));
         return Runner.run(file, "take", json);
     }
 
