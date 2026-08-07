@@ -44,20 +44,21 @@ class AnArgumentTheSchemaDoesNotDeclareIsRefusedNotDroppedTest {
     }
 
     @Test
-    void aFlagWrittenAsAStringIsRefusedTheSameWay() {
-        JsonNode answer = call("stdlib_api", "{\"name\":\"String\",\"source\":\"true\"}");
+    void aCountBeyondWhatACountHoldsIsRefusedRatherThanThrown() {
+        JsonNode answer = call("doc_search", "{\"term\":\"newtype\",\"limit\":2147483648}");
 
-        assertEquals(-32602, answer.get("error").get("code").asInt());
-        assertTrue(answer.get("error").get("message").asString().contains("must be true or false"));
+        assertEquals(-32602, answer.get("error").get("code").asInt(),
+                "the conversion would have thrown, and the client would have been shown the throw");
+        assertTrue(answer.get("error").get("message").asString().contains("2147483647"),
+                answer.get("error").get("message").asString());
     }
 
     @Test
-    void aFlagThatNeedsANameIsRefusedRatherThanRunWithout() {
-        JsonNode answer = call("stdlib_api", "{\"source\":true}");
+    void aCountBelowZeroIsRefusedRatherThanQuietlyMeaningEverything() {
+        JsonNode answer = call("doc_search", "{\"term\":\"newtype\",\"limit\":-1}");
 
-        assertEquals(-32602, answer.get("error").get("code").asInt());
-        assertTrue(answer.get("error").get("message").asString().contains("`source` needs `name`"),
-                answer.get("error").get("message").asString());
+        assertEquals(-32602, answer.get("error").get("code").asInt(),
+                "0 is the spelling for all of them, and it is the only one published");
     }
 
     @Test
@@ -65,6 +66,28 @@ class AnArgumentTheSchemaDoesNotDeclareIsRefusedNotDroppedTest {
         JsonNode answer = call("doc_read", "{}");
 
         assertTrue(answer.has("result"), "absent is how a client says it wants the whole listing");
+    }
+
+    @Test
+    void argumentsWrittenAsNullAreNotTheSameAsArgumentsLeftOut() {
+        JsonNode written = serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"doc_read\",\"arguments\":null}}").getFirst();
+        JsonNode omitted = serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"doc_read\"}}").getFirst();
+
+        assertEquals(-32602, written.get("error").get("code").asInt(),
+                "the protocol has the field present as an object or absent; null is neither");
+        assertTrue(omitted.has("result"), "and leaving it out is how a client asks for the listing");
+    }
+
+    @Test
+    void anArgumentWrittenAsNullIsNotTheSameAsTheArgumentLeftOut() {
+        JsonNode written = call("doc_read", "{\"name\":null}");
+        JsonNode omitted = call("doc_read", "{}");
+
+        assertEquals(-32602, written.get("error").get("code").asInt(),
+                "the schema gives `name` a type, and null is not of it");
+        assertTrue(omitted.has("result"));
     }
 
     @Test

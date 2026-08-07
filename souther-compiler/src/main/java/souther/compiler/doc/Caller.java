@@ -43,7 +43,7 @@ enum Caller {
     String stdlibSource(String module) {
         return switch (this) {
             case CLI -> "`souther api --source " + module + "` for what it means";
-            case MCP -> "`stdlib_api {name: \"" + module + "\", source: true}` for what it means";
+            case MCP -> "`stdlib_api_source {name: \"" + module + "\"}` for what it means";
         };
     }
 }

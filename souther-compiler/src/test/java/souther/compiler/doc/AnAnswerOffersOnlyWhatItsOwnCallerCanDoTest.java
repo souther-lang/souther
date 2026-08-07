@@ -61,16 +61,16 @@ class AnAnswerOffersOnlyWhatItsOwnCallerCanDoTest {
     void aSignatureDefersToItsModulesSourceAsAToolCall() {
         String said = text(call("stdlib_api", "{\"name\":\"String.length\"}"));
 
-        assertTrue(said.contains("`stdlib_api {name: \"String\", source: true}` for what it means"), said);
+        assertTrue(said.contains("`stdlib_api_source {name: \"String\"}` for what it means"), said);
         assertTrue(!said.contains("souther api"), said);
     }
 
     @Test
     void andWhatTheOfferNamesIsACallThatAnswers() {
         String offered = text(call("stdlib_api", "{\"name\":\"String.length\"}"));
-        assertTrue(offered.contains("{name: \"String\", source: true}"), offered);
+        assertTrue(offered.contains("stdlib_api_source {name: \"String\"}"), offered);
 
-        JsonNode answer = call("stdlib_api", "{\"name\":\"String\",\"source\":true}");
+        JsonNode answer = call("stdlib_api_source", "{\"name\":\"String\"}");
 
         assertTrue(!answer.get("isError").asBoolean(), "the call the answer named is one that works");
     }

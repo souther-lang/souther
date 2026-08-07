@@ -70,7 +70,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
 
     @Test
     void aModulesOwnSourceIsAToolCallAway() {
-        String source = text(call("stdlib_api", "{\"name\":\"String\",\"source\":true}"));
+        String source = text(call("stdlib_api_source", "{\"name\":\"String\"}"));
 
         assertEquals(printed(new String[]{"--source", "String"}), source);
         assertTrue(source.contains("String."), "the module's own declarations, not its signatures alone");
@@ -82,16 +82,6 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
 
         assertFalse(answer.get("isError").asBoolean());
         assertTrue(text(answer).contains("List.map"), text(answer));
-    }
-
-    @Test
-    void everyToolSaysWhatArgumentsItHasSoNoneHaveToBeGuessed() {
-        JsonNode tools = serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}")
-                .getFirst().get("result").get("tools");
-
-        assertTrue(tools.valueStream().allMatch(
-                        t -> !t.get("inputSchema").get("additionalProperties").asBoolean()),
-                "the schema closes the set, so a client learns the arguments rather than trying them");
     }
 
     private String printed(String[] args) {

@@ -55,7 +55,7 @@ public final class McpServer {
                     "Search the Souther language specification and every bundled library doc for a term."
                             + " Answers the 20 best hits unless `limit` says otherwise.",
                     List.of(new Param("term", Kind.STRING, true, "the word or phrase to look for"),
-                            new Param("limit", Kind.INTEGER, false,
+                            new Param("limit", Kind.COUNT, false,
                                     "how many hits to answer with; 0 for all of them (default 20)"))),
             new Tool("doc_read",
                     "Read the Souther specification and the docs bundled libraries ship. With no `name`"
@@ -68,18 +68,19 @@ public final class McpServer {
             new Tool("stdlib_api",
                     "The Souther standard library's published surface with resolved signatures. No name"
                             + " lists everything; a module qualifier (`List`) or a qualified name"
-                            + " (`List.map`) narrows the answer. With `source` and a module name it reads"
-                            + " that module's own source instead, whose comments say what each"
-                            + " declaration means.",
+                            + " (`List.map`) narrows the answer.",
                     List.of(new Param("name", Kind.STRING, false,
-                                    "a stdlib module or Module.name, omit for all"),
-                            new Param("source", Kind.BOOLEAN, false,
-                                    "read the named module's own source rather than its signatures"))),
+                            "a stdlib module or Module.name, omit for all"))),
             new Tool("stdlib_api_search",
                     "Find published stdlib names containing a term. Answers every match — the surface is"
                             + " small enough that nothing is ever held back.",
                     List.of(new Param("term", Kind.STRING, true,
                             "a piece of the name to look for, matched without regard to case"))),
+            new Tool("stdlib_api_source",
+                    "A stdlib module's own source, whose comments say what each declaration means —"
+                            + " which end a span counts, whether a division aborts or answers a case."
+                            + " A signature says how to call something; this says what it does.",
+                    List.of(new Param("name", Kind.STRING, true, "a stdlib module, e.g. `String`"))),
             new Tool("jar_api",
                     "A dependency jar's public API read from its class files, with javadoc from the"
                             + " -sources.jar beside it. Give a fully qualified class or package name.",
@@ -89,15 +90,59 @@ public final class McpServer {
                                     "jars or class directories to search, path-separated;"
                                             + " omit to search the CLI's own class path"))));
 
-    /** What a declared argument may hold, and the JSON Schema type that says so. */
+    /**
+     * What a declared argument may hold.
+     *
+     * <p>Each kind both publishes its domain and decides whether a value is in it, because the two
+     * being written apart is how a server comes to refuse what its own schema invites. A client
+     * that reads the schema and is then told no has learnt nothing it can act on.
+     */
     private enum Kind {
-        STRING("string"), INTEGER("integer"), BOOLEAN("boolean");
 
-        private final String schemaType;
+        STRING {
+            @Override
+            void publish(ObjectNode schema) {
+                schema.put("type", "string");
+                // Somewhere in it, a character that is not a space: the empty term is the one a
+                // search cannot walk, and saying so here is cheaper than a call spent finding out.
+                schema.put("pattern", "\\S");
+            }
 
-        Kind(String schemaType) {
-            this.schemaType = schemaType;
-        }
+            @Override
+            String malformed(String name, JsonNode value) {
+                if (!value.isString()) {
+                    return "`" + name + "` must be a string";
+                }
+                return value.asString().isBlank() ? "`" + name + "` must not be empty" : null;
+            }
+        },
+
+        COUNT {
+            @Override
+            void publish(ObjectNode schema) {
+                schema.put("type", "integer");
+                schema.put("minimum", 0);
+                schema.put("maximum", Integer.MAX_VALUE);
+            }
+
+            @Override
+            String malformed(String name, JsonNode value) {
+                // A count written as a string is the shape a client falls into when it is guessing,
+                // and answering the default would look like the count had been honoured. One past
+                // what a count can hold is refused here rather than thrown from the conversion.
+                if (!value.isIntegralNumber() || !value.canConvertToInt()) {
+                    return "`" + name + "` must be an integer no larger than " + Integer.MAX_VALUE;
+                }
+                return value.intValue() < 0
+                        ? "`" + name + "` must not be negative; 0 is all of them" : null;
+            }
+        };
+
+        /** Writes this kind's domain into the property schema a client reads. */
+        abstract void publish(ObjectNode schema);
+
+        /** Why this value is outside that domain, or null when it is in it. */
+        abstract String malformed(String name, JsonNode value);
     }
 
     private record Param(String name, Kind kind, boolean required, String description) {}
@@ -190,7 +235,7 @@ public final class McpServer {
             ObjectNode properties = schema.putObject("properties");
             for (Param param : tool.params()) {
                 ObjectNode p = properties.putObject(param.name());
-                p.put("type", param.kind().schemaType);
+                param.kind().publish(p);
                 p.put("description", param.description());
             }
             var required = schema.putArray("required");
@@ -223,12 +268,13 @@ public final class McpServer {
             return "no tool `" + name + "`";
         }
         JsonNode arguments = params.get("arguments");
-        // The schema says arguments are an object. A tool that requires none of them would
-        // otherwise take anything at all and answer as though it had been called properly.
-        if (arguments != null && !arguments.isNull() && !arguments.isObject()) {
-            return "`arguments` must be an object";
+        // The schema says arguments are an object, and the protocol says the field is either an
+        // object or not there. A null is neither, and reading it as "not there" would have a tool
+        // whose arguments are all optional answer a request nobody wrote.
+        if (arguments != null && !arguments.isObject()) {
+            return "`arguments` must be an object, or left out entirely";
         }
-        if (arguments != null && arguments.isObject()) {
+        if (arguments != null) {
             for (String given : arguments.propertyNames()) {
                 if (tool.param(given) == null) {
                     return "`" + name + "` has no argument `" + given + "`; it takes "
@@ -239,35 +285,20 @@ public final class McpServer {
         }
         for (Param param : tool.params()) {
             JsonNode value = arguments == null ? null : arguments.get(param.name());
-            if (value == null || value.isNull()) {
+            if (value == null) {
                 if (param.required()) {
                     return "`" + name + "` needs `" + param.name() + "`";
                 }
                 continue;
             }
-            String wrong = malformed(param, value);
+            // A null written for an argument is not the argument left out — the schema gives it a
+            // type and null is not of it. Reading it as absent is the same slip one level down.
+            String wrong = param.kind().malformed(param.name(), value);
             if (wrong != null) {
                 return wrong;
             }
         }
-        // `--source` names a module, and the command it reaches has no listing to fall back on.
-        if (flag(arguments, "source") && argument(arguments, "name").isEmpty()) {
-            return "`source` needs `name` — the module whose source to read";
-        }
         return null;
-    }
-
-    /** Why this value does not fit the argument it was given for, or null when it does. */
-    private static String malformed(Param param, JsonNode value) {
-        return switch (param.kind()) {
-            case STRING -> !value.isString()
-                    ? "`" + param.name() + "` must be a string"
-                    : value.asString().isBlank() ? "`" + param.name() + "` must not be empty" : null;
-            // A count written as a string is the shape a client falls into when it is guessing,
-            // and answering it with the default count would look like the count was honoured.
-            case INTEGER -> value.isIntegralNumber() ? null : "`" + param.name() + "` must be an integer";
-            case BOOLEAN -> value.isBoolean() ? null : "`" + param.name() + "` must be true or false";
-        };
     }
 
     /**
@@ -289,7 +320,7 @@ public final class McpServer {
         int code = switch (tool) {
             case "doc_search" -> {
                 JsonNode limit = arguments == null ? null : arguments.get("limit");
-                String[] args = limit == null || limit.isNull()
+                String[] args = limit == null
                         ? new String[]{"--search", argument(arguments, "term")}
                         : new String[]{"--search", argument(arguments, "term"),
                                 "--limit", String.valueOf(limit.asInt())};
@@ -302,13 +333,13 @@ public final class McpServer {
             }
             case "stdlib_api" -> {
                 String name = argument(arguments, "name");
-                String[] args = flag(arguments, "source")
-                        ? new String[]{"--source", name}
-                        : name.isEmpty() ? new String[]{} : new String[]{name};
-                yield ApiCommand.run(args, stream, stream, Caller.MCP);
+                yield ApiCommand.run(name.isEmpty() ? new String[]{} : new String[]{name},
+                        stream, stream, Caller.MCP);
             }
             case "stdlib_api_search" -> ApiCommand.run(
                     new String[]{"--search", argument(arguments, "term")}, stream, stream, Caller.MCP);
+            case "stdlib_api_source" -> ApiCommand.run(
+                    new String[]{"--source", argument(arguments, "name")}, stream, stream, Caller.MCP);
             case "jar_api" -> {
                 String classpath = argument(arguments, "classpath");
                 String[] args = classpath.isEmpty()
@@ -341,11 +372,6 @@ public final class McpServer {
     private static String argument(JsonNode arguments, String name) {
         return arguments == null || arguments.get(name) == null || !arguments.get(name).isString()
                 ? "" : arguments.get(name).asString();
-    }
-
-    private static boolean flag(JsonNode arguments, String name) {
-        JsonNode value = arguments == null ? null : arguments.get(name);
-        return value != null && value.isBoolean() && value.asBoolean();
     }
 
     private static ObjectNode result(JsonNode id, ObjectNode result) {

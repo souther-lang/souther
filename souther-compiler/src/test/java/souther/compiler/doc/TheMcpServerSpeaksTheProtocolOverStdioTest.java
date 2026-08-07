@@ -84,7 +84,8 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
 
         JsonNode tools = answers.getFirst().get("result").get("tools");
         List<String> names = tools.valueStream().map(t -> t.get("name").asString()).toList();
-        assertEquals(List.of("doc_search", "doc_read", "stdlib_api", "stdlib_api_search", "jar_api"), names);
+        assertEquals(List.of("doc_search", "doc_read", "stdlib_api", "stdlib_api_search",
+                "stdlib_api_source", "jar_api"), names);
         assertTrue(tools.valueStream().allMatch(t -> t.has("inputSchema")), "every tool declares its input");
     }
 
