@@ -2963,7 +2963,7 @@ Note that `+applicant.rank == Staff+` cannot be written as a condition. `+==+` w
 map  filter  fold  foldRight  all  any  length  get  mapIndexed
 reverse  contains  sum  product  append  concat  flatMap  isEmpty  sort  rangeInclusive
 distinct  distinctBy  allDistinctBy  partition  groupBy  indexBy  filterMap  max  min  find  sortBy
-take  drop  zip  unzip
+take  drop  zipShortest  unzip
 ----
 
 All are called through the qualifier `+List+` (<<stdlib>>). `+List.get+` returns `+Option<T>+`. `+List.map+` / `+List.filter+` / `+List.fold+` / `+List.all+` / `+List.any+` / `+List.mapIndexed+` take a block (<<blocks>>). Import them as `+import List (map, all )+` to write unqualified thereafter.

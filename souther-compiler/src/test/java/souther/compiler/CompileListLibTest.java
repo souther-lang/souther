@@ -522,11 +522,11 @@ class CompileListLibTest {
         assertEquals("", empty.get("rightward"));
     }
 
-    /** {@code zip} pairs two lists and truncates to the shorter one (Elm's {@code map2}); {@code
-     *  unzip} takes the pairs apart again. The tuples stay inside the behavior — a tuple has no
-     *  external form — so the boundary sees the two lists and a rendering of the pairs. */
+    /** {@code zipShortest} pairs two lists and truncates to the shorter one (Elm's {@code map2});
+     *  {@code unzip} takes the pairs apart again. The tuples stay inside the behavior — a tuple has
+     *  no external form — so the boundary sees the two lists and a rendering of the pairs. */
     @Test
-    void zipPairsTwoListsAndUnzipTakesThemApart() throws Exception {
+    void zipShortestPairsTwoListsAndUnzipTakesThemApart() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
