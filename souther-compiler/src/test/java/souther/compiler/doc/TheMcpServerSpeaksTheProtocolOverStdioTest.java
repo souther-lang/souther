@@ -123,6 +123,24 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
         assertTrue(answers.get(1).get("result").has("tools"), "the next request is served as usual");
     }
 
+    /**
+     * A tool schema is the whole of what a client can find out about a tool. A form the tool accepts
+     * and the schema does not mention cannot be reached by a reader who only has the schema, so it
+     * is missing however well it works.
+     */
+    @Test
+    void theJarApiSchemaSaysThatAMemberCanBeSelected() {
+        List<JsonNode> answers = serve("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+
+        JsonNode jarApi = answers.getFirst().get("result").get("tools").valueStream()
+                .filter(t -> t.get("name").asString().equals("jar_api")).findFirst().orElseThrow();
+        assertTrue(jarApi.get("description").asString().contains("Class#member"),
+                "the description names the form: " + jarApi.get("description").asString());
+        String name = jarApi.get("inputSchema").get("properties").get("name")
+                .get("description").asString();
+        assertTrue(name.contains("#member"), "and so does the argument that takes it: " + name);
+    }
+
     @Test
     void anUnknownMethodIsAJsonRpcError() {
         List<JsonNode> answers = serve("{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"nothing/here\"}");

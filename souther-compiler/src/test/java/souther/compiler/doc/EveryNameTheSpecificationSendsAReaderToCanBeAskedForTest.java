@@ -245,6 +245,24 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
                 "and so is an anchor written on a paragraph: " + forAnAnchor);
     }
 
+    /**
+     * A short name occurs inside longer words that have nothing to do with it — `cli` sits in the
+     * middle of `acyclic`. A suggestion is worth making only when the name asked for and the name
+     * offered are near each other, which containment does not measure.
+     */
+    @Test
+    void aNameThatMerelyOccursInsideAWordIsNotANearMiss() {
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        PrintStream discard = new PrintStream(ByteArrayOutputStream.nullOutputStream(), true,
+                StandardCharsets.UTF_8);
+
+        DocCommand.run(new String[]{"cli"}, discard, new PrintStream(err, true, StandardCharsets.UTF_8));
+
+        String said = err.toString(StandardCharsets.UTF_8);
+        assertFalse(said.contains("module-dependencies-are-acyclic"),
+                "a word that happens to hold the letters is not a suggestion: " + said);
+    }
+
     private static String text() {
         try (InputStream in = SpecDocument.class.getResourceAsStream("/META-INF/souther/specification.adoc")) {
             assertNotNull(in, "the specification travels in the jar");
