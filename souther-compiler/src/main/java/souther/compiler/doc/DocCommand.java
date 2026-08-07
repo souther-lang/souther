@@ -97,15 +97,23 @@ public final class DocCommand {
         SpecDocument.Section section = spec.section(anchor);
         if (section == null) {
             err.println("no section `" + anchor + "`");
-            List<String> near = spec.sections().stream()
-                    .map(SpecDocument.Section::anchor)
-                    .filter(a -> a.contains(anchor) || anchor.contains(a))
+            // Through the same fold the lookup itself went through: a reader who typed the case the
+            // compiler prints would otherwise be told there is nothing near what they asked for.
+            String asked = DocName.canonical(anchor);
+            List<String> near = spec.names().stream()
+                    .filter(a -> DocName.canonical(a).contains(asked)
+                            || asked.contains(DocName.canonical(a)))
                     .toList();
             if (!near.isEmpty()) {
                 err.println("did you mean: " + String.join(", ", near));
             }
             err.println("`souther doc` lists every section");
             return 2;
+        }
+        if (!DocName.canonical(section.anchor()).equals(DocName.canonical(anchor))) {
+            // A name written inside a section is answered with that section, and a reader who is
+            // not told so cannot tell an answer to what they asked from the nearest thing to it.
+            err.println("`" + anchor + "` is written in `" + section.anchor() + "`, which is what follows");
         }
         out.println("=".repeat(section.level()) + " " + section.title() + " [#" + section.anchor() + "]");
         out.println();

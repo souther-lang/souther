@@ -22,11 +22,13 @@ public final class LibraryDocs {
 
     private static final String ROOT = "META-INF/souther-docs/";
 
-    /** One shipped document: {@code set/topic} as it is asked for, the title of its first
-     *  markdown heading, and where its text is. */
+    /** One shipped document: {@code set/topic} as the jar that ships it spells the name, the title
+     *  of its first markdown heading, and where its text is. */
     public record Topic(String name, String title, String resource) {}
 
     private final ClassLoader loader;
+    /** Keyed by {@link DocName#canonical}, so a topic is found in whatever case it is asked for.
+     *  The topic keeps its own spelling: the name is also the path its text is read from. */
     private final Map<String, Topic> byName;
 
     private LibraryDocs(ClassLoader loader, Map<String, Topic> byName) {
@@ -49,7 +51,13 @@ public final class LibraryDocs {
                     for (String file : lines(indexUrl)) {
                         String topic = set + "/" + file.replaceFirst("\\.md$", "");
                         String resource = ROOT + set + "/" + file;
-                        byName.put(topic, new Topic(topic, titleOf(loader, resource, file), resource));
+                        Topic taken = byName.put(DocName.canonical(topic),
+                                new Topic(topic, titleOf(loader, resource, file), resource));
+                        if (taken != null) {
+                            throw new IllegalStateException(
+                                    "two shipped topics are asked for by the same name: `"
+                                            + taken.name() + "` and `" + topic + "`");
+                        }
                     }
                 }
             }
@@ -70,7 +78,7 @@ public final class LibraryDocs {
      * with nothing in it.
      */
     public String read(String name) {
-        Topic topic = byName.get(name);
+        Topic topic = byName.get(DocName.canonical(name));
         if (topic == null || loader.getResource(topic.resource()) == null) {
             return null;
         }
