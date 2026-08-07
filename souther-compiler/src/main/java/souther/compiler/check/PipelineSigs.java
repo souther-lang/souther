@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -107,7 +108,7 @@ public final class PipelineSigs {
             }
             if (!inProgress.add(s.bare())) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.pipe.selfcompose").title("check.pipe.title")
+                        Diagnostic.uncoded("check.pipe.selfcompose").title("check.pipe.title")
                                 .at(pos).args(s.name()).build(),
                         "pipeline `" + s.name() + "` composes with itself (a cycle)");
             }
@@ -153,7 +154,7 @@ public final class PipelineSigs {
             // arity is confirmed rather than assumed, or `route` would index an empty input list.
             if (g.ins().size() != 1) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.pipe.multiinput").title("check.pipe.title")
+                        Diagnostic.uncoded("check.pipe.multiinput").title("check.pipe.title")
                                 .at(pipe.pos()).args(stages.get(i).name(), g.ins().size(),
                                         pipe.name()).build(),
                         "`" + stages.get(i) + "` takes " + g.ins().size() + " inputs, so it cannot follow"
@@ -171,7 +172,7 @@ public final class PipelineSigs {
             Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut(), symbols), symbols);
             if (!inferred.equals(declared)) {
                 throw CompileException.of(
-                        Diagnostic.of("E1604", "e1604.msg").at(pipe.pos())
+                        Diagnostic.of(DiagnosticCode.E1604, "e1604.msg").at(pipe.pos())
                                 .args(pipe.name(), caseList(declared), caseList(inferred))
                                 .hint("e1604.hint")
                                 .build(),
@@ -255,7 +256,7 @@ public final class PipelineSigs {
             }
             if (consumed.isEmpty()) {
                 throw CompileException.of(
-                        Diagnostic.of("E1701", "e1701.msg")
+                        Diagnostic.of(DiagnosticCode.E1701, "e1701.msg")
                                 .at(pos)
                                 .diff(Type.show(mainline, in), Type.show(in, mainline))
                                 .hint("e1701.hint")
@@ -268,7 +269,7 @@ public final class PipelineSigs {
         }
         if (!mainline.equals(in)) {
             throw CompileException.of(
-                    Diagnostic.of("E1701", "e1701.msg")
+                    Diagnostic.of(DiagnosticCode.E1701, "e1701.msg")
                             .at(pos)
                             .diff(Type.show(mainline, in), Type.show(in, mainline))
                             .hint("e1701.hint")

@@ -173,7 +173,7 @@ class MessageCatalogFormatTest {
 
     /** Every module's main sources. The test runs in its own module directory, so the repo root is
      *  that directory's parent, and any module may name a message key. */
-    private static List<Path> mainSources() throws IOException {
+    static List<Path> mainSources() throws IOException {
         Path module = Path.of("").toAbsolutePath();
         Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
                 ? module.getParent() : module;

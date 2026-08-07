@@ -64,7 +64,7 @@ public final class BinaryElaborator {
                 Type rt = right.type();
                 if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.compare.ordered").title("check.type.mismatch.title")
+                            Diagnostic.uncoded("check.compare.ordered").title("check.type.mismatch.title")
                                     .at(bin.pos()).args(Type.show(lt), Type.show(rt)).build(),
                             "operand of comparison must be two ordered values of the same type (Int,"
                                     + " String, Decimal, Date, DateTime, a newtype over one of these, or"
@@ -115,7 +115,7 @@ public final class BinaryElaborator {
                 Type rt = BottomInfer.bottomAsEmptyList(rraw);
                 if (!(lt instanceof Type.ListOf lo) || !(rt instanceof Type.ListOf ro)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.concat.msg")
+                            Diagnostic.uncoded("check.concat.msg")
                                     .title("check.concat.title")
                                     .at(bin.pos(), 2)
                                     .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
@@ -154,7 +154,7 @@ public final class BinaryElaborator {
                         || !TypeOps.supportsEquality(rt, ctx.symbols())) {
                     Type carrier = TypeOps.supportsEquality(lt, ctx.symbols()) ? rt : lt;
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.equality.function")
+                            Diagnostic.uncoded("check.equality.function")
                                     .title("check.compare.title")
                                     .at(bin.pos(), 2).args(Type.show(carrier)).build(),
                             "a function has no value to compare, so " + Type.show(carrier)
@@ -167,7 +167,7 @@ public final class BinaryElaborator {
                 if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())
                         && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.compare.msg")
+                            Diagnostic.uncoded("check.compare.msg")
                                     .title("check.compare.title")
                                     .at(bin.pos(), 2)
                                     .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
@@ -223,7 +223,7 @@ public final class BinaryElaborator {
      * unrelated types is. */
     private static CompileException refused(Ast.Binary bin, ArithmeticCheck.Refusal refusal,
                                             Type lt, Type rt) {
-        Diagnostic.Builder d = Diagnostic.of(null, refusal.messageKey())
+        Diagnostic.Builder d = Diagnostic.uncoded(refusal.messageKey())
                 .title("check.type.mismatch.title")
                 .args(refusal.messageArgs().toArray());
         if (refusal.hintKey() != null) {

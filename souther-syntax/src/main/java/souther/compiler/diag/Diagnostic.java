@@ -18,6 +18,12 @@ import java.util.List;
  * The {@code code} (e.g. {@code E1301}) and the {@link TypeComparison} types are locale-independent
  * — the stable identity a tool keys on. Everything else (title, message, hints, secondary labels)
  * follows the locale.
+ *
+ * <p>A code is a {@link DiagnosticCode} and carries its own {@code titleKey}, so a coded diagnostic
+ * has both and they cannot disagree between two sites reporting the same rule. The remaining
+ * {@link #uncoded} sites are the ones not yet mapped onto a rule: they carry a title and no
+ * identity, which is what makes them unreadable from a diagnostic a reader is holding, and they are
+ * held to a shrinking allowlist until there are none.
  */
 public record Diagnostic(Severity severity,
                          String code,
@@ -64,24 +70,28 @@ public record Diagnostic(Severity severity,
     }
 
     /** A pre-formatted English message wrapped verbatim — the compatibility path for a site that
-     * has not yet been moved onto a catalog key. {@code pos} may be null for a position-less error. */
-    public static Diagnostic literal(SourcePos pos, String code, String message) {
-        return new Diagnostic(Severity.ERROR, code, null, pos == null ? null : Region.point(pos),
+     * has not yet been moved onto a catalog key. It carries no code and no title: a site with
+     * either of those has a catalog key by now. {@code pos} may be null for a position-less error. */
+    public static Diagnostic literal(SourcePos pos, String message) {
+        return new Diagnostic(Severity.ERROR, null, null, pos == null ? null : Region.point(pos),
                 List.of(), null, null, message, null, List.of(), null);
     }
 
-    /** A literal-message diagnostic that still carries a named title (e.g. SYNTAX ERROR) — the
-     * compatibility path for a site whose body is not yet a catalog key but whose title should be
-     * consistent with its migrated siblings. */
-    public static Diagnostic titledLiteral(SourcePos pos, String titleKey, int width, String message) {
-        Region region = pos == null ? null : Region.ofWidth(pos, width);
-        return new Diagnostic(Severity.ERROR, null, titleKey, region,
-                List.of(), null, null, message, null, List.of(), null);
+    /**
+     * A builder for a diagnostic that reports a known rule. The code carries the title, so the two
+     * agree at every site reporting that rule and neither is given here.
+     */
+    public static Builder of(DiagnosticCode code, String messageKey) {
+        return new Builder(code.name(), messageKey, code.titleKey());
     }
 
-    /** A builder for a catalog-keyed diagnostic. {@code code} may be null for an uncoded error. */
-    public static Builder of(String code, String messageKey) {
-        return new Builder(code, messageKey);
+    /**
+     * A builder for a diagnostic not yet mapped onto a rule, and so onto a code. It states a title
+     * and nothing a reader can look up; {@code souther doc} has no answer for one. Every remaining
+     * use is listed in the migration allowlist, and the list only shrinks.
+     */
+    public static Builder uncoded(String messageKey) {
+        return new Builder(null, messageKey, null);
     }
 
     public static final class Builder {
@@ -96,9 +106,10 @@ public record Diagnostic(Severity severity,
         private String suggestion;
         private Severity severity = Severity.ERROR;
 
-        private Builder(String code, String messageKey) {
+        private Builder(String code, String messageKey, String titleKey) {
             this.code = code;
             this.messageKey = messageKey;
+            this.titleKey = titleKey;
         }
 
         /** Marks this a warning: it is reported but does not fail the build. */
@@ -107,9 +118,16 @@ public record Diagnostic(Severity severity,
             return this;
         }
 
-        /** An explicit title-bar key, for an uncoded error that still deserves a named title
-         * (e.g. TYPE MISMATCH). A coded error derives its title from the code. */
+        /**
+         * The title-bar category, for a diagnostic not yet mapped onto a rule. A coded one takes
+         * its title from the code, so that two sites reporting one rule cannot be shown under two
+         * categories; asking for a title here would be asking for that disagreement.
+         */
         public Builder title(String titleKey) {
+            if (code != null) {
+                throw new IllegalStateException(
+                        code + " takes its title from the code; remove the title() call");
+            }
             this.titleKey = titleKey;
             return this;
         }

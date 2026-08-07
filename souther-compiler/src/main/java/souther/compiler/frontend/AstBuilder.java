@@ -9,6 +9,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
@@ -151,7 +152,7 @@ public final class AstBuilder {
 
     private CompileException onlyExamples(SyntaxNode n) {
         return CompileException.of(
-                Diagnostic.of("E1906", "check.example.file.only").title("check.example.title")
+                Diagnostic.of(DiagnosticCode.E1906, "check.example.file.only")
                         .at(pos(n)).build(),
                 "an `examples for` file holds examples, the fakes they run against and the values they"
                         + " name; a data, a behavior, an import and a `let` with parameters belong in the"
@@ -267,7 +268,7 @@ public final class AstBuilder {
             // thing and reject each other's construction. One way to write it (spec §unit-data).
             if (includes.isEmpty() && fields.isEmpty()) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.data.emptybody").title("check.data.invalid.title")
+                        Diagnostic.uncoded("check.data.emptybody").title("check.data.invalid.title")
                                 .at(bodyRegion(product.get())).args(name)
                                 .hint("check.data.emptybody.hint", name).build(),
                         "data `" + name + "` has an empty body");
@@ -300,7 +301,7 @@ public final class AstBuilder {
         // slot for one, would silently drop it and with it any error inside it.
         for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.invariant.onunit").title("check.invariant.invalid.title")
+                    Diagnostic.uncoded("check.invariant.onunit").title("check.invariant.invalid.title")
                             .at(pos(clause)).args(name).build(),
                     "unit data `" + name + "` cannot carry an invariant");
         }
@@ -327,7 +328,7 @@ public final class AstBuilder {
                 // Refused here rather than left to be discovered at the attempt.
                 if (ident(label).equals("_")) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.invariant.underscore")
+                            Diagnostic.uncoded("check.invariant.underscore")
                                     .title("check.invariant.invalid.title")
                                     .at(posOf(label)).args(typeName)
                                     .hint("check.invariant.underscore.hint").build(),
@@ -335,7 +336,7 @@ public final class AstBuilder {
                 }
                 if (!named.add(ident(label))) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.invariant.duplicate")
+                            Diagnostic.uncoded("check.invariant.duplicate")
                                     .title("check.invariant.invalid.title")
                                     .at(posOf(label)).args(ident(label), typeName).build(),
                             "`" + typeName + "` declares two invariant clauses named `"
@@ -755,7 +756,7 @@ public final class AstBuilder {
                     pos(operands.get(1)));
         }
         throw CompileException.of(
-                Diagnostic.of(null, "parse.vpipe.right").title("parse.title").at(right.pos()).build(),
+                Diagnostic.uncoded("parse.vpipe.right").title("parse.title").at(right.pos()).build(),
                 "the right side of `|>` must be a function call or a function name");
     }
 
@@ -797,8 +798,7 @@ public final class AstBuilder {
         }
         if (binder == null) {
             throw CompileException.of(
-                    Diagnostic.of("E2018", "check.attempt.armswithoutattempt")
-                            .title("check.attempt.title").at(pos(node.get()))
+                    Diagnostic.of(DiagnosticCode.E2018, "check.attempt.armswithoutattempt").at(pos(node.get()))
                             .hint("check.attempt.armswithoutattempt.hint").build(),
                     "departure arms need an attempted construction to answer for");
         }
@@ -808,8 +808,7 @@ public final class AstBuilder {
             SyntaxToken label = identTokens(arm).get(0);
             if (!answered.add(ident(label))) {
                 throw CompileException.of(
-                        Diagnostic.of("E2019", "check.attempt.armtwice")
-                                .title("check.attempt.title").at(posOf(label))
+                        Diagnostic.of(DiagnosticCode.E2019, "check.attempt.armtwice").at(posOf(label))
                                 .args(ident(label)).build(),
                         "the arm `" + ident(label) + "` is written twice");
             }
@@ -1536,7 +1535,7 @@ public final class AstBuilder {
 
     private CompileException error(SourcePos pos, String messageKey, String legacyMessage, Object... args) {
         return CompileException.of(
-                Diagnostic.of(null, messageKey).title("parse.title").at(pos).args(args).build(),
+                Diagnostic.uncoded(messageKey).title("parse.title").at(pos).args(args).build(),
                 legacyMessage);
     }
 
@@ -1544,7 +1543,7 @@ public final class AstBuilder {
     private CompileException errorWithHint(SourcePos pos, String messageKey, String hintKey,
                                            String legacyMessage, Object... args) {
         return CompileException.of(
-                Diagnostic.of(null, messageKey).title("parse.title").at(pos).args(args)
+                Diagnostic.uncoded(messageKey).title("parse.title").at(pos).args(args)
                         .hint(hintKey).build(),
                 legacyMessage);
     }

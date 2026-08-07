@@ -294,7 +294,7 @@ public final class Deriver {
      */
     private static CompileException badMapKey(Type key, Ast.Data d, String field, SourcePos pos) {
         return CompileException.of(
-                Diagnostic.of(null, "check.map.key.field").title("check.boundary.title")
+                Diagnostic.uncoded("check.map.key.field").title("check.boundary.title")
                         .at(pos).args(where(d, field), Type.show(key))
                         .hint("check.map.key.field.hint").build(),
                 "a Map crossing the boundary at `" + where(d, field) + "` must be keyed by String, a"
@@ -341,14 +341,14 @@ public final class Deriver {
     private static CompileException noCodec(Type t, Ast.Data d, String field, SourcePos pos) {
         if (t instanceof Type.TupleOf) {
             return CompileException.of(
-                    Diagnostic.of(null, "check.derive.tuplefield").title("check.boundary.title")
+                    Diagnostic.uncoded("check.derive.tuplefield").title("check.boundary.title")
                             .at(pos).args(where(d, field), Type.show(t)).build(),
                     "`" + where(d, field) + "` is " + Type.show(t) + ": a tuple has"
                             + " no external representation, so no codec can be derived (ADR-0036)."
                             + " Use a named data.");
         }
         return CompileException.of(
-                Diagnostic.of(null, "check.derive.nocodec").title("check.boundary.title")
+                Diagnostic.uncoded("check.derive.nocodec").title("check.boundary.title")
                         .at(pos).args(where(d, field), Type.show(t)).build(),
                 "no codec can be derived for `" + where(d, field) + "`: "
                         + Type.show(t) + " has no external representation");

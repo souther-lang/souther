@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -203,7 +204,7 @@ public final class TypeOps {
             TypeName name = memberName(m);
             if (name == null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.union.members").title("check.boundary.title")
+                        Diagnostic.uncoded("check.union.members").title("check.boundary.title")
                                 .at(ret.pos()).args(Type.show(m)).build(),
                         "`" + Type.show(m) + "` cannot be a union member: a member is a type that is"
                                 + " nominal, tells itself apart at run time, and can be written as a"
@@ -588,7 +589,7 @@ public final class TypeOps {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (!assignable(arg, bound, symbols) && !assignable(bound, arg, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.generic.arg").title("check.type.mismatch.title")
+                            Diagnostic.uncoded("check.generic.arg").title("check.type.mismatch.title")
                                     .at(pos).args(what, Type.show(bound), Type.show(arg))
                                     .diff(Type.show(arg, bound), Type.show(bound, arg)).build(),
                             what + ": expected " + bound + " but got " + arg);
@@ -619,7 +620,7 @@ public final class TypeOps {
             default -> {
                 if (!assignable(arg, param, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.generic.arg").title("check.type.mismatch.title")
+                            Diagnostic.uncoded("check.generic.arg").title("check.type.mismatch.title")
                                     .at(pos).args(what, Type.show(param), Type.show(arg))
                                     .diff(Type.show(arg, param), Type.show(param, arg)).build(),
                             what + ": expected " + param + " but got " + arg);
@@ -840,14 +841,14 @@ public final class TypeOps {
             TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.spread.notproduct").title("check.construct.title")
+                        Diagnostic.uncoded("check.spread.notproduct").title("check.construct.title")
                                 .at(inc.name().region()).args(inc.written()).build(),
                         "cannot spread `..." + inc.written() + "` (not a product data)");
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
                 if (types.put(e.getKey(), e.getValue()) != null) {
                     throw CompileException.of(
-                            Diagnostic.of("E1004", "e1004.msg").at(data.pos())
+                            Diagnostic.of(DiagnosticCode.E1004, "e1004.msg").at(data.pos())
                                     .args(e.getKey(), inc.written(), data.name()).build(),
                             "Field `" + e.getKey() + "` from `..." + inc.written() + "` conflicts with a field of `"
                                     + data.name() + "`.");
@@ -857,7 +858,7 @@ public final class TypeOps {
         for (Ast.Field f : data.fields()) {
             if (types.put(f.name(), fieldType(f)) != null) {
                 throw CompileException.of(
-                        Diagnostic.of("E1004", "e1004.dup").at(f.pos())
+                        Diagnostic.of(DiagnosticCode.E1004, "e1004.dup").at(f.pos())
                                 .args(f.name(), data.name()).build(),
                         "duplicate field `" + f.name() + "` in `" + data.name() + "`");
             }
@@ -1374,7 +1375,7 @@ public final class TypeOps {
                                         String message) {
         if (!supportsEquality(t, symbols)) {
             throw CompileException.of(
-                    Diagnostic.of(null, key).title("check.boundary.title")
+                    Diagnostic.uncoded(key).title("check.boundary.title")
                             .at(at.pos()).args(Type.show(t)).build(),
                     message + ": " + Type.show(t));
         }
@@ -1385,7 +1386,7 @@ public final class TypeOps {
                                 String message) {
         if (ref.arg() == null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.typearg." + key).title("check.typearg.title")
+                    Diagnostic.uncoded("check.typearg." + key).title("check.typearg.title")
                             .at(ref.pos(), width).build(),
                     message);
         }
@@ -1410,7 +1411,7 @@ public final class TypeOps {
             String module = symbols.moduleOfQualifier(qualifier);
             if (module == null) {
                 return CompileException.of(
-                        Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
+                        Diagnostic.uncoded("check.qualified.unknownmodule").title("check.module.title")
                                 .at(written.region()).args(qualifier, name)
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build(),
@@ -1419,7 +1420,7 @@ public final class TypeOps {
             String key = symbols.contains(new TypeName(module, name))
                     ? "check.qualified.notexposed" : "check.qualified.notdefined";
             return CompileException.of(
-                    Diagnostic.of(null, key).title("check.module.title")
+                    Diagnostic.uncoded(key).title("check.module.title")
                             .at(written.region()).args(name, module)
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
                             .build(),
@@ -1428,7 +1429,7 @@ public final class TypeOps {
         }
         Set<String> known = symbols.namesInScope();
         return CompileException.of(
-                Diagnostic.of(null, "check.unknown.type.msg")
+                Diagnostic.uncoded("check.unknown.type.msg")
                         .title("check.unknown.title")
                         .at(written.region())
                         .args(written.quoted())

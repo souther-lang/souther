@@ -177,7 +177,7 @@ public final class BottomInfer {
             return joined;
         }
         throw CompileException.of(
-                Diagnostic.of(null, "check.list.msg")
+                Diagnostic.uncoded("check.list.msg")
                         .title("check.list.title")
                         .at(pos)
                         .hint("check.list.hint", Type.show(a), Type.show(b))

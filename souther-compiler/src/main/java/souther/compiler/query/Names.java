@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -250,7 +251,7 @@ public final class Names {
             String last = dot < 0 ? "" : written.substring(dot + 1);
             if (last.equals("decoder") || last.equals("encoder")) {
                 return nothing(ref, Report.raised(
-                        Diagnostic.of(null, "check.pipe.boundary").title("check.pipe.title")
+                        Diagnostic.uncoded("check.pipe.boundary").title("check.pipe.title")
                                 .at(ref.pos()).build(),
                         "decode/encode are boundary edges, not pipeline stages; `>->` composes"
                                 + " behaviors only (spec 14.1)"));
@@ -266,7 +267,7 @@ public final class Names {
          */
         Ast.Var required(Ast.Var ref, String by) {
             return behavior(ref, (name, candidates) -> Report.raised(
-                    Diagnostic.of("E1607", "e1607.unknown").title("e1607.title")
+                    Diagnostic.of(DiagnosticCode.E1607, "e1607.unknown")
                             .at(name.written().region()).args(by, name.name())
                             .suggestion(Suggest.candidate(name.name(), candidates))
                             .hint("e1607.unknown.hint").build(),
@@ -293,7 +294,7 @@ public final class Names {
             }
             if (!db.ask(new Front.ModuleNames()).value().contains(target)) {
                 return nothing(ref, Report.raised(
-                        Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
+                        Diagnostic.uncoded("check.qualified.unknownmodule").title("check.module.title")
                                 .at(ref.pos()).args(qualifier, bare).build(),
                         "no module named `" + qualifier + "`"));
             }
@@ -341,7 +342,7 @@ public final class Names {
             WrittenName written = ref.written();
             String name = written.canonical();
             return Report.raised(
-                    Diagnostic.of(null, "check.unknown.behavior.msg").title("check.unknown.title")
+                    Diagnostic.uncoded("check.unknown.behavior.msg").title("check.unknown.title")
                             .at(written.region()).args(written.quoted())
                             .suggestion(Suggest.candidate(name, candidates)).build(),
                     "unknown behavior `" + written.quoted() + "` in pipeline"
@@ -545,7 +546,7 @@ public final class Names {
                 for (String imported : imp.names()) {
                     if (!exposed.contains(imported)) {
                         reports.add(Report.raised(
-                                Diagnostic.of(null, "check.import.notexposed").title("check.module.title")
+                                Diagnostic.uncoded("check.import.notexposed").title("check.module.title")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not exposed by `" + imp.module() + "`"));
                         nameless(scope, List.of(imported));
@@ -560,7 +561,7 @@ public final class Names {
                             continue;
                         }
                         reports.add(Report.raised(
-                                Diagnostic.of(null, "check.import.notdefined").title("check.module.title")
+                                Diagnostic.uncoded("check.import.notdefined").title("check.module.title")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not defined in `" + imp.module() + "`"));
                         nameless(scope, List.of(imported));
@@ -809,8 +810,7 @@ public final class Names {
                             || used.contains(new Use(imported.text(), imp.module(), imported.text()))) {
                         continue;
                     }
-                    reports.add(Report.of(Diagnostic.of("E1922", "check.import.unused").warning()
-                            .title("check.import.title")
+                    reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1922, "check.import.unused").warning()
                             .at(imported.written().region())
                             .args(imported.written().quoted())
                             .hint("check.import.unused.hint")
@@ -1355,8 +1355,7 @@ public final class Names {
                     // quote. Everything from the module it names round to this one is in the cycle,
                     // and none of them can be compiled — each needs an answer from the next.
                     found.putIfAbsent(name, Report.raised(
-                            Diagnostic.literal(dep.pos(), "E1501",
-                                    "Cyclic module dependency detected."),
+                            Diagnostic.of(DiagnosticCode.E1501, "e1501.msg").at(dep.pos()).build(),
                             "Cyclic module dependency detected."));
                     members.addAll(stack.subList(closes, stack.size()));
                     continue;
@@ -1417,7 +1416,7 @@ public final class Names {
 
     static Report unknownModule(Ast.Import imp) {
         return Report.raised(
-                Diagnostic.of(null, "check.import.unknownmodule").title("check.module.title")
+                Diagnostic.uncoded("check.import.unknownmodule").title("check.module.title")
                         .at(imp.pos()).args(imp.module()).build(),
                 "unknown module `" + imp.module() + "`");
     }
@@ -1436,7 +1435,7 @@ public final class Names {
             return null;
         }
         return Report.raised(
-                Diagnostic.of(null, "check.import.aliastaken").title("check.module.title")
+                Diagnostic.uncoded("check.import.aliastaken").title("check.module.title")
                         .at(imp.pos()).args(imp.alias(), taken)
                         .hint("check.import.aliastaken.hint").build(),
                 "the alias `" + imp.alias() + "` is already how `" + taken + "` is named here");
@@ -1467,7 +1466,7 @@ public final class Names {
             // shadow. Refused where it is declared, as a reserved module name is (see Front).
             if (Prelude.isQualifier(def.name())) {
                 reports.add(Report.raised(
-                        Diagnostic.of(null, "check.data.qualifier").title("check.duplicate.title")
+                        Diagnostic.uncoded("check.data.qualifier").title("check.duplicate.title")
                                 .at(def.pos()).args(def.name()).build(),
                         "data `" + def.name() + "` uses a name reserved for the standard-library"
                                 + " qualifier `" + def.name() + "` (as in `" + def.name()
@@ -1484,7 +1483,7 @@ public final class Names {
                 continue;
             }
             reports.add(Report.raised(
-                    Diagnostic.of(null, "check.dup.valuename").title("check.duplicate.title")
+                    Diagnostic.uncoded("check.dup.valuename").title("check.duplicate.title")
                             .at(fn.pos()).args(fn.name()).build(),
                     "`let " + fn.name() + "` and data `" + fn.name()
                             + "` are one name where a value is written; rename one"));
@@ -1553,11 +1552,11 @@ public final class Names {
     private static Report importCollision(String name, Ast.Import imp, Ast.Import earlier) {
         if (earlier == null) {
             return Report.raised(
-                    Diagnostic.of(null, "check.import.conflict").title("check.module.title")
+                    Diagnostic.uncoded("check.import.conflict").title("check.module.title")
                             .at(imp.pos()).args(name).hint("check.import.conflict.hint").build(),
                     "imported `" + name + "` conflicts with a local definition");
         }
-        Diagnostic.Builder b = Diagnostic.of(null, "check.import.duplicate")
+        Diagnostic.Builder b = Diagnostic.uncoded("check.import.duplicate")
                 .title("check.module.title").at(imp.pos()).args(name, earlier.module(), imp.module())
                 .secondary(Region.point(earlier.pos()), "check.import.duplicate.first", name,
                         earlier.module());

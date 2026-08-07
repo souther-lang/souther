@@ -4,6 +4,7 @@ import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.frontend.CstFrontend;
@@ -326,7 +327,7 @@ public final class Front {
                 PublishedModule published = PublishedModule.read(name, classes);
                 if (published == null) {
                     if (neededBy.containsKey(name) && !Prelude.isQualifier(name)) {
-                        reports.add(Report.of(Diagnostic.of(null, "check.module.pathincomplete")
+                        reports.add(Report.of(Diagnostic.uncoded("check.module.pathincomplete")
                                 .title("check.module.title").args(name, neededBy.get(name))
                                 .hint("check.module.pathincomplete.hint", name).build()));
                     }
@@ -510,7 +511,7 @@ public final class Front {
                 return Answer.of(m.name());
             }
             return Answer.absent(Report.raised(
-                    Diagnostic.of(null, "check.module.duplicate").title("check.module.title")
+                    Diagnostic.uncoded("check.module.duplicate").title("check.module.title")
                             .at(m.pos()).args(m.name()).build(),
                     "duplicate module `" + m.name() + "`"));
         }
@@ -608,7 +609,7 @@ public final class Front {
             SourcePos pos = db.ask(new Parsed(id)).present()
                     ? db.ask(new Parsed(id)).value().module().pos() : null;
             return Answer.absent(Report.raised(
-                    Diagnostic.of("E1907", "check.example.notarget").title("check.example.title")
+                    Diagnostic.of(DiagnosticCode.E1907, "check.example.notarget")
                             .at(pos).args(target).build(),
                     "an `examples for " + target + "` file names a module that is not being compiled"));
         }
@@ -675,7 +676,7 @@ public final class Front {
                 return Answer.of(Boolean.FALSE);
             }
             return Answer.absent(Report.raised(
-                    Diagnostic.of(null, "check.module.shadowspath").title("check.module.title")
+                    Diagnostic.uncoded("check.module.shadowspath").title("check.module.title")
                             .args(name).hint("check.module.shadowspath.hint", name).build(),
                     "module `" + name + "` is compiled here and is also on the path"));
         }
@@ -752,7 +753,7 @@ public final class Front {
     static Report reservedNamespace(String name, SourcePos pos) {
         if (name.equals(RESERVED) || name.startsWith(RESERVED + ".")) {
             return Report.raised(
-                    Diagnostic.of(null, "check.module.reserved").title("check.module.title")
+                    Diagnostic.uncoded("check.module.reserved").title("check.module.title")
                             .at(pos).args(name).build(),
                     "module `" + name + "` is in the reserved `" + RESERVED + "` namespace: the"
                             + " compiler ships souther.string / souther.list / souther.map /"
@@ -763,7 +764,7 @@ public final class Front {
         // imported.
         if (Prelude.isQualifier(name)) {
             return Report.raised(
-                    Diagnostic.of(null, "check.module.qualifier").title("check.module.title")
+                    Diagnostic.uncoded("check.module.qualifier").title("check.module.title")
                             .at(pos).args(name).build(),
                     "module `" + name + "` uses a name reserved for the standard-library qualifier `"
                             + name + "` (as in `" + name + ".…` / `import " + name + " { … }`); pick"

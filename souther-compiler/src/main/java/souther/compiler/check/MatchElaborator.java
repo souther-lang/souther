@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -36,7 +37,7 @@ public final class MatchElaborator {
         }
         if (!(st instanceof Type.Ref ref) || !(ctx.symbols().get(ref.name()) instanceof Ast.SumData sum)) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.match.notsum").title("check.match.title")
+                    Diagnostic.uncoded("check.match.notsum").title("check.match.title")
                             .at(m.pos(), 5).args(Type.show(st)).build(),
                     "match requires a sum-typed value, got " + st);
         }
@@ -65,7 +66,7 @@ public final class MatchElaborator {
                 break;
             }
         }
-        Diagnostic.Builder d = Diagnostic.of(null, "check.match.notcase").title("check.match.title")
+        Diagnostic.Builder d = Diagnostic.uncoded("check.match.notcase").title("check.match.title")
                 .at(c.pos()).args(caseName, what);
         if (otherSum != null) {
             d = d.hint("check.match.notcase.other", caseName, otherSum);
@@ -95,7 +96,7 @@ public final class MatchElaborator {
                 }
                 if (!covered.add(caseName)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.match.overlap").title("check.match.title")
+                            Diagnostic.uncoded("check.match.overlap").title("check.match.title")
                                     .at(c.pos()).args(written.written()).build(),
                             "`" + written.written() + "` is matched by more than one case");
                 }
@@ -105,7 +106,7 @@ public final class MatchElaborator {
             if (c.unwrapAsserts() != null) {
                 if (c.caseTypes().size() != 1) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.match.newtype.orpattern").title("check.match.title")
+                            Diagnostic.uncoded("check.match.newtype.orpattern").title("check.match.title")
                                     .at(c.pos()).build(),
                             "a constructor destructuring opens a single case, not an or-pattern");
                 }
@@ -129,7 +130,7 @@ public final class MatchElaborator {
         }
         if (branchType == null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.match.nocases").title("check.match.title")
+                    Diagnostic.uncoded("check.match.nocases").title("check.match.title")
                             .at(m.pos(), 5).build(),
                     "match has no cases");
         }
@@ -146,7 +147,7 @@ public final class MatchElaborator {
         for (Ast.Case c : m.cases()) {
             if (c.caseTypes().size() != 1) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.match.option.orpattern").title("check.match.title")
+                        Diagnostic.uncoded("check.match.option.orpattern").title("check.match.title")
                                 .at(c.pos()).build(),
                         "or-patterns are not allowed in an Option match; use separate Some and None cases");
             }
@@ -159,14 +160,14 @@ public final class MatchElaborator {
                 bind = null;
             } else {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.match.option.notcase").title("check.match.title")
+                        Diagnostic.uncoded("check.match.option.notcase").title("check.match.title")
                                 .at(c.pos()).args(caseType).build(),
                         "`" + caseType + "` is not a case of Option; use Some or None");
             }
             if (c.unwrapAsserts() != null) {
                 if (!TypeName.SOME.equals(arm.denotes())) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.match.option.nopayload").title("check.match.title")
+                            Diagnostic.uncoded("check.match.option.nopayload").title("check.match.title")
                                     .at(c.pos()).args(caseType).build(),
                             "`" + caseType + "` has no value, so it cannot be opened with `" + caseType + "(...)`");
                 }
@@ -174,7 +175,7 @@ public final class MatchElaborator {
             }
             if (!covered.add(arm.denotes())) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.match.overlap").title("check.match.title")
+                        Diagnostic.uncoded("check.match.overlap").title("check.match.title")
                                 .at(c.pos()).args(caseType).build(),
                         "`" + caseType + "` is matched by more than one case");
             }
@@ -249,7 +250,7 @@ public final class MatchElaborator {
         if (!(element instanceof Type.Ref r) || !r.name().equals(first.denotes())) {
             String elementName = element instanceof Type.Ref r2 ? r2.name().name() : Type.show(element);
             throw CompileException.of(
-                    Diagnostic.of(null, "check.match.newtype.mismatch").title("check.match.title")
+                    Diagnostic.uncoded("check.match.newtype.mismatch").title("check.match.title")
                             .at(c.pos()).args("Some", elementName, first.written()).build(),
                     "`Some` wraps `" + elementName + "`, not `" + first.written() + "`");
         }
@@ -267,7 +268,7 @@ public final class MatchElaborator {
             Type inner = TypeOps.newtypeInner(layer, symbols);
             if (inner == null) {
                 Diagnostic.Builder d =
-                        Diagnostic.of(null, "check.match.newtype.notnewtype").title("check.match.title")
+                        Diagnostic.uncoded("check.match.newtype.notnewtype").title("check.match.title")
                                 .at(c.pos()).args(name);
                 if (i == 0 && firstOpensTheCase) {
                     d = d.hint("check.match.newtype.notnewtype.hint");
@@ -282,7 +283,7 @@ public final class MatchElaborator {
                 if (!(inner instanceof Type.Ref ir) || !ir.name().equals(next.denotes())) {
                     String innerName = inner instanceof Type.Ref r ? r.name().name() : Type.show(inner);
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.match.newtype.mismatch").title("check.match.title")
+                            Diagnostic.uncoded("check.match.newtype.mismatch").title("check.match.title")
                                     .at(c.pos()).args(name, innerName, next.written()).build(),
                             "`" + name + "` wraps `" + innerName + "`, not `" + next.written() + "`");
                 }
@@ -311,7 +312,7 @@ public final class MatchElaborator {
             return joined;
         }
         throw CompileException.of(
-                Diagnostic.of(null, "check.match.branchtypes").title("check.match.title")
+                Diagnostic.uncoded("check.match.branchtypes").title("check.match.title")
                         .at(c.pos()).args(Type.show(branchType), Type.show(bt))
                         .diff(Type.show(bt, branchType), Type.show(branchType, bt)).build(),
                 "match branches disagree: " + Type.show(branchType) + " vs " + Type.show(bt));
@@ -321,7 +322,7 @@ public final class MatchElaborator {
      * first missing case, as it did before, so callers reading the text are unchanged. */
     static CompileException nonExhaustive(SourcePos pos, String what, List<String> missing) {
         return CompileException.of(
-                Diagnostic.of("E1201", "e1201.msg")
+                Diagnostic.of(DiagnosticCode.E1201, "e1201.msg")
                         .at(pos, 5)
                         .args(what)
                         .hint("e1201.hint", String.join(", ", missing))

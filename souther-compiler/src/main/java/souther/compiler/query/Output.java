@@ -15,6 +15,7 @@ import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleMetadata;
@@ -511,7 +512,7 @@ public final class Output {
                             + (check.value() instanceof String s ? "\"" + s + "\"" : check.value()) + ")";
                     String clause = failingClause(db, check, ctfe);
                     reports.add(Report.raised(
-                            Diagnostic.of(null, clause == null
+                            Diagnostic.uncoded(clause == null
                                             ? "check.const.invariant" : "check.const.invariant.clause")
                                     .title("check.construct.title")
                                     .at(check.pos()).args(shown, clause).build(),
@@ -681,12 +682,11 @@ public final class Output {
             // Which of the three it was travels into the message, because what to do about them
             // differs — and one of them is not about the model at all.
             souther.compiler.ExampleStatements.Unread why = f.why();
-            Diagnostic.Builder said = Diagnostic.of("E1920",
-                            why.isDepth() ? "check.example.disagreement.unread.deep"
+            Diagnostic.Builder said = Diagnostic.of(DiagnosticCode.E1920, why.isDepth() ? "check.example.disagreement.unread.deep"
                             : why.isSteps() ? "check.example.disagreement.unread.steps"
                             : why.isStack() ? "check.example.disagreement.unread.stack"
                             : "check.example.disagreement.unread.unanswered")
-                    .warning().title("check.example.title")
+                    .warning()
                     .at(f.at().pos(), f.width())
                     .args(f.target(), why.limitShown());
             return (why.isDepth()
@@ -714,7 +714,7 @@ public final class Output {
             // there is nothing to say, and the renderer would quote the same name twice.
             String elsewhere = standIn.at().sourceId().equals(recorded.at().sourceId())
                     ? null : standIn.at().sourceId();
-            return Diagnostic.of("E1919", key).warning().title("check.example.title")
+            return Diagnostic.of(DiagnosticCode.E1919, key).warning()
                     .at(recorded.at().pos(), recorded.width())
                     .args(d.behavior())
                     .secondaryIn(elsewhere,
@@ -919,8 +919,7 @@ public final class Output {
                 for (Ast.FnDef value : parsed.module().fns()) {
                     boolean fresh = taken.add(value.name());
                     if (!fresh && id.equals(sourceId)) {
-                        reports.add(Report.of(Diagnostic.of("E1906", "check.example.file.declared")
-                                .title("check.example.title").at(value.written().region())
+                        reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1906, "check.example.file.declared").at(value.written().region())
                                 .args(value.name(), name).build()));
                     }
                 }

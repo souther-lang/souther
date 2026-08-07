@@ -695,7 +695,7 @@ public final class HelperInliner {
             String param = params.get(i).name();
             if (fnParam < 0) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.fn.argnotfn").title("check.fn.title")
+                        Diagnostic.uncoded("check.fn.argnotfn").title("check.fn.title")
                                 .at(lambda.pos()).args(call.written(), i + 1, param).build(),
                         "argument " + (i + 1) + " of `" + call.written() + "` is `" + param
                                 + "`, which does not take a function");
@@ -703,7 +703,7 @@ public final class HelperInliner {
             String shape = params.stream().map(Ast.FnParam::name)
                     .collect(java.util.stream.Collectors.joining(", "));
             throw CompileException.of(
-                    Diagnostic.of(null, "check.fn.argorder").title("check.fn.title")
+                    Diagnostic.uncoded("check.fn.argorder").title("check.fn.title")
                             .at(lambda.pos())
                             .args(call.written(), i + 1, param, fnParam + 1, params.get(fnParam).name(), shape)
                             .hint("check.fn.argorder.hint").build(),
@@ -1053,7 +1053,7 @@ public final class HelperInliner {
         LambdaOrigin origin = applied == null ? null : applied.origin();
         if (origin != null) {
             return CompileException.of(
-                    Diagnostic.of(null, "check.fn.blockparam.arity").title("check.fn.title")
+                    Diagnostic.uncoded("check.fn.blockparam.arity").title("check.fn.title")
                             .at(origin.pos())
                             .args(origin.param(), origin.owner(), given,
                                     helper.params().size()).build(),
@@ -1062,7 +1062,7 @@ public final class HelperInliner {
                             + helper.params().size());
         }
         return CompileException.of(
-                Diagnostic.of(null, "check.helper.arity").title("check.arity.title")
+                Diagnostic.uncoded("check.helper.arity").title("check.arity.title")
                         .at(call.name().region())
                         .args(helper.name(), helper.params().size(), given).build(),
                 "helper `let " + helper.name() + "` takes " + helper.params().size()
@@ -1176,7 +1176,7 @@ public final class HelperInliner {
         String shape = written == null ? null : written.stream()
                 .map(Ast.FnParam::name)
                 .collect(java.util.stream.Collectors.joining(", "));
-        Diagnostic.Builder d = Diagnostic.of(null, "check.fn.argnotvalue")
+        Diagnostic.Builder d = Diagnostic.uncoded("check.fn.argnotvalue")
                 .title("check.fn.title").at(arg.pos())
                 .args(rawCall.written(), index + 1, p.name(), shape);
         if (shape != null) {

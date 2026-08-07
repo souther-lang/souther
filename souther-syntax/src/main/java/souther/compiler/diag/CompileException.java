@@ -30,11 +30,7 @@ public class CompileException extends RuntimeException {
     private final transient List<String> sources;
 
     public CompileException(SourcePos pos, String message) {
-        this(pos, null, message);
-    }
-
-    public CompileException(SourcePos pos, String code, String message) {
-        this(Diagnostic.literal(pos, code, message), format(pos, code, message));
+        this(Diagnostic.literal(pos, message), format(pos, null, message));
     }
 
     /** Throws with a fully structured diagnostic (a migrated site). */

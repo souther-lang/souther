@@ -186,7 +186,7 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         String text = found == null ? null : member.apply(found);
         if (text == null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.module.publishedincomplete").title("check.module.title")
+                    Diagnostic.uncoded("check.module.publishedincomplete").title("check.module.title")
                             .args(name, m.name()).hint("check.module.publishedincomplete.hint", m.name())
                             .build(),
                     "module `" + m.name() + "` says it declares `" + name
@@ -197,7 +197,7 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
 
     private static CompileException incompatible(SoutherModuleView m) {
         return CompileException.of(
-                Diagnostic.of(null, "check.module.incompatible").title("check.module.title")
+                Diagnostic.uncoded("check.module.incompatible").title("check.module.title")
                         .args(m.name(), m.compiler())
                         .hint("check.module.incompatible.hint", m.name()).build(),
                 "module `" + m.name() + "` was compiled by Souther " + m.compiler()

@@ -101,7 +101,7 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
     public static List<Report> of(CompileException e) {
         List<Diagnostic> diagnostics = e.diagnostics();
         if (diagnostics.isEmpty()) {
-            return List.of(new Report(Diagnostic.literal(null, null, e.getMessage()), e.getMessage(),
+            return List.of(new Report(Diagnostic.literal(null, e.getMessage()), e.getMessage(),
                     Delivery.BY_KEY));
         }
         List<Report> reports = new ArrayList<>();

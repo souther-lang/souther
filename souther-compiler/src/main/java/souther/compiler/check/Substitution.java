@@ -94,7 +94,7 @@ final class Substitution {
         }
         Type stated = settle(declared);
         throw CompileException.of(
-                Diagnostic.of(null, "check.expects").title("check.type.mismatch.title")
+                Diagnostic.uncoded("check.expects").title("check.type.mismatch.title")
                         .at(pos).args(what, Type.show(stated, actual), Type.show(actual, stated))
                         .diff(Type.show(actual, stated), Type.show(stated, actual)).build(),
                 what + " expects " + Type.show(stated) + ", but got " + Type.show(actual));
@@ -293,7 +293,7 @@ final class Substitution {
             return;
         }
         throw CompileException.of(
-                Diagnostic.of(null, "check.generic.arg").title("check.type.mismatch.title")
+                Diagnostic.uncoded("check.generic.arg").title("check.type.mismatch.title")
                         .at(pos).args(what, Type.show(held, at), Type.show(at, held))
                         .diff(Type.show(at, held), Type.show(held, at)).build(),
                 what + ": expected " + Type.show(held) + " but got " + Type.show(at));

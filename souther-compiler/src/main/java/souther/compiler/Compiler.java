@@ -89,7 +89,7 @@ public final class Compiler {
      */
     private static CompileException tooDeep() {
         return CompileException.of(
-                Diagnostic.of(null, "check.expr.toodeep").title("check.boundary.title").build(),
+                Diagnostic.uncoded("check.expr.toodeep").title("check.boundary.title").build(),
                 "an expression in this source nests too deeply for the compiler to walk;"
                         + " name its parts with `let` to flatten it");
     }

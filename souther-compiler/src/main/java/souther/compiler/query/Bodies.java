@@ -292,7 +292,7 @@ public final class Bodies {
          */
         private Report collision(String bare, String earlier, Ast.Import imp) {
             return Report.raised(
-                    Diagnostic.of(null, "check.import.behaviordup").title("check.module.title")
+                    Diagnostic.uncoded("check.import.behaviordup").title("check.module.title")
                             .at(imp.pos()).args(bare, earlier, imp.module())
                             .hint("check.import.behaviordup.hint", bare).build(),
                     "behavior `" + bare + "` is named from both `" + earlier + "` and `"

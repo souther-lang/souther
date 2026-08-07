@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.DiagnosticCode;
+
 import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +20,7 @@ class DiagnosticRenderTest {
 
     @Test
     void humanRendererQuotesTheLineAndUnderlinesTheToken() {
-        Diagnostic d = Diagnostic.of("E1301", "e1301.msg")
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
                 .at(new SourcePos(2, 13), 4)
                 .build();
         String out = new HumanRenderer(false).render(d, SRC, Locale.ENGLISH);
@@ -29,7 +31,8 @@ class DiagnosticRenderTest {
 
     @Test
     void titleFollowsTheLocale() {
-        Diagnostic d = Diagnostic.literal(new SourcePos(2, 13), "E1301", "boom");
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
+                .at(new SourcePos(2, 13)).build();
         String en = new HumanRenderer(false).render(d, SRC, Locale.ENGLISH);
         String ja = new HumanRenderer(false).render(d, SRC, Locale.JAPANESE);
         assertTrue(en.contains("USE OF NULL"), en);
@@ -51,7 +54,7 @@ class DiagnosticRenderTest {
 
     @Test
     void jsonRendererCarriesCodeAndRegion() {
-        Diagnostic d = Diagnostic.of("E1301", "e1301.msg")
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
                 .at(new SourcePos(2, 13), 4)
                 .build();
         String json = new JsonRenderer().render(d, SRC, Locale.JAPANESE);

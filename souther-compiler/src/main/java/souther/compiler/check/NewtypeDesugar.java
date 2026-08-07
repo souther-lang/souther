@@ -74,7 +74,7 @@ public final class NewtypeDesugar {
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(
-                                Diagnostic.of(null, "check.newtype.arity").title("check.arity.title")
+                                Diagnostic.uncoded("check.newtype.arity").title("check.arity.title")
                                         .at(call.name().region()).args(call.written(), args.size())
                                         .build(),
                                 "`" + call.written() + "` wraps one value, but is applied to " + args.size()

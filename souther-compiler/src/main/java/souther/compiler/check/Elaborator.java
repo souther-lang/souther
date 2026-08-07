@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -83,7 +84,7 @@ public final class Elaborator {
                 ? "check.map.key.function" : "check.set.function";
         String what = bad instanceof TypeOps.UncomparableIn.MapKey ? "key" : "element";
         throw CompileException.of(
-                Diagnostic.of(null, key).title("check.boundary.title")
+                Diagnostic.uncoded(key).title("check.boundary.title")
                         .at(c.pos()).args(Type.show(bad.type())).build(),
                 "this collection would have to compare " + Type.show(bad.type()) + " as its " + what
                         + ", and a function has no value to compare");
@@ -122,13 +123,13 @@ public final class Elaborator {
                 Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.tuple.pattern").title("check.type.mismatch.title")
+                            Diagnostic.uncoded("check.tuple.pattern").title("check.type.mismatch.title")
                                     .at(tg.pos()).args(Type.show(tt)).build(),
                             "a tuple pattern needs a tuple, got " + tt);
                 }
                 if (to.elements().size() != tg.arity()) {   // exact arity, in either direction (Elm)
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.tuple.arity").title("check.type.mismatch.title")
+                            Diagnostic.uncoded("check.tuple.arity").title("check.type.mismatch.title")
                                     .at(tg.pos()).args(tg.arity(), to.elements().size()).build(),
                             "this pattern binds " + tg.arity()
                                     + " name(s) but the tuple has " + to.elements().size() + " element(s)");
@@ -141,7 +142,7 @@ public final class Elaborator {
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.neg.msg")
+                            Diagnostic.uncoded("check.neg.msg")
                                     .title("check.neg.title")
                                     .at(new Region(neg.pos(), region(neg.operand()).end()))
                                     .args(Type.show(t))
@@ -198,7 +199,7 @@ public final class Elaborator {
             case Ast.Block block when expected instanceof Type.FnOf want ->
                     elaborateFunctionValue(block, want.params(), env, ctx);
             case Ast.Block block -> throw CompileException.of(
-                    Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
+                    Diagnostic.uncoded("check.block.notvalue").title("check.block.title")
                             .at(block.pos()).build(),
                     "a block is not a value: it may be passed as an argument or bound to a `let` and "
                             + "applied, but it cannot be returned or stored in a data (spec 12.5)");
@@ -243,7 +244,7 @@ public final class Elaborator {
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.construct.no").title("check.construct.title")
+                            Diagnostic.uncoded("check.construct.no").title("check.construct.title")
                                     .at(built.name().region()).args(built.name().quoted())
                                     .build(),
                             "cannot construct `" + built.name().quoted() + "`");
@@ -282,7 +283,7 @@ public final class Elaborator {
                     yield new Core.If(cond, then, els, joined, iff.pos());
                 }
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.if.msg")
+                        Diagnostic.uncoded("check.if.msg")
                                 .title("check.if.title")
                                 .at(iff.pos(), 2)
                                 .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())),
@@ -297,8 +298,7 @@ public final class Elaborator {
                 Core built = elaborate(ic.construct(), env, ctx);
                 if (!(built instanceof Core.NewData construct)) {
                     throw CompileException.of(
-                            Diagnostic.of("E2012", "check.attempt.notconstruction")
-                                    .title("check.attempt.title")
+                            Diagnostic.of(DiagnosticCode.E2012, "check.attempt.notconstruction")
                                     .at(region(ic.construct()))
                                     .hint("check.attempt.notconstruction.hint")
                                     .build(),
@@ -309,8 +309,7 @@ public final class Elaborator {
                 // branch that is not one — the same call a unit data's forbidden invariant makes.
                 if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
                     throw CompileException.of(
-                            Diagnostic.of("E2013", "check.attempt.noinvariant")
-                                    .title("check.attempt.title")
+                            Diagnostic.of(DiagnosticCode.E2013, "check.attempt.noinvariant")
                                     .at(region(ic.construct()))
                                     .args(construct.typeName().name())
                                     .hint("check.attempt.noinvariant.hint")
@@ -332,7 +331,7 @@ public final class Elaborator {
                     Type next = TypeOps.join(joined, body.type());
                     if (next == null) {
                         throw CompileException.of(
-                                Diagnostic.of(null, "check.if.msg")
+                                Diagnostic.uncoded("check.if.msg")
                                         .title("check.if.title")
                                         .at(ic.pos(), 2)
                                         .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
@@ -419,7 +418,7 @@ public final class Elaborator {
                     without.add(c.name());
                 }
             }
-            Diagnostic.Builder d = Diagnostic.of(null, "check.access.sum")
+            Diagnostic.Builder d = Diagnostic.uncoded("check.access.sum")
                     .title("check.type.mismatch.title")
                     .at(fa.name().region()).args(fa.field(), Type.show(target));
             if (!without.isEmpty()) {
@@ -435,7 +434,7 @@ public final class Elaborator {
                             + "`: a sum has no fields of its own; open it with `match`");
         }
         throw CompileException.of(
-                Diagnostic.of(null, "check.access").title("check.type.mismatch.title")
+                Diagnostic.uncoded("check.access").title("check.type.mismatch.title")
                         .at(fa.name().region()).args(fa.field()).build(),
                 "cannot access field `" + fa.field() + "` on this value");
     }
@@ -496,7 +495,7 @@ public final class Elaborator {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
         }
         throw CompileException.of(
-                Diagnostic.of(null, "check.fn.argtype").title("check.fn.title")
+                Diagnostic.uncoded("check.fn.argtype").title("check.fn.title")
                         .at(stepArg.pos()).args(fnName, Type.show(narrowGot),
                                 Type.show(TypeOps.substitute(declaredStep.result(), bind))).build(),
                 "the step of " + fnName + " returns " + Type.show(narrowGot)
@@ -514,7 +513,7 @@ public final class Elaborator {
             if (value.type() instanceof Type.FnOf fn) {
                 if (fn.params().size() != paramTypes.size()) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.fn.callarity").title("check.fn.title")
+                            Diagnostic.uncoded("check.fn.callarity").title("check.fn.title")
                                     .at(arg.pos()).args(fnName, paramTypes.size(), fn.params().size())
                                     .build(),
                             fnName + " calls its function with " + paramTypes.size()
@@ -523,7 +522,7 @@ public final class Elaborator {
                 for (int i = 0; i < paramTypes.size(); i++) {
                     if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), ctx.symbols())) {
                         throw CompileException.of(
-                                Diagnostic.of(null, "check.fn.argtype").title("check.fn.title")
+                                Diagnostic.uncoded("check.fn.argtype").title("check.fn.title")
                                         .at(arg.pos()).args(fnName, Type.show(paramTypes.get(i)),
                                                 Type.show(fn.params().get(i))).build(),
                                 fnName + "'s element type " + paramTypes.get(i)
@@ -534,14 +533,14 @@ public final class Elaborator {
                 return value;
             }
             throw CompileException.of(
-                    Diagnostic.of(null, "check.fn.expectsblock").title("check.fn.title")
+                    Diagnostic.uncoded("check.fn.expectsblock").title("check.fn.title")
                             .at(arg.pos()).args(fnName).build(),
                     fnName + " expects a block, e.g. `" + fnName
                             + "((acc, x) -> ..., seed, xs)` (spec 12.5)");
         }
         if (block.params().size() != paramTypes.size()) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.fn.blockarity").title("check.fn.title")
+                    Diagnostic.uncoded("check.fn.blockarity").title("check.fn.title")
                             .at(block.pos()).args(paramTypes.size(), block.params().size()).build(),
                     "this block takes " + paramTypes.size() + " parameter(s), got "
                             + block.params().size());
@@ -586,7 +585,7 @@ public final class Elaborator {
         TypeName layer = li.opens().denotes();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.open.notnewtype").title("check.open.title")
+                    Diagnostic.uncoded("check.open.notnewtype").title("check.open.title")
                             .at(li.pos()).args(opened)
                             .hint("check.open.notnewtype.hint").build(),
                     "`" + opened + "` is not a newtype, so a binding cannot open it with `"
@@ -599,7 +598,7 @@ public final class Elaborator {
             String shown = layer.name();
             String actual = Type.show(valueType);
             throw CompileException.of(
-                    Diagnostic.of(null, "check.open.mismatch").title("check.open.title")
+                    Diagnostic.uncoded("check.open.mismatch").title("check.open.title")
                             .at(li.pos()).args(shown, actual)
                             .diff(actual, shown).build(),
                     "this pattern opens `" + shown + "`, but the value is `" + actual + "`");
@@ -621,7 +620,7 @@ public final class Elaborator {
             return;
         }
         throw CompileException.of(
-                Diagnostic.of(null, "check.let.annotation").title("check.type.mismatch.title")
+                Diagnostic.uncoded("check.let.annotation").title("check.type.mismatch.title")
                         .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
                         .diff(Type.show(valueType, declared), Type.show(declared, valueType)).build(),
                 "the binding `" + li.name() + "` declares " + Type.show(declared)
@@ -969,7 +968,7 @@ public final class Elaborator {
      * shapes a function binding takes (a bare lambda, one an {@code if} chooses) read the same. */
     static CompileException functionAnnotation(Ast.LetIn li) {
         return CompileException.of(
-                Diagnostic.of(null, "check.fn.annotation").title("check.fn.title")
+                Diagnostic.uncoded("check.fn.annotation").title("check.fn.title")
                         .at(li.pos()).args(li.name()).hint("check.fn.annotation.hint").build(),
                 "the binding `" + li.name() + "` is a function, so it takes no annotation: a function"
                         + " type may be written only in a helper's parameter (spec 13.1)");
@@ -990,7 +989,7 @@ public final class Elaborator {
             }
             if (declared.params().size() != lambda.params().size()) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.fn.lambdaarity").title("check.fn.title")
+                        Diagnostic.uncoded("check.fn.lambdaarity").title("check.fn.title")
                                 .at(lambda.pos())
                                 .args(lambda.params().size(), declared.params().size()).build(),
                         "this lambda takes " + lambda.params().size()
@@ -1017,7 +1016,7 @@ public final class Elaborator {
         collectApplications(binder, body, env, ctx, uses, Set.of());
         if (uses.isEmpty()) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.fn.noinfer").title("check.fn.title")
+                    Diagnostic.uncoded("check.fn.noinfer").title("check.fn.title")
                             .at(body.pos()).args(binder.name()).build(),
                     "cannot infer the type of the function `" + binder.name() + "`: write its type"
                             + " (`let " + binder.name() + ": (Int) -> Bool = ...`), or apply it in"
@@ -1027,7 +1026,7 @@ public final class Elaborator {
         for (List<Type> u : uses) {
             if (!u.equals(first)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.fn.difftypes").title("check.fn.title")
+                        Diagnostic.uncoded("check.fn.difftypes").title("check.fn.title")
                                 .at(body.pos()).args(binder.name(), first.toString(), u.toString())
                                 .build(),
                         "the function `" + binder.name() + "` is applied with different argument"
@@ -1215,7 +1214,7 @@ public final class Elaborator {
             case Ast.Block b -> {
                 if (b.params().size() != paramTypes.size()) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.fn.lambdaarity").title("check.fn.title")
+                            Diagnostic.uncoded("check.fn.lambdaarity").title("check.fn.title")
                                     .at(b.pos()).args(b.params().size(), paramTypes.size()).build(),
                             "this lambda takes " + b.params().size() + " parameter(s) but is applied with "
                                     + paramTypes.size());
@@ -1235,7 +1234,7 @@ public final class Elaborator {
                 Type f = els.type();
                 if (!t.equals(f)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.fn.branchtypes").title("check.fn.title")
+                            Diagnostic.uncoded("check.fn.branchtypes").title("check.fn.title")
                                     .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build(),
                             "the two branches produce different function types: " + Type.show(t) + " vs " + Type.show(f));
                 }
@@ -1272,7 +1271,7 @@ public final class Elaborator {
     static void rejectBuiltinShadow(String name, SourcePos pos) {
         if (BUILTIN_VALUES.contains(name)) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.builtin.shadow").title("check.reserved.title")
+                    Diagnostic.uncoded("check.builtin.shadow").title("check.reserved.title")
                             .at(pos, name.length()).args(name).build(),
                     "`" + name + "` is a built-in value and cannot be used as a binding name — it would"
                             + " shadow the built-in; choose another name");
@@ -1318,7 +1317,7 @@ public final class Elaborator {
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
             throw CompileException.of(
-                    Diagnostic.of(null, "check.type.mismatch.msg")
+                    Diagnostic.uncoded("check.type.mismatch.msg")
                             .title("check.type.mismatch.title")
                             .at(region(e))
                             .args(what)
@@ -1371,12 +1370,12 @@ public final class Elaborator {
         };
         if (denotes != null) {
             return CompileException.of(
-                    Diagnostic.of(null, "check.notavalue").title("check.unknown.title")
+                    Diagnostic.uncoded("check.notavalue").title("check.unknown.title")
                             .at(v.written().region()).args(v.name(), denotes).build(),
                     "`" + v.name() + "` is " + denotes + ", and cannot be held as a value here");
         }
         return CompileException.of(
-                Diagnostic.of(null, "check.unknown.name.msg")
+                Diagnostic.uncoded("check.unknown.name.msg")
                         .title("check.unknown.title")
                         .at(v.written().region())
                         .args(v.name())
@@ -1399,7 +1398,7 @@ public final class Elaborator {
             return;
         }
         throw CompileException.of(
-                Diagnostic.of("E1303", some ? "e1303.some" : "e1303.none").title("e1303.title")
+                Diagnostic.of(DiagnosticCode.E1303, some ? "e1303.some" : "e1303.none")
                         .at(pos, name.length())
                         .hint(some ? "e1303.some.hint" : "e1303.none.hint").build(),
                 some
@@ -1449,8 +1448,7 @@ public final class Elaborator {
             answered.add(name);
             if (!named.contains(name)) {
                 throw CompileException.of(
-                        Diagnostic.of("E2014", "check.attempt.unknownclause")
-                                .title("check.attempt.title")
+                        Diagnostic.of(DiagnosticCode.E2014, "check.attempt.unknownclause")
                                 .at(arm.pos(), name.length())
                                 .args(name, typeName.name())
                                 .hint("check.attempt.unknownclause.hint",
@@ -1463,8 +1461,7 @@ public final class Elaborator {
         missing.removeAll(answered);
         if (!missing.isEmpty()) {
             throw CompileException.of(
-                    Diagnostic.of("E2015", "check.attempt.clauseunanswered")
-                            .title("check.attempt.title")
+                    Diagnostic.of(DiagnosticCode.E2015, "check.attempt.clauseunanswered")
                             .at(ic.pos(), 2)
                             .args(String.join(", ", missing), typeName.name())
                             .hint("check.attempt.clauseunanswered.hint")
@@ -1474,8 +1471,7 @@ public final class Elaborator {
         }
         if (unnamed && !wildcard) {
             throw CompileException.of(
-                    Diagnostic.of("E2016", "check.attempt.unnamedunanswered")
-                            .title("check.attempt.title")
+                    Diagnostic.of(DiagnosticCode.E2016, "check.attempt.unnamedunanswered")
                             .at(ic.pos(), 2)
                             .args(typeName.name())
                             .hint("check.attempt.unnamedunanswered.hint")
@@ -1485,8 +1481,7 @@ public final class Elaborator {
         }
         if (!unnamed && wildcard) {
             throw CompileException.of(
-                    Diagnostic.of("E2017", "check.attempt.nothingunnamed")
-                            .title("check.attempt.title")
+                    Diagnostic.of(DiagnosticCode.E2017, "check.attempt.nothingunnamed")
                             .at(ic.pos(), 2)
                             .args(typeName.name())
                             .hint("check.attempt.nothingunnamed.hint")

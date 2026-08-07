@@ -202,7 +202,7 @@ public final class Backend {
             String cls = behaviorClass(bd.name());
             if (localTypes.contains(cls)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.behavior.collision.data").title("check.duplicate.title")
+                        Diagnostic.uncoded("check.behavior.collision.data").title("check.duplicate.title")
                                 .at(bd.pos()).args(bd.name(), cls).build(),
                         "behavior `" + bd.name() + "`'s first letter is capitalized to form the JVM class `"
                                 + cls + "` (spec 19.5), which collides with data `" + cls
@@ -211,7 +211,7 @@ public final class Backend {
             String prev = behaviorClassOwner.put(cls, bd.name());
             if (prev != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.behavior.collision.behavior").title("check.duplicate.title")
+                        Diagnostic.uncoded("check.behavior.collision.behavior").title("check.duplicate.title")
                                 .at(bd.pos()).args(prev, bd.name(), cls).build(),
                         "behaviors `" + prev + "` and `" + bd.name() + "` both capitalize to the same JVM"
                                 + " class `" + cls + "` (spec 19.5); rename one so their class names differ");
@@ -875,7 +875,7 @@ public final class Backend {
             TypeName sameName = byBridgeName.put(bridge, member);
             if (sameName != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.bridge.collision.member").title("check.duplicate.title")
+                        Diagnostic.uncoded("check.bridge.collision.member").title("check.duplicate.title")
                                 .at(pos).args(sameName.qualified(), member.qualified(), bridge)
                                 .hint("check.bridge.collision.member.hint").build(),
                         "`" + sameName + "` and `" + member + "` both join a union of this module"
@@ -886,7 +886,7 @@ public final class Backend {
             if (collidesWith != null) {
                 String other = localTypes.contains(bridge) ? bridge : behaviorClassOwner.get(bridge);
                 throw CompileException.of(
-                        Diagnostic.of(null, collidesWith).title("check.duplicate.title")
+                        Diagnostic.uncoded(collidesWith).title("check.duplicate.title")
                                 .at(pos).args(what, member.name(), bridge, other)
                                 .hint("check.bridge.collision.hint", bridge).build(),
                         "the output of `" + what + "` has the member `" + member.name() + "`, which"
@@ -911,7 +911,7 @@ public final class Backend {
             String what = owner != null ? owner.name() : resultName;
             if (localTypes.contains(resultName)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.result.collision.data").title("check.duplicate.title")
+                        Diagnostic.uncoded("check.result.collision.data").title("check.duplicate.title")
                                 .at(pos).args(what, resultName)
                                 .hint("check.result.collision.hint", resultName).build(),
                         "the output of `" + what + "` is a union, generated as a sealed interface `"
@@ -921,7 +921,7 @@ public final class Backend {
             String behavior = behaviorClassOwner.get(resultName);
             if (behavior != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.result.collision.behavior").title("check.duplicate.title")
+                        Diagnostic.uncoded("check.result.collision.behavior").title("check.duplicate.title")
                                 .at(pos).args(what, resultName, behavior)
                                 .hint("check.result.collision.hint", resultName).build(),
                         "the output of `" + what + "` is a union, generated as a sealed interface `"

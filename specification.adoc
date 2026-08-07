@@ -157,10 +157,10 @@ Souther -> arbitrary Java API    forbidden (touch the outside only via a behavio
 
 Souther does not have the following. These are design decisions, not features to be added later.
 
-* arbitrary Java API calls
+* [[no-arbitrary-jvm-calls]]arbitrary Java API calls
 * mutable state
 * exceptions (see below)
-* null
+* [[no-null]]null
 * threads
 * asynchronous processing in the language
 * inheritance
@@ -272,7 +272,11 @@ Otherwise a reader is handed a value it has no name for, and the generated class
 This does not reach the *cases* of a sum, or of an output written as more than one case. Those are generated as a union interface that is public regardless (<<jvm-anonymous-union>>), and a case reaches a reader through the decoder or through the `+protected+` factory rather than by being named — which is what E1305's unit-data allowance rests on. A module keeping a case to itself therefore stays a decision about the union, not about this rule.
 
 [#imports]
-Imports SHALL be listed explicitly. Wildcard imports are forbidden. A cyclic import is a compile error.
+Imports SHALL be listed explicitly. Wildcard imports are forbidden.
+
+[[module-dependencies-are-acyclic]]A module depends on every module it imports and on every module it names in a qualified reference (<<qualified-reference>>). Those dependencies MUST have no cycle.
+
+[[imports-are-used]]An entry on an import list MUST be written bare somewhere below it. What another module declares is reachable qualified whether or not it is imported, so an entry earns its place only by being used under the name it brings in.
 
 [,text]
 ----
@@ -630,7 +634,8 @@ This desugars to:
 preApprover: Option<EmployeeId>
 ----
 
-To put a value in a `+?+` field, write an `+EmployeeId+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. This is the only place `+None+` may be written as a value: what puts it there is the field, not the type of the position — a model may name `+Option<T>+` where it reads one (<<algebraic-types>>), and an annotation saying so does not license making one. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
+[#option-cases-are-not-written]
+To put a value in a `+?+` field, write an `+EmployeeId+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. This is the only place either name may be written as a value: what puts it there is the field, not the type of the position — a model may name `+Option<T>+` where it reads one (<<algebraic-types>>), and an annotation saying so does not license making one. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
 
 [,text]
 ----
@@ -719,7 +724,7 @@ The `+...+` spread is defined as follows.
 
 * The taken-in fields are laid out flatly. A `+Submitted+` value is referenced directly as `+x.applicant+` (not nested as `+x.common.applicant+`).
 * The taken-in data's invariants are inherited too. The invariants of `+TravelRequestCommon+` are checked when `+Submitted+` is constructed. The spread carries not only fields but invariants.
-* A field-name collision is a compile error.
+* [[spread-fields-do-not-collide]]A field-name collision is a compile error.
 * A spread is not inheritance. `+Submitted+` is not a subtype of `+TravelRequestCommon+`; the two are not assignment-compatible. They only share fields.
 * A spread is an element of the same comma sequence as fields. It appears inside `+{+` separated by `+,+`, and multiple may be written. By convention it is placed first. It uses the same `+...+` as the value-level record-literal spread (<<record-literal>>).
 
@@ -751,6 +756,8 @@ data OwnCost = Reimbursement | Advance | CorporateCard
 A case names a data; an inline record MUST NOT be written in a case position. A case that carries fields is declared separately, as the spec DSL declares it (for `+data Rank = Manager OR Staff+`, `+data Manager = { level: Level }+`). A case declared nowhere carries no fields, and the case list is its declaration (<<unit-data>>).
 
 *A case value is a value of its sum.* As in functional languages, a value of a case type (e.g. `+Submitted+`) may be used transparently wherever its sum type (`+TravelRequest+`) is expected — field assignment, argument, or return value. Only the upward direction (case→sum) is allowed; the downward direction (sum→specific case) requires `+match+`. A nested sum (`+data OwnCost = Reimbursement | Advance+` being a case of `+CostBearer+`) is decided the same way, folding to the leaf case.
+
+[[sum-cases-are-declared-with-the-sum]]A sum's cases are declared with it. A case a module imports MUST NOT be one of them: the sum is published as a sealed interface its own module closes, so another module's type cannot be a member of it. What crosses a boundary is matched and restated as a case of this module.
 
 *What holds of every case is a property of the sum.* A sum has no fields of its own, so reading one is an error and the value must be opened with `+match+` — except for a field that *every* case spreads (<<field-spread>>): the sum exposes the fields of a data all of its cases include, and `+d.id+` reads it without opening the value. The same part is spread from the sum into a construction, so `+Filed { ...d, filedOn = on }+` writes at once what a `+match+` arm per case would write alike.
 
@@ -895,6 +902,8 @@ Because there is no `+|+`, there is no room to read `+data InsufficientAuthority
 
 A value constraint written as a comment in the spec DSL is made executable as an `+invariant+`.
 
+[[invariant-expression-is-bool]]An invariant clause states a condition, so its expression MUST have type `+Bool+`.
+
 [,text]
 ----
 // spec DSL: data Amount = Integer // at least 0, in yen
@@ -1007,8 +1016,8 @@ An invariant is checked at run time on every construction (<<invariant-mvp>>), a
 The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+guard+` / `+if+` guard (<<guard>>, <<if>>), and at every construction asks whether the guards prove its invariant.
 
 * *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
-* *Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
-* *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
+* [[construction-satisfies-its-invariant]]*Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
+* [[construction-invariant-is-discharged]]*Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
 * *Not expressible* — a clause outside the checked fragment. No diagnostic for it; the run-time check stands. The other clauses of the same invariant are answered on their own, so writing one the check cannot read beside one it can does not cost the second its report (<<invariant-discharge-capability>>).
 
 Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
@@ -1563,7 +1572,12 @@ An anonymous union appears only in a behavior's *output* (<<union-intersection>>
 [#constructs]
 === Data construction authority (constructs)
 
-A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body (too few = E1002, too many = E1006). An injected behavior has no body, and its declaration is the input to factory generation, so it MUST always write it (<<java-base-class>>).
+A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body. An injected behavior has no body, and its declaration is the input to factory generation, so it MUST always write it (<<java-base-class>>).
+
+Exact agreement is two obligations, and a declaration can fail either one on its own:
+
+* [[constructs-authority-complete]]every data the implementation constructs MUST appear in the clause (<<e1002>>);
+* [[constructs-no-overdeclaration]]every data the clause names MUST actually be constructed (<<e1006>>).
 
 [,text]
 ----
@@ -1634,6 +1648,8 @@ To replace only some fields while keeping the same type, also write the type nam
 When a field value is a binding of the same name as the field, the value may be omitted. `+Member { address }+` is shorthand for `+Member { address = address }+`, filling from the same-named binding in scope.
 
 A record literal and a spread both require construction authority (`+constructs+`). Because the type name appears at the construction point, the authority check and field check are done on the spot.
+
+[[construction-supplies-every-field]]Every field the constructed type declares MUST be given a value — written out, filled from a same-named binding, or supplied by a spread. A spread supplies what the type it copies from declares and nothing else.
 
 [#blocks]
 === Blocks
@@ -1782,12 +1798,19 @@ The `+now+` appearing inside a `+let+` is an argument in either case. There is n
 
 ==== Checking
 
-The set of behaviors with a non-empty requirement set that a `+let+` uses and the set written in `+depends on+` MUST match. Too few is E1602, too many is E1603 (<<e1602>>, <<e1603>>). An over-declaration erring on the safe side is not admitted either.
+The set of behaviors with a non-empty requirement set that a `+let+` uses and the set written in `+depends on+` MUST match. As with `+constructs+`, matching is two obligations and either can fail alone. An over-declaration erring on the safe side is not admitted.
+
+* [[depends-on-names-every-requirement]]every behavior the implementation reaches that requires something MUST appear in the clause (<<e1602>>);
+* [[depends-on-names-no-more]]every behavior the clause names MUST actually be reached by the implementation (<<e1603>>).
+
+[[depends-on-names-a-dependency]]An entry MUST name something there is to inject: a behavior in scope whose own requirement set is not empty (<<e1607>>). A behavior that requires nothing is reached by name, and a `+>->+` composition infers its requirements from its stages rather than being handed them.
 
 [#calling-a-behavior]
 === Calling a behavior
 
 A behavior's `+let+` may call a behavior. Which ones it may call is decided by one question — the requirement set — and the answer does not depend on where the behavior was declared. A behavior this module declares and one it imported are called the same way.
+
+[[behavior-does-not-reach-itself]]A behavior MUST NOT reach itself, whether through calls, `+depends on+` or `+>->+` stages, or a mixture of them. A `+depends on+` cycle leaves nothing to build first and a call cycle does not terminate; recursion belongs to a helper `+let+`, where it is proven total (<<fn-rules>>).
 
 A helper `+let+` may not. A helper is expanded into what calls it, and an invariant that names one carries it to an importing module as source (<<published-modules>>); it names only what travels with it, which is what keeps an invariant's rule a single question about the requirement set rather than a second one about where a name came from. A behavior a helper wanted is called from the behavior's own `+let+` and its result passed in.
 
@@ -1915,7 +1938,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 * A helper *may recurse* (self- and mutual recursion). A non-recursive helper is inline-expanded at its call site; a recursive helper is not inlined but lowered to a method — self- and mutual calls become plain method calls. Traversal of self-referential data that `+fold+` cannot write (climbing the manager chain to the root, counting tree depth) is written this way.
 * A recursive helper MUST *declare its return type* (above). Without a declaration it is a compile error.
 * A recursive helper MUST be *pure*: its own body MUST NOT call an injected behavior (`+depends on+`). It MAY apply a function argument that does — the effect is then the caller's, declared in the caller's `+depends on+` and carried in by the closure (<<blocks>>). An effect touching the outside world is placed on the behavior that calls the helper, or on the function it is handed.
-* Recursion is *total by default*. A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.manager with | Some b -> depth(b)+` passes the unwrapped `+OrgMember+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + depth(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.manager |> Option.map(b -> depth(b) + 1)+` — the payload of `+s.manager+` is a smaller `+OrgMember+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` — private, reached through `+List.fold+` — is trusted total.
+* [[helper-carries-its-termination-guarantee]]Recursion is *total by default*. A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.manager with | Some b -> depth(b)+` passes the unwrapped `+OrgMember+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + depth(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.manager |> Option.map(b -> depth(b) + 1)+` — the payload of `+s.manager+` is a smaller `+OrgMember+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` — private, reached through `+List.fold+` — is trusted total.
 * `+partial+` *declares that the helper does not carry Souther's termination guarantee*. It does not assert that the helper diverges: a recursion that does terminate and that the analysis cannot prove is written this way too, and so is one the analysis gave up on as too large. What it disclaims is the termination guarantee and nothing else — the helper is type-checked, its `+match+` is checked for exhaustiveness, and its invariants hold as any other's do. A helper written without the word does carry the guarantee.
 * *A helper's totality covers everything it reaches.* An unmarked helper MUST NOT reach a `+partial+` one, directly or through any chain of calls; doing so is a compile error (E2001) naming the path. Its caller has to say `+partial+` as well. Every member of a mutually-recursive group holding a `+partial+` member therefore needs the word — each reaches the others. Reading a `+let+` written with no parameter list is reaching it, because the value is substituted where it is named. A behavior's implementing `+let+` is not a helper and publishes no termination guarantee, so this rule is not asked of it: it MAY call a `+partial+` helper. That is not a boundary the walk stops at — it is a declaration the walk is never asked about, and a helper between the behavior and the `+partial+` one still needs the word.
 * A `+partial+` helper MUST NOT be written where a value goes. It may be applied; it may not be handed over. A function type (<<fn-value-semantics>>) says nothing about termination, so a `+partial+` helper stored in one leaves the call graph and arrives somewhere the rule above cannot see it. Writing the name in an argument, or anywhere else a function value is expected, is a compile error (E2001). A `+let+` with no parameter list is a value rather than a function and is not covered by this: reading it is reaching it, which the rule above already answers.
@@ -1987,6 +2010,7 @@ This abstract base class is *always public*, regardless of whether it is in `+ex
 
 Because the base is public and the implementation overrides `+apply+` from outside the module, the implementation *writes* the behavior's input type and its output type. A type the module keeps to itself cannot be written there, and no raw-typed override stands in for it — the erased signature clashes with the one being overridden. So an injected behavior's input and output MUST be exposed by the module that declares them, whether or not the behavior itself is in `+exposing+` (<<exposed-surface>>).
 
+[#injected-constructs-are-creatable]
 When a *non-unit* data is listed in `+constructs+` and that data is not exposed with `+exposing+`, it is a compile error (E1305). A factory is generated only for a unit data, and a non-exposed data has no decoder either, so a Java implementation would have no way to create that value. If exposed, it can be created via the decoder (<<jvm-codec>>). The requirement is that it be either a unit data or an exposed data.
 
 What is confined is <<invariant-on-construct>>. An invariant-bearing data is always checked whether it goes through `+__construct+` or the decoder. So even if it can be created from outside, *no unvalidated value can be created*. A unit data has nothing to validate, so nothing is lost by allowing it to be created from outside.
@@ -2095,6 +2119,9 @@ Decode / encode are not behaviors but edges of the boundary and are not `+>->+` 
 [#type-routing]
 === Type-routing composition rule
 
+[#composition-stages-type-route]
+Every stage of a `+>->+` composition MUST be able to receive what the stage before it answers with: of the previous output, the cases the next input accepts flow on and the rest depart, and a stage that accepts none of them routes nothing.
+
 A pipeline carries the *mainline*. Only the mainline is passed to a stage; a case a stage did not receive departs the mainline and is *never passed to the remaining stages* of that pipeline. A departed case is piled onto the output.
 
 Let the previous stage's output sum be `+O_f+` and the next stage's input type `+I_g+`. Of `+O_f+`, cases `+I_g+` can receive flow to the next stage; the remaining cases `+R+` depart the mainline.
@@ -2176,6 +2203,7 @@ A `+>->+` composition's output is inferred from its stages (<<composition-with-r
 
 An inferred output *changes silently on a distant change* when a stage is a behavior of another module. If an upstream stage adds a case, the composition output grows silently; if a downstream stage narrows its input, a previously processed case moves to departed (<<type-routing>>) and likewise increases the output. The composition's definition site has nothing to signal this.
 
+[#composition-output-agrees-with-inference]
 So a composition *MAY optionally declare its output*. If written, it MUST *exactly match* the inferred output or it is a compile error (E1604). Neither too few (a case appears that is not declared) nor too many (a declared case does not appear) is admitted.
 
 [,text]
@@ -2188,6 +2216,7 @@ behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock
 
 Input is not declared. A pipeline is point-free, and the input is decided by the first stage (<<sequential-composition>>). Only the output may be declared. A dependency (`+depends on+`) has the same distant-change risk, but a composition leaves it inferred (<<depends-on>>).
 
+[#exposed-composition-declares-its-output]
 For an internal composition this declaration is optional. But for a composition exposed with `+exposing+` it is *required*, written not on the definition line but in the exposing list as `+name : cases+` (<<modules>>). Leaving a public boundary to inference means that when an upstream stage adds a case, it reaches another compilation unit (another module, or a non-exhaustive Java switch or JSON serialization) silently, and the definition site has nothing to signal it. Placing a signature in `+exposing+` makes the composition's definition error (E1604) the moment a case is added, and the author chooses to handle the case or update the signature. If no signature exists, it is E1605. A non-composition behavior writes its type at the definition, so it MUST NOT write a signature in `+exposing+` (doing so is E1605). This division corresponds to.
 
 [#case-propagation]
@@ -2223,12 +2252,23 @@ example submitTravelRequest
             -> AwaitingPreApproval
 ----
 
+What a row is held to, and what holding a build to it requires:
+
+* [[example-target-is-a-behavior]]the target MUST be a behavior of the module the example is attached to;
+* [[example-holds]]an evaluated row's result MUST match what it expects;
+* [[example-does-not-reach-unreachable]]a row's evaluation MUST NOT reach an `+unreachable+` (<<unreachable>>): either the row states a combination the model rules out, or the reason written there does not hold;
+* [[example-evaluation-stays-within-budget]]a row's evaluation MUST come to a value within the counted budget it is held to — the points it may pass and the depth a recursion may go to;
+* [[example-evaluation-stays-within-stack]]and it MUST reach that counted depth limit before the JVM stack runs out, the two being set so the counted one is met first;
+* [[example-evaluation-answers]]the work around the counted evaluation — loading a class, decoding a value, comparing two of them — MUST answer within the wait the policy allows. Unlike the two above, this says nothing about the model.
+
 An `+example+` names a target behavior, then lists one or more `+|+`-led rows. A row is an optional description string (a business-case name, followed by `+:+`), an input argument tuple, `+->+`, and an expected result. `+example+`, `+examples+`, and `+for+` are contextual keywords, not reserved words, so they do not collide with an identifier or the `+example.*+` namespace.
 
 [#example-expected]
 === The expected result
 
 The expected side asserts at one of two granularities.
+
+[[example-expected-arm-is-an-output-case]]Where a row expects an arm, that arm MUST be one of the target behavior's output cases.
 
 * A bare type name (`+-> Submitted+`) asserts only the *arm* — which case of the output sum the result is — and ignores its fields.
 * A construction (`+-> Rejected { reason = "high_cost" }+`), a newtype application (`+-> Amount(0)+`), or a literal asserts the *whole value* by structural equality.
@@ -2239,6 +2279,11 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 
 [#example-evaluable]
 === What can carry an example
+
+[#example-target-is-evaluable]
+The target MUST be something this module can run: a behavior with a `+let+` implementation, or a `+>->+` composition of them. A helper `+let+` is not one.
+
+[[example-fixtures-are-buildable]]Every fixture a row writes MUST build — each input against its parameter type and the expected result against the output type — through that type's derived Decoder and its invariant. The expectation is built before the behavior is applied.
 
 A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) has nothing to run, so its rows are *recorded* rather than evaluated (<<example-pending>>). A target that is not a behavior at all — a helper `+let+` of that name — is <<e1902>>. A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
@@ -2297,6 +2342,12 @@ When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior pro
 [#example-fakes]
 === Faking a dependency
 
+[[example-dependency-has-a-usable-fake]]Every dependency required to evaluate a row MUST have a usable fake: one supplied, by a `+with+` on the row or a `+fake+` table, and one whose fixture builds.
+
+[[fake-answers-the-inputs-it-is-asked]]A `+fake+` table MUST answer every input it is asked for, by listing it or by carrying a `+_+` default row.
+
+[[fake-table-builds]]Building a `+fake+` table MUST come to a value within the budget and the wait it is held to; where it does not, the table states nothing that was checked.
+
 To evaluate a behavior that `+depends on+` an injected dependency (<<depends-on>>), the example supplies a fake for it. Best is to need none: an outside-world value written as an *input* rather than an injected behavior keeps the behavior example-able with no fake (<<purity>>). When a dependency stays injected, a fake stands in, scoped to the example and never shipped (no run-time class is produced).
 
 A *value dependency* — one whose faked result is a constant — is given on the row with `+with+`:
@@ -2324,6 +2375,10 @@ A composition's dependencies are its stages' (<<composition-with-requirements>>)
 
 [#example-pending]
 === A row waits for the implementation it is about
+
+[[stand-in-and-recorded-row-agree]]A stand-in and a recorded row MUST NOT state different answers for one input. Which of the two the model is to be held to is not readable from the text, so neither is named as the right one.
+
+[[stand-in-comparison-completes]]Reading a `+fake+` against the rows recorded for that behavior MUST come to a value, so that what the two state was compared. Being told nothing was found and being told nothing was compared are different answers.
 
 An injected behavior (<<injected-behavior>>) has no `+let+` to apply, so a row naming one is *recorded* rather than evaluated. It is not refused. A model that a system is being migrated onto is injected everywhere at the start, and the rows harvested from the system it replaces are the record of what each behavior will owe; refusing them would mean keeping that record somewhere the compiler cannot read, which is where it stops being checked.
 
@@ -2357,12 +2412,21 @@ How many rows are waiting is what `+souther examples+` reports; it is not a comp
 [#example-placement]
 === Inline or an attached file
 
+[[examples-file-holds-only-examples]]An `+examples for+` file MUST hold only examples, the fakes they run against and the values their rows name, and MUST NOT declare a name the target module already declares.
+
+[[examples-file-names-a-compiled-module]]An `+examples for <module>+` file MUST name a module among those being compiled.
+
 The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
 
 [#example-adequacy]
 === What the rows establish
 
 An `+example+` fixes the value rule for one input. Whether a model's rows together say enough about it is a different question, and `+souther examples+` answers it from what evaluating them observed. Nothing here changes what compiles; it reports.
+
+These are the questions the dial asks of a model's rows, each answered where the measurement was complete:
+
+* [[every-output-case-is-expected-by-a-row]]where a behavior's output is a sum, some row SHOULD expect each of its cases;
+* [[every-input-case-is-used-by-a-row]]where an input position is a sum, some row SHOULD apply the behavior to each of its cases.
 
 *Evidence is graded, not counted.* How far a row got decides what it proves, and three claims are kept apart rather than collapsed into one:
 
@@ -2403,6 +2467,11 @@ A rule that drew a line is kept per line. The same value can be a boundary of an
 === Which arms of the body the rows go through
 
 Where a behavior has a body, `+souther examples+` also reports which of its arms the rows run through. An arm is one branch of an `+if+` or a `+guard+` (<<if>>), one arm of a `+match+` (<<match>>), or the success branch or one departure of an attempted construction (<<attempted-construction>>). Cases written together on one arm are one arm: they are one run of code, and a row takes it or does not.
+
+Two more the dial asks, needing the arms measured:
+
+* [[every-arm-has-a-row]]some row SHOULD go through each arm of an `+if+`, a `+guard+` or an attempted construction;
+* [[every-guard-boundary-has-a-row]]and some row SHOULD be at each line a `+guard+` draws, a row on the line being what tells a rule written `+<=+` from one written `+<+`.
 
 This is *branch-arm* coverage and nothing wider. Going through both arms of two nested conditions is four arms and says nothing about whether their combinations were tried, so covering every arm is a lower bound on covering what a body can do rather than the same thing.
 
@@ -2539,6 +2608,7 @@ let approverLabel (c: TravelCompleted) =
         | None              -> "None"
 ----
 
+[#match-covers-every-case]
 A match on sum data MUST be exhaustive. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) does not flatten leaf cases; receive `+OwnCost+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
 
 [#unreachable]
@@ -2564,7 +2634,7 @@ The rules it obeys:
 
 * The reason is a string literal and MUST be written. It is read without running the model — by a reader, by the diagnostic an `+example+` gets (<<e1911>>), and by the abort's message — so it is not an expression that builds one.
 * Its type is `+Never+` (<<algebraic-types>>), which fits whatever the position expects. An arm answering it contributes no case to what the `+match+` answers: the type is the one the other arms agree on.
-* The position it stands in MUST state what it holds, or a branch beside it MUST — a field, a declared return, an annotated binding, an arm beside one that answers a value. Written where nothing does (`+let n = unreachable "..."+`, `+1 + unreachable "..."+`), it is <<e1307>>: the value it stands for is never made, but the code around it is still compiled, and nothing there says what shape that code reads.
+* [[unreachable-stands-where-a-type-is-stated]]The position it stands in MUST state what it holds, or a branch beside it MUST — a field, a declared return, an annotated binding, an arm beside one that answers a value. Written where nothing does (`+let n = unreachable "..."+`, `+1 + unreachable "..."+`), it is <<e1307>>: the value it stands for is never made, but the code around it is still compiled, and nothing there says what shape that code reads.
 * Exhaustiveness counts the arm like any other. Nothing here relaxes <<e1201>>, and there is still no `+_+`.
 * Reaching it *aborts*, as an invariant violation does (<<invariant-abort>>) and for the same reason: what failed is the model, not the business. It is not catchable, and a boundary maps it to a 500, apart from a business failure's 400.
 * It is not written in an `+invariant+` (<<invariant-expressions>>): an invariant answers whether the value being built holds, on every path through it.
@@ -2606,8 +2676,12 @@ guard DomainName(d) as name else BadDomain
 if DomainName(d) as name then [ name ] else []
 ----
 
+[#attempt-subject-is-a-construction]
 Where the condition is a construction followed by `+as <name>+`, that construction's invariant decides
-the branch. The invariant is run — the type's own and every invariant a `+...+` spread brought in
+the branch. `+as+` names the value a construction builds, so what it is written on MUST be one; a
+condition that is anything else states no invariant for the branch to be decided by.
+
+The invariant is run — the type's own and every invariant a `+...+` spread brought in
 (<<invariant-mvp>>, <<field-spread>>). Holding, the value is built and `+<name>+` names it in the
 success branch; failing, the `+else+` value is taken and no value is built. The invariant runs once.
 
@@ -2654,10 +2728,17 @@ effect; which clause failed is decided by the order the clauses are declared in 
 
 The arms MUST cover what can fail, so that no failure reaches a branch that is not there:
 
-* every named clause of the type MUST have an arm, and an arm MUST name a clause the type has;
-* `+| _ -> …+` MUST be written when the type has a clause carrying no name, and MUST NOT be written when
-  it has none — it answers the clauses that cannot be named, and there being none to answer is worth
-  saying.
+* [[attempt-answers-every-failing-clause]]every named clause of the type MUST have an arm;
+* [[attempt-arm-names-a-declared-clause]]an arm MUST name a clause the type has;
+* [[attempt-answers-each-clause-once]]no clause may be answered twice — the arm is chosen by the clause
+  that failed, so a second arm for it could never be reached;
+* [[attempt-answers-unnamed-clauses]]`+| _ -> …+` MUST be written when the type has a clause carrying no
+  name — it answers the clauses that cannot be named;
+* [[attempt-catch-all-has-clauses-to-answer]]and MUST NOT be written when the type has none, there being
+  nothing left for it to answer.
+
+[[attempt-arms-answer-an-attempt]]Arms of this shape answer for an attempted construction, so there MUST
+be one for them to answer for. The `+else+` of a condition that is not an attempt takes one value.
 
 Adding an unnamed clause to a type whose clauses are all named is therefore a compile error at every
 mapping site, which is what adding a rule to a published type should be: today it shows up only as more
@@ -2670,9 +2751,12 @@ A construction inside an argument is an ordinary construction and aborts on viol
 (<<violation-destination>>); what is attempted is the outer construction alone.
 
 An attempt builds a value on its success branch, so the enclosing behavior's `+constructs+` MUST name
-the type (<<constructs>>). The type MUST carry an invariant, its own or one a spread brought in:
-without one the `+else+` value could never be reached, so writing it is a compile error rather than a
-branch that is not one.
+the type (<<constructs>>).
+
+[#attempt-subject-declares-an-invariant]
+The attempted type MUST carry an invariant, its own or one a spread brought in: without one the
+`+else+` value could never be reached, so writing it is a compile error rather than a branch that is
+not one.
 
 Writing `+T(v)+` on its own still aborts (<<violation-destination>>). This is the form a writer
 chooses at the site, and it is what lets a rule be stated once — the rule lives in the type's
@@ -3079,6 +3163,14 @@ Decoders and Encoders do not appear in Souther's syntax. Derived from a data's s
 
 [#jvm-output]
 == JVM output
+
+A declaration is emitted as classes and methods, and a class file has structural limits a declaration can be written past. What the compiler emits MUST fit inside them, since past any of the three the class cannot be loaded at all:
+
+* [[generated-methods-fit-jvm-parameter-slots]]a generated method MUST fit the JVM argument-slot limit, which is what bounds how many fields a `+data+` may declare and how many parameters and dependencies a `+behavior+` may take;
+* [[generated-methods-fit-jvm-code-size]]a generated method's code MUST fit the JVM code-size limit;
+* [[generated-classes-fit-jvm-constant-pool]]a generated class's constant pool MUST fit what a class file can address and write out.
+
+The first is decided at the declaration, before anything is emitted. The other two are not known until the code is written, and are reported as the definition being emitted when the limit was met.
 
 [#target-jdk]
 === Target JDK
@@ -3816,6 +3908,18 @@ was checked.
 
 A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when building the table where it is written (<<example-fakes>>) does not come to a value, with the same three reasons <<e1920>> distinguishes. A warning rather than an error: what stopped the build says the table was not read, not that it is wrong.
 
+[#e1922]
+=== An import is never used
+
+[,text]
+----
+`Amount` is imported but never used under this name.
+Hint: Take it off the import list. What another module declares is reachable qualified whether or
+not it is imported, so an entry here earns its place only by being written bare somewhere below.
+----
+
+A warning, quoted at the entry on the import list (<<imports-are-used>>). An import brings a name in so it can be written bare; what the entry buys is that spelling, and an entry nothing writes bare buys nothing. Reaching the same declaration qualified is unaffected, so removing the entry does not take anything away from the module.
+
 [#e1923]
 === An example evaluation did not answer
 
@@ -3892,6 +3996,17 @@ value, or guard the path so the violating case cannot reach here.
 
 Neither names what decided it: the check knows the values alone did not, and not which of the things known there did. The companion E2011 is a warning, not an error: it says the guards do not establish the invariant, so the check remains at run time.
 
+[#e2011]
+=== A construction's invariant is not established where it stands
+
+[,text]
+----
+Constructing `Amount` here may violate its invariant: the guards do not establish it. Guard it with
+`guard`, or reify the relation into `Amount`'s (or an input's) invariant so it is assumed here.
+----
+
+A warning, and the companion of <<e2010>> (<<construction-invariant-is-discharged>>). The invariant is expressible in the checked fragment but the guards do not prove it, so the check remains at run time and the construction can abort there. It says the proof is missing and not that the value is wrong: a construction nothing establishes may still hold on every path the model takes. A clause outside the fragment is a third thing and is not warned about — the run-time check stands for it and there was never a proof to miss.
+
 [#e2012]
 === `as` names what a construction builds
 
@@ -3904,6 +4019,18 @@ a condition.
 
 Emitted for the forms of an attempted construction that cannot be read (<<attempted-construction>>). Attempting a type that declares no invariant is E2013, since the `+else+` value could never be reached.
 
+[#e2013]
+=== An attempted type declares no invariant
+
+[,text]
+----
+`Rank` declares no invariant, so an attempted construction of it always succeeds and the `else`
+value is never reached.
+Hint: Construct `Rank` directly, or give it the invariant that decides the branch.
+----
+
+Emitted when the type attempted declares no invariant, its own or one a spread brought in (<<attempt-subject-declares-an-invariant>>). The `+else+` is written to be reached, and here nothing can reach it: the branch is not one, so writing it is an error rather than dead code that reads as a decision.
+
 [#e2014]
 === A clause answered by name does not exist
 
@@ -3915,6 +4042,63 @@ declared (`invariant <name> = ...`); one declared without a name is answered by 
 ----
 
 Emitted when a per-clause departure names a clause the type does not declare (<<attempt-departures>>, <<invariant-clause-name>>). The rest of that form is checked with its own codes: a clause that can fail and has no arm is E2015, unnamed clauses left unanswered E2016, a `+| _+` with nothing to answer E2017, arms with no attempted construction to answer for E2018, and a clause answered twice E2019.
+
+[#e2015]
+=== A clause that can fail has no arm
+
+[,text]
+----
+These clauses of `Amount` have no arm: inYen. A failure reaches one arm, so every clause that can
+fail needs one.
+Hint: Answer each of them, or give the `else` one value, which answers any failure.
+----
+
+Emitted when a named clause of the attempted type has no arm answering it (<<attempt-answers-every-failing-clause>>). All the unanswered clauses are named in one report: which of them a build meets first is not a property of the text, and telling an author about one at a time would make adding a clause a sequence of compiles.
+
+[#e2016]
+=== Unnamed clauses are left unanswered
+
+[,text]
+----
+`Amount` has invariant clauses declared without a name, and nothing here answers them.
+Hint: Add `| _ -> ...` for them, or name them where they are declared.
+----
+
+Emitted when the attempted type has a clause carrying no name and the arms do not write `+| _ -> …+` (<<attempt-answers-unnamed-clauses>>). A clause with no name cannot be answered by name, so `+| _+` is the only arm that can hold it; the other move is to name the clause where it is declared (<<invariant-clause-name>>).
+
+[#e2017]
+=== A catch-all arm has nothing to answer
+
+[,text]
+----
+Every invariant clause of `Amount` is named and answered, so `| _ -> ...` answers nothing.
+Hint: Drop it. It would come back the moment `Amount` declares a clause without a name.
+----
+
+Emitted when `+| _ -> …+` is written and the type has no clause carrying a name (<<attempt-catch-all-has-clauses-to-answer>>). It is worth saying rather than allowing as harmless: an arm that answers nothing reads as cover the mapping does not have, and the day a clause is added without a name it would silently start carrying it.
+
+[#e2018]
+=== Arms answer for no attempted construction
+
+[,text]
+----
+These arms answer one invariant clause each, and there is no attempted construction here for them to
+answer for.
+Hint: Attempt the construction (`guard T(v) as x else ...`), or give the `else` one value.
+----
+
+Emitted when per-clause arms are written on a condition that is not an attempted construction (<<attempt-arms-answer-an-attempt>>). What an arm names is a clause of the type being built, and where nothing is being built there are no clauses for them to name.
+
+[#e2019]
+=== A clause is answered twice
+
+[,text]
+----
+The clause `inYen` is answered twice. An arm is chosen by the clause that failed, so a second arm for
+it could never be reached.
+----
+
+Emitted when two arms name the same clause (<<attempt-answers-each-clause-once>>). Which arm is taken is decided by the clause that failed and not by the order the arms are written in (<<attempt-departures>>), so the second one is unreachable rather than a fallback.
 
 [#e2101]
 === A generated method exceeds the JVM parameter-slot limit

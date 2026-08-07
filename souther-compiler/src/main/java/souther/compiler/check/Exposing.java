@@ -89,13 +89,13 @@ public final class Exposing {
                 String qualified = imp.module() + "." + name;
                 if (!Prelude.isLibraryFunction(qualified)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.import.notstdfn").title("check.module.title")
+                            Diagnostic.uncoded("check.import.notstdfn").title("check.module.title")
                                     .at(imp.pos()).args(name, imp.module()).build(),
                             "`" + name + "` is not a function in the standard library module `"
                                     + imp.module() + "` (spec §stdlib).");
                 }
                 if (declaredData.contains(name) || ownNames.contains(name)) {
-                    conflicts.add(Diagnostic.of(null, "check.import.conflict")
+                    conflicts.add(Diagnostic.uncoded("check.import.conflict")
                             .title("check.module.title").at(imp.pos()).args(name)
                             .hint("check.import.conflict.hint").build());
                     continue;   // the name is refused; what it means until then is the declaration
@@ -103,7 +103,7 @@ public final class Exposing {
                 String prior = exposed.putIfAbsent(name, qualified);
                 if (prior != null && !prior.equals(qualified)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.import.ambiguous").title("check.module.title")
+                            Diagnostic.uncoded("check.import.ambiguous").title("check.module.title")
                                     .at(imp.pos()).args(name, prior, qualified).build(),
                             "`" + name + "` is exposed from both `" + prior + "` and `" + qualified
                                     + "` — call it qualified instead of importing both (spec §stdlib).");

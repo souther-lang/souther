@@ -4,6 +4,7 @@ import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CheckContext;
@@ -773,8 +774,7 @@ final class BodyGen {
             Type shape = expected != null ? expected : u.type();
             if (shape instanceof Type.Never) {
                 throw CompileException.of(
-                        Diagnostic.of("E1307", "check.unreachable.untyped")
-                                .title("check.type.mismatch.title")
+                        Diagnostic.of(DiagnosticCode.E1307, "check.unreachable.untyped")
                                 .at(u.pos(), "unreachable".length())
                                 .hint("check.unreachable.untyped.hint").build(),
                         "nothing here says what this position holds, and `unreachable` answers no"

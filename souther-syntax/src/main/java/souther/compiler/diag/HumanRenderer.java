@@ -87,21 +87,19 @@ public final class HumanRenderer implements DiagnosticRenderer {
     }
 
     /**
-     * The header's title: what the diagnostic is about — its own title, or the one its code carries
-     * — with its severity beside it, or the severity alone when it is about nothing in particular. A
-     * warning is marked either way, since the code and the message read the same for both and the
-     * bar is the only place the difference can be seen.
+     * The header's title: the category the diagnostic states, with its severity beside it, or the
+     * severity alone when it states none. A warning is marked either way, since the code and the
+     * message read the same for both and the bar is the only place the difference can be seen.
+     *
+     * <p>The title is not derived from the code. A code names a rule and a title names a category,
+     * and one category holds many rules — deriving one from the other would put a per-code title in
+     * the catalog for every rule and print the same category under a different wording each time.
+     * A coded diagnostic is given its title by {@link DiagnosticCode}, before it reaches here.
      */
     private String title(Diagnostic d, Locale locale) {
-        String about = null;
-        if (d.titleKey() != null && Messages.has(d.titleKey(), locale)) {
-            about = Messages.get(d.titleKey(), locale);
-        } else if (d.code() != null) {
-            String key = d.code().toLowerCase(Locale.ROOT) + ".title";
-            if (Messages.has(key, locale)) {
-                about = Messages.get(key, locale);
-            }
-        }
+        String about = d.titleKey() != null && Messages.has(d.titleKey(), locale)
+                ? Messages.get(d.titleKey(), locale)
+                : null;
         if (d.severity() != Severity.WARNING) {
             return about != null ? about : Messages.get("diag.error.title", locale);
         }
