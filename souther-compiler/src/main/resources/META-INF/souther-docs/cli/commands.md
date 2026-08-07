@@ -4,6 +4,7 @@
 souther <command> [args]
 ```
 
+<!-- souther-section: compile -->
 ## compile
 
 ```
@@ -15,6 +16,7 @@ under `-d`. `-cp` points at modules another project compiled. `--adequacy` addit
 what the `example` rows do not cover; it defaults to `off`, and `souther examples` asks the same
 question as a report.
 
+<!-- souther-section: run -->
 ## run
 
 ```
@@ -25,6 +27,7 @@ Applies one behavior of one self-contained file to JSON input and prints the JSO
 `--input` encoding depends on the behavior's arity and is easy to get wrong — see
 {{doc:cli/run}}.
 
+<!-- souther-section: fmt -->
 ## fmt
 
 ```
@@ -34,6 +37,7 @@ souther fmt <file.sou>... [-w] [--check]
 Prints the canonical form to stdout, rewrites in place with `-w`, or exits non-zero on a file that
 is not formatted with `--check`.
 
+<!-- souther-section: examples -->
 ## examples
 
 ```
@@ -48,6 +52,7 @@ rows at the untried boundaries, and `--strict` exits non-zero while rows are sti
 This is the command worth running on a model you believe is finished. It names gaps that reading
 the rows does not reveal.
 
+<!-- souther-section: doc -->
 ## doc
 
 ```
@@ -57,6 +62,7 @@ souther doc [<anchor> | <set>/<topic> | --search <term> [--limit <n>]]
 The language specification and the documentation bundled libraries ship. With no argument it lists
 every section and topic as `name<TAB>title`. New to Souther? Read {{doc:cli/start-here}}.
 
+<!-- souther-section: api -->
 ## api
 
 ```
@@ -67,6 +73,7 @@ The standard library's published surface with the signatures the type checker re
 argument it prints everything, which for a library this size is the fastest way to see it.
 `--source` prints a module's own source with its design comments.
 
+<!-- souther-section: japi -->
 ## japi
 
 ```
@@ -85,6 +92,7 @@ printed with its value, since the value is what the declaration says.
 souther japi net.unit8.raoh.Result#map2
 ```
 
+<!-- souther-section: mcp -->
 ## mcp
 
 ```
@@ -104,6 +112,7 @@ count.
 The schema a client reads is the one the server enforces: every argument publishes its domain, and
 one no tool declares is refused rather than dropped.
 
+<!-- souther-section: shared-options -->
 ## Options every command shares
 
 | Option | Meaning |

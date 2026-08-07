@@ -10,6 +10,8 @@ import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Documentation a dependency ships inside its own jar, under {@code META-INF/souther-docs/}.
@@ -17,22 +19,46 @@ import java.util.Map;
  * <p>Each contributing jar carries a {@code sets} registry naming its doc sets, and per set an
  * {@code index} listing the topic files. The docs therefore version with the jar they describe:
  * bundling a different raoh bundles that raoh's docs, and no copy is maintained anywhere else.
+ *
+ * <p>A file may also name parts of itself, by writing {@code <!-- souther-section: name -->} on the
+ * line above a heading. That name is then asked for as {@code set/topic/name}, and it is the doc
+ * set's to keep: the specification's sections are addressable because every heading carries an
+ * explicit anchor, not because anything reads structure out of the prose. Deriving a name from a
+ * heading instead would publish an identifier that moves when the heading is reworded, renumbered
+ * or translated, and a name a client has written down is not the doc set's to move.
+ *
+ * <p>A file that names no part of itself is one document, whole. That is the honest answer for a
+ * jar this compiler does not author: what it has to offer is the file its index promised, and a
+ * name invented here would be Souther's, published as though it were raoh's.
  */
 public final class LibraryDocs {
 
     private static final String ROOT = "META-INF/souther-docs/";
 
+    /** A name a doc set gives to a part of one of its files, written above the heading it opens. */
+    private static final Pattern DECLARED = Pattern.compile(
+            "^<!--\\s*souther-section:\\s*([A-Za-z0-9][A-Za-z0-9._-]*)\\s*-->\\s*$");
+
+    private static final Pattern HEADING = Pattern.compile("^(#{1,6})\\s+(\\S.*?)\\s*$");
+
     /**
-     * One shipped document: {@code set/topic} as the jar that ships it spells the name, the title
-     * of its first markdown heading, where its text is, and the one caller whose listing names it.
+     * One document, or one part of one that its doc set has named.
      *
-     * <p>{@code listedFor} is null for a topic every caller is shown, which is nearly all of them.
-     * A topic that documents an interface only one caller has is named in that caller's listing
-     * alone: the listing is where a client with no other map of what is here decides what to read,
-     * and a manual for a wire this one is not on is not an answer it can use. It stays readable by
-     * name, because what the toolchain is remains worth knowing to a reader who asks.
+     * <p>{@code from} and {@code to} are where the text of it is in the file: the whole of it for a
+     * document, and for a named part, its heading through to the next heading that closes it. A
+     * part carries its subordinate parts the way a specification section carries its subsections,
+     * so asking for the larger thing is asking for all of it.
+     *
+     * <p>{@code depth} is 0 for a document and the heading's level for a part of one, which is what
+     * a listing indents by. {@code listedFor} is null for a topic every caller is shown, which is
+     * nearly all of them. A topic that documents an interface only one caller has is named in that
+     * caller's listing alone: the listing is where a client with no other map of what is here
+     * decides what to read, and a manual for a wire this one is not on is not an answer it can use.
+     * It stays readable by name, because what the toolchain is remains worth knowing to a reader
+     * who asks.
      */
-    public record Topic(String name, String title, String resource, Caller listedFor) {
+    public record Topic(String name, String title, int depth, String resource, int from, int to,
+            Caller listedFor) {
 
         /** Whether {@code caller}'s listing names this topic. */
         boolean listedFor(Caller caller) {
@@ -44,12 +70,22 @@ public final class LibraryDocs {
     /** Keyed by {@link DocName#canonical}, so a topic is found in whatever case it is asked for.
      *  The topic keeps its own spelling: the name is also the path its text is read from. */
     private final Map<String, Topic> byName;
+    /**
+     * What a search ranks: the named parts of a file that has them, and the file itself otherwise.
+     *
+     * <p>Ranking both would answer one occurrence twice, and a search that says a thing twice is a
+     * search with fewer answers in the room it has. Where a file names its parts, the part is the
+     * smaller true answer, and it is the one a reader is sent to.
+     */
+    private final List<Topic> ranked;
     /** Who the text is spelled for, wherever it sends its reader somewhere. */
     private final Caller caller;
 
-    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, Caller caller) {
+    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, List<Topic> ranked,
+            Caller caller) {
         this.loader = loader;
         this.byName = byName;
+        this.ranked = ranked;
         this.caller = caller;
     }
 
@@ -61,6 +97,7 @@ public final class LibraryDocs {
     /** The same sets, read as {@code caller} is to be answered. */
     static LibraryDocs on(ClassLoader loader, Caller caller) {
         Map<String, Topic> byName = new LinkedHashMap<>();
+        List<Topic> ranked = new ArrayList<>();
         try {
             Enumeration<URL> registries = loader.getResources(ROOT + "sets");
             while (registries.hasMoreElements()) {
@@ -78,21 +115,86 @@ public final class LibraryDocs {
                         String file = written[0].strip();
                         String topic = set + "/" + file.replaceFirst("\\.md$", "");
                         String resource = ROOT + set + "/" + file;
-                        Topic taken = byName.put(DocName.canonical(topic),
-                                new Topic(topic, titleOf(loader, resource, file, caller), resource,
-                                        written.length < 2 ? null : listedFor(written[1].strip(), topic)));
-                        if (taken != null) {
-                            throw new IllegalStateException(
-                                    "two shipped topics are asked for by the same name: `"
-                                            + taken.name() + "` and `" + topic + "`");
-                        }
+                        Caller listedFor = written.length < 2
+                                ? null : listedFor(written[1].strip(), topic);
+                        String text = Affordance.materialize(text(loader, resource), caller);
+                        register(byName, new Topic(topic, titleOf(text, file), 0, resource,
+                                0, text.length(), listedFor));
+                        List<Topic> parts = named(topic, resource, text, listedFor);
+                        parts.forEach(part -> register(byName, part));
+                        // The parts where there are parts, and the file itself where there are not.
+                        ranked.addAll(parts.isEmpty()
+                                ? List.of(byName.get(DocName.canonical(topic))) : parts);
                     }
                 }
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new LibraryDocs(loader, byName, caller);
+        return new LibraryDocs(loader, byName, List.copyOf(ranked), caller);
+    }
+
+    private static void register(Map<String, Topic> byName, Topic topic) {
+        Topic taken = byName.put(DocName.canonical(topic.name()), topic);
+        if (taken != null) {
+            throw new IllegalStateException("two shipped topics are asked for by the same name: `"
+                    + taken.name() + "` and `" + topic.name() + "`");
+        }
+    }
+
+    /**
+     * The parts {@code text} names of itself, each running to the heading that closes it.
+     *
+     * <p>A declaration that opens nothing is a mistake in the doc set rather than a part with no
+     * text: the name would be published, answered with whatever followed it, and moved the next
+     * time the file was edited. It is refused where the set is read.
+     */
+    private static List<Topic> named(String topic, String resource, String text, Caller listedFor) {
+        // Every heading, whether the file names it or not: what closes a part is the next heading
+        // that is not under it, and a heading the set chose not to name still is not under it.
+        record Head(String name, String title, int level, int from) {}
+        List<Head> heads = new ArrayList<>();
+        String[] lines = text.split("\n", -1);
+        int[] starts = new int[lines.length];
+        for (int i = 0, at = 0; i < lines.length; i++) {
+            starts[i] = at;
+            at += lines[i].length() + 1;
+        }
+        for (int i = 0; i < lines.length; i++) {
+            Matcher declaration = DECLARED.matcher(lines[i]);
+            if (declaration.matches()) {
+                Matcher heading = i + 1 < lines.length ? HEADING.matcher(lines[i + 1]) : null;
+                if (heading == null || !heading.matches()) {
+                    throw new IllegalStateException("`" + topic + "` names a section `"
+                            + declaration.group(1) + "` above something that is not a heading");
+                }
+                heads.add(new Head(topic + "/" + declaration.group(1), heading.group(2),
+                        heading.group(1).length(), starts[i]));
+                i++;
+                continue;
+            }
+            Matcher heading = HEADING.matcher(lines[i]);
+            if (heading.matches()) {
+                heads.add(new Head(null, heading.group(2), heading.group(1).length(), starts[i]));
+            }
+        }
+        List<Topic> parts = new ArrayList<>();
+        for (int h = 0; h < heads.size(); h++) {
+            Head here = heads.get(h);
+            if (here.name() == null) {
+                continue;
+            }
+            int to = text.length();
+            for (int n = h + 1; n < heads.size(); n++) {
+                if (heads.get(n).level() <= here.level()) {
+                    to = heads.get(n).from();
+                    break;
+                }
+            }
+            parts.add(new Topic(here.name(), here.title(), here.level(), resource,
+                    here.from(), to, listedFor));
+        }
+        return parts;
     }
 
     /** The caller an index names beside a topic, refusing one no caller answers to. */
@@ -121,7 +223,7 @@ public final class LibraryDocs {
         if (topic == null || loader.getResource(topic.resource()) == null) {
             return null;
         }
-        return text(topic.resource());
+        return text(topic);
     }
 
     /** Every topic whose title or text contains {@code term}, case-insensitively. */
@@ -143,8 +245,8 @@ public final class LibraryDocs {
         }
         String needle = term.toLowerCase();
         List<Hit> hits = new ArrayList<>();
-        for (Topic topic : byName.values()) {
-            String body = text(topic.resource());
+        for (Topic topic : ranked) {
+            String body = text(topic);
             boolean titled = topic.title().toLowerCase().contains(needle)
                     || topic.name().toLowerCase().contains(needle);
             int occurrences = count(body.toLowerCase(), needle);
@@ -169,7 +271,7 @@ public final class LibraryDocs {
     /** The line of {@code topic} that says {@code term}, cut to a readable width. */
     public String snippet(Topic topic, String term) {
         String needle = term.toLowerCase();
-        String line = text(topic.resource()).lines()
+        String line = text(topic).lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
                 .filter(l -> l.toLowerCase().contains(needle))
@@ -178,8 +280,8 @@ public final class LibraryDocs {
         return line.length() <= 120 ? line : line.substring(0, 119) + "…";
     }
 
-    private static String titleOf(ClassLoader loader, String resource, String fallback, Caller caller) {
-        return Affordance.materialize(text(loader, resource), caller).lines()
+    private static String titleOf(String text, String fallback) {
+        return text.lines()
                 .filter(l -> l.startsWith("# "))
                 .map(l -> l.substring(2).strip())
                 .findFirst()
@@ -187,14 +289,17 @@ public final class LibraryDocs {
     }
 
     /**
-     * The topic's text as this reader is to be shown it.
+     * The text of {@code topic} as this reader is to be shown it.
      *
      * <p>Spelled here rather than where it is printed, because a search ranks and cuts snippets
      * from the same text. A term that named the other caller's spelling would otherwise match, and
-     * the snippet it matched in would hand back the operation this reader cannot carry out.
+     * the snippet it matched in would hand back the operation this reader cannot carry out. The
+     * extent is measured against the same spelling, so it is taken after it and not before.
      */
-    private String text(String resource) {
-        return Affordance.materialize(text(loader, resource), caller);
+    private String text(Topic topic) {
+        String text = Affordance.materialize(text(loader, topic.resource()), caller);
+        return topic.from() == 0 && topic.to() >= text.length()
+                ? text : text.substring(topic.from(), Math.min(topic.to(), text.length()));
     }
 
     private static String text(ClassLoader loader, String resource) {

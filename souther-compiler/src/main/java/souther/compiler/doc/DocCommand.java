@@ -48,7 +48,8 @@ public final class DocCommand {
                 // A topic left out of it is still read by name, which is how a reader who is asking
                 // about the toolchain rather than about their next step still arrives at it.
                 if (topic.listedFor(caller)) {
-                    out.println(topic.name() + "\t" + topic.title());
+                    out.println(topic.name() + "\t"
+                            + "  ".repeat(Math.max(0, topic.depth() - 1)) + topic.title());
                 }
             }
             return 0;
