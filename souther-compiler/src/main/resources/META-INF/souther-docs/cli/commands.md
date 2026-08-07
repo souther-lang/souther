@@ -56,11 +56,14 @@ the rows does not reveal.
 ## doc
 
 ```
-souther doc [<anchor> | <set>/<topic> | --search <term> [--limit <n>]]
+souther doc [<anchor> | <set>/<topic>[/<section>] | --search <term> [--limit <n>]]
 ```
 
 The language specification and the documentation bundled libraries ship. With no argument it lists
-every section and topic as `name<TAB>title`. New to Souther? Read {{doc:cli/start-here}}.
+every section and topic as `name<TAB>title`. A shipped file that names parts of itself — by writing
+`<!-- souther-section: name -->` above a heading — has each of them listed and read as
+`<set>/<topic>/<name>`; one that names none is read whole. New to Souther? Read
+{{doc:cli/start-here}}.
 
 <!-- souther-section: api -->
 ## api
@@ -111,6 +114,18 @@ count.
 
 The schema a client reads is the one the server enforces: every argument publishes its domain, and
 one no tool declares is refused rather than dropped.
+
+A document that sends its reader somewhere writes the operation rather than one caller's spelling
+of it, so what a client is told to do next is a tool call and what a reader at a prompt is told to
+do next is a command. A topic that documents an interface only one caller has is on that caller's
+listing alone, and still read by name — `cli/run` is not on a client's map and answers when asked
+for.
+
+A long answer arrives in parts. `doc_read` hands back as much as one answer carries, ending with
+how much is left and the call that reaches it; carry that `cursor` back with the same `name`. The
+cursor is this server's to read, so it goes out as it came in: where it points is checked against
+the answer it is carried back to, and one measured against a different answer is refused rather
+than resumed at.
 
 <!-- souther-section: shared-options -->
 ## Options every command shares
