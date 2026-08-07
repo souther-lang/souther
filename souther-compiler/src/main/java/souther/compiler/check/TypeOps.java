@@ -1205,16 +1205,20 @@ public final class TypeOps {
         return t;
     }
 
+    /** What a single-value newtype directly wraps (one level, so a newtype over a newtype answers
+     * with that newtype), or {@code null} for anything that is not one. */
+    static Type wrapped(Type t, Symbols symbols) {
+        if (isSingleValueNewtype(t, symbols)) {
+            return fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
+        }
+        return null;
+    }
+
     /** The Int or Decimal that a single-value newtype directly wraps (one level), or {@code null}
      * (a non-newtype, or a newtype over a non-numeric or over another newtype). */
     static Type directNumericNewtypeBase(Type t, Symbols symbols) {
-        if (isSingleValueNewtype(t, symbols)) {
-            Type inner = fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
-            if (inner == Type.INT || inner == Type.DECIMAL) {
-                return inner;
-            }
-        }
-        return null;
+        Type inner = wrapped(t, symbols);
+        return inner == Type.INT || inner == Type.DECIMAL ? inner : null;
     }
 
     /** The single-value numeric newtype a closed {@code +}/{@code -} over {@code lt} and {@code rt}

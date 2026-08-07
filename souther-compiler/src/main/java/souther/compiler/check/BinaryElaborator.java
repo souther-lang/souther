@@ -7,6 +7,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -79,31 +80,22 @@ public final class BinaryElaborator {
                 Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
-                boolean addSub = bin.op() == Ast.BinOp.ADD || bin.op() == Ast.BinOp.SUB;
-                // Closed newtype arithmetic (spec §newtype-arithmetic): `+`/`-` over a single-value
-                // numeric newtype yield that newtype. The result is re-wrapped and its invariant re-checked at construction,
-                // which a behavior's guard discharges. The operands are the same newtype, or a newtype
-                // with a bare literal of its base (as for comparison).
-                if (addSub && arithClosedNewtype(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
-                    Type result = TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols());
-                    yield new Core.Binary(bin.op(), left, right, result, bin.pos());
-                }
-                // Scalar newtype arithmetic: `*`/`/` scale a numeric newtype by a plain Int/Decimal of
-                // the same base (`金額 * 2`), staying in the newtype — the dimension is unchanged.
-                // `金額 * 金額` and `金額 * 数量` (a dimension change / units, not modeled) fall through
-                // to the base path below, an error.
-                if (!addSub && scalarNewtypeArith(lt, rt, bin.op(), ctx.symbols())) {
-                    Type result = TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols());
-                    yield new Core.Binary(bin.op(), left, right, result, bin.pos());
-                }
-                if (lt != Type.INT && lt != Type.DECIMAL) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.arith.operand").title("check.type.mismatch.title")
-                                    .at(bin.pos()).args(Type.show(lt)).build(),
-                            "operand of arithmetic must be Int or Decimal, got " + lt);
-                }
-                Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");   // rt reused, no re-type
-                yield new Core.Binary(bin.op(), left, right, lt, bin.pos());
+                // The rules live in ArithmeticCheck, which answers with the type the operator gives
+                // back or with the rule that refused the operands. Nothing is decided a second time
+                // here: a refusal already knows what it is, and this only points it at the source.
+                ArithmeticCheck answer = ArithmeticCheck.of(bin.op(), lt, rt,
+                        isLiteralExpr(bin.left()), isLiteralExpr(bin.right()), ctx.symbols());
+                yield switch (answer) {
+                    case ArithmeticCheck.Allowed allowed ->
+                            new Core.Binary(bin.op(), left, right, allowed.resultType(), bin.pos());
+                    case ArithmeticCheck.DeferToPlainTypeCheck ignored -> {
+                        // One type against another: the found-versus-expected block says it better
+                        // than a sentence would, and requireType raises or absorbs it.
+                        Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");
+                        yield new Core.Binary(bin.op(), left, right, lt, bin.pos());
+                    }
+                    case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
+                };
             }
             case CONCAT -> {
                 // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to
@@ -226,44 +218,29 @@ public final class BinaryElaborator {
                 && literalPairsNewtype(lt, rt, le, re, symbols);
     }
 
-    /** Whether {@code +}/{@code -} may combine the operands as closed newtype arithmetic: a
-     * single-value newtype whose value is Int or Decimal, paired with the same newtype, or with a
-     * bare literal of that base. A nested newtype (value is another newtype) and {@code *}/{@code /}
-     * are excluded; {@code 金額 - 数量} (two different newtypes) is not combinable and falls through
-     * to the base-only path (an error). This is the one home of the admissibility rule; codegen and
-     * the invariant analysis run on validated code and only pick the result via
-     * {@link TypeOps#closedNewtypeArithResult}. */
-    static boolean arithClosedNewtype(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
-                                              Symbols symbols) {
-        Type ln = TypeOps.directNumericNewtypeBase(lt, symbols);
-        Type rn = TypeOps.directNumericNewtypeBase(rt, symbols);
-        if (ln == null && rn == null) {
-            return false;   // no newtype operand — the plain Int/Decimal path handles it
+    /** The refusal, pointed at the source: at the operand it is about, or — where the rule is about
+     * the pair — at the operator with each operand named beside it, as a comparison of two
+     * unrelated types is. */
+    private static CompileException refused(Ast.Binary bin, ArithmeticCheck.Refusal refusal,
+                                            Type lt, Type rt) {
+        Diagnostic.Builder d = Diagnostic.of(null, refusal.messageKey())
+                .title("check.type.mismatch.title")
+                .args(refusal.messageArgs().toArray());
+        if (refusal.hintKey() != null) {
+            d = d.hint(refusal.hintKey(), refusal.messageArgs().toArray());
         }
-        if (lt.equals(rt)) {
-            return ln != null;   // same single-value newtype over a numeric base
+        if (refusal.side() == ArithmeticCheck.Side.BOTH) {
+            d = d.at(bin.pos())
+                    .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
+                            "check.operand", Type.show(lt, rt))
+                    .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
+                            "check.operand", Type.show(rt, lt));
+        } else {
+            Ast.Expr faulted = refusal.side() == ArithmeticCheck.Side.LEFT ? bin.left() : bin.right();
+            d = d.at(Region.ofWidth(faulted.pos(), Elaborator.width(faulted)));
         }
-        if (ln != null && !TypeOps.isSingleValueNewtype(rt, symbols) && isLiteralExpr(re) && rt.equals(ln)) {
-            return true;        // 金額 + 100 (the literal takes 金額)
-        }
-        return rn != null && !TypeOps.isSingleValueNewtype(lt, symbols) && isLiteralExpr(le) && lt.equals(rn);
-    }
-
-    /** Whether {@code *}/{@code /} scales a single-value numeric newtype by a plain Int/Decimal of the
-     * same base (`金額 * 2`, `2 * 金額`, `金額 / 2`), staying in the newtype. One operand is such a
-     * newtype and the other is the bare base (Int/Decimal, literal or variable — a scalar is not
-     * coerced to the newtype, it stays a plain number). {@code newtype × newtype} (a dimension change /
-     * units, not modeled — spec §newtype-arithmetic) is excluded. Division is not commutative: only
-     * {@code newtype / scalar} scales; {@code scalar / newtype} (`2 / 金額`) is an inverse — a
-     * dimension change — so a scalar on the left is admitted for {@code *} only. */
-    static boolean scalarNewtypeArith(Type lt, Type rt, Ast.BinOp op, Symbols symbols) {
-        Type ln = TypeOps.directNumericNewtypeBase(lt, symbols);
-        Type rn = TypeOps.directNumericNewtypeBase(rt, symbols);
-        if (ln != null && rn == null && rt.equals(ln)) {
-            return true;   // 金額 * 2, 金額 / 2 — newtype on the left, scalar on the right
-        }
-        // scalar on the left (2 * 金額) is fine only for `*`; 2 / 金額 is an inverse, rejected.
-        return op == Ast.BinOp.MUL && rn != null && ln == null && lt.equals(rn);
+        return CompileException.of(d.build(),
+                "operand of arithmetic: " + Type.show(lt, rt) + " and " + Type.show(rt, lt));
     }
 
     /**
@@ -271,15 +248,11 @@ public final class BinaryElaborator {
      * {@code onTheRight} says which side the asked-about operand stands on, because the rule is not
      * symmetric.
      *
-     * <p>Arithmetic and comparison relate two values of one type, so mostly the answer is {@code other}
-     * itself. Scaling a numeric newtype is where they differ: {@code N * s}, {@code s * N} and
-     * {@code N / s} stay in {@code N}, so the operand beside a numeric newtype is the bare base it
-     * wraps, and {@code N × N} is a dimension change the model does not have. Where the operator admits
-     * neither — {@code s / N} is an inverse — nothing follows and the answer is null.
-     *
-     * <p>This is the rule {@link #elaborateBinary} checks, answered for the question a reader of an
-     * operand asks: what does standing here make me? Both are stated here so that neither can be
-     * changed without the other in view.
+     * <p>The question a reader of an operand asks — what does standing here make me? — is the same
+     * question {@link #elaborateBinary} asks, so it is put to the same rules rather than answered
+     * again beside them: each type an operand could be is offered to {@link ArithmeticCheck}, and
+     * the one the operator accepts is the answer. Where it accepts neither, nothing follows and the
+     * answer is null.
      */
     static Type operandBeside(Ast.BinOp op, Type other, boolean onTheRight, Symbols symbols) {
         if (op == Ast.BinOp.AND || op == Ast.BinOp.OR) {
@@ -292,9 +265,14 @@ public final class BinaryElaborator {
         if (base == null || !(op == Ast.BinOp.MUL || op == Ast.BinOp.DIV)) {
             return other;
         }
-        Type lt = onTheRight ? other : base;
-        Type rt = onTheRight ? base : other;
-        return scalarNewtypeArith(lt, rt, op, symbols) ? base : null;
+        for (Type candidate : List.of(other, base)) {
+            Type lt = onTheRight ? other : candidate;
+            Type rt = onTheRight ? candidate : other;
+            if (ArithmeticCheck.of(op, lt, rt, false, false, symbols) instanceof ArithmeticCheck.Allowed) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /** One side is a single-value newtype and the other is a bare literal (not itself a newtype). */
