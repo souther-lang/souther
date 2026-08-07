@@ -3,7 +3,11 @@ package souther.compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
+import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.query.Compilation;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.Located;
@@ -195,7 +199,8 @@ public final class Runner {
         List<Type> ins = sig.ins();
 
         MemoryClassLoader loader = new MemoryClassLoader(classes, Runner.class.getClassLoader());
-        Object[] args = decodeInputs(loader, module.name(), spec.name(), ins, inputJson);
+        Object[] args = decodeInputs(loader, compilation.symbols(module.name()), module.name(),
+                spec.name(), ins, inputJson);
 
         Object result = invoke(loader, module.name(), spec.name(), args);
         Object encoded = encodeOutput(loader, module.name(), spec.name(), sig.out(), result);
@@ -380,8 +385,8 @@ public final class Runner {
      * Arity cannot tell them apart; only decoding against the parameter type can. So the split and the
      * decode are one step, taken with the types in hand.
      */
-    private static Object[] decodeInputs(MemoryClassLoader loader, String pkg, String name,
-                                         List<Type> ins, String inputJson) {
+    private static Object[] decodeInputs(MemoryClassLoader loader, Symbols symbols, String pkg,
+                                         String name, List<Type> ins, String inputJson) {
         int arity = ins.size();
         if (arity == 0) {
             return new Object[0];
@@ -392,7 +397,7 @@ public final class Runner {
         }
         JsonNode tree = parseJson(inputJson);
         if (arity == 1) {
-            return new Object[] {decodeSoleInput(loader, pkg, ins.get(0), tree)};
+            return new Object[] {decodeSoleInput(loader, symbols, pkg, ins.get(0), tree)};
         }
         if (!tree.isArray()) {
             throw fail("run.input.notarray", "`" + name + "` takes " + arity
@@ -404,7 +409,7 @@ public final class Runner {
         }
         Object[] args = new Object[arity];
         for (int i = 0; i < arity; i++) {
-            args[i] = decode(loader, pkg, ins.get(i), tree.get(i), i);
+            args[i] = decode(loader, symbols, pkg, ins.get(i), tree.get(i), i);
         }
         return args;
     }
@@ -418,11 +423,12 @@ public final class Runner {
      * the value while succeeding as the array's sole element is. When the element fails too, the input
      * is wrong for some other reason and the decoder's own report is what says so.
      */
-    private static Object decodeSoleInput(MemoryClassLoader loader, String pkg, Type type, JsonNode tree) {
+    private static Object decodeSoleInput(MemoryClassLoader loader, Symbols symbols, String pkg,
+                                          Type type, JsonNode tree) {
         try {
-            return decode(loader, pkg, type, tree, 0);
+            return decode(loader, symbols, pkg, type, tree, 0);
         } catch (RunException asWritten) {
-            if (tree.isArray() && tree.size() == 1 && decodes(loader, pkg, type, tree.get(0))) {
+            if (tree.isArray() && tree.size() == 1 && decodes(loader, symbols, pkg, type, tree.get(0))) {
                 throw fail("run.input.wrapped", "This behavior has one parameter. Pass its value"
                         + " directly to --input; remove the outer array.");
             }
@@ -431,9 +437,10 @@ public final class Runner {
     }
 
     /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
-    private static boolean decodes(MemoryClassLoader loader, String pkg, Type type, JsonNode raw) {
+    private static boolean decodes(MemoryClassLoader loader, Symbols symbols, String pkg, Type type,
+                                   JsonNode raw) {
         try {
-            decode(loader, pkg, type, raw, 0);
+            decode(loader, symbols, pkg, type, raw, 0);
             return true;
         } catch (RunException _) {
             return false;
@@ -442,8 +449,9 @@ public final class Runner {
 
     // --- decode / encode ----------------------------------------------------------------------
 
-    private static Object decode(MemoryClassLoader loader, String pkg, Type type, JsonNode raw, int index) {
-        Decoder<JsonNode, ?> decoder = decoderFor(loader, pkg, type, index);
+    private static Object decode(MemoryClassLoader loader, Symbols symbols, String pkg, Type type,
+                                 JsonNode raw, int index) {
+        Decoder<JsonNode, ?> decoder = decoderFor(loader, symbols, pkg, type, index);
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
@@ -481,23 +489,24 @@ public final class Runner {
      * a sum's discriminator are all read exactly as they are at the boundary. What is composed here
      * is only what has no class of its own: the primitives and the collections.
      */
-    private static Decoder<JsonNode, ?> decoderFor(MemoryClassLoader loader, String pkg, Type type, int index) {
+    private static Decoder<JsonNode, ?> decoderFor(MemoryClassLoader loader, Symbols symbols,
+                                                   String pkg, Type type, int index) {
         if (type instanceof Type.Prim prim) {
             return leafDecoder(prim, index);
         }
         if (type instanceof Type.Ref ref) {
-            return codecOf(loader, ref, "jsonDecoder");
+            return codecOf(loader, ref.name(), "jsonDecoder");
         }
         if (type instanceof Type.ListOf list) {
-            return JsonDecoders.list(decoderFor(loader, pkg, list.element(), index));
+            return JsonDecoders.list(decoderFor(loader, symbols, pkg, list.element(), index));
         }
         if (type instanceof Type.SetOf set) {
-            return JsonDecoders.list(decoderFor(loader, pkg, set.element(), index))
+            return JsonDecoders.list(decoderFor(loader, symbols, pkg, set.element(), index))
                     .map(elements -> Sets.fromList(new java.util.ArrayList<Object>(elements)));
         }
         if (type instanceof Type.MapOf map) {
-            Decoder<Object, ?> key = keyDecoder(loader, map.key());
-            return JsonDecoders.map(decoderFor(loader, pkg, map.value(), index))
+            Decoder<Object, ?> key = keyDecoder(loader, symbols, map.key(), type, index);
+            return JsonDecoders.map(decoderFor(loader, symbols, pkg, map.value(), index))
                     .flatMapWithPath((entries, path) -> rekey(key, entries, path));
         }
         throw fail("run.decode.unsupported",
@@ -512,29 +521,35 @@ public final class Runner {
      * neutral source, whichever source the map itself came from. This is the decoder
      * {@code CodecGen.emitKeyDecoder} builds, in Java.
      *
-     * <p>Which key types arrive here is not asked again. What may key a map that crosses is
-     * {@code TypeOps.isBoundaryMapKey}, and E1314 has already refused everything else, so a named key
-     * runs its own decoder — a String-backed newtype enforcing its invariant, an enumeration reading
-     * its case's name — and the three primitives are the string leaf, parsed for a temporal. Telling
-     * the newtype and the enumeration apart here would be reading the boundary's rule a second time,
-     * in a place that cannot see all of it.
+     * <p>Which key types arrive here is not decided again. The classification is asked for rather
+     * than carried — {@code run} holds a {@code Type} the compile handed back, not the codec IR the
+     * witness travels in — but it is the checker's rule that answers, so this reads the answer
+     * instead of writing the kinds out: a named key runs its own decoder, and a representation is
+     * the string leaf, parsed for a temporal. A key that classifies as nothing never reached a
+     * codec, so it is reported as an input this cannot decode rather than asserted away.
      */
-    private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, Type key) {
-        if (key instanceof Type.Ref ref) {
-            return codecOf(loader, ref, "decoder");
+    private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, Symbols symbols, Type key,
+                                                 Type map, int index) {
+        BoundaryMapKey classified = TypeOps.classifyConcreteMapKey(key, symbols);
+        if (classified == null) {
+            throw fail("run.decode.unsupported",
+                    "input #" + (index + 1) + " has type `" + Type.show(map)
+                            + "`, which `run` cannot decode yet (only a data type, a primitive, or a"
+                            + " collection of those).", index + 1, Type.show(map));
         }
-        // text arriving from outside is canonical, which is what the string leaf makes it
-        StringDecoder<Object> text = ObjectDecoders.string().normalize();
-        if (key == Type.STRING) {
-            return text;
-        }
-        if (key == Type.DATE) {
-            return text.date();
-        }
-        if (key == Type.DATETIME) {
-            return text.dateTime();
-        }
-        throw new IllegalStateException("not a boundary map key: " + Type.show(key));
+        return switch (classified) {
+            case BoundaryMapKey.StringNewtype n -> codecOf(loader, n.name(), "decoder");
+            case BoundaryMapKey.UnitEnum e -> codecOf(loader, e.name(), "decoder");
+            case BoundaryMapKey.Text _ -> text();
+            case BoundaryMapKey.Date _ -> text().date();
+            case BoundaryMapKey.DateTime _ -> text().dateTime();
+        };
+    }
+
+    /** The string leaf a key is read through. Text arriving from outside is canonical, which is what
+     *  the leaf makes it (ADR-0096). */
+    private static StringDecoder<Object> text() {
+        return ObjectDecoders.string().normalize();
     }
 
     /**
@@ -581,16 +596,16 @@ public final class Runner {
     /** The named static decoder factory of a generated class — {@code jsonDecoder} for a value read
      *  from JSON, {@code decoder} for a map key, which is read from the string the object carried.
      *  Either erases at the reflection boundary. */
-    private static <I> Decoder<I, ?> codecOf(MemoryClassLoader loader, Type.Ref ref, String factory) {
+    private static <I> Decoder<I, ?> codecOf(MemoryClassLoader loader, TypeName type, String factory) {
         try {
             @SuppressWarnings("unchecked")
             Decoder<I, ?> decoder = (Decoder<I, ?>)
-                    loader.loadClass(ref.name().qualified()).getMethod(factory).invoke(null);
+                    loader.loadClass(type.qualified()).getMethod(factory).invoke(null);
             return decoder;
         } catch (ReflectiveOperationException e) {
             throw fail("run.decode.nodecoder",
-                    "cannot obtain a decoder for `" + ref.name().name() + "`: " + e,
-                    ref.name().name(), e.toString());
+                    "cannot obtain a decoder for `" + type.name() + "`: " + e,
+                    type.name(), e.toString());
         }
     }
 

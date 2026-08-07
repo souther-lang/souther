@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
@@ -155,6 +156,13 @@ public final class Compilation {
      * recursive prelude helpers it reaches. */
     public Ast.Module module(String name) {
         return db.ask(new Shapes.Prepared(name)).value();
+    }
+
+    /** What the names in {@code module} denote — the table a question about a type is asked against.
+     *  {@code souther run} needs it because it is handed the behavior's types rather than the codec
+     *  IR: a classification it cannot be given, it has to ask the same rule for. */
+    public Symbols symbols(String module) {
+        return db.ask(new Shapes.Scope(module)).value();
     }
 
     /** The signatures of the behaviors {@code module} declares. */

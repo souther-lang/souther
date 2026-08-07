@@ -513,7 +513,8 @@ public final class Resolve {
             case Ast.ListDecRef l -> new Ast.ListDecRef(decRef(l.element()), l.pos());
             case Ast.SetDecRef s -> new Ast.SetDecRef(decRef(s.element()), s.pos());
             case Ast.OptionDecRef o -> new Ast.OptionDecRef(decRef(o.element()), o.pos());
-            case Ast.MapDecRef m -> new Ast.MapDecRef(decRef(m.value()), decRef(m.key()), m.pos());
+            // the key is already the classification the checker made, carrying a resolved name
+            case Ast.MapDecRef m -> new Ast.MapDecRef(decRef(m.value()), m.key(), m.pos());
         };
     }
 
@@ -545,7 +546,7 @@ public final class Resolve {
             case Ast.ListEnc l -> new Ast.ListEnc(expr(l.source(), bound), encElem(l.elem()), l.pos());
             case Ast.SetEnc s -> new Ast.SetEnc(expr(s.source(), bound), encElem(s.elem()), s.pos());
             case Ast.MapEnc m -> new Ast.MapEnc(expr(m.source(), bound), encElem(m.elem()),
-                    encElem(m.key()), m.pos());
+                    m.key(), m.pos());
             // the inner expression reads the element the option holds, under the name given here
             case Ast.OptionRaw o -> {
                 Answered elem = bind(bound, o.elem());
@@ -569,7 +570,7 @@ public final class Resolve {
             case Ast.DataEnc d -> new Ast.DataEnc(type(d.typeName()), d.pos());
             case Ast.ListElemEnc l -> new Ast.ListElemEnc(encElem(l.elem()), l.pos());
             case Ast.SetElemEnc s -> new Ast.SetElemEnc(encElem(s.elem()), s.pos());
-            case Ast.MapElemEnc m -> new Ast.MapElemEnc(encElem(m.value()), encElem(m.key()), m.pos());
+            case Ast.MapElemEnc m -> new Ast.MapElemEnc(encElem(m.value()), m.key(), m.pos());
         };
     }
 

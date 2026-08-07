@@ -8,6 +8,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -1012,27 +1013,65 @@ public final class TypeOps {
         return null;
     }
 
-    /** Whether {@code name} is a newtype over {@code String} ({@code data X = String}) — the only key
-     *  type a {@code Map} admits besides {@code String} itself (ADR-0040). */
-    static boolean isStringNewtype(TypeName name, Symbols symbols) {
+    /** Whether {@code name} is a newtype over {@code String} ({@code data X = String}). A key is a
+     *  JSON object's key, so what a newtype wraps has to be text already; a newtype over another
+     *  base would be converted and rendered differently, which is a case of its own in
+     *  {@link BoundaryMapKey} rather than a widening of this. */
+    private static boolean isStringNewtype(TypeName name, Symbols symbols) {
         return symbols.get(name) instanceof Ast.Data d && d.newtype()
                 && d.fields().size() == 1
                 && d.fields().get(0).type() instanceof Ast.TypeRef base && "String".equals(base.name());
     }
 
+    /** How a refused {@code Map} key is described to a Java caller, in one place. Which types are
+     *  admitted is {@link #classifyConcreteMapKey}'s, and a message that listed them here would be a
+     *  second copy of that rule — which is what happened when the enumeration was admitted and three
+     *  of the four sentences went on naming four kinds. The kinds are named in the catalog's hint,
+     *  where a reader is told what to write instead. */
+    public static final String MAP_KEY_RULE =
+            "a Map crossing the boundary must be keyed by a type with a boundary text"
+                    + " representation (ADR-0040)";
+
     /**
-     * Whether {@code key} can key a {@code Map} that crosses the boundary. A map's external form is a
-     * JSON object, whose keys are strings, so the key type must render as and parse from a bare
-     * string: {@code String}, a String-backed newtype (ADR-0040), or a temporal — a {@code Date}
-     * field already travels as its ISO form, so an ISO key is the same representation in key
-     * position. A key type variable is admitted for the {@code core} signatures, which monomorphise
-     * to one of those.
+     * Whether {@code key} may stand as a {@code Map} key in a signature. This is not the question the
+     * codecs ask: a type variable may be written — the {@code core}'s {@code Map<'k, 'a>} signatures
+     * are — and stands for a key rather than being one, so it is admissible and classifies as
+     * nothing. Everything else is admissible exactly when it classifies.
      */
-    public static boolean isBoundaryMapKey(Type key, Symbols symbols) {
-        return key == Type.STRING || key == Type.DATE || key == Type.DATETIME
-                || key instanceof Type.Var
-                || (key instanceof Type.Ref r
-                    && (isStringNewtype(r.name(), symbols) || isUnitOnlySum(key, symbols)));
+    public static boolean isMapKeyAdmissibleInSignature(Type key, Symbols symbols) {
+        return key instanceof Type.Var || classifyConcreteMapKey(key, symbols) != null;
+    }
+
+    /**
+     * What a concrete {@code key} is converted through at the boundary, or null when it cannot cross.
+     * A map's external form is a JSON object, whose keys are strings, so an admitted key renders as
+     * and parses from a bare string: {@code String} itself, a String-backed newtype (ADR-0040), a
+     * temporal as the ISO form a {@code Date} field already travels as, or an enumeration as its
+     * case's name (issue #161).
+     *
+     * <p>The answer is the witness rather than a yes, and it is this function's alone. A reader that
+     * builds a decoder, renders an encoder's keys or lowers a key into the codec IR takes what it
+     * needs from the result; none of them asks the type again.
+     */
+    public static BoundaryMapKey classifyConcreteMapKey(Type key, Symbols symbols) {
+        if (key == Type.STRING) {
+            return new BoundaryMapKey.Text();
+        }
+        if (key == Type.DATE) {
+            return new BoundaryMapKey.Date();
+        }
+        if (key == Type.DATETIME) {
+            return new BoundaryMapKey.DateTime();
+        }
+        if (key instanceof Type.Ref r) {
+            if (isStringNewtype(r.name(), symbols)) {
+                return new BoundaryMapKey.StringNewtype(r.name());
+            }
+            if (isUnitOnlySum(key, symbols)) {
+                return new BoundaryMapKey.UnitEnum(r.name());
+            }
+        }
+        return null;
     }
 
     /**
@@ -1071,7 +1110,7 @@ public final class TypeOps {
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
      * every one can — what a data field or a behavior's input/output is checked against. */
     public static Type nonBoundaryMapKey(Type t, Symbols symbols) {
-        if (t instanceof Type.MapOf m && !isBoundaryMapKey(m.key(), symbols)) {
+        if (t instanceof Type.MapOf m && !isMapKeyAdmissibleInSignature(m.key(), symbols)) {
             return m.key();
         }
         return switch (t) {

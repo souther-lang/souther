@@ -7,6 +7,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -1075,25 +1076,28 @@ public final class FixtureReader {
         });
     }
 
-    /** The decoder for one boundary map key, over the text the decoded map carried. A named key runs
-     *  its own decoder; the three primitives a key may be are the string leaf, parsed for a temporal.
-     *  This is not {@link #decoderFor}: there a {@code Date} is handed over already parsed, and in key
-     *  position it is the text that arrives. */
+    /** The decoder for one boundary map key, over the text the decoded map carried. Which key it is
+     *  is the checker's rule to say, asked here rather than written out again — a fixture is read
+     *  from a written expression, not from the codec IR the witness travels in. This is not
+     *  {@link #decoderFor}: there a {@code Date} is handed over already parsed, and in key position
+     *  it is the text that arrives. */
     private Decoder<Object, ?> keyDecoderFor(Type key) {
-        if (key instanceof Type.Ref ref) {
-            return decoderFor(ref);
+        BoundaryMapKey classified = TypeOps.classifyConcreteMapKey(key, symbols);
+        if (classified == null) {
+            throw new FixtureException("`" + Type.show(key) + "` cannot key a Map that crosses");
         }
-        StringDecoder<Object> text = ObjectDecoders.string().normalize();
-        if (key == Type.STRING) {
-            return text;
-        }
-        if (key == Type.DATE) {
-            return text.date();
-        }
-        if (key == Type.DATETIME) {
-            return text.dateTime();
-        }
-        throw new FixtureException("`" + Type.show(key) + "` cannot key a Map that crosses");
+        return switch (classified) {
+            case BoundaryMapKey.StringNewtype n -> decoderFor(Type.ref(n.name()));
+            case BoundaryMapKey.UnitEnum e -> decoderFor(Type.ref(e.name()));
+            case BoundaryMapKey.Text _ -> keyText();
+            case BoundaryMapKey.Date _ -> keyText().date();
+            case BoundaryMapKey.DateTime _ -> keyText().dateTime();
+        };
+    }
+
+    /** The string leaf a key's text is read through, canonicalizing as every arriving text is. */
+    private static StringDecoder<Object> keyText() {
+        return ObjectDecoders.string().normalize();
     }
 
     /** One decoded input, in the form the compiler owns. Never throws: a value that cannot be read is

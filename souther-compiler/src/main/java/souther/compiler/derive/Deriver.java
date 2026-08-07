@@ -7,6 +7,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
@@ -74,7 +75,7 @@ public final class Deriver {
                                 BindingOwner.Pass.DERIVER, 0))));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()
                 ? d.encoder()
-                : Optional.of(deriveEncoder(d, fields, isCase,
+                : Optional.of(deriveEncoder(d, fields, isCase, symbols,
                         new Ast.Binders(new BindingOwner.Synthesized(declared,
                                 BindingOwner.Pass.DERIVER, 1))));
         return new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(), d.invariants(),
@@ -104,7 +105,7 @@ public final class Deriver {
             Ast.Construct result = new Ast.Construct(self,
                     List.of(new Ast.FieldInit(only.getKey(), Ast.Var.local(input, pos), pos)), pos);
             return new Ast.NewtypeDecoder(
-                    decRef(only.getValue(), d, only.getKey(), fieldPos(d, only.getKey())),
+                    decRef(only.getValue(), d, only.getKey(), fieldPos(d, only.getKey()), symbols),
                     input, result, pos);
         }
         List<Ast.Bind> binds = new ArrayList<>();
@@ -112,7 +113,7 @@ public final class Deriver {
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             Ast.Binder took = binders.binder(f.getKey(), pos);
             binds.add(new Ast.Bind(took, f.getKey(),
-                    decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey())), pos));
+                    decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey()), symbols), pos));
             inits.add(new Ast.FieldInit(f.getKey(), Ast.Var.local(took, pos), pos));
         }
         return new Ast.ObjectDecoder(binds, new Ast.Construct(self, inits, pos), pos);
@@ -156,7 +157,8 @@ public final class Deriver {
         return Ast.PrimKind.INT;
     }
 
-    private static Ast.DecRef decRef(Type t, Ast.Data d, String field, SourcePos pos) {
+    private static Ast.DecRef decRef(Type t, Ast.Data d, String field, SourcePos pos,
+                                     Symbols symbols) {
         if (t == Type.STRING || t == Type.INT || t == Type.BOOL
                 || t == Type.DECIMAL || t == Type.DATE || t == Type.DATETIME) {
             return new Ast.PrimDecRef(primKind(t), pos);
@@ -165,16 +167,17 @@ public final class Deriver {
             return new Ast.DataDecRef(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (t instanceof Type.ListOf lo) {
-            return new Ast.ListDecRef(decRef(lo.element(), d, field, pos), pos);
+            return new Ast.ListDecRef(decRef(lo.element(), d, field, pos, symbols), pos);
         }
         if (t instanceof Type.SetOf so) {
-            return new Ast.SetDecRef(decRef(so.element(), d, field, pos), pos);
+            return new Ast.SetDecRef(decRef(so.element(), d, field, pos, symbols), pos);
         }
         if (t instanceof Type.OptionOf oo) {
-            return new Ast.OptionDecRef(decRef(oo.element(), d, field, pos), pos);
+            return new Ast.OptionDecRef(decRef(oo.element(), d, field, pos, symbols), pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapDecRef(decRef(mo.value(), d, field, pos), mapKeyDec(mo, d, field, pos), pos);
+            return new Ast.MapDecRef(decRef(mo.value(), d, field, pos, symbols),
+                    mapKey(mo, d, field, pos, symbols), pos);
         }
         throw noCodec(t, d, field, pos);
     }
@@ -182,7 +185,7 @@ public final class Deriver {
     // --- encoder derivation ---
 
     private static Ast.EncoderDef deriveEncoder(Ast.Data d, Map<String, Type> fields, boolean isCase,
-                                                Ast.Binders binders) {
+                                                Symbols symbols, Ast.Binders binders) {
         SourcePos pos = d.pos();
         Ast.Binder self = binders.binder("self", pos);
         Map.Entry<String, Type> single = bareField(d, fields, isCase);
@@ -197,12 +200,12 @@ public final class Deriver {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
             Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), only.getKey(), pos);
             return new Ast.EncoderDef(self,
-                    rawForAccess(only.getValue(), access, d, only.getKey(), pos, binders), pos);
+                    rawForAccess(only.getValue(), access, d, only.getKey(), symbols, pos, binders), pos);
         }
         List<Ast.RawEntry> entries = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             entries.add(new Ast.RawEntry(f.getKey(),
-                    rawFor(f.getValue(), f.getKey(), d, fieldPos(d, f.getKey()), self, binders), pos));
+                    rawFor(f.getValue(), f.getKey(), d, fieldPos(d, f.getKey()), symbols, self, binders), pos));
         }
         return new Ast.EncoderDef(self, new Ast.ObjectRaw(entries, pos), pos);
     }
@@ -228,13 +231,14 @@ public final class Deriver {
                 || t == Type.DECIMAL || t == Type.DATE || t == Type.DATETIME;
     }
 
-    private static Ast.RawExpr rawFor(Type t, String field, Ast.Data d, SourcePos pos,
+    private static Ast.RawExpr rawFor(Type t, String field, Ast.Data d, SourcePos pos, Symbols symbols,
                                       Ast.Binder self, Ast.Binders binders) {
         return rawForAccess(t, new Ast.FieldAccess(Ast.Var.local(self, pos), field, pos),
-                d, field, pos, binders);
+                d, field, symbols, pos, binders);
     }
 
     private static Ast.RawExpr rawForAccess(Type t, Ast.Expr access, Ast.Data d, String field,
+                                            Symbols symbols,
                                             SourcePos pos, Ast.Binders binders) {
         if (isPrim(t)) {
             return primRaw(t, access, pos);
@@ -243,48 +247,37 @@ public final class Deriver {
             return new Ast.EncodeRaw(Ast.Name.resolved(r.name(), pos), access, pos);
         }
         if (t instanceof Type.ListOf lo) {
-            return new Ast.ListEnc(access, encElem(lo.element(), d, field, pos), pos);
+            return new Ast.ListEnc(access, encElem(lo.element(), d, field, pos, symbols), pos);
         }
         if (t instanceof Type.SetOf so) {
-            return new Ast.SetEnc(access, encElem(so.element(), d, field, pos), pos);
+            return new Ast.SetEnc(access, encElem(so.element(), d, field, pos, symbols), pos);
         }
         if (t instanceof Type.OptionOf oo) {
             Ast.Binder elem = binders.binder("$opt", pos);
-            Ast.RawExpr inner = rawForAccess(oo.element(), Ast.Var.local(elem, pos), d, field, pos,
+            Ast.RawExpr inner = rawForAccess(oo.element(), Ast.Var.local(elem, pos), d, field, symbols, pos,
                     binders);
             return new Ast.OptionRaw(access, inner, elem, pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapEnc(access, encElem(mo.value(), d, field, pos), mapKeyEnc(mo, d, field, pos), pos);
+            return new Ast.MapEnc(access, encElem(mo.value(), d, field, pos, symbols),
+                    mapKey(mo, d, field, pos, symbols), pos);
         }
         throw noCodec(t, d, field, pos);
     }
 
     /**
      * How a map's keys cross the boundary. A JSON object's keys are strings, so a key is decoded from
-     * and encoded to a bare string: a {@code String} key passes through, a String-backed newtype
-     * ({@code Map<商品ID, V>}) is constructed on decode (its invariant enforced) and rendered bare on
-     * encode, and a temporal key is parsed from and written as its ISO form — the same representation
-     * a {@code Date} field already has. Any other key type is rejected before here (ADR-0040).
+     * and encoded to a bare string, and which string is the checker's answer rather than one worked
+     * out here: this asks for the classification and puts it in the codec IR, where the backend reads
+     * it. A key with no classification never had a boundary representation, and is refused (ADR-0040).
      */
-    private static Ast.DecRef mapKeyDec(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
-        if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataDecRef(Ast.Name.resolved(r.name(), pos), pos);
+    private static BoundaryMapKey mapKey(Type.MapOf mo, Ast.Data d, String field, SourcePos pos,
+                                         Symbols symbols) {
+        BoundaryMapKey key = TypeOps.classifyConcreteMapKey(mo.key(), symbols);
+        if (key == null) {
+            throw badMapKey(mo.key(), d, field, pos);
         }
-        if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
-            return new Ast.PrimDecRef(primKind(mo.key()), pos);
-        }
-        throw badMapKey(mo.key(), d, field, pos);
-    }
-
-    private static Ast.EncElem mapKeyEnc(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
-        if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataEnc(Ast.Name.resolved(r.name(), pos), pos);
-        }
-        if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
-            return new Ast.PrimEnc(primKind(mo.key()), pos);
-        }
-        throw badMapKey(mo.key(), d, field, pos);
+        return key;
     }
 
     /**
@@ -297,10 +290,9 @@ public final class Deriver {
         return CompileException.of(
                 Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
                         .at(pos).args(where(d, field), Type.show(key))
-                        .hint("check.map.key.field.hint").build(),
-                "a Map crossing the boundary at `" + where(d, field) + "` must be keyed by String, a"
-                        + " String-backed newtype (`data X = String`), Date or DateTime, got "
-                        + Type.show(key));
+                        .hint("check.map.key.hint").build(),
+                "`" + where(d, field) + "` is keyed by " + Type.show(key) + ": "
+                        + TypeOps.MAP_KEY_RULE);
     }
 
     /** How to name the place a boundary complaint belongs to. A newtype's single field is implicit —
@@ -313,7 +305,8 @@ public final class Deriver {
     /** The encoder for one element of a collection. A collection may hold a collection
      * ({@code Map<String, List<商品ID>>}), so this recurses the same way {@link #decRef} does on the
      * decoding side — the two stay symmetric, and what decodes in encodes back out. */
-    private static Ast.EncElem encElem(Type t, Ast.Data d, String field, SourcePos pos) {
+    private static Ast.EncElem encElem(Type t, Ast.Data d, String field, SourcePos pos,
+                                       Symbols symbols) {
         if (isPrim(t)) {
             return new Ast.PrimEnc(primKind(t), pos);   // every primitive has a leaf encoder
         }
@@ -321,13 +314,14 @@ public final class Deriver {
             return new Ast.DataEnc(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (t instanceof Type.ListOf lo) {
-            return new Ast.ListElemEnc(encElem(lo.element(), d, field, pos), pos);
+            return new Ast.ListElemEnc(encElem(lo.element(), d, field, pos, symbols), pos);
         }
         if (t instanceof Type.SetOf so) {
-            return new Ast.SetElemEnc(encElem(so.element(), d, field, pos), pos);
+            return new Ast.SetElemEnc(encElem(so.element(), d, field, pos, symbols), pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapElemEnc(encElem(mo.value(), d, field, pos), mapKeyEnc(mo, d, field, pos), pos);
+            return new Ast.MapElemEnc(encElem(mo.value(), d, field, pos, symbols),
+                    mapKey(mo, d, field, pos, symbols), pos);
         }
         throw noCodec(t, d, field, pos);
     }
