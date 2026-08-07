@@ -37,6 +37,11 @@ souther fmt <file.sou>... [-w] [--check]
 Prints the canonical form to stdout, rewrites in place with `-w`, or exits non-zero on a file that
 is not formatted with `--check`.
 
+`--check` prints each file it rejects as a unified diff against that file's canonical form. The
+canonical form is what the verdict is taken against, so a failing build says what differs rather
+than only which file did, and nothing has to be formatted a second time locally to read it. A file
+already in canonical form is not mentioned.
+
 <!-- souther-section: examples -->
 ## examples
 
