@@ -38,6 +38,109 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 """, formatted);
     }
 
+    @Test
+    void onTheFieldItWasWrittenAfter() {
+        String formatted = Formatter.format("""
+                module m
+                data AccountId = String
+                data DomainName = String
+                data Industry
+                data Account =
+                    { id: AccountId
+                    , domain: DomainName?         // an honest optional
+                    , industry: Industry
+                    }
+                """);
+
+        assertEquals("""
+                module m
+
+                data AccountId = String
+
+                data DomainName = String
+
+                data Industry
+
+                data Account =
+                    { id: AccountId
+                    , domain: DomainName? // an honest optional
+                    , industry: Industry
+                    }
+                """, formatted);
+    }
+
+    /** In a list whose members are separated rather than opened, the comment goes after the comma:
+     * the comma is on that line too, and one written after the comment would be inside it. */
+    @Test
+    void afterTheCommaWhenTheMemberIsFollowedByOne() {
+        String formatted = Formatter.format("""
+                module m
+                data O = { a: Int, b: Int }
+                behavior f : (n: Int) -> O constructs O
+                let f (n) = O {
+                  a = n,   // the first
+                  b = n
+                }
+                """);
+
+        assertEquals("""
+                module m
+
+                data O =
+                    { a: Int
+                    , b: Int
+                    }
+
+                behavior f : (n: Int) -> O
+                    constructs O
+
+                let f (n) =
+                    O {
+                        a = n, // the first
+                        b = n
+                    }
+                """, formatted);
+    }
+
+    @Test
+    void onTheMatchArmItWasWrittenAfter() {
+        String formatted = Formatter.format("""
+                module m
+                data A
+                data B
+                data S = A | B
+                data O = { n: Int }
+                behavior f : (s: S) -> O constructs O
+                let f (s) = O { n = match s with
+                  | A -> 1   // the first
+                  | B -> 2 }
+                """);
+
+        assertEquals("""
+                module m
+
+                data A
+
+                data B
+
+                data S = A | B
+
+                data O =
+                    { n: Int
+                    }
+
+                behavior f : (s: S) -> O
+                    constructs O
+
+                let f (s) =
+                    O {
+                        n = match s with
+                            | A -> 1 // the first
+                            | B -> 2
+                    }
+                """, formatted);
+    }
+
     /** A trailing comment is not content the width has to make room for. It sits past the end of the
      * line whatever its length, so measuring the line against it would break a construct that fits. */
     @Test

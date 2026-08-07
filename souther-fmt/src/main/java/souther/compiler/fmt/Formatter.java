@@ -109,10 +109,37 @@ public final class Formatter {
     // in the document before the renderer can choose it, and the renderer breaks the outermost group
     // that does not fit, so a member is split only when the structure around it had nothing to give.
 
+    /**
+     * A member and the comment written at the end of the line it takes. The comment goes after
+     * whatever the enclosing construct writes between this member and the next, because that
+     * punctuation is on this line too — a comma written after the comment would be inside it.
+     */
+    private record Member(Doc doc, Doc trailing) {}
+
+    /** Members that carry no comment of their own. */
+    private static List<Member> plain(List<Doc> docs) {
+        List<Member> out = new ArrayList<>();
+        for (Doc d : docs) {
+            out.add(new Member(d, Doc.NIL));
+        }
+        return out;
+    }
+
     /** Members with a comma between them, one to a line where they do not fit. The comma stays on
-     * the line its member ends. */
-    private static Doc separated(List<Doc> members) {
-        return Doc.join(concat(text(","), LINE), members);
+     * the line its member ends, and a comment written at the end of that line follows the comma. */
+    private static Doc separated(List<Member> members) {
+        List<Doc> parts = new ArrayList<>();
+        for (int i = 0; i < members.size(); i++) {
+            if (i > 0) {
+                parts.add(LINE);
+            }
+            parts.add(members.get(i).doc());
+            if (i < members.size() - 1) {
+                parts.add(text(","));
+            }
+            parts.add(members.get(i).trailing());
+        }
+        return concat(parts);
     }
 
     /**
@@ -120,7 +147,7 @@ public final class Formatter {
      * where the flat form has a space there ({@code exposing ( a, b )}, {@code T { a, b }}),
      * {@link Doc#SOFTLINE} where it does not ({@code f(a, b)}, {@code [a, b]}).
      */
-    private static Doc delimited(String open, Doc boundary, List<Doc> members, String close) {
+    private static Doc delimited(String open, Doc boundary, List<Member> members, String close) {
         return group(concat(text(open),
                 nest(INDENT, concat(boundary, separated(members))),
                 boundary, text(close)));
@@ -242,7 +269,8 @@ public final class Formatter {
         String target = ids.size() >= 2 ? ids.get(1).text() : "";
         List<Doc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
-            rows.add(concat(HARDLINE, withComments(n, row, exampleRow(row))));
+            rows.add(concat(HARDLINE, withComments(n, row, exampleRow(row)),
+                    concat(trailingOf(row))));
         }
         rows.add(endComments(n));
         return concat(text("example "), text(target), nest(INDENT, concat(rows)));
@@ -259,14 +287,14 @@ public final class Formatter {
         for (SyntaxNode a : n.child(SyntaxKind.ARG_LIST).map(this::exprChildren).orElse(List.of())) {
             args.add(expr(a));
         }
-        Doc input = delimited("(", SOFTLINE, args, ")");
+        Doc input = delimited("(", SOFTLINE, plain(args), ")");
         var with = n.child(SyntaxKind.WITH_CLAUSE);
         if (with.isPresent()) {
             List<Doc> binds = new ArrayList<>();
             for (SyntaxNode b : childNodes(with.get(), SyntaxKind.WITH_BINDING)) {
                 binds.add(concat(text(firstIdent(b)), text(" = "), expr(firstExprChildOpt(b).orElseThrow())));
             }
-            input = concat(input, text(" with "), group(nest(INDENT, separated(binds))));
+            input = concat(input, text(" with "), group(nest(INDENT, separated(plain(binds)))));
         }
 
         List<Segment> segs = new ArrayList<>();
@@ -288,7 +316,7 @@ public final class Formatter {
         String target = ids.size() >= 2 ? ids.get(1).text() : "";
         List<Doc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
-            rows.add(concat(HARDLINE, withComments(n, row, fakeRow(row))));
+            rows.add(concat(HARDLINE, withComments(n, row, fakeRow(row)), concat(trailingOf(row))));
         }
         rows.add(endComments(n));
         return concat(text("fake "), text(target), nest(INDENT, concat(rows)));
@@ -302,7 +330,7 @@ public final class Formatter {
             for (SyntaxNode a : exprChildren(args.get())) {
                 as.add(expr(a));
             }
-            input = delimited("(", SOFTLINE, as, ")");
+            input = delimited("(", SOFTLINE, plain(as), ")");
         } else {
             input = text("_");   // the default row
         }
@@ -319,10 +347,10 @@ public final class Formatter {
     }
 
     private Doc exposing(SyntaxNode clause) {
-        List<Doc> entries = new ArrayList<>();
+        List<Member> entries = new ArrayList<>();
         for (SyntaxNode e : childNodes(clause, SyntaxKind.EXPOSED_ENTRY)) {
             Doc name = qualifiedName(e.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
-            entries.add(withComments(clause, e, e.child(SyntaxKind.RET_TYPE)
+            entries.add(member(clause, e, e.child(SyntaxKind.RET_TYPE)
                     .map(rt -> concat(name, text(" : "), retType(rt)))
                     .orElse(name)));
         }
@@ -343,7 +371,7 @@ public final class Formatter {
         for (SyntaxToken t : idents(list.get())) {
             names.add(text(t.text()));
         }
-        return concat(d, text(" "), delimited("(", LINE, names, ")"));
+        return concat(d, text(" "), delimited("(", LINE, plain(names), ")"));
     }
 
     // --- data ---
@@ -356,7 +384,8 @@ public final class Formatter {
             String label = inv.token(SyntaxKind.ASSIGN).isPresent()
                     ? firstIdent(inv) + " = " : "";
             invariants.add(concat(HARDLINE,
-                    withComments(n, inv, concat(text("invariant " + label), expr(onlyExpr(inv))))));
+                    withComments(n, inv, concat(text("invariant " + label), expr(onlyExpr(inv)))),
+                    concat(trailingOf(inv))));
         }
 
         var product = n.child(SyntaxKind.PRODUCT_BODY);
@@ -423,7 +452,8 @@ public final class Formatter {
             // a comment written after it would leave the member starting a line of its own, at the
             // block's indent rather than after the comma the rest of the block is written with.
             boolean first = lines.isEmpty();
-            Doc line = withComments(body, m, concat(text(first ? "{ " : ", "), member));
+            Doc line = concat(withComments(body, m, concat(text(first ? "{ " : ", "), member)),
+                    concat(trailingOf(m)));
             lines.add(first ? line : concat(HARDLINE, line));
         }
         lines.add(endComments(body));
@@ -449,10 +479,12 @@ public final class Formatter {
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
                     clauses.add(concat(HARDLINE,
-                            withComments(s, c, concat(text("constructs "), nameList(c, 0)))));
+                            withComments(s, c, concat(text("constructs "), nameList(c, 0))),
+                            concat(trailingOf(c))));
                 } else if (c.kind() == SyntaxKind.DEPENDS_CLAUSE) {
                     clauses.add(concat(HARDLINE,
-                            withComments(s, c, concat(text("depends on "), nameList(c, 1)))));
+                            withComments(s, c, concat(text("depends on "), nameList(c, 1))),
+                            concat(trailingOf(c))));
                 }
             }
             return concat(text("behavior "), text(name), text(" : "), params, text(" -> "), ret,
@@ -471,9 +503,9 @@ public final class Formatter {
     }
 
     private Doc paramList(SyntaxNode n) {
-        List<Doc> params = new ArrayList<>();
+        List<Member> params = new ArrayList<>();
         for (SyntaxNode p : childNodes(n, SyntaxKind.PARAM)) {
-            params.add(withComments(n, p, concat(text(firstIdent(p)), text(": "),
+            params.add(member(n, p, concat(text(firstIdent(p)), text(": "),
                     retType(p.child(SyntaxKind.RET_TYPE).orElseThrow()))));
         }
         return delimited("(", SOFTLINE, withEndComments(n, params), ")");
@@ -520,7 +552,7 @@ public final class Formatter {
         if (current.length() > 0) {
             names.add(text(current.toString()));
         }
-        return group(nest(INDENT, separated(names)));
+        return group(nest(INDENT, separated(plain(names))));
     }
 
     /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
@@ -578,7 +610,7 @@ public final class Formatter {
                 params.add(pattern(c));
             }
         }
-        return delimited("(", SOFTLINE, params, ")");
+        return delimited("(", SOFTLINE, plain(params), ")");
     }
 
     private Doc fnParamList(SyntaxNode n) {
@@ -592,7 +624,7 @@ public final class Formatter {
             }
             params.add(d);
         }
-        return delimited("(", SOFTLINE, params, ")");
+        return delimited("(", SOFTLINE, plain(params), ")");
     }
 
     // --- types ---
@@ -612,7 +644,7 @@ public final class Formatter {
                 }
             }
         }
-        return concat(delimited("(", SOFTLINE, params, ")"), text(" -> "), result);
+        return concat(delimited("(", SOFTLINE, plain(params), ")"), text(" -> "), result);
     }
 
     private Doc retType(SyntaxNode n) {
@@ -636,7 +668,7 @@ public final class Formatter {
                     elems.add(typeTerm(c));
                 }
             }
-            return delimited("(", SOFTLINE, elems, ")");
+            return delimited("(", SOFTLINE, plain(elems), ")");
         }
         var typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
@@ -653,7 +685,7 @@ public final class Formatter {
                 typeArgs.add(typeTerm(c));
             }
         }
-        return concat(name, delimited("<", SOFTLINE, typeArgs, ">"));
+        return concat(name, delimited("<", SOFTLINE, plain(typeArgs), ">"));
     }
 
     private static boolean isTypeNode(SyntaxKind k) {
@@ -710,9 +742,9 @@ public final class Formatter {
             return text("()");
         }
         SyntaxNode argList = n.child(SyntaxKind.ARG_LIST).orElseThrow();
-        List<Doc> argDocs = new ArrayList<>();
+        List<Member> argDocs = new ArrayList<>();
         for (SyntaxNode a : args) {
-            argDocs.add(withComments(argList, a, expr(a)));
+            argDocs.add(member(argList, a, expr(a)));
         }
         return delimited("(", SOFTLINE, withEndComments(argList, argDocs), ")");
     }
@@ -789,7 +821,7 @@ public final class Formatter {
     }
 
     private Doc list(SyntaxNode n) {
-        List<Doc> elems = exprDocs(n);
+        List<Member> elems = exprDocs(n);
         if (elems.isEmpty()) {
             return text("[]");
         }
@@ -797,9 +829,9 @@ public final class Formatter {
     }
 
     private Doc listComp(SyntaxNode n) {
-        List<Doc> exprs = exprDocs(n);
-        List<Doc> guards = exprs.subList(1, exprs.size());
-        return concat(text("["), exprs.get(0), text(" | "),
+        List<Member> exprs = exprDocs(n);
+        List<Member> guards = exprs.subList(1, exprs.size());
+        return concat(text("["), exprs.get(0).doc(), text(" | "),
                 group(nest(INDENT, separated(guards))), text("]"));
     }
 
@@ -847,7 +879,7 @@ public final class Formatter {
         SyntaxNode scrutinee = exprChildren(n).get(0);
         List<Doc> cases = new ArrayList<>();
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
-            cases.add(concat(HARDLINE, withComments(n, c, matchCase(c))));
+            cases.add(concat(HARDLINE, withComments(n, c, matchCase(c)), concat(trailingOf(c))));
         }
         cases.add(endComments(n));
         return concat(text("match "), expr(scrutinee), text(" with"), nest(INDENT, concat(cases)));
@@ -889,14 +921,14 @@ public final class Formatter {
         }
         // `x -> e` keeps its bare parameter; anything parenthesised was written that way
         Doc paramsDoc = n.token(SyntaxKind.LPAREN).isPresent()
-                ? delimited("(", SOFTLINE, params, ")")
+                ? delimited("(", SOFTLINE, plain(params), ")")
                 : params.get(0);
         return concat(paramsDoc, text(" -> "), expr(lastExprChild(n)));
     }
 
     private Doc newData(SyntaxNode n) {
         String typeName = firstIdent(n);
-        List<Doc> members = new ArrayList<>();
+        List<Member> members = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             Doc member;
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
@@ -911,7 +943,7 @@ public final class Formatter {
             // A member's leading comments come before it, each on its own line. The HARDLINE forces
             // the enclosing group to break, which is what a literal with a comment in it wants
             // anyway: a `//` on a line the group had collapsed would swallow the rest of it.
-            members.add(withComments(n, c, member));
+            members.add(member(n, c, member));
         }
         if (members.isEmpty()) {
             return concat(text(typeName), text(" {}"));
@@ -940,7 +972,7 @@ public final class Formatter {
                 case GUARD_STMT -> guardStmt(c);
                 default -> expr(c);   // the result expression
             };
-            lines.add(concat(HARDLINE, d));
+            lines.add(concat(HARDLINE, d, concat(trailingOf(c))));
         }
         lines.add(endComments(n));
         return concat(text("{"), nest(INDENT, concat(lines)), HARDLINE, text("}"));
@@ -960,7 +992,7 @@ public final class Formatter {
                         elems.add(pattern(c));
                     }
                 }
-                return delimited("(", SOFTLINE, elems, ")");
+                return delimited("(", SOFTLINE, plain(elems), ")");
             }
             case PATTERN_CTOR -> {
                 return concat(qualifiedName(n), text("("), pattern(patternChild(n)), text(")"));
@@ -976,7 +1008,7 @@ public final class Formatter {
                             ? concat(text(names.get(0).text()), text(" = "), text(names.get(1).text()))
                             : text(names.get(0).text()));
                 }
-                return delimited("{", LINE, fields, "}");
+                return delimited("{", LINE, plain(fields), "}");
             }
             default -> {
                 return text(firstIdent(n));
@@ -1138,18 +1170,26 @@ public final class Formatter {
     /** {@code members} with {@code parent}'s end comments under the last of them — for a construct
      * whose members are joined rather than written a line at a time, where there is no line to add
      * one to except the last member's own document. */
-    private List<Doc> withEndComments(SyntaxNode parent, List<Doc> members) {
+    private List<Member> withEndComments(SyntaxNode parent, List<Member> members) {
         List<Doc> lines = unwritten(comments(parent).atEnd());
         if (lines.isEmpty() || members.isEmpty()) {
             return members;
         }
-        List<Doc> out = new ArrayList<>(members);
-        Doc last = out.get(out.size() - 1);
+        List<Member> out = new ArrayList<>(members);
+        Member last = out.get(out.size() - 1);
+        Doc doc = last.doc();
         for (Doc c : lines) {
-            last = concat(last, HARDLINE, c);
+            doc = concat(doc, HARDLINE, c);
         }
-        out.set(out.size() - 1, last);
+        out.set(out.size() - 1, new Member(doc, last.trailing()));
         return out;
+    }
+
+    /** A member with the comments written above its line in front of it, and the one written at the
+     * end of that line kept apart, since what the enclosing construct writes between this member and
+     * the next goes between them. */
+    private Member member(SyntaxNode parent, SyntaxNode node, Doc d) {
+        return new Member(withComments(parent, node, d), concat(trailingOf(node)));
     }
 
     /**
@@ -1160,18 +1200,24 @@ public final class Formatter {
      */
     private static Map<SyntaxNode, List<SyntaxToken>> scanTrailing(SyntaxNode file) {
         Map<SyntaxNode, List<SyntaxToken>> out = new IdentityHashMap<>();
-        SyntaxToken code = null;             // the last token that was not trivia
+        List<SyntaxToken> code = new ArrayList<>();   // the tokens that were not trivia
         boolean lineEnded = true;            // nothing precedes the first token on its line
         for (SyntaxToken t : tokens(file)) {
             if (t.kind() == SyntaxKind.WHITESPACE) {
                 lineEnded |= t.text().indexOf('\n') >= 0;
             } else if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                if (!lineEnded && code != null) {
-                    out.computeIfAbsent(owner(code), _ -> new ArrayList<>()).add(t);
+                // a comma is the enclosing construct's, so a comment after one was written about
+                // the member the comma closed rather than about the comma
+                int i = code.size() - 1;
+                while (i >= 0 && code.get(i).kind() == SyntaxKind.COMMA) {
+                    i--;
+                }
+                if (!lineEnded && i >= 0) {
+                    out.computeIfAbsent(owner(code.get(i)), _ -> new ArrayList<>()).add(t);
                 }
                 lineEnded = true;            // a line comment runs to the end of its line
             } else {
-                code = t;
+                code.add(t);
                 lineEnded = false;
             }
         }
@@ -1248,10 +1294,10 @@ public final class Formatter {
         return text(sb.toString());
     }
 
-    private List<Doc> exprDocs(SyntaxNode n) {
-        List<Doc> out = new ArrayList<>();
+    private List<Member> exprDocs(SyntaxNode n) {
+        List<Member> out = new ArrayList<>();
         for (SyntaxNode c : exprChildren(n)) {
-            out.add(withComments(n, c, expr(c)));
+            out.add(member(n, c, expr(c)));
         }
         return withEndComments(n, out);
     }
