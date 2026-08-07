@@ -3873,16 +3873,24 @@ termination guarantee, so a `partial` helper may be applied but not handed over.
 ----
 
 [#e2010]
-=== A construction violates its invariant on a reachable path
+=== A construction violates its invariant
 
 [,text]
 ----
-Constructing `Amount` here violates its invariant on a reachable path: the guards force a
-value the invariant rejects. Fix the value, or guard the path so the violating case cannot
-reach here.
+Constructing `Amount` here violates its invariant: the value being built is one the
+invariant rejects. Fix the value.
 ----
 
-Emitted when the guards on the path to a construction prove the invariant false (<<invariant-discharge>>). The companion E2011 is a warning, not an error: it says the guards do not establish the invariant, so the check remains at run time.
+Emitted when the check proves the invariant false at a construction (<<invariant-discharge>>). What is said of it depends on what proved it. The message above is for a violation the values reach on their own — a value written out, an arithmetic result, a name given one of those, or what an input's own type guarantees of it — which fails wherever the construction is written. Where proving it takes a condition on the path as well, the message says that instead:
+
+[,text]
+----
+Constructing `Amount` here violates its invariant on a reachable path: under what is
+assumed where it stands, the value being built is one the invariant rejects. Fix the
+value, or guard the path so the violating case cannot reach here.
+----
+
+Neither names the condition that decided it: the check knows the violation needs the path to be the path it is on, and not which assumption on that path it needs. The companion E2011 is a warning, not an error: it says the guards do not establish the invariant, so the check remains at run time.
 
 [#e2012]
 === `as` names what a construction builds
