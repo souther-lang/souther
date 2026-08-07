@@ -123,6 +123,14 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
         Diagnostic added = refusalOf("(a: Amount, d: Decimal) : Amount", "a + d");
         assertEquals("check.arith.newtype.base", added.messageKey(),
                 "reading its own base is one rule, and `+` is not a scale to be refused as one");
+
+        // The base is read on either side, and this side is the one `/` will not scale from once
+        // the base agrees — so the fix beside this refusal has to say which way `/` goes.
+        Diagnostic divided = refusalOf("(d: Decimal, a: Amount) : Amount", "d / a");
+        assertEquals("check.arith.newtype.base", divided.messageKey());
+        assertEquals("check.arith.newtype.reciprocal",
+                refusalOf("(n: Int, a: Amount) : Amount", "n / a").messageKey(),
+                "which is where an author who only agreed the base would arrive");
     }
 
     @Test
