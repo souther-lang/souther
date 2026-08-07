@@ -1,5 +1,8 @@
 package souther.compiler;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -13,10 +16,42 @@ public final class Reserved {
 
     private Reserved() {}
 
-    /** Every qualifier a call may carry: the prelude modules plus the arithmetic built-in
-     *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */
-    public static final Set<String> QUALIFIERS =
-            Set.of("List", "String", "Map", "Set", "Bool", "Int", "Decimal", "Date", "DateTime", "Option");
+    /** One standard-library module: the namespace it is declared under and the qualifier a caller
+     *  writes it as. {@code souther.list} is written {@code List}. */
+    public record StdlibModule(String moduleName, String qualifier) {}
+
+    /**
+     * The standard library's modules, in the order the language names them. Everything that has to
+     * put library modules in an order reads this one: which resources {@link Prelude} loads and in
+     * what order, which qualifiers exist, and the order a diagnostic offers candidates in when a
+     * bare name could be several. Written here rather than derived from a map's entries, because
+     * the iteration order of {@code Map.ofEntries} is not something a reader may be shown.
+     */
+    public static final List<StdlibModule> MODULES = List.of(
+            new StdlibModule("souther.bool", "Bool"),
+            new StdlibModule("souther.string", "String"),
+            new StdlibModule("souther.map", "Map"),
+            new StdlibModule("souther.list", "List"),
+            new StdlibModule("souther.set", "Set"),
+            new StdlibModule("souther.date", "Date"),
+            new StdlibModule("souther.datetime", "DateTime"),
+            new StdlibModule("souther.int", "Int"),
+            new StdlibModule("souther.decimal", "Decimal"),
+            new StdlibModule("souther.option", "Option"));
+
+    /** Every qualifier a call may carry (spec §stdlib), in {@link #MODULES} order. */
+    public static final Set<String> QUALIFIERS = qualifiers();
+
+    private static Set<String> qualifiers() {
+        Set<String> names = new LinkedHashSet<>();
+        for (StdlibModule module : MODULES) {
+            if (!names.add(module.qualifier())) {
+                throw new IllegalStateException(
+                        "two standard-library modules are written `" + module.qualifier() + "`");
+            }
+        }
+        return Collections.unmodifiableSet(names);
+    }
 
     /**
      * The name a spelling denotes, canonicalized to NFC.
