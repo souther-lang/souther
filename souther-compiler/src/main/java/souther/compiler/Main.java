@@ -544,7 +544,7 @@ public final class Main {
             // run that aborted on an invariant is where a warning that the construction was unproven
             // is worth most. A usage error is raised before any of it and carries none.
             report(warnings, sources, render);
-            System.err.println(e.localized(Messages.resolveLocale(render.lang)));
+            System.err.println(e.localized(render.locale()));
             return e.exitCode;
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
@@ -636,8 +636,7 @@ public final class Main {
      */
     private static int refused(RenderOptions render) {
         if (!render.json()) {
-            System.err.println(Messages.get("cli.warnings.refused",
-                    Messages.resolveLocale(render.lang)));
+            System.err.println(Messages.get("cli.warnings.refused", render.locale()));
         }
         return 1;
     }
@@ -645,7 +644,7 @@ public final class Main {
     /** Prints each diagnostic to stderr as the chosen renderer renders it, quoting the file it
      * belongs to. Errors and warnings take the same path; only where they come from differs. */
     private static void report(List<Located> located, List<Path> sources, RenderOptions render) {
-        Locale locale = Messages.resolveLocale(render.lang);
+        Locale locale = render.locale();
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
         for (String line : DiagnosticRenderer.renderAll(
@@ -675,6 +674,18 @@ public final class Main {
 
         boolean json() {
             return "json".equals(format);
+        }
+
+        /**
+         * The language this invocation answers in: the {@code --lang} value if one was written,
+         * then {@code SOUTHER_LANG}, then the default.
+         *
+         * <p>The CLI's policy, in the CLI, and asked here by everything that prints. A place that
+         * resolves for itself is a second answer that happens to agree, with nothing saying it has
+         * to.
+         */
+        Locale locale() {
+            return Messages.resolveLocale(lang);
         }
 
         boolean useColor() {

@@ -61,6 +61,17 @@ import java.util.Set;
 public final class Analyzer {
 
     /**
+     * The language an editor's markers are written in.
+     *
+     * <p>The server's policy, in the server, and English rather than resolved. A language server is
+     * told which files the workspace holds and nothing about which language its user reads, so there
+     * is no answer here to resolve from; reaching for {@code SOUTHER_LANG} would let whichever shell
+     * happened to launch the editor decide what the editor shows. Named once, because a marker's
+     * text and a linked location's label are the same answer.
+     */
+    private static final Locale EDITOR_LANGUAGE = Locale.ENGLISH;
+
+    /**
      * The workspace's compile, kept between edits. An answer is recomputed only when something it
      * read has changed, so a keystroke costs what it reached rather than a whole workspace — and a
      * source that is edited back to what it said costs nothing at all.
@@ -1882,7 +1893,7 @@ public final class Analyzer {
     private LspDiagnostic project(Diagnostic d, String primarySourceId, String publishedUri,
                                   java.util.function.Function<String, LineIndex> linesOf,
                                   java.util.function.Function<String, String> uriOf) {
-        String message = DiagnosticRenderer.body(d, Locale.ENGLISH);
+        String message = DiagnosticRenderer.body(d, EDITOR_LANGUAGE);
         if (d.diff() != null) {
             message = message + " (expected " + d.diff().expectedType()
                     + ", but was " + d.diff().actualType() + ")";
@@ -1899,7 +1910,7 @@ public final class Analyzer {
             }
             related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.region()),
                     other.labelled()
-                            ? Messages.get(other.labelKey(), Locale.ENGLISH, other.labelArgs())
+                            ? Messages.get(other.labelKey(), EDITOR_LANGUAGE, other.labelArgs())
                             : message));
         }
         Range range = view.anchor().region() != null
