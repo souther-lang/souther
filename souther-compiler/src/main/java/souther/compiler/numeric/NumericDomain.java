@@ -154,10 +154,16 @@ public final class NumericDomain {
                 : new NumericDomain(bottom, lo, hi, diff, kept, Map.copyOf(next));
     }
 
-    /** Assert {@code g <= 0} (or {@code g < 0} when strict), updating an interval or a difference, or
-     * keeping the form as written when it is neither. Strictness only sharpens the constant case; for
-     * an interval or difference a strict {@code < 0} is recorded as {@code <= 0} (weaker, so still
-     * sound). */
+    /**
+     * Assert {@code g <= 0} (or {@code g < 0} when strict), updating an interval or a difference, or
+     * keeping the form as written when it is neither.
+     *
+     * <p>What strictness is worth depends on what the atoms are made of. Over whole numbers there is
+     * a next value to step to, so {@code a < 3} is {@code a <= 2} and {@code a - b < 0} is
+     * {@code a - b <= -1}; over decimals there is not, and a strict bound is recorded as the
+     * non-strict one, which is weaker and therefore still sound. A form of neither shape keeps its
+     * strictness as written.
+     */
     private NumericDomain addLe(LinearForm g, boolean strict) {
         Map<String, BigDecimal> c = g.coefs();
         if (c.isEmpty()) {
@@ -176,17 +182,51 @@ public final class NumericDomain {
             java.math.MathContext mc = new java.math.MathContext(
                     34, upper ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
             BigDecimal bound = g.constant().negate().divide(k, mc);
+            if (kinds.get(a) == Granularity.DISCRETE) {
+                bound = whole(bound, upper, strict);
+            }
             return upper ? withHi(a, bound) : withLo(a, bound);
         }
         String[] ab = unitDiffAtoms(c);
         if (ab != null) {
-            return withDiff(ab[0], ab[1], g.constant().negate());   // a - b <= -const
+            // a - b <= -const. A difference of two whole numbers is a whole number, and only then:
+            // one dense atom on either side leaves the difference with no smallest step, so the
+            // bound stays where the constant put it.
+            BigDecimal bound = g.constant().negate();
+            if (kinds.get(ab[0]) == Granularity.DISCRETE
+                    && kinds.get(ab[1]) == Granularity.DISCRETE) {
+                bound = whole(bound, true, strict);
+            }
+            return withDiff(ab[0], ab[1], bound);
         }
         // Neither shape holds it — a sum of two lengths, say. Keeping the form as written is what lets
         // a guard restating an invariant discharge it, which is the promise the flagging rests on.
         List<Asserted> next = new ArrayList<>(kept);
         next.add(new Asserted(g, strict));
         return new NumericDomain(false, lo, hi, diff, List.copyOf(next), kinds);
+    }
+
+    /**
+     * A bound on a whole number, tightened to one.
+     *
+     * <p>Never past the true bound. An upper bound admits everything up to {@code q}, so the largest
+     * whole number it admits is {@code floor(q)}; a strict one stops short of {@code q}, so the
+     * largest is the whole number below it, {@code ceil(q) - 1} — which is {@code q - 1} where
+     * {@code q} is whole and {@code floor(q)} where it is not. Lower bounds are the mirror.
+     *
+     * @param q      the bound as the arithmetic left it, already rounded away from the constraint
+     * @param upper  whether {@code q} bounds the atom above
+     * @param strict whether the value {@code q} itself is outside what the constraint admits
+     */
+    private static BigDecimal whole(BigDecimal q, boolean upper, boolean strict) {
+        if (upper) {
+            return strict
+                    ? q.setScale(0, java.math.RoundingMode.CEILING).subtract(BigDecimal.ONE)
+                    : q.setScale(0, java.math.RoundingMode.FLOOR);
+        }
+        return strict
+                ? q.setScale(0, java.math.RoundingMode.FLOOR).add(BigDecimal.ONE)
+                : q.setScale(0, java.math.RoundingMode.CEILING);
     }
 
     /** The two atoms of a unit difference {@code {a:+1, b:-1}} as {@code {a, b}}, or {@code null} if

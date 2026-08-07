@@ -91,21 +91,24 @@ class NumericDomainTest {
         assertFalse(provesAtLeast(d, A, 3), "a = 2.5 satisfies it, so a >= 3 does not follow");
     }
 
-    /**
-     * The same two over whole numbers, as they are answered today.
-     *
-     * <p>{@code 2a <= 5} over the integers is {@code a <= 2}, and this does not say so: the quotient
-     * is rounded away from the constraint without asking what the atom is made of. Blunt rather than
-     * wrong — a bound weaker than the true one proves less and refuses nothing — and it is what
-     * knowing the spacing is there to sharpen.
-     */
+    /** The same two over whole numbers. {@code 2a <= 5} admits no integer above 2, so that is the
+     * bound: a remainder under an integer atom is a value the atom cannot take. */
     @Test
-    void aWholeNumberBoundIsNotYetSharpenedByItsSpacing() {
+    void aWholeNumberBoundIsSharpenedByItsSpacing() {
         NumericDomain d = NumericDomain.top()
                 .assume(times(2, A).minus(num(5)), Rel.LE, whole(A));
 
-        assertTrue(provesAtMost(d, A, 3));
-        assertFalse(provesAtMost(d, A, 2), "true of every integer satisfying it, and not derived");
+        assertTrue(provesAtMost(d, A, 2), "no integer over two satisfies 2a <= 5");
+        assertFalse(provesAtMost(d, A, 1), "a = 2 satisfies it");
+    }
+
+    @Test
+    void aWholeNumberLowerBoundIsSharpenedTheOtherWay() {
+        NumericDomain d = NumericDomain.top()
+                .assume(times(-2, A).plus(num(5)), Rel.LE, whole(A));
+
+        assertTrue(provesAtLeast(d, A, 3), "no integer under three satisfies a >= 2.5");
+        assertFalse(provesAtLeast(d, A, 4), "a = 3 satisfies it");
     }
 
     // --- strictness on one atom -------------------------------------------------------------------
@@ -119,28 +122,55 @@ class NumericDomainTest {
         assertFalse(provesAtMost(d, A, 2), "2.5 is under three and over two");
     }
 
-    /** {@code a < 3} over the integers is {@code a <= 2}. Today it is recorded as {@code a <= 3}. */
+    /** {@code a < 3} over the integers is {@code a <= 2}. */
     @Test
-    void aStrictBoundOnAWholeNumberIsNotYetSteppedDown() {
+    void aStrictBoundOnAWholeNumberStepsDownToTheNextValue() {
         NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
-        assertTrue(provesAtMost(d, A, 3));
-        assertFalse(provesAtMost(d, A, 2), "true of every integer under three, and not derived");
+        assertTrue(provesAtMost(d, A, 2));
+        assertFalse(provesAtMost(d, A, 1), "a = 2 satisfies it");
+    }
+
+    /** And {@code a > 3} is {@code a >= 4}. */
+    @Test
+    void aStrictLowerBoundOnAWholeNumberStepsUp() {
+        NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.GT, whole(A));
+
+        assertTrue(provesAtLeast(d, A, 4));
+        assertFalse(provesAtLeast(d, A, 5), "a = 4 satisfies it");
     }
 
     // --- strictness on a difference, which is the part a record's invariant writes -----------------
 
-    /** {@code a < b} with {@code b <= 1440} bounds {@code a} at 1440 and no lower, whatever the
-     * spacing, while the difference is recorded without its strictness. */
+    /**
+     * {@code a < b} with {@code b <= 1440} bounds {@code a} at 1439 over whole numbers.
+     *
+     * <p>This is the shape a record's invariant writes — the two ends of an interval, each bounded by
+     * its own type and related to the other — and 1439 rather than 1440 is the whole of what issue
+     * #427 is about: 1440 is a value nothing can be constructed at.
+     */
     @Test
-    void aStrictDifferenceCarriesNoStepToday() {
+    void aStrictDifferenceBetweenWholeNumbersStepsTheBoundThrough() {
         NumericDomain d = NumericDomain.top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, whole(A, B))
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B));
 
-        assertTrue(provesAtMost(d, A, 1440), "through the difference, a <= b <= 1440");
-        assertFalse(provesAtMost(d, A, 1439),
-                "true of every pair of integers with a < b <= 1440, and not derived");
+        assertTrue(provesAtMost(d, A, 1439), "a <= b - 1 <= 1439");
+        assertFalse(provesAtMost(d, A, 1438), "a = 1439 with b = 1440 satisfies it");
+    }
+
+    /** One dense atom on either side and the difference has no smallest step again: {@code a} may be
+     * {@code 1439.5} when {@code b} is 1440. */
+    @Test
+    void aStrictDifferenceWithOneDenseSideTakesNoStep() {
+        Map<String, Granularity> mixed = new LinkedHashMap<>(whole(A));
+        mixed.putAll(dense(B));
+        NumericDomain d = NumericDomain.top()
+                .assume(atom(A).minus(atom(B)), Rel.LT, mixed)
+                .assume(atom(B).minus(num(1440)), Rel.LE, dense(B));
+
+        assertTrue(provesAtMost(d, A, 1440));
+        assertFalse(provesAtMost(d, A, 1439), "nothing here says b is a whole number");
     }
 
     /** The same shape over decimals, where 1439 is not derivable and must not become so: {@code a =
