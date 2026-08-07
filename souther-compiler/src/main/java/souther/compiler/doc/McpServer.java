@@ -95,7 +95,8 @@ public final class McpServer {
                             + " it lists every section anchor and every shipped topic as `name<TAB>title`,"
                             + " one per line — start there. With a `name` it reads that one specification"
                             + " section by its anchor (e.g. `newtype`) or that one library topic by its"
-                            + " set-qualified name (e.g. `raoh/tutorial`). A diagnostic code is a name"
+                            + " set-qualified name (e.g. `raoh/tutorial`), or the part of one that its"
+                            + " set has named (e.g. `cli/commands/japi`). A diagnostic code is a name"
                             + " too, in either case (e.g. `E2011`): every code the compiler prints is"
                             + " the anchor of the section explaining it, so a banner read no further"
                             + " than its code is still enough to look up.",
@@ -158,6 +159,31 @@ public final class McpServer {
             }
         },
 
+        /**
+         * A place in an answer this server issued, and nothing a client composes.
+         *
+         * <p>Its spelling is published so that a value that was never one of ours is refused
+         * against the schema rather than spent as a call. What it means is not published: a client
+         * carries it back as it arrived, and where it points is checked against the answer it is
+         * carried back to.
+         */
+        CURSOR {
+            @Override
+            void publish(ObjectNode schema) {
+                schema.put("type", "string");
+                schema.put("pattern", Continuation.SPELLED);
+            }
+
+            @Override
+            String malformed(String name, JsonNode value) {
+                if (!value.isString()) {
+                    return "`" + name + "` must be a string";
+                }
+                return value.asString().matches(Continuation.SPELLED)
+                        ? null : "`" + name + "` is not a cursor this server issued";
+            }
+        },
+
         COUNT {
             @Override
             void publish(ObjectNode schema) {
@@ -192,10 +218,36 @@ public final class McpServer {
 
     private record Param(String name, Kind kind, boolean required, String description) {}
 
-    private record Tool(String name, String description, List<Param> params) {
+    /**
+     * What every tool takes and every tool says, because how much arrives at once is a question
+     * about this wire rather than about any one answer on it.
+     *
+     * <p>Declaring it per tool would leave the ones nobody expected to be long undeclared, and what
+     * is long is a property of the documents and the jars on the class path rather than of the
+     * table here. A tool whose answers all fit simply never issues one.
+     */
+    private static final Param CARRIES_ON = new Param("cursor", Kind.CURSOR, false,
+            "to read on from where a part left off: the `cursor` that part came back with,"
+                    + " sent back with the same arguments");
+
+    private static final String IN_PARTS =
+            " A long answer arrives in parts, each saying how to ask for what follows it.";
+
+    private record Tool(String name, String said, List<Param> declared) {
+
+        String description() {
+            return said + IN_PARTS;
+        }
+
+        /** What the tool declares, and after it the one argument they all take. */
+        List<Param> params() {
+            List<Param> all = new java.util.ArrayList<>(declared);
+            all.add(CARRIES_ON);
+            return List.copyOf(all);
+        }
 
         Param param(String name) {
-            return params.stream().filter(p -> p.name().equals(name)).findFirst().orElse(null);
+            return params().stream().filter(p -> p.name().equals(name)).findFirst().orElse(null);
         }
     }
 
@@ -397,12 +449,60 @@ public final class McpServer {
                 yield 2;
             }
         };
+        String said = captured.toString(StandardCharsets.UTF_8);
+        Tool answering = TOOLS.stream().filter(t -> t.name().equals(tool)).findFirst().orElse(null);
+        if (code == 0 && answering != null) {
+            try {
+                said = part(answering, arguments, said);
+            } catch (IllegalArgumentException e) {
+                // A cursor that does not belong to this answer is this call's failure. Resuming at
+                // it anyway would answer from the middle of a document nobody asked about.
+                return failed(e.getMessage());
+            }
+        }
         ObjectNode result = JSON.createObjectNode();
         ObjectNode content = result.putArray("content").addObject();
         content.put("type", "text");
-        content.put("text", captured.toString(StandardCharsets.UTF_8));
+        content.put("text", said);
         result.put("isError", code != 0);
         return result;
+    }
+
+    /**
+     * As much of {@code said} as one answer carries, and how to ask for what follows it.
+     *
+     * <p>What follows is named as the call that reaches it rather than as a place in the text,
+     * because a place is only a place to whoever holds the whole of it, which this caller by
+     * definition does not.
+     */
+    private static String part(Tool tool, JsonNode arguments, String said) {
+        JsonNode cursor = arguments == null ? null : arguments.get("cursor");
+        // The line that carries an answer on is part of that answer, so the room for it comes out
+        // of the count before the text is cut and not after. What it will say is not known until
+        // the cut is made, so what is set aside is the longest it could be: a cursor of the length
+        // this server issues, and a count of every character there could be.
+        int reserve = carriesOn(tool, "x".repeat(64), Integer.MAX_VALUE).length();
+        Continuation.Part part = Continuation.of(said, cursor == null ? null : cursor.asString(),
+                Continuation.MOST - reserve);
+        if (part.cursor() == null) {
+            return part.text();
+        }
+        return part.text() + carriesOn(tool, part.cursor(), part.remaining());
+    }
+
+    /**
+     * What a part that is not the last one ends with.
+     *
+     * <p>It names the operation and the cursor, and says the rest of the call is the one the caller
+     * just made. Writing that call back out instead would put the caller's own arguments inside an
+     * answer whose size this server is promising to bound, and a caller can send arguments longer
+     * than the bound: an answer would then be cut to nothing and the line saying so would run past
+     * the count on its own. What is echoed here is this server's, and its length is this server's
+     * to know.
+     */
+    private static String carriesOn(Tool tool, String cursor, int remaining) {
+        return "\n… " + remaining + " more characters; ask `" + tool.name() + "` again with the same"
+                + " arguments and `cursor: \"" + cursor + "\"` for what follows\n";
     }
 
     private static ObjectNode failed(String said) {

@@ -37,14 +37,20 @@ public final class DocCommand {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, Caller caller, ClassLoader loader) {
-        SpecDocument spec = SpecDocument.bundled();
-        LibraryDocs shipped = LibraryDocs.on(loader);
+        SpecDocument spec = SpecDocument.bundled(caller);
+        LibraryDocs shipped = LibraryDocs.on(loader, caller);
         if (args.length == 0) {
             for (SpecDocument.Section s : spec.sections()) {
                 out.println(s.anchor() + "\t" + "  ".repeat(s.level() - 2) + s.title());
             }
             for (LibraryDocs.Topic topic : shipped.topics()) {
-                out.println(topic.name() + "\t" + topic.title());
+                // The listing is the map a caller navigates by, so it names what this one can use.
+                // A topic left out of it is still read by name, which is how a reader who is asking
+                // about the toolchain rather than about their next step still arrives at it.
+                if (topic.listedFor(caller)) {
+                    out.println(topic.name() + "\t"
+                            + "  ".repeat(Math.max(0, topic.depth() - 1)) + topic.title());
+                }
             }
             return 0;
         }

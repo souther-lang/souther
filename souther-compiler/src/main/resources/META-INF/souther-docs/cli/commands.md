@@ -4,6 +4,7 @@
 souther <command> [args]
 ```
 
+<!-- souther-section: compile -->
 ## compile
 
 ```
@@ -15,6 +16,7 @@ under `-d`. `-cp` points at modules another project compiled. `--adequacy` addit
 what the `example` rows do not cover; it defaults to `off`, and `souther examples` asks the same
 question as a report.
 
+<!-- souther-section: run -->
 ## run
 
 ```
@@ -23,8 +25,9 @@ souther run <file.sou> [--behavior <name>] [--input <json>]
 
 Applies one behavior of one self-contained file to JSON input and prints the JSON result. The
 `--input` encoding depends on the behavior's arity and is easy to get wrong — see
-`souther doc cli/run`.
+{{doc:cli/run}}.
 
+<!-- souther-section: fmt -->
 ## fmt
 
 ```
@@ -34,6 +37,7 @@ souther fmt <file.sou>... [-w] [--check]
 Prints the canonical form to stdout, rewrites in place with `-w`, or exits non-zero on a file that
 is not formatted with `--check`.
 
+<!-- souther-section: examples -->
 ## examples
 
 ```
@@ -48,19 +52,24 @@ rows at the untried boundaries, and `--strict` exits non-zero while rows are sti
 This is the command worth running on a model you believe is finished. It names gaps that reading
 the rows does not reveal.
 
+<!-- souther-section: doc -->
 ## doc
 
 ```
-souther doc [<anchor> | <error-code> | <set>/<topic> | --search <term> [--limit <n>]]
+souther doc [<anchor> | <error-code> | <set>/<topic>[/<section>] | --search <term> [--limit <n>]]
 ```
 
 The language specification and the documentation bundled libraries ship. With no argument it lists
-every section and topic as `name<TAB>title`. New to Souther? Read `souther doc cli/start-here`.
+every section and topic as `name<TAB>title`. A shipped file that names parts of itself — by writing
+`<!-- souther-section: name -->` above a heading — has each of them listed and read as
+`<set>/<topic>/<name>`; one that names none is read whole. New to Souther? Read
+{{doc:cli/start-here}}.
 
 Every diagnostic code the compiler prints is the name of the section explaining it, in either case:
-the `E2011` in a banner is `souther doc E2011`. Nothing else has to be read off the banner for the
+the `E2011` in a banner is {{doc:E2011}}. Nothing else has to be read off the banner for the
 lookup to work.
 
+<!-- souther-section: api -->
 ## api
 
 ```
@@ -71,6 +80,7 @@ The standard library's published surface with the signatures the type checker re
 argument it prints everything, which for a library this size is the fastest way to see it.
 `--source` prints a module's own source with its design comments.
 
+<!-- souther-section: japi -->
 ## japi
 
 ```
@@ -89,6 +99,7 @@ printed with its value, since the value is what the declaration says.
 souther japi net.unit8.raoh.Result#map2
 ```
 
+<!-- souther-section: mcp -->
 ## mcp
 
 ```
@@ -108,6 +119,31 @@ count.
 The schema a client reads is the one the server enforces: every argument publishes its domain, and
 one no tool declares is refused rather than dropped.
 
+A document that sends its reader somewhere writes the operation rather than one caller's spelling
+of it, so what a client is told to do next is a tool call and what a reader at a prompt is told to
+do next is a command. A topic that documents an interface only one caller has is on that caller's
+listing alone, and still read by name — `cli/run` is not on a client's map and answers when asked
+for.
+
+A long answer arrives in parts. Every tool hands back as much as one answer carries — at most
+16,000 characters, the line saying how to carry on included — and ends with how much is left and
+the `cursor` that reaches it; ask the same tool again with the same arguments and that `cursor`.
+How much arrives at once is a question about this wire rather than about any one answer on it, so
+the argument is on every tool and not only the ones expected to be long.
+
+That line names the cursor and not the call, because the call is the caller's. Written back out, a
+caller's own arguments would be inside an answer whose size this server is promising to bound, and
+arguments can be longer than the bound.
+
+A part stops where the document says to: a heading, failing that a blank line, failing that the end
+of a line. A line or a code block longer than one answer carries has no such place in it, and is
+cut where the count runs out — a bound a document could talk this server out of would not be one.
+
+The cursor is this server's to read, so it goes out as it came in: where it points is checked
+against the answer it is carried back to, and one measured against a different answer is refused
+rather than resumed at.
+
+<!-- souther-section: shared-options -->
 ## Options every command shares
 
 | Option | Meaning |

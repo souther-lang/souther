@@ -85,18 +85,29 @@ public final class SpecDocument {
 
     /** The specification this compiler was built from, bundled in its jar. */
     public static SpecDocument bundled() {
+        return bundled(Caller.CLI);
+    }
+
+    /** The same specification, with what it sends a reader to spelled the way {@code caller} asks. */
+    static SpecDocument bundled(Caller caller) {
         try (InputStream in = SpecDocument.class.getResourceAsStream(RESOURCE)) {
             if (in == null) {
                 throw new IllegalStateException("the bundled specification is missing: " + RESOURCE);
             }
-            return of(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return of(new String(in.readAllBytes(), StandardCharsets.UTF_8), caller);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
     public static SpecDocument of(String adoc) {
-        String[] lines = adoc.split("\n", -1);
+        return of(adoc, Caller.CLI);
+    }
+
+    static SpecDocument of(String adoc, Caller caller) {
+        // Spelled before the document is cut into sections, so that what is ranked, cut to a
+        // snippet and printed is one text rather than three readings of it.
+        String[] lines = Affordance.materialize(adoc, caller).split("\n", -1);
         record Heading(List<String> anchors, String title, int level, int anchorFrom, int bodyFrom) {}
         boolean[] takenAsItStands = opaqueLines(lines);
         List<Heading> headings = new ArrayList<>();
@@ -210,26 +221,12 @@ public final class SpecDocument {
      * where the sections are and not only about what they are called.
      *
      * <p>One walk answers for both what a heading is and what an anchor is, so the document has one
-     * account of where its structure is written and not two that can come apart.
+     * account of where its structure is written and not two that can come apart. That walk is
+     * {@link TakenAsItStands}, which every reader of a document's structure shares — a shipped
+     * markdown file and a part of one being cut off ask the same question about their own blocks.
      */
     private static boolean[] opaqueLines(String[] lines) {
-        boolean[] opaque = new boolean[lines.length];
-        String open = null;
-        for (int i = 0; i < lines.length; i++) {
-            String delimiter = lines[i].strip();
-            if (open != null) {
-                opaque[i] = true;
-                if (delimiter.equals(open)) {
-                    open = null;
-                }
-                continue;
-            }
-            if (OPAQUE_DELIMITER.matcher(delimiter).matches()) {
-                open = delimiter;
-                opaque[i] = true;
-            }
-        }
-        return opaque;
+        return TakenAsItStands.asciiDoc(lines);
     }
 
     /** Every section, in document order. */
