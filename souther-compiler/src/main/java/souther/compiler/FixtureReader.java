@@ -234,7 +234,7 @@ public final class FixtureReader {
      */
     private Object helperAnswer(Ast.Expr e, Set<String> followed) {
         return switch (e) {
-            case Ast.Apply c when appliedHelper(c) instanceof Ast.FnDef helper -> answered(c, helper);
+            case Ast.Apply c when appliedHelper(c) instanceof Applied helper -> answered(c, helper);
             case Ast.LetIn let -> helperAnswer(let.body(), followed);
             // a binding holds what it was bound to; a value stands for the body it was defined as.
             // A name that denotes a type is a case, and no helper answered it.
@@ -703,45 +703,83 @@ public final class FixtureReader {
             }
             return raw(c.args().get(0), expected);
         }
-        if (appliedHelper(c) instanceof Ast.FnDef helper) {
+        if (appliedHelper(c) instanceof Applied helper) {
             return applied(c, helper, expected);
         }
         return newtypeInner(c);
     }
 
+    /**
+     * A helper a fixture applies, and the name this module reached it by.
+     *
+     * <p>The two travel together because the declaration and the method have to be the same helper.
+     * Each was looked up on its own, and each looked up a spelling, so which declaration a fixture
+     * read and which method it ran were two answers that happened to agree.
+     */
+    private record Applied(String reached, Ast.FnDef def) {}
+
     /** The helper an application applies, or null where the call is not one: a {@code fromList} is the
      * fixture's own notation for a collection and a newtype application is a construction, so neither is
      * a helper however it is spelled. Asked wherever an application has to be told from a construction,
      * so the two readers of a call cannot come to different answers. */
-    private Ast.FnDef appliedHelper(Ast.Apply c) {
+    private Applied appliedHelper(Ast.Apply c) {
         if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())
                 || neutral.isNewtype(c.written())) {
             return null;
         }
-        return helperDef(c.written());
+        String reached = helperKey(c);
+        Ast.FnDef helper = reached == null ? null : helperDef(reached);
+        return helper == null ? null : new Applied(reached, helper);
     }
 
     /**
-     * The helper a fixture may apply under {@code name}, or null where the name is not one: a
-     * definition written with a parameter list, read from the table that keys every helper this module
-     * reaches — its own, the ones its imports publish, and the prelude's — as the emitted method is
-     * keyed. The types come from there rather than from the written module because that table is
-     * settled (ADR-0066), and an argument is decoded against the parameter's settled type.
+     * The name this fixture looks {@code c}'s callee up by, or null where the call is not one a helper
+     * table may answer at all.
+     *
+     * <p>Two questions, and each is put to the thing that holds the answer. Whether this may be read as
+     * a helper is what the call denotes: a binding holds whatever it was given, a construction and a
+     * checker built-in stand for no declaration, and a behavior is not a helper — so a binding that
+     * shares a helper's spelling is still the binding. Under what name it is then looked up is the
+     * reach name the reference carries, settled at resolution and not worked out again here.
      */
-    private Ast.FnDef helperDef(String name) {
-        Ast.FnDef helper = values.get(name);
+    private String helperKey(Ast.Apply c) {
+        return switch (c.denotes()) {
+            case ValueName.Helper _, ValueName.Stdlib _ -> c.reaches();
+            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _, ValueName.Behavior _,
+                    ValueName.Unresolved _ -> null;
+            case null -> null;   // what applying something that is not a name leaves
+        };
+    }
+
+    /**
+     * The helper a fixture may apply under the reach name {@code reached}, or null where nothing there
+     * is one: a definition written with a parameter list, read from the table that keys every helper
+     * this module reaches — its own, the ones its imports publish, and the prelude's — as the emitted
+     * method is keyed. The types come from there rather than from the written module because that
+     * table is settled (ADR-0066), and an argument is decoded against the parameter's settled type.
+     *
+     * <p>Asked with what the call reaches and never with what it spells. An import lets a library name
+     * be written without its qualifier and nothing rewrites that spelling — the pass that writes
+     * imported names qualified reads what a name denotes, and a library name denotes something else —
+     * so a table keyed by reach names misses on it, silently, and the row is reported as having named
+     * a construction it cannot make.
+     */
+    private Ast.FnDef helperDef(String reached) {
+        Ast.FnDef helper = values.get(reached);
         return helper != null && !helper.params().isEmpty() ? helper : null;
     }
 
-    /** Whether {@code name} is a function this example cannot run: nothing emitted a method for it.
-     * A helper that has one is applied; the ones that never do are the standard library's intrinsics
-     * and a helper whose body produces a function, and both read as this. */
-    private boolean noMethod(String name) {
-        if (Prelude.isLibraryFunction(name)) {
+    /** Whether the helper {@code reached} names is a function this example cannot run: nothing emitted
+     * a method for it. A helper that has one is applied; the ones that never do are the standard
+     * library's intrinsics and a helper whose body produces a function, and both read as this. The
+     * reach name for the reason {@link #helperDef} takes one: the library is keyed under its alias, and
+     * this module's fns under the names it reaches them by. */
+    private boolean noMethod(String reached) {
+        if (Prelude.isLibraryFunction(reached)) {
             return true;   // a standard-library function: an intrinsic, or one nothing emitted here
         }
         for (Ast.FnDef fn : module.fns()) {
-            if (fn.name().equals(name) && !fn.params().isEmpty()) {
+            if (fn.name().equals(reached) && !fn.params().isEmpty()) {
                 return true;
             }
         }
@@ -754,21 +792,22 @@ public final class FixtureReader {
      * a field of a record and an element of a list alike. An application that encloses nothing is
      * {@link #helperAnswer}: there the value itself is what the row asserts.
      */
-    private Object applied(Ast.Apply c, Ast.FnDef helper, Type expected) {
+    private Object applied(Ast.Apply c, Applied helper, Type expected) {
         return neutral.of(answered(c, helper), expected, c.written());
     }
 
     /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
      * built against its parameter types, so an argument breaking one of those types' invariants is
      * reported as the fixture it is. */
-    private Object answered(Ast.Apply c, Ast.FnDef helper) {
-        if (c.args().size() != helper.params().size()) {
-            throw new FixtureException("`" + c.written() + "` takes " + helper.params().size()
+    private Object answered(Ast.Apply c, Applied helper) {
+        List<Ast.FnParam> params = helper.def().params();
+        if (c.args().size() != params.size()) {
+            throw new FixtureException("`" + c.written() + "` takes " + params.size()
                     + " argument(s) but is called with " + c.args().size());
         }
-        Object[] args = new Object[helper.params().size()];
+        Object[] args = new Object[params.size()];
         for (int i = 0; i < args.length; i++) {
-            Ast.FnParam p = helper.params().get(i);
+            Ast.FnParam p = params.get(i);
             if (p.type() == null) {
                 throw new FixtureException("`" + c.written() + "` parameter `" + p.name()
                         + "` has no type a fixture can be built against");
@@ -784,7 +823,7 @@ public final class FixtureReader {
             }
             args[i] = built(c.args().get(i), paramType);
         }
-        return helpers.invoke(c.written(), args);
+        return helpers.invoke(helper.reached(), args);
     }
 
     private Object newtypeInner(Ast.Apply c) {
@@ -797,7 +836,8 @@ public final class FixtureReader {
             return CallElaborator.parseTemporal(c.written(), lit.value(), c.pos());
         }
         if (!neutral.isNewtype(c.written())) {
-            if (noMethod(c.written())) {
+            String reached = helperKey(c);
+            if (reached != null && noMethod(reached)) {
                 // A function this module cannot run: an intrinsic implemented in Java, or a helper
                 // whose body produces a function. Said as that, so the rule that a fixture may apply a
                 // helper does not appear to have exceptions nothing explains (ADR-0077).
