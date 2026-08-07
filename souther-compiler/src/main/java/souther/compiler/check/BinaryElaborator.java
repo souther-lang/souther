@@ -88,7 +88,7 @@ public final class BinaryElaborator {
                 yield switch (answer) {
                     case ArithmeticCheck.Allowed allowed ->
                             new Core.Binary(bin.op(), left, right, allowed.resultType(), bin.pos());
-                    case ArithmeticCheck.PlainTypeCheck ignored -> {
+                    case ArithmeticCheck.DeferToPlainTypeCheck ignored -> {
                         // One type against another: the found-versus-expected block says it better
                         // than a sentence would, and requireType raises or absorbs it.
                         Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -143,6 +144,22 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
         Diagnostic d = refusalOf("(n: Int, d: Decimal) : Int", "n * d");
         assertEquals("check.type.mismatch.msg", d.messageKey(),
                 "Int beside Decimal is said by a found-versus-expected block, not by a sentence");
+    }
+
+    @Test
+    void everyNewtypeRuleSaysWhatToDoInstead() {
+        List<Diagnostic> refusals = List.of(
+                refusalOf("(a: Amount, q: Quantity) : Amount", "a + q"),
+                refusalOf("(a: Amount, b: Amount) : Amount", "a * b"),
+                refusalOf("(a: Amount, b: Amount) : Amount", "a / b"),
+                refusalOf("(n: Int, a: Amount) : Amount", "n / a"),
+                refusalOf("(a: Amount, n: Int) : Amount", "a + n"),
+                refusalOf("(r: Rate, n: Int) : Rate", "r * n"),
+                refusalOf("(o: Outer, p: Outer) : Outer", "o + p"));
+        for (Diagnostic d : refusals) {
+            assertFalse(d.notes().isEmpty(),
+                    d.messageKey() + " refuses a newtype without saying what to write instead");
+        }
     }
 
     @Test

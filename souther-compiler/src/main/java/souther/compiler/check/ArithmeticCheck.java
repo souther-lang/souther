@@ -33,13 +33,18 @@ sealed interface ArithmeticCheck {
     record Allowed(Type resultType) implements ArithmeticCheck {}
 
     /**
-     * What is left is one type against another, which the plain type check states as a
-     * found-versus-expected block: two plain numbers of unlike bases (Int beside Decimal), or an
-     * operand whose type states nothing at all, which that check absorbs or reports as what it is.
-     * It is not a {@link Refusal} because it has no sentence of its own: every refusal that does
-     * carries one.
+     * Arithmetic has nothing of its own left to say, and what remains is one type against another:
+     * two plain numbers of unlike bases (Int beside Decimal), or an operand whose type states
+     * nothing at all. Both are the plain type check's question, and it answers them as it always
+     * has — a found-versus-expected block, or absorbing the operand that states nothing, in which
+     * case the expression stands.
+     *
+     * <p>So this is neither an allowance nor a refusal, and it is deliberately not a
+     * {@link Refusal}: a refusal names a rule of arithmetic and carries the sentence for it, and
+     * there is no such rule here. Handing the question on is the answer, which is what separates it
+     * from falling through to whatever check came next.
      */
-    record PlainTypeCheck(Type left, Type right) implements ArithmeticCheck {}
+    record DeferToPlainTypeCheck(Type left, Type right) implements ArithmeticCheck {}
 
     /** The operands do not combine, by {@code refusal}. */
     record Refused(Refusal refusal) implements ArithmeticCheck {}
@@ -59,7 +64,12 @@ sealed interface ArithmeticCheck {
         Side side();
 
         /** The fix, stated beside the rule. A rule that refuses without one leaves the author to
-         * guess, and the guess a newtype rule invites is to delete the newtype. */
+         * guess, and the guess a newtype rule invites is to delete the newtype.
+         *
+         * <p>A rule that holds for every operator has one fix that has to hold for every operator
+         * too: what {@code +} takes beside a newtype is not what {@code *} takes, and a fix written
+         * for one of them sends the author from this refusal into the next. Where they differ, the
+         * fix says both rather than guessing which operator asked. */
         default String hintKey() {
             return messageKey() + ".hint";
         }
@@ -190,7 +200,7 @@ sealed interface ArithmeticCheck {
         // reported. None of these breaks a rule of arithmetic, and BottomInfer is where the
         // property is decided rather than in a list kept here.
         if (BottomInfer.answersNoValue(lt) || BottomInfer.answersNoValue(rt)) {
-            return new PlainTypeCheck(lt, rt);
+            return new DeferToPlainTypeCheck(lt, rt);
         }
         Type ln = TypeOps.directNumericNewtypeBase(lt, symbols);
         Type rn = TypeOps.directNumericNewtypeBase(rt, symbols);
@@ -215,7 +225,7 @@ sealed interface ArithmeticCheck {
         Type rightBase = rn != null ? rn : rt;
         if (!leftBase.equals(rightBase)) {
             if (ln == null && rn == null) {
-                return new PlainTypeCheck(lt, rt);
+                return new DeferToPlainTypeCheck(lt, rt);
             }
             return new Refused(ln != null
                     ? new ValueOfAnotherBase(lt, ln, rt, Side.RIGHT)
