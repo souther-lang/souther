@@ -15,6 +15,7 @@ import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,7 +42,9 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
     /** A row of the block: bare names separated by spaces, with nothing else on the line. */
     private static final Pattern NAME_ROW = Pattern.compile("[a-z][a-zA-Z0-9]*( +[a-z][a-zA-Z0-9]*)*");
 
-    /** The listing delimiter, as the document writes it. */
+    /** A listing delimiter: four or more dashes. The block runs to the line that repeats it
+     *  exactly, which is AsciiDoc's rule and the one the document reader follows — a shorter run
+     *  inside a longer one is content rather than the end of it. */
     private static final Pattern LISTING = Pattern.compile("^-{4,}$");
 
     @Test
@@ -61,17 +64,11 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
                         + " surface disagree. The left side is what the library publishes.");
     }
 
-    /**
-     * Both sides being empty would compare equal and say nothing. The count is the ten modules the
-     * document has a section for; a new one arrives with a section or fails the check above.
-     */
+    /** Both sides being empty would compare equal and say nothing. How many modules there are is
+     *  not written down here: a module arrives with a section or fails the check above. */
     @Test
-    void everyModuleIsComparedSoTheAgreementIsNotBetweenTwoEmptyThings() {
-        Map<String, Set<String>> published = publishedByModule();
-
-        assertEquals(10, published.size(), "every published module is compared: " + published.keySet());
-        assertTrue(published.get("List").contains("zipShortest"),
-                "the library publishes the name the block is checked against");
+    void thereIsSomethingToCompareSoTheAgreementIsNotBetweenTwoEmptyThings() {
+        assertFalse(publishedByModule().isEmpty(), "the library publishes nothing to compare against");
     }
 
     /** One line per module: its name, then the names it publishes in a fixed order. */
@@ -97,27 +94,32 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
     /**
      * The names in the section's one block of bare names. A trailing {@code //} comment labels a
      * row — which of them read, which build — and is not part of a name.
+     *
+     * <p>A name written twice is refused rather than counted once. The comparison that follows is
+     * between sets, so a repeat would fold into the name already there and the block would list an
+     * operation twice and still agree with the library.
      */
     private static Set<String> namesListedIn(String body) {
-        List<Set<String>> blocks = new ArrayList<>();
-        Set<String> current = null;
-        boolean inside = false;
+        List<List<String>> blocks = new ArrayList<>();
+        List<String> current = null;
+        String opening = null;
         boolean bare = true;
         for (String line : body.split("\n", -1)) {
-            if (LISTING.matcher(line.strip()).matches()) {
-                if (inside) {
-                    if (bare && current != null && !current.isEmpty()) {
-                        blocks.add(current);
-                    }
-                    inside = false;
-                } else {
-                    inside = true;
-                    bare = true;
-                    current = new TreeSet<>();
-                }
+            String delimiter = line.strip();
+            if (opening == null && LISTING.matcher(delimiter).matches()) {
+                opening = delimiter;
+                current = new ArrayList<>();
+                bare = true;
                 continue;
             }
-            if (!inside) {
+            if (opening != null && delimiter.equals(opening)) {
+                if (bare && !current.isEmpty()) {
+                    blocks.add(current);
+                }
+                opening = null;
+                continue;
+            }
+            if (opening == null) {
                 continue;
             }
             String written = line.split("//", 2)[0].strip();
@@ -134,7 +136,13 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
             throw new IllegalStateException("a module section lists its operations in one block of"
                     + " bare names; found " + blocks.size());
         }
-        return blocks.get(0);
+        Set<String> names = new TreeSet<>();
+        for (String name : blocks.get(0)) {
+            if (!names.add(name)) {
+                throw new IllegalStateException("a module section lists `" + name + "` more than once");
+            }
+        }
+        return names;
     }
 
     @Test
@@ -183,5 +191,43 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
                         """));
 
         assertTrue(refused.getMessage().contains("found 2"), refused.getMessage());
+    }
+
+    /**
+     * Folded into the name already there, a repeat would leave the block naming an operation twice
+     * and still agreeing with the library — the set it compares as would be the same set.
+     */
+    @Test
+    void anOperationNamedTwiceIsRefusedRatherThanCountedOnce() {
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> namesListedIn("""
+                        [,text]
+                        ----
+                        map  filter  fold
+                        fold  all
+                        ----
+                        """));
+
+        assertTrue(refused.getMessage().contains("`fold` more than once"), refused.getMessage());
+    }
+
+    /** A block runs to the line that repeats its delimiter exactly. Closing it on a shorter run
+     *  would end the block where AsciiDoc reads content, and what follows the false end would be
+     *  read as the section around it. */
+    @Test
+    void aShorterRunInsideALongerDelimiterIsContent() {
+        assertEquals(new TreeSet<>(Set.of("map", "filter")), namesListedIn("""
+                [,text]
+                -----
+                [e1, e2, ...]
+                ----
+                not a row of names either
+                -----
+
+                [,text]
+                ----
+                map  filter
+                ----
+                """));
     }
 }
