@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -221,6 +222,105 @@ public final class InvariantChecker {
         }
         return terms.bodyKey(e, fields) == null ? e : null;
     }
+
+    /**
+     * What the invariants reaching a value of {@code data} leave each of its fields able to hold, and
+     * the atom each field is named by.
+     *
+     * <p>The same seeding a parameter of that type gets ({@link #seedAt}), read for its numbers
+     * instead of for what it discharges. A record's own clause relates its fields; each field's type
+     * bounds that field on its own; and both land in one domain over the same atoms, which is what
+     * lets a bound reach one field through another.
+     *
+     * @param everyClauseRead whether every clause of the declaration was taken into the domain. False
+     *                        where one could not be typed or held nothing this reads — the bounds are
+     *                        then weaker than what the declaration actually says, and a caller
+     *                        turning one into an obligation has to know that
+     */
+    record Seeded(NumericDomain numbers, Map<String, String> atoms, boolean everyClauseRead) {}
+
+    /** {@link Seeded} for one declaration. Never throws: a declaration this cannot read is one whose
+     * fields it says nothing about, which is the same answer as a declaration with no rules. */
+    static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols) {
+        InvariantChecker c = new InvariantChecker(symbols, Map.of());
+        Map<String, Type> fields = c.clauses.fieldsOf(data);
+        Map<String, BindingId> bindings = c.clauses.bindingsOf(data);
+        Denotations at = Denotations.none().locations(bindings.values());
+        Known k = Known.top();
+        boolean read = true;
+        try {
+            for (Ast.InvariantClause clause : c.clauses.of(named, data)) {
+                Core stated = c.clauses.typed(clause.expr(), data);
+                if (stated == null) {
+                    read = false;
+                    continue;
+                }
+                Predicates.Owed owed = c.predicates.obligations(stated, k, at, false);
+                read &= !owed.unreadable();
+                k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
+            }
+            // And what each field's own type says of it, at the field's own location. A depth of one
+            // is already spent on the record, so this reaches the field's newtype and stops where the
+            // seeding of a parameter would.
+            for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
+                Type type = fields.get(field.getKey());
+                if (type != null) {
+                    k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                            k, at, 1);
+                }
+            }
+        } catch (RuntimeException why) {
+            gaveUp("seedFields " + named.name(), why);
+            return new Seeded(NumericDomain.top(), Map.of(), false);
+        }
+        Map<String, String> atoms = new LinkedHashMap<>();
+        for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
+            Type type = fields.get(field.getKey());
+            if (type == null) {
+                continue;
+            }
+            String atom = c.terms.atomOf(
+                    new Core.Read(field.getKey(), field.getValue(), type, NOWHERE), at, k);
+            if (atom != null) {
+                atoms.put(field.getKey(), atom);
+            }
+        }
+        return new Seeded(k.numbers(), atoms,
+                read && everyRuleIsDerivable(named, data, symbols, 0, new HashSet<>()));
+    }
+
+    /**
+     * Whether every rule reaching a value of {@code data} is one the numeric domain reasons over.
+     *
+     * <p>{@link ClauseDischarge.Kind#DERIVABLE} is the same classification a construction is judged
+     * by, asked here of the declaration rather than of a site. A clause that is only nameable — a
+     * pattern, a membership — narrows no bound, and a clause outside the fragment narrows none
+     * either; both leave a way the record refuses a value that the bounds do not express.
+     *
+     * <p>The same reach the seeding has, so what this classifies is what that took in.
+     */
+    private static boolean everyRuleIsDerivable(TypeName named, Ast.Data data, Symbols symbols,
+                                                int depth, Set<TypeName> seen) {
+        if (depth > FIELDS_SEEDED || !seen.add(named)) {
+            return true;
+        }
+        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+            if (capabilityOf(clause.expr(), clause.pos(), data, symbols).kind()
+                    != ClauseDischarge.Kind.DERIVABLE) {
+                return false;
+            }
+        }
+        for (Type type : TypeOps.fieldTypes(data, symbols).values()) {
+            if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data inner
+                    && !everyRuleIsDerivable(ref.name(), inner, symbols, depth + 1, seen)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** A position read from no source, for the reads this makes to stand at. */
+    private static final SourcePos NOWHERE = new SourcePos(0, 0);
 
     /**
      * Analyzes one behavior body against the bindings its inputs are. Never throws. A {@code null}
@@ -999,7 +1099,7 @@ public final class InvariantChecker {
      * clause is the declaration's either way, and where it is established and where it is owed differ
      * only in direction.
      */
-    private Known seedAt(Core root, Known k, Denotations at, int depth) {
+    Known seedAt(Core root, Known k, Denotations at, int depth) {
         if (depth > FIELDS_SEEDED || !(root.type() instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
             return k;

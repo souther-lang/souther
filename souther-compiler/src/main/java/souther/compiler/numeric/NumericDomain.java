@@ -374,6 +374,39 @@ public final class NumericDomain {
         return best;
     }
 
+    // --- reading the domain back ------------------------------------------------------------------
+
+    /**
+     * The tightest bounds this proves on one atom, {@code null} at either end where it proves none.
+     *
+     * <p>Through the differences, not off the atom's own record: {@code a - b <= 0} with
+     * {@code b <= 1440} bounds {@code a} at 1440 though nothing was ever asserted about {@code a}
+     * alone. That is the whole point of asking here rather than reading what was put in.
+     */
+    public Bounds boundsOf(String atom) {
+        return bottom ? new Bounds(null, null) : new Bounds(bestLo(atom), bestHi(atom));
+    }
+
+    /** What an atom's values are known to lie between. A {@code null} end is unbounded there. */
+    public record Bounds(BigDecimal min, BigDecimal max) {
+
+        public boolean isEmpty() {
+            return min == null && max == null;
+        }
+    }
+
+    /**
+     * Whether everything this holds is held in a shape {@link #boundsOf} reads.
+     *
+     * <p>False where a form outside both shapes was kept as written. Such a form still proves things
+     * — {@link #entails} reads it — but no bound is derived through it, so a projection taken from a
+     * domain holding one is weaker than what the constraints actually say. A caller turning a
+     * projection into an obligation has to know which of the two it has.
+     */
+    public boolean everythingIsProjectable() {
+        return kept.isEmpty();
+    }
+
     // --- assignment ----------------------------------------------------------------------------
 
     /** The domain after {@code atom := f}: drop every prior fact about {@code atom}, then record its
