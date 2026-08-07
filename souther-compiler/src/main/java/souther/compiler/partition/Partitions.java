@@ -210,30 +210,35 @@ public final class Partitions {
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
-                             List<Axis> out, NumericDomain.Bounds projected,
+                             List<Axis> out, Placed placed,
                              Map<String, NumericDomain.Bounds> domains) {
         AxisId id = AxisId.of(behavior, path);
         List<PartitionClass> classes = classesOf(type, symbols);
-        Bounds here = narrowed(boundsOf(type, symbols), projected);
+        Bounds own = boundsOf(type, symbols);
+        Bounds here = narrowed(own, placed == null ? null : placed.bounds());
         if (here != null && !here.isEmpty()) {
             domains.put(path.toString(), new NumericDomain.Bounds(here.min(), here.max()));
         }
-        List<Cut> cuts = cutsOf(type, here);
+        List<Cut> cuts = cutsOf(type, here, own, placed == null ? null : placed.record());
         if (!classes.isEmpty() || !cuts.isEmpty()) {
             out.add(new Axis(id, path, type, classes, cuts));
             return;
         }
         Map<String, Type> fields = productFields(type, symbols);
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
+            TypeName named = ((Type.Ref) type).name();
             FieldDomains record = fieldDomainsOf(type, symbols);
             for (Map.Entry<String, Type> field : fields.entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
-                        record.at(field.getKey()), domains);
+                        new Placed(named, record.at(field.getKey())), domains);
             }
             return;
         }
         out.add(Axis.notDerivable(id, path, type));
     }
+
+    /** Where a field sits: the record holding it, and what that record leaves it able to hold. */
+    private record Placed(TypeName record, NumericDomain.Bounds bounds) {}
 
     /** What the record a field sits in leaves each of its fields able to hold. */
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
@@ -377,27 +382,45 @@ public final class Partitions {
 
     /** The cuts of a position, each carrying the rule that drew it. */
     static List<Cut> cutsOf(Type type, Symbols symbols) {
-        return cutsOf(type, boundsOf(type, symbols));
+        return cutsOf(type, boundsOf(type, symbols), boundsOf(type, symbols), null);
     }
 
-    /** The cuts of a position whose range is already settled. */
-    private static List<Cut> cutsOf(Type type, Bounds bounds) {
+    /**
+     * The cuts of a position whose range is already settled.
+     *
+     * @param bounds where the position stops, the record it sits in taken into account
+     * @param own    where its own type stops, so that an end the record moved can say so
+     * @param within the record, or null at a position that is not a field of one
+     */
+    private static List<Cut> cutsOf(Type type, Bounds bounds, Bounds own, TypeName within) {
         if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref ref)) {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
         if (bounds.min != null) {
-            put(byValue, numeric(bounds.min, bounds.decimal), ref.name(), "min");
+            put(byValue, numeric(bounds.min, bounds.decimal), ref.name(), "min",
+                    moved(own == null ? null : own.min(), bounds.min) ? within : null);
         }
         if (bounds.max != null) {
-            put(byValue, numeric(bounds.max, bounds.decimal), ref.name(), "max");
+            put(byValue, numeric(bounds.max, bounds.decimal), ref.name(), "max",
+                    moved(own == null ? null : own.max(), bounds.max) ? within : null);
         }
         return List.copyOf(byValue.values());
     }
 
-    private static void put(Map<String, Cut> into, ObservedValue value, TypeName type, String clause) {
+    /** Whether an end is somewhere other than where the type's own rule left it. */
+    private static boolean moved(BigDecimal own, BigDecimal effective) {
+        return own != null && own.compareTo(effective) != 0;
+    }
+
+    private static void put(Map<String, Cut> into, ObservedValue value, TypeName type, String clause,
+                            TypeName narrowedBy) {
         OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
-        into.merge(String.valueOf(value), Cut.at(value, origin), (had, _) -> had.and(origin));
+        if (narrowedBy != null) {
+            origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
+        }
+        OriginRef each = origin;
+        into.merge(String.valueOf(value), Cut.at(value, origin), (had, _) -> had.and(each));
     }
 
     // --- small helpers ----------------------------------------------------------------------------

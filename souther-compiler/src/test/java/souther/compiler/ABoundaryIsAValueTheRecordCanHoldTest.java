@@ -83,6 +83,21 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "0 would need a startsAt below zero: " + asked);
     }
 
+    /** An end the record moved says so. `MinuteOfDay`'s maximum is why there is an upper edge here;
+     * `WorkInterval`'s clause is why it is 1439, and an author reading 1439 beside a rule that says
+     * 1440 has been told half of it. */
+    @Test
+    void anEdgeTheRecordMovedNamesTheRecordBesideTheRuleThatPutItThere() throws Exception {
+        List<String> asked = boundariesOf(TIMESHEET);
+
+        assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 1439")
+                        && l.contains("invariant MinuteOfDay (max) within WorkInterval")),
+                () -> "asked for " + asked);
+        assertTrue(asked.stream().anyMatch(l -> l.contains("interval.startsAt = 0")
+                        && l.contains("(invariant MinuteOfDay (min))")),
+                () -> "an end the record left alone names only the rule that put it there: " + asked);
+    }
+
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test

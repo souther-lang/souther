@@ -48,12 +48,28 @@ public sealed interface OriginRef {
     record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, SourceRef at,
                        boolean valueBelongsBelow) implements OriginRef {}
 
+    /**
+     * A bound one rule put there and another took in.
+     *
+     * <p>One obligation and not two. The rules do not each want a row: {@code MinuteOfDay}'s maximum
+     * is why this position has an upper edge at all, and {@code WorkInterval}'s clause is why that
+     * edge is 1439 rather than 1440. Kept as two origins side by side they would be counted as two
+     * boundaries at one value, which is the accounting for rules that each drew a line of their own
+     * — an invariant and a guard naming the same number — and not for one line two rules settled
+     * together.
+     *
+     * @param bound  the rule that put an edge here
+     * @param within the record whose own clauses decided where it stopped
+     */
+    record NarrowedOrigin(OriginRef bound, TypeName within) implements OriginRef {}
+
     /** Where this came from, for a report to print. */
     default String describe() {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
             case GuardOrigin g -> "guard@" + g.at().pos();
+            case NarrowedOrigin n -> n.bound().describe() + " within " + n.within().name();
         };
     }
 }
