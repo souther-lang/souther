@@ -120,8 +120,18 @@ public final class Formatter {
                 boundary, text(close)));
     }
 
-    /** One part of a chain, written after the connector that joins it to what came before. */
-    private record Segment(String connector, Doc doc) {}
+    /**
+     * One part of a chain, written after the connector that joins it to what came before.
+     * {@code leading} is what goes above the line the part opens — its comments. The connector is
+     * part of that line, so the two are written in this order and not the other: a comment placed
+     * after the connector leaves the part itself starting a line the connector never opened.
+     */
+    private record Segment(String connector, Doc doc, Doc leading) {
+
+        Segment(String connector, Doc doc) {
+            this(connector, doc, Doc.NIL);
+        }
+    }
 
     /**
      * A head and the parts written after it, each opening with its connector — a union's {@code |},
@@ -132,7 +142,7 @@ public final class Formatter {
     private static Doc chained(Doc head, List<Segment> segments) {
         List<Doc> parts = new ArrayList<>();
         for (Segment s : segments) {
-            parts.add(concat(LINE, text(s.connector()), s.doc()));
+            parts.add(concat(LINE, s.leading(), text(s.connector()), s.doc()));
         }
         return group(concat(head, nest(INDENT, concat(parts))));
     }
@@ -347,25 +357,34 @@ public final class Formatter {
         if (sum.isPresent()) {
             // A sum's cases are bare idents, not nodes, so the comments between them are picked up
             // from the token stream rather than from a member node.
-            List<Doc> cases = new ArrayList<>();
-            List<String> pending = new ArrayList<>();
+            List<Doc> pending = new ArrayList<>();
+            Doc head = null;
+            List<Doc> headComments = List.of();
+            List<Segment> cases = new ArrayList<>();
             for (SyntaxElement e : sum.get().children()) {
                 if (!(e instanceof SyntaxToken t)) {
                     continue;
                 }
                 if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                    pending.add(t.text().stripTrailing());
+                    pending.add(concat(text(t.text().stripTrailing()), HARDLINE));
                 } else if (t.kind() == SyntaxKind.IDENT) {
-                    Doc c = text(t.text());
-                    for (int i = pending.size() - 1; i >= 0; i--) {
-                        c = concat(text(pending.get(i)), HARDLINE, c);
+                    if (head == null) {
+                        head = text(t.text());
+                        headComments = List.copyOf(pending);
+                    } else {
+                        cases.add(new Segment("| ", text(t.text()), concat(pending)));
                     }
                     pending.clear();
-                    cases.add(c);
                 }
             }
-            return concat(text("data "), text(name), text(" = "),
-                    chained(cases.get(0), segments("| ", cases.subList(1, cases.size()))));
+            Doc chain = chained(head, cases);
+            if (headComments.isEmpty()) {
+                return concat(text("data "), text(name), text(" = "), chain);
+            }
+            // The first case shares its line with `data S =`, so its comments cannot go above that
+            // line without describing the declaration instead. The union moves down a line instead.
+            return concat(text("data "), text(name), text(" ="),
+                    nest(INDENT, concat(HARDLINE, concat(headComments), chain)));
         }
         var newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
@@ -377,17 +396,22 @@ public final class Formatter {
 
     /** The leading-comma product block: {@code { f1: T1\n, f2: T2\n}}. Always multi-line. */
     private Doc productBody(SyntaxNode body) {
-        List<Doc> members = new ArrayList<>();
-        for (SyntaxNode m : body.childNodes()) {
-            if (m.kind() == SyntaxKind.FIELD) {
-                members.add(withComments(body, m, field(m)));
-            } else if (m.kind() == SyntaxKind.SPREAD_MEMBER) {
-                members.add(withComments(body, m, concat(text("..."), text(firstIdent(m)))));
-            }
-        }
         List<Doc> lines = new ArrayList<>();
-        for (int i = 0; i < members.size(); i++) {
-            lines.add(concat(i == 0 ? text("{ ") : concat(HARDLINE, text(", ")), members.get(i)));
+        for (SyntaxNode m : body.childNodes()) {
+            Doc member;
+            if (m.kind() == SyntaxKind.FIELD) {
+                member = field(m);
+            } else if (m.kind() == SyntaxKind.SPREAD_MEMBER) {
+                member = concat(text("..."), text(firstIdent(m)));
+            } else {
+                continue;
+            }
+            // The opener is part of the member's line, so it is inside what the comments decorate:
+            // a comment written after it would leave the member starting a line of its own, at the
+            // block's indent rather than after the comma the rest of the block is written with.
+            boolean first = lines.isEmpty();
+            Doc line = withComments(body, m, concat(text(first ? "{ " : ", "), member));
+            lines.add(first ? line : concat(HARDLINE, line));
         }
         lines.add(concat(HARDLINE, text("}")));
         return concat(lines);
