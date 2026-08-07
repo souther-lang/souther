@@ -1,7 +1,8 @@
 package souther.compiler.check;
 
-import souther.compiler.check.NumericDomain.LinearForm;
-import souther.compiler.check.NumericDomain.Rel;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.NumericDomain.Rel;
 
 import java.util.ArrayList;
 import java.util.Collection;

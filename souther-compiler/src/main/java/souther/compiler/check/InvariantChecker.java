@@ -2,7 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Combinators.Handed;
-import souther.compiler.check.NumericDomain.LinearForm;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;

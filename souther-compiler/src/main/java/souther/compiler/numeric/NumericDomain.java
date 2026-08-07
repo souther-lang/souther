@@ -1,4 +1,4 @@
-package souther.compiler.check;
+package souther.compiler.numeric;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -11,52 +11,53 @@ import java.util.Set;
 /**
  * A small numeric abstract domain — a per-atom interval plus difference-bound constraints
  * ({@code a - b <= c}, the octagon-style relational part) — over named atoms. An atom is the
- * numeric content of a variable, a field chain, or a newtype's wrapped value (see
- * {@link InvariantChecker}). Constants are {@link BigDecimal}; {@code null} bounds are ±infinity.
+ * numeric content of a variable, a field chain, or a newtype's wrapped value; what names one is the
+ * caller's, and {@code Terms} in the checker is where the names come from today. Constants are
+ * {@link BigDecimal}; {@code null} bounds are ±infinity.
  *
- * <p>This is the decision procedure the invariant-discharge check runs on: {@link #assume} tightens
- * the domain along a {@code guard}/{@code if} guard or an input newtype's invariant, and
- * {@link #entails} / {@link #refutes} answer whether a construction's invariant is discharged or is
- * definitely violated on the current path. What it derives is bounded to interval + difference-bound;
- * a form of neither shape is kept as it was written, so a guard restating an invariant still
- * discharges it even where nothing can be derived from the two together (spec §invariant-discharge).
- * Instances are immutable — each operation returns a fresh domain, threaded functionally like
- * {@code TotalityChecker}'s scope map.
+ * <p>{@link #assume} tightens the domain along a {@code guard}/{@code if} guard or an input
+ * newtype's invariant, and {@link #entails} / {@link #refutes} answer whether a construction's
+ * invariant is discharged or is definitely violated on the current path — which is the
+ * invariant-discharge check, the caller this was written for. What it derives is bounded to
+ * interval + difference-bound; a form of neither shape is kept as it was written, so a guard
+ * restating an invariant still discharges it even where nothing can be derived from the two
+ * together (spec §invariant-discharge). Instances are immutable — each operation returns a fresh
+ * domain, threaded functionally like {@code TotalityChecker}'s scope map.
  */
-final class NumericDomain {
+public final class NumericDomain {
 
     /** A comparison of a {@link LinearForm} against zero. */
-    enum Rel { GE, GT, LE, LT, EQ, NE }
+    public enum Rel { GE, GT, LE, LT, EQ, NE }
 
     /** An affine form {@code const + Σ coef·atom} over the domain's atoms. */
-    record LinearForm(BigDecimal constant, Map<String, BigDecimal> coefs) {
-        static LinearForm constant(BigDecimal c) {
+    public record LinearForm(BigDecimal constant, Map<String, BigDecimal> coefs) {
+        public static LinearForm constant(BigDecimal c) {
             return new LinearForm(c, Map.of());
         }
 
-        static LinearForm atom(String a) {
+        public static LinearForm atom(String a) {
             return new LinearForm(BigDecimal.ZERO, Map.of(a, BigDecimal.ONE));
         }
 
-        LinearForm plus(LinearForm o) {
+        public LinearForm plus(LinearForm o) {
             Map<String, BigDecimal> m = new HashMap<>(coefs);
             o.coefs.forEach((k, v) -> m.merge(k, v, BigDecimal::add));
             m.values().removeIf(v -> v.signum() == 0);
             return new LinearForm(constant.add(o.constant), m);
         }
 
-        LinearForm negate() {
+        public LinearForm negate() {
             Map<String, BigDecimal> m = new HashMap<>();
             coefs.forEach((k, v) -> m.put(k, v.negate()));
             return new LinearForm(constant.negate(), m);
         }
 
-        LinearForm minus(LinearForm o) {
+        public LinearForm minus(LinearForm o) {
             return plus(o.negate());
         }
 
         /** This form scaled by a constant {@code k} (a scalar multiply). */
-        LinearForm times(BigDecimal k) {
+        public LinearForm times(BigDecimal k) {
             if (k.signum() == 0) {
                 return constant(BigDecimal.ZERO);
             }
@@ -86,18 +87,18 @@ final class NumericDomain {
         this.kept = kept;
     }
 
-    static NumericDomain top() {
+    public static NumericDomain top() {
         return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of());
     }
 
-    boolean isBottom() {
+    public boolean isBottom() {
         return bottom;
     }
 
     // --- assume: tighten along `f rel 0` -------------------------------------------------------
 
     /** The domain refined by asserting {@code f rel 0}. */
-    NumericDomain assume(LinearForm f, Rel rel) {
+    public NumericDomain assume(LinearForm f, Rel rel) {
         if (bottom || rel == Rel.NE) {
             // `f != 0` is a disjunction, and the domain holds conjunctions of bounds. Nothing to
             // record; what settles such a guard is the fact keyed on the comparison itself.
@@ -178,7 +179,7 @@ final class NumericDomain {
     // --- entails / refutes ---------------------------------------------------------------------
 
     /** Whether the domain proves {@code f rel 0} (the construction's invariant is discharged). */
-    boolean entails(LinearForm f, Rel rel) {
+    public boolean entails(LinearForm f, Rel rel) {
         if (bottom) {
             return true;   // an infeasible path discharges anything
         }
@@ -194,7 +195,7 @@ final class NumericDomain {
     /** Whether the domain proves {@code ¬(f rel 0)} — the invariant is <em>definitely</em> violated
      * on this path (a compile error, the path-sensitive generalization of the constant check). The
      * negation flips both bits of the comparison: {@code ¬(f >= 0)} is {@code f < 0}, etc. */
-    boolean refutes(LinearForm f, Rel rel) {
+    public boolean refutes(LinearForm f, Rel rel) {
         if (bottom || rel == Rel.EQ) {
             return false;   // an unreachable path violates nothing; equality is never refuted here
         }
@@ -294,7 +295,7 @@ final class NumericDomain {
 
     /** The domain after {@code atom := f}: drop every prior fact about {@code atom}, then record its
      * new interval bounds from {@code f} (relational facts about {@code f} are not re-derived). */
-    NumericDomain assign(String atom, LinearForm f) {
+    public NumericDomain assign(String atom, LinearForm f) {
         if (bottom) {
             return this;
         }

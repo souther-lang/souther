@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.NumericDomain.LinearForm;
+import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
