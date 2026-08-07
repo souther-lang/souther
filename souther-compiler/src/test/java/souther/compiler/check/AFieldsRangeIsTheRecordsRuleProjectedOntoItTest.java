@@ -208,6 +208,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
      * They agree here on nothing — `data StartMinute = Minute` carries no bound to either, and the
      * position is reported as not derivable — so there is nothing to take in. That the inner rule is
      * lost is older than this and is a limit of what a bound is read off, not of the projection.
+     * Reported separately; this holds the agreement, and will want the bounds once that is fixed.
      */
     @Test
     void aNewtypeOverANewtypeIsBoundedByNeitherReading() {
