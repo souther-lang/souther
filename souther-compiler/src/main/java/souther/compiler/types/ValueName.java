@@ -42,21 +42,72 @@ public sealed interface ValueName {
     }
 
     /**
-     * A standard-library function, under the qualified name the library is keyed by
-     * ({@code List.map}, {@code String.trim}). A prelude helper, a prelude intrinsic and a checker
+     * A standard-library function: the alias the library publishes it under ({@code List}) and the
+     * operation that alias reaches ({@code map}). A prelude helper, a prelude intrinsic and a checker
      * built-in are one thing to a name: what is on the other side of the name is the library's own
      * business.
+     *
+     * <p>The alias is not the module that declares the operation and cannot be made into one:
+     * {@code souther.list} declares {@code foldFrom}, and a reader reaches it as
+     * {@code List.foldFrom}. Both parts are held here so that a reader wanting one of them takes it
+     * rather than splitting {@link #qualified()} back apart — a name written by joining two values is
+     * a name somebody downstream will try to read them back out of.
      */
-    record Stdlib(String qualified) implements ValueName {
+    record Stdlib(String alias, String name) implements ValueName {
 
+        public Stdlib {
+            if (alias == null) {
+                throw new IllegalArgumentException("a library name is reached under an alias");
+            }
+        }
+
+        /**
+         * The namespace itself, applied: {@code Date("2026-09-30")} constructs from the module the
+         * alias names, and there is no operation for it to name.
+         *
+         * <p>The second shape a library name has, and the reason the operation may be absent. Which
+         * of the two this is, {@link #isNamespace()} says — not the spelling: an operation a library
+         * gave its own module's name would render the same either way, and telling them apart by
+         * comparing renderings is the reading-a-name-back-out this type exists to stop.
+         */
+        public static Stdlib namespace(String alias) {
+            return new Stdlib(alias, null);
+        }
+
+        /** An operation of the library module published as {@code alias}. */
+        public static Stdlib operation(String alias, String name) {
+            if (name == null) {
+                throw new IllegalArgumentException("an operation has a name: " + alias);
+            }
+            return new Stdlib(alias, name);
+        }
+
+        /** Whether this is the namespace applied rather than an operation of it. */
+        public boolean isNamespace() {
+            return name == null;
+        }
+
+        /** The operation this reaches, or null where it is the namespace itself. */
+        public String operation() {
+            return name;
+        }
+
+        /** What is reached: the operation, or the namespace where the alias was applied itself.
+         * Two shapes can answer one string, so a caller asking which shape it is asks
+         * {@link #isNamespace()}. */
         @Override
         public String name() {
-            return qualified;
+            return name == null ? alias : name;
+        }
+
+        /** The name the library is keyed by, and the one a reader reaches it under. */
+        public String qualified() {
+            return name == null ? alias : alias + "." + name;
         }
 
         @Override
         public String toString() {
-            return qualified;
+            return qualified();
         }
     }
 

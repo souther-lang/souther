@@ -7,6 +7,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -113,7 +114,7 @@ public final class CallElaborator {
         Map<String, Type> bindings = new HashMap<>();
         BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols(),
                 v.pos(), "the type of " + lib.qualified());
-        return new Core.Call(lib.qualified(), List.of(),
+        return new Core.Call(new ReachName.OfLibrary(lib), List.of(),
                 TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
@@ -137,7 +138,7 @@ public final class CallElaborator {
                     new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
-        return new Core.Call(call.reaches(), ca.cores(), result, call.pos());
+        return new Core.Call(call.reachedAs(), ca.cores(), result, call.pos());
     }
 
     /**
@@ -556,16 +557,25 @@ public final class CallElaborator {
                     }
                     yield applySignature(call, fn, ca, expected, env, ctx).result();
                 }
-                // A library qualifier that matched no builtin or intrinsic above is a wrong stdlib
-                // call (spec §stdlib) — report it as such, not as a missing behavior. Asked of what
-                // this reaches rather than of what a report would quote: a field read applied
-                // (`deps.count(x)`) reaches a binding and is quoted with a dot in it, and what is
-                // wrong with it is that it is not a function, which is what the report below says.
-                if (library || call.reaches().indexOf('.') >= 0) {
+                // A library name that matched no builtin or intrinsic above is a wrong stdlib call
+                // (spec §stdlib) — reported as that, not as a missing behavior. Asked of which kind
+                // of name this reaches and not of whether the spelling holds a dot: a field read
+                // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
+                // what is wrong with it is that it is not a function, which the report below says.
+                if (call.reachedAs() instanceof ReachName.OfLibrary) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
                                     .at(call.name().region()).args(call.written()).build(),
                             "`" + call.written() + "` is not a standard-library function.");
+                }
+                // A helper another module declares is expanded where it is called, or — where it
+                // recurses — bound as a signature and answered above. Reaching here it is neither,
+                // which is this compiler having failed to do one of them rather than anything the
+                // author wrote. Said outright: reported as a wrong library call, it named a library
+                // the author never wrote.
+                if (call.reachedAs() instanceof ReachName.OfModule reached) {
+                    throw new IllegalStateException("`" + reached + "` was neither expanded nor"
+                            + " bound before the call to it at " + call.pos() + " was typed");
                 }
                 // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
                 // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's

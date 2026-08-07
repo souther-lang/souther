@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
@@ -43,7 +44,7 @@ import java.util.TreeSet;
  * not rest on what building the graph happened to visit. Whether a name is {@code partial} is read off
  * the declaration it reaches, not off a set collected on the way — a clause names what it names,
  * whether or not a helper of this module names it too. And which declaration a name reaches is read
- * off what the name denotes ({@link HelperNames#keyIn}), not off how it was spelled, so the answer is
+ * off the name the reference carries, not off how it was spelled, so the answer is
  * the same before and after the pass that writes an imported name out qualified.
  *
  * <p>A path is the shortest one, found breadth-first with each node's callees taken in name order, so
@@ -101,7 +102,7 @@ final class PartialReachability {
      * not be written where a value goes. A value takes none and is read rather than handed over.
      */
     boolean isPartialFunctionNamed(Ast.Var v) {
-        Ast.FnDef declared = declarationOf(v.denotes(), inliner);
+        Ast.FnDef declared = declarationOf(v.denotes(), v.reachedAs(), inliner);
         return declared != null && declared.partial() && !declared.params().isEmpty();
     }
 
@@ -195,15 +196,15 @@ final class PartialReachability {
     private static void collectReached(Ast.Expr e, HelperInliner inliner, Set<String> out) {
         switch (e) {
             case Ast.Apply call -> {
-                Ast.FnDef applied = declarationOf(call.denotes(), inliner);
+                Ast.FnDef applied = declarationOf(call.denotes(), call.reachedAs(), inliner);
                 if (applied != null) {
-                    out.add(keyOf(call.denotes(), inliner));
+                    out.add(keyOf(call.denotes(), call.reachedAs()));
                 }
             }
             case Ast.Var v -> {
-                Ast.FnDef read = declarationOf(v.denotes(), inliner);
+                Ast.FnDef read = declarationOf(v.denotes(), v.reachedAs(), inliner);
                 if (read != null && read.params().isEmpty()) {
-                    out.add(keyOf(v.denotes(), inliner));
+                    out.add(keyOf(v.denotes(), v.reachedAs()));
                 }
             }
             default -> { }
@@ -222,16 +223,19 @@ final class PartialReachability {
      * today, so keeping it changes no answer; leaving it out would make that a premise of the check
      * rather than a fact about the library, and one the library could stop honouring in silence.
      */
-    private static String keyOf(ValueName denotes, HelperInliner inliner) {
+    private static String keyOf(ValueName denotes, ReachName reachedAs) {
         return switch (denotes) {
-            case ValueName.Helper helper -> HelperNames.keyIn(inliner.moduleName(), helper);
-            case ValueName.Stdlib lib -> lib.qualified();
+            // Which key it is, the reference says: settled where the name was resolved and carried
+            // here. What decides whether there is a node at all is what the name denotes — a binding
+            // spelled like a helper reaches no declaration however it is written.
+            case ValueName.Helper _, ValueName.Stdlib _ -> reachedAs.rendered();
             case null, default -> null;
         };
     }
 
-    private static Ast.FnDef declarationOf(ValueName denotes, HelperInliner inliner) {
-        String key = keyOf(denotes, inliner);
+    private static Ast.FnDef declarationOf(ValueName denotes, ReachName reachedAs,
+                                           HelperInliner inliner) {
+        String key = keyOf(denotes, reachedAs);
         return key == null ? null : inliner.helper(key);
     }
 }

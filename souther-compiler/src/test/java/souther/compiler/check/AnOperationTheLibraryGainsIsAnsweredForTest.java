@@ -35,7 +35,7 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
     void everyOperationInAQuestionsRangeAnswersIt() {
         List<String> unanswered = new ArrayList<>();
         for (Map.Entry<String, Prelude.PreludeEntry> e : Prelude.entries().entrySet()) {
-            ValueName operation = new ValueName.Stdlib(e.getKey());
+            ValueName operation = Prelude.operation(e.getKey());
             for (Question question : Question.askedOf(e.getValue().signature())) {
                 if (question.answeredFor(operation)
                         || question.nothingSaidOf().contains(operation)) {
@@ -62,13 +62,13 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
         List<String> unasked = new ArrayList<>();
         for (Question question : Question.values()) {
             for (ValueName operation : question.answeredOperations()) {
-                if (!question.asksOfOperation(operation.name())) {
-                    unasked.add(operation.name() + " — " + question + " (a rule)");
+                if (!question.asksOfOperation(operation.toString())) {
+                    unasked.add(operation + " — " + question + " (a rule)");
                 }
             }
             for (ValueName operation : question.nothingSaidOf()) {
-                if (!question.asksOfOperation(operation.name())) {
-                    unasked.add(operation.name() + " — " + question + " (nothing to say)");
+                if (!question.asksOfOperation(operation.toString())) {
+                    unasked.add(operation + " — " + question + " (nothing to say)");
                 }
             }
         }

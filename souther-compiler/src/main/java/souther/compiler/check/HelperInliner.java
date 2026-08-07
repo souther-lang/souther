@@ -8,6 +8,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -449,8 +450,7 @@ public final class HelperInliner {
                         HelperNames.publishedBy(HelperNames.qualifyHelpersOf(closed, module), module)));
     }
 
-    /** The module these helpers belong to — what {@link HelperNames#keyIn} compares a name's
-     * declaring module against. */
+    /** The module these helpers belong to — the one whose bodies this expands into. */
     public String moduleName() {
         return table.module();
     }
@@ -490,8 +490,8 @@ public final class HelperInliner {
         for (int supplied : rewrite.supplied()) {
             args.add(new Ast.IntLit(supplied, call.pos()));
         }
-        return new Ast.Apply(rewrite.target(), new ValueName.Stdlib(rewrite.target()), args,
-                ConstructionOrigin.own(),
+        return new Ast.Apply(rewrite.target().qualified(), rewrite.target(),
+                new ReachName.OfLibrary(rewrite.target()), args, ConstructionOrigin.own(),
                 call.pos());
     }
 
@@ -656,7 +656,7 @@ public final class HelperInliner {
     private List<Ast.FnParam> declaredParams(Ast.Apply call) {
         Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
         if (rewrite != null && call.args().size() == rewrite.keptArgs()) {
-            Ast.FnDef target = table.reached(rewrite.target());
+            Ast.FnDef target = table.reached(rewrite.target().qualified());
             return target == null ? null : target.params().subList(0, rewrite.keptArgs());
         }
         Ast.FnDef helper = table.reached(call.reaches());
@@ -872,7 +872,7 @@ public final class HelperInliner {
                 // separate slots: the binding is in the callee position, the spelling beside it.
                 yield inline(new Ast.LetIn(f, raw.function(), null, false, null,
                         new Ast.Apply(new Ast.Var(f.name(), new ValueName.Local(f.name(), f.id()),
-                                raw.pos()),
+                                new ReachName.Bare(f.name()), raw.pos()),
                                 raw.args(), raw.origin(), spelling(raw.function()), raw.pos()),
                         raw.pos()));
             }
@@ -1208,8 +1208,8 @@ public final class HelperInliner {
             args.add(Ast.Var.local(p, function.pos()));
         }
         return new Ast.Block(params,
-                new Ast.Apply(function.name(), function.denotes(), args, ConstructionOrigin.own(),
-                        function.pos()),
+                new Ast.Apply(function.name(), function.denotes(), function.reachedAs(), args,
+                        ConstructionOrigin.own(), function.pos()),
                 function.pos());
     }
 
@@ -1279,7 +1279,9 @@ public final class HelperInliner {
             return v;
         }
         Ast.FnDef value = table.reached(v.reaches());
-        if (value == null || value.body() == null || graph.recurses(v.name())) {
+        // Asked with the name the table was asked with. The graph is keyed as the table is, and a
+        // spelling agrees with that key only where a pass has already written it out qualified.
+        if (value == null || value.body() == null || graph.recurses(v.reaches())) {
             return v;
         }
         return substituted(v.reaches(), value.writtenBody());
@@ -1443,6 +1445,11 @@ public final class HelperInliner {
         /** The binding an expansion made, read as the name the body will read. */
         static Substituted of(Ast.Binder binder) {
             return new Substituted(binder.name(), new ValueName.Local(binder.name(), binder.id()));
+        }
+
+        /** A binding is reached where it is bound, so its own name is the whole of it. */
+        ReachName reachedAs() {
+            return new ReachName.Bare(name);
         }
     }
 
@@ -1645,8 +1652,10 @@ public final class HelperInliner {
     private Ast.Var renameVar(Ast.Var v, Renaming renaming) {
         Substituted stands = renaming.substituted(v.denotes());
         return stands != null
-                ? new Ast.Var(stands.name(), stands.denotes(), renaming.at(v.pos()))
-                : new Ast.Var(v.name(), renaming.copy().of(v.denotes()), renaming.at(v.pos()));
+                ? new Ast.Var(stands.name(), stands.denotes(), stands.reachedAs(),
+                        renaming.at(v.pos()))
+                : new Ast.Var(v.name(), renaming.copy().of(v.denotes()), v.reachedAs(),
+                        renaming.at(v.pos()));
     }
 
     private List<Ast.Expr> renameList(List<Ast.Expr> es, Renaming renaming) {
@@ -1670,7 +1679,7 @@ public final class HelperInliner {
             return null;
         }
         // by the name it is reached by here, which for another module's value is the qualified one
-        String reached = spread.name();
+        String reached = spread.reaches();
         Ast.FnDef value = table.fns().get(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reached) ? null : value;

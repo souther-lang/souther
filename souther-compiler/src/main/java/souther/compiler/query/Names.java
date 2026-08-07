@@ -16,6 +16,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -302,7 +303,7 @@ public final class Names {
                 // The module is one this compilation has and could not read. What is wrong with it
                 // is reported on its own source; saying anything here sends the author to a file
                 // that is fine.
-                return ref.denoting(new ValueName.Unresolved(written));
+                return reached(ref, new ValueName.Unresolved(written));
             }
             if (!declared.value().contains(bare)) {
                 return nothing(ref, unknown.report(ref, declared.value()));
@@ -311,25 +312,36 @@ public final class Names {
                 added.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
                 at.putIfAbsent(target, ref.pos());
             }
-            return ref.denoting(new ValueName.Behavior(target, bare));
+            return reached(ref, new ValueName.Behavior(target, bare));
         }
 
         /** A bare name: this module's own behavior, or one an import brought in. */
         private Ast.Var bare(Ast.Var ref, String written, Unknown unknown) {
             BehaviorsInScope.Of scope = db.ask(new BehaviorsInScope(m.name())).value();
             if (scope == null) {
-                return ref.denoting(new ValueName.Unresolved(written));
+                return reached(ref, new ValueName.Unresolved(written));
             }
             ValueName.Behavior named = scope.byName().get(written);
             if (named != null) {
-                return ref.denoting(named);
+                return reached(ref, named);
             }
             if (!scope.whole()) {
                 // An import that could not be followed may have been where this name came from.
                 // Whatever is wrong with that module is reported there.
-                return ref.denoting(new ValueName.Unresolved(written));
+                return reached(ref, new ValueName.Unresolved(written));
             }
             return nothing(ref, unknown.report(ref, scope.byName().keySet()));
+        }
+
+        /**
+         * {@code ref} denoting {@code name}, and reached as this module reaches it.
+         *
+         * <p>Both answers together, from the one place that has them. A behavior is reached by the
+         * name written here — bare, or under the module a qualified reference names — and so is a
+         * name nothing answers to, which keeps the spelling for a report to quote.
+         */
+        private Ast.Var reached(Ast.Var ref, ValueName name) {
+            return ref.denoting(name, ReachName.of(name, ref.name(), m.name()));
         }
 
         /** What to say about a name no behavior answers to, given the names that were reachable. */
@@ -351,7 +363,7 @@ public final class Names {
         /** Records why a name denotes nothing, and gives it the name that says so. */
         private Ast.Var nothing(Ast.Var ref, Report report) {
             reports.add(report);
-            return ref.denoting(new ValueName.Unresolved(ref.name()));
+            return reached(ref, new ValueName.Unresolved(ref.name()));
         }
     }
 
@@ -926,7 +938,7 @@ public final class Names {
             }
         }
         BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
-        Map<String, String> exposed = db.ask(new Front.LibraryNames(m.name())).value();
+        Map<String, ValueName.Stdlib> exposed = db.ask(new Front.LibraryNames(m.name())).value();
         return new Resolve.Values(m.name(), helpers,
                 behaviors == null ? Map.of() : behaviors.byName(),
                 exposed == null ? Map.of() : exposed);

@@ -9,6 +9,7 @@ import souther.compiler.check.Exposing;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.PublishedModule;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -418,14 +419,14 @@ public final class Front {
      * <p>Read from the module as its source declared it, because {@link Exposed} drops the import
      * lines once it has checked them: what they brought in outlives the lines themselves.
      */
-    public record LibraryNames(String name) implements Key<Map<String, String>> {
+    public record LibraryNames(String name) implements Key<Map<String, ValueName.Stdlib>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, String>> compute(Db db) {
+        public Answer<Map<String, ValueName.Stdlib>> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             if (layout == null) {
                 return Answer.absent();

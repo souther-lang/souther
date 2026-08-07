@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -142,12 +143,12 @@ public final class HelperNames {
     private static Ast.Expr qualifyHelpers(Ast.Expr e, Predicate<ValueName.Helper> which) {
         // a name slot takes the same rewrite as a name standing on its own: a spread names a value
         // the way any other position does
-        Ast.Expr rebuilt = Ast.mapChildren(e, c -> qualifyHelpers(c, which),
-                s -> qualified(s, which));
+        Ast.Expr rebuilt = alsoInGiven(Ast.mapChildren(e, c -> qualifyHelpers(c, which),
+                s -> qualified(s, which)), c -> qualifyHelpers(c, which));
         return switch (rebuilt) {
             case Ast.Apply call when foreign(call.denotes(), which) ->
-                    new Ast.Apply(qualifiedName(call.denotes()), call.denotes(), call.args(),
-                            call.origin(),
+                    new Ast.Apply(qualifiedName(call.denotes()), call.denotes(),
+                            ofModule(call.denotes()), call.args(), call.origin(),
                             call.pos());
             case Ast.Var v -> qualified(v, which);
             default -> rebuilt;
@@ -157,8 +158,37 @@ public final class HelperNames {
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Ast.Var qualified(Ast.Var name, Predicate<ValueName.Helper> which) {
         return foreign(name.denotes(), which)
-                ? new Ast.Var(qualifiedName(name.denotes()), name.denotes(), name.pos())
+                ? new Ast.Var(qualifiedName(name.denotes()), name.denotes(),
+                        ofModule(name.denotes()), name.pos())
                 : name;
+    }
+
+    /**
+     * {@code e} with {@code rewrite} also applied to what a combinator was handed.
+     *
+     * <p>A function argument stands in {@link Ast.Expansion#given} and that is not a slot, so no
+     * generic walk reaches it: a callee that applies its argument holds the same lambda inside its
+     * body, and a walk taking both would read one lambda twice. What is written here is not a
+     * general walk. It is the rewrite a body takes when it leaves the module it was written in, and
+     * a body leaves whole — an argument the callee never applies stands in {@code given} and nowhere
+     * else, and one it does apply still says, there, what it said where it was written. Left alone,
+     * it goes on naming the declaring module's helpers by the names that module reached them by,
+     * inside a body being read against a reader's.
+     */
+    private static Ast.Expr alsoInGiven(Ast.Expr e, java.util.function.UnaryOperator<Ast.Expr> rewrite) {
+        if (!(e instanceof Ast.Expansion ex)) {
+            return e;
+        }
+        List<Ast.Given> given = new ArrayList<>();
+        boolean any = false;
+        for (Ast.Given g : ex.given()) {
+            Ast.Expr value = rewrite.apply(g.value());
+            any |= value != g.value();
+            given.add(value == g.value() ? g
+                    : new Ast.Given(g.declaredType(), value, g.applied(), g.arrivesAs()));
+        }
+        return any ? new Ast.Expansion(ex.callee(), ex.application(), ex.bound(), given,
+                ex.declaredReturn(), ex.body(), ex.pos()) : e;
     }
 
     /** Whether {@code denotes} is a helper {@code which} accepts. */
@@ -179,7 +209,8 @@ public final class HelperNames {
     static Ast.Expr publishedBy(Ast.Expr e, String module) {
         // a spread names a value, and a value is not a construction: what it built was built where it
         // was defined, so the mark is already on it
-        Ast.Expr rebuilt = Ast.mapChildren(e, c -> publishedBy(c, module), s -> s);
+        Ast.Expr rebuilt = alsoInGiven(Ast.mapChildren(e, c -> publishedBy(c, module), s -> s),
+                c -> publishedBy(c, module));
         return switch (rebuilt) {
             case Ast.NewData nd -> nd.publishedBy(module);
             // a unit data is constructed by being named, so the name is where it says where it came
@@ -214,7 +245,8 @@ public final class HelperNames {
      * showing through the rule again, in the one place expansion cannot reach.
      */
     static Ast.Expr carriedByValue(Ast.Expr e) {
-        Ast.Expr rebuilt = Ast.mapChildren(e, HelperNames::carriedByValue, s -> s);
+        Ast.Expr rebuilt = alsoInGiven(Ast.mapChildren(e, HelperNames::carriedByValue, s -> s),
+                HelperNames::carriedByValue);
         return switch (rebuilt) {
             case Ast.NewData nd -> nd.carriedByValue();
             case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
@@ -253,33 +285,17 @@ public final class HelperNames {
         Ast.forEachChild(e, c -> collectHelpersOf(c, out));
     }
 
+    /** How a helper written qualified is reached: under the module that declares it, which is what
+     * writing it qualified says. Read off what the name denotes, like the spelling beside it. */
+    private static ReachName ofModule(ValueName denotes) {
+        ValueName.Helper helper = (ValueName.Helper) denotes;
+        return new ReachName.OfModule(helper.module(), helper.name());
+    }
+
     /** The name a helper is reached by outside the module that declares it. Read off what the name
      * denotes, so applying it to a name already written this way answers the same thing. */
     private static String qualifiedName(ValueName denotes) {
         ValueName.Helper helper = (ValueName.Helper) denotes;
         return qualified(helper.module(), helper.name());
-    }
-
-    /**
-     * The key {@code helper} is filed under in the table of the module named {@code module} — bare for
-     * one that module declares, declaring-module-qualified for one it imported.
-     *
-     * <p>This turns a helper's identity into the name that module reaches it by, and the two are
-     * different values. What comes back is a key: it names a declaration within one module's table and
-     * says nothing outside it, and it is not something to read a declaring module back out of. That is
-     * carried on the declaration ({@link Ast.FnDef#declaredBy}).
-     *
-     * <p>Asked with the identity and never with a spelling, which is what {@link ValueName.Helper}
-     * holds (ADR-0072); a reader writes an imported definition bare, so a key taken off the spelling
-     * would be one key before {@link #qualifyImports} and another after — silently, because a miss is
-     * what a table does with a key it has not got.
-     *
-     * <p>The library does not come through here. A standard-library name is reached under an alias
-     * rather than under the module that declares it — {@code souther.list}'s {@code foldFrom} is
-     * reached as {@code List.foldFrom} — and denotes a {@link ValueName.Stdlib}, which already holds
-     * that reach name and is read as it stands.
-     */
-    public static String keyIn(String module, ValueName.Helper helper) {
-        return helper.module().equals(module) ? helper.name() : qualified(helper.module(), helper.name());
     }
 }

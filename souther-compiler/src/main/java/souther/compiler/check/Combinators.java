@@ -130,7 +130,7 @@ final class Combinators {
     /** The operations there is a rule for, for the tests that hold them to firing. */
     static Set<String> names() {
         Set<String> names = new LinkedHashSet<>();
-        Derived.RULES.keySet().forEach(operation -> names.add(operation.name()));
+        Derived.RULES.keySet().forEach(operation -> names.add(operation.toString()));
         return names;
     }
 
@@ -145,11 +145,11 @@ final class Combinators {
         Prelude.entries().forEach((qualified, entry) -> {
             Combinator rule = ruleFor(qualified, entry.signature().params());
             if (rule != null) {
-                rules.put(new ValueName.Stdlib(qualified), rule);
+                rules.put(Prelude.operation(qualified), rule);
             }
         });
         Prelude.rewrites().forEach((sugar, rewrite) -> {
-            Combinator target = rules.get(new ValueName.Stdlib(rewrite.target()));
+            Combinator target = rules.get(rewrite.target());
             if (target == null) {
                 return;   // what it becomes hands its closure nothing, so neither does it
             }
@@ -158,7 +158,7 @@ final class Combinators {
                         + ", whose closure or container is not among the arguments the rewrite keeps"
                         + " in place — what it hands its closure cannot be said of the sugar");
             }
-            rules.put(new ValueName.Stdlib(sugar), target);
+            rules.put(Prelude.operation(sugar), target);
         });
         return Collections.unmodifiableMap(rules);
     }

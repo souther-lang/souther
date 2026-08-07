@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-    private static final ValueName MAP = new ValueName.Stdlib("List.map");
+    private static final ValueName.Stdlib MAP = new ValueName.Stdlib("List", "map");
 
     /** `(Int) -> Int`, standing for whatever the operation was declared as. */
     private static final Type.FnOf SIGNATURE = (Type.FnOf) Type.fn(List.of(Type.INT), Type.INT);
@@ -51,12 +52,12 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         Preserved keepsMapOnly = keeping(MAP, SIGNATURE);
 
         assertThrows(RuntimeException.class,
-                () -> elaborate(callTo(new ValueName.Stdlib("List.filter")), keepsMapOnly));
+                () -> elaborate(callTo(new ValueName.Stdlib("List", "filter")), keepsMapOnly));
     }
 
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
-        Ast.Expr twoArgs = new Ast.Apply("List.map", MAP,
+        Ast.Expr twoArgs = new Ast.Apply("List.map", MAP, new ReachName.OfLibrary(MAP),
                 List.of(new Ast.IntLit(1, POS), new Ast.IntLit(2, POS)),
                 ConstructionOrigin.own(), POS);
 
@@ -84,9 +85,9 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
         assertEquals(keeping.preserved(), keeping.forData(null).preserved());
     }
 
-    private static Ast.Expr callTo(ValueName operation) {
-        return new Ast.Apply(operation.name(), operation, List.of(new Ast.IntLit(1, POS)),
-                ConstructionOrigin.own(), POS);
+    private static Ast.Expr callTo(ValueName.Stdlib operation) {
+        return new Ast.Apply(operation.qualified(), operation, new ReachName.OfLibrary(operation),
+                List.of(new Ast.IntLit(1, POS)), ConstructionOrigin.own(), POS);
     }
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {

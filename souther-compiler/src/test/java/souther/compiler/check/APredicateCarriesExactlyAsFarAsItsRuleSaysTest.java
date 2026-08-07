@@ -140,7 +140,7 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
     /** Every row of the table is answered for here, and every answer here is a row. */
     @Test
     void everyRowIsAnsweredFor() {
-        Set<String> written = DischargeRules.carryingOperations().stream().map(ValueName::name)
+        Set<String> written = DischargeRules.carryingOperations().stream().map(ValueName::toString)
                 .collect(Collectors.toCollection(TreeSet::new));
         Set<String> answered = PREDICATES.stream()
                 .map(APredicateCarriesExactlyAsFarAsItsRuleSaysTest::operationOf)

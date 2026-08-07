@@ -12,6 +12,7 @@ import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -382,7 +383,7 @@ final class BodyGen {
             emitLine(e);
             switch (e) {
                 case Core.LetIn li -> {
-                    if (li.value() instanceof Core.Call call && requiredNames.contains(call.fn())) {
+                    if (li.value() instanceof Core.Call call && requiredNames.contains(call.name())) {
                         // call an injected required behavior; requiredCall handles both the unary
                         // Behavior contract and a multi-input base (issue #57), leaving the success
                         // value cast on the stack
@@ -432,7 +433,7 @@ final class BodyGen {
                             null);
                 }
                 case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
-                case Core.Call call when tcoName != null && call.fn().equals(tcoName)
+                case Core.Call call when tcoName != null && call.name().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
@@ -958,8 +959,8 @@ final class BodyGen {
          *  became. What it decides is whether a value being constructed can stay on the stack while its
          *  fields are built. */
         private static boolean walksInside(Core e) {
-            if (e instanceof Core.Call c && (c.fn().equals(FOLD)
-                    || c.fn().equals(GrowingFold.BUILD) || c.fn().equals(GrowingFold.MAP_BUILD))) {
+            if (e instanceof Core.Call c && (c.name().equals(FOLD)
+                    || c.fn() == Core.Emitted.BUILD_LIST || c.fn() == Core.Emitted.BUILD_MAP)) {
                 return true;
             }
             boolean[] found = {false};
@@ -1142,12 +1143,12 @@ final class BodyGen {
             // An enumeration's order lives on its sum, so the ordered family takes it as a comparator
             // rather than reading a Comparable off the value (issue #161). Everything else about
             // these is what their declaration says, so only this prefix is written out here.
-            if (ORDERED_BY_COMPARATOR.contains(call.fn())) {
+            if (ORDERED_BY_COMPARATOR.contains(call.name())) {
                 TypeName ordering = elementOrdering(call.args().get(0));
                 if (ordering != null) {
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                     genExpr(call.args().get(0));
-                    String bare = bareOp(call.fn());
+                    String bare = operationOf(call);
                     code.invokestatic(CD_Lists, bare, MethodTypeDesc.of(
                             bare.equals("sort") ? CD_List : CD_Option, CD_Comparator, CD_List));
                     return;
@@ -1155,7 +1156,7 @@ final class BodyGen {
             }
             // `sortBy` orders by what its key answers, not by what the list holds, so its comparator
             // is read off the key's result type.
-            if ("List.sortBy".equals(call.fn())
+            if ("List.sortBy".equals(call.name())
                     && call.args().get(0).type() instanceof Type.FnOf key
                     && TypeOps.orderingEnumeration(key.result(), symbols) instanceof TypeName ordering) {
                 code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
@@ -1169,7 +1170,7 @@ final class BodyGen {
             // A partial division answers a case rather than a number when its divisor is zero, so
             // it emits a branch. The table's row shape is one call with one result; these are
             // written out here, and their declarations still say what they take and answer.
-            switch (call.fn()) {
+            switch (call.name()) {
                 case "Int.divide" -> {
                     intDivide(call, true);
                     return;
@@ -1184,20 +1185,32 @@ final class BodyGen {
                 }
                 default -> { }
             }
-            Prelude.PreludeEntry entry = Prelude.entry(call.fn());
+            Prelude.PreludeEntry entry = Prelude.entry(call.name());
             if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
                 Intrinsics.emit(this, kernel.key(), call);
                 return;
             }
-            switch (call.fn()) {
-                case GrowingFold.BUILD -> buildList(call);
-                case GrowingFold.GROW -> growList(call);
-                case GrowingFold.MAP_BUILD -> buildMap(call);
-                case GrowingFold.PUT -> putIntoMap(call);
+            if (call.fn() == Core.Emitted.BUILD_LIST) {
+                buildList(call);
+                return;
+            }
+            if (call.fn() == Core.Emitted.GROW_LIST) {
+                growList(call);
+                return;
+            }
+            if (call.fn() == Core.Emitted.BUILD_MAP) {
+                buildMap(call);
+                return;
+            }
+            if (call.fn() == Core.Emitted.PUT_MAP) {
+                putIntoMap(call);
+                return;
+            }
+            switch (call.name()) {
                 case "Date", "DateTime" -> {
                     // a written date: the checker has already parsed the literal, so the text is
                     // known good and this is a plain parse of a constant string.
-                    ClassDesc cd = "Date".equals(call.fn()) ? CD_LocalDate : CD_LocalDateTime;
+                    ClassDesc cd = "Date".equals(call.name()) ? CD_LocalDate : CD_LocalDateTime;
                     code.loadConstant(((Core.Str) call.args().get(0)).value());
                     code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
                 }
@@ -1206,20 +1219,20 @@ final class BodyGen {
                     // field of the enclosing behavior, and is applied as the value it is. This asks
                     // where the value is, not what the name means: what it means was settled when
                     // the call was elaborated, and an injected behavior is not a binding.
-                    Var behavior = captured.get(call.fn());
+                    Var behavior = captured.get(call.name());
                     if (behavior != null && behavior.type() instanceof Type.FnOf fnType) {
                         applyCaptured(call, fnType);
-                    } else if (ctx.emittedHelpers.containsKey(call.fn())) {
+                    } else if (ctx.emittedHelpers.containsKey(call.name())) {
                         // The one loop the language has is emitted where it stands, not called.
-                        if (!call.fn().equals(FOLD) || !folded(call)) {
+                        if (!call.name().equals(FOLD) || !folded(call)) {
                             recursiveHelperCall(call);
                         }
-                    } else if (reqNames.contains(call.fn())) {
+                    } else if (reqNames.contains(call.name())) {
                         requiredCall(call);
-                    } else if (ctx.calleeSig(call.fn()) != null) {
+                    } else if (ctx.calleeSig(call.name()) != null) {
                         behaviorCall(call);
                     } else {
-                        throw new CompileException(call.pos(), "unknown function `" + call.fn() + "`");
+                        throw new CompileException(call.pos(), "unknown function `" + call.name() + "`");
                     }
                 }
             }
@@ -1432,7 +1445,7 @@ final class BodyGen {
         private void invokeRecursiveHelper(Core.Call call) {
             ClassDesc[] params = new ClassDesc[call.args().size()];
             java.util.Arrays.fill(params, CD_Object);
-            code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.helperMethod(call.fn()),
+            code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.helperMethod(call.name()),
                     MethodTypeDesc.of(CD_Object, params));
         }
 
@@ -1440,10 +1453,11 @@ final class BodyGen {
          *  loop every fold in a program is, which is why the emitter knows its name. */
         private static final String FOLD = "List.foldFrom";
 
-        /** The operation name from a qualified builtin call ({@code "List.max"} → {@code "max"}). */
-        private static String bareOp(String fn) {
-            int dot = fn.indexOf('.');
-            return dot < 0 ? fn : fn.substring(dot + 1);
+        /** The operation a library call names ({@code List.max} → {@code max}) — read off the
+         * name, which holds the library's alias and the operation as two values. */
+        private static String operationOf(Core.Call call) {
+            Core.Reached reached = (Core.Reached) call.fn();
+            return ((ReachName.OfLibrary) reached.name()).target().name();
         }
 
         /** {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
@@ -1516,8 +1530,8 @@ final class BodyGen {
          * {@code apply} links; one with any other arity declares a typed {@code apply} of its own.
          */
         private void behaviorCall(Core.Call call) {
-            ReqSig sig = ctx.calleeSig(call.fn());
-            ClassDesc impl = ctx.cdBehaviorImpl(call.fn());
+            ReqSig sig = ctx.calleeSig(call.name());
+            ClassDesc impl = ctx.cdBehaviorImpl(call.name());
             code.new_(impl);
             code.dup();
             code.invokespecial(impl, "<init>", MTD_void);
@@ -1525,7 +1539,7 @@ final class BodyGen {
                 Type at = genExpr(call.args().get(0));
                 box(code, at);
                 code.invokeinterface(CD_Behavior, "apply", MTD_apply);
-                project(call.fn(), sig.success());
+                project(call.name(), sig.success());
                 stackCast(sig.success());
                 return;
             }
@@ -1533,36 +1547,36 @@ final class BodyGen {
                 Type at = genExpr(arg);
                 box(code, at);
             }
-            code.invokeinterface(ctx.cdBehavior(call.fn()), "apply",
-                    ctx.typedApplyDesc(call.fn(), sig.params(), sig.success()));
-            project(call.fn(), sig.success());
+            code.invokeinterface(ctx.cdBehavior(call.name()), "apply",
+                    ctx.typedApplyDesc(call.name(), sig.params(), sig.success()));
+            project(call.name(), sig.success());
             stackCast(sig.success());
         }
 
         private void requiredCall(Core.Call call) {
-            Type success = reqSuccess.get(call.fn());
-            if (ctx.isStandaloneRequired(call.fn())) {
+            Type success = reqSuccess.get(call.name());
+            if (ctx.isStandaloneRequired(call.name())) {
                 // other than one input: the required behavior is its own base class, called with a
                 // typed invokevirtual apply(A,B,…); each arg is left as its declared param type
                 // (issue #57). A `() -> R` produces, so the call hands it nothing.
-                MethodTypeDesc desc = ctx.requiredApplyDesc(call.fn());
+                MethodTypeDesc desc = ctx.requiredApplyDesc(call.name());
                 code.aload(0);
-                code.getfield(cdName, call.fn(), ctx.cdBehavior(call.fn()));
+                code.getfield(cdName, call.name(), ctx.cdBehavior(call.name()));
                 for (Core arg : call.args()) {
                     Type at = genExpr(arg);
                     box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
                 }
-                code.invokevirtual(ctx.cdBehavior(call.fn()), "apply", desc);
-                project(call.fn(), success);
+                code.invokevirtual(ctx.cdBehavior(call.name()), "apply", desc);
+                project(call.name(), success);
                 stackCast(success);
                 return;
             }
             code.aload(0);
-            code.getfield(cdName, call.fn(), CD_Behavior);
+            code.getfield(cdName, call.name(), CD_Behavior);
             Type at = genExpr(call.args().get(0));
             box(code, at);
             code.invokeinterface(CD_Behavior, "apply", MTD_apply);
-            project(call.fn(), success);
+            project(call.name(), success);
             stackCast(success);
         }
 
@@ -1877,7 +1891,7 @@ final class BodyGen {
 
         /** The same, for an injected behavior a lambda captured into a slot of its own class. */
         private void applyCaptured(Core.Call call, Type.FnOf fnType) {
-            applyValue(captured.get(call.fn()), call.args(), fnType);
+            applyValue(captured.get(call.name()), call.args(), fnType);
         }
 
         private void applyValue(Var fv, List<Core> args, Type.FnOf fnType) {
@@ -1932,8 +1946,8 @@ final class BodyGen {
                 case Core.Call c -> {
                     // an injected behavior the body calls is handed over too: the lambda is a class
                     // of its own, and what it reaches has to reach it
-                    if (reqNames.contains(c.fn())) {
-                        free.behaviors.add(c.fn());
+                    if (reqNames.contains(c.name())) {
+                        free.behaviors.add(c.name());
                     }
                     c.args().forEach(a -> collectFree(a, bound, free));
                 }
