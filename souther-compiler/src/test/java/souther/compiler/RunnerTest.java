@@ -416,21 +416,19 @@ class RunnerTest {
     }
 
     /**
-     * The type a behavior declares reaches {@code run} already judged. Whether a type may cross is
-     * the checker's question, and every kind it admits at the boundary is one {@code run} drives, so
-     * the reasons {@code run} keeps for a type it cannot decode or encode have no input left to
-     * refuse. Each row here is refused before {@code run} composes a codec at all.
+     * A parameter type reaches {@code run} already judged. What may cross is the checker's question,
+     * and every kind it admits is one the runner composes a decoder for, so {@code run.decode
+     * .unsupported} has no input left to refuse — each row here is refused before a decoder is asked
+     * for at all.
      */
     @Test
-    void everyTypeThatCrossesIsOneRunDrives() throws Exception {
-        assertRefusedByTheChecker("(Int, Int)", "a tuple", "E1311");
-        assertRefusedByTheChecker("Int?", "an optional", "E1402");
-        assertRefusedByTheChecker("A | B", "an anonymous union", "E1312");
-        assertRefusedByTheChecker("Map<Int, Int>", "a map an object cannot be keyed by", "E1314");
+    void aParameterTypeTheRunnerCannotDecodeIsRefusedBeforeItIsAsked() throws Exception {
+        assertInputRefused("(Int, Int)", "a tuple", "E1311");
+        assertInputRefused("Int?", "an optional", "E1402");
+        assertInputRefused("A | B", "an anonymous union", "E1312");
+        assertInputRefused("Map<Int, Int>", "a map an object cannot be keyed by", "E1314");
 
-        // and what the checker does admit, `run` drives — the collections over the five key kinds,
-        // which DecoderPathAgreementTest and EncoderPathAgreementTest hold row by row
-        Path file = write("admitted.sou", """
+        Path file = write("indrives.sou", """
                 data UserId = String
                 data Out = { n: Int }
                 behavior f : (byUser: Map<UserId, Int>) -> Out constructs Out
@@ -439,10 +437,36 @@ class RunnerTest {
         assertEquals("{\"n\":1}", Runner.run(file, "f", "{\"u1\": 1}"));
     }
 
-    /** That a parameter of this type never reaches {@code run}: the compile refuses it, naming the
-     *  code that owns the rule. */
-    private void assertRefusedByTheChecker(String type, String what, String code) throws Exception {
-        Path file = write("refused" + Math.abs(type.hashCode()) + ".sou", """
+    /**
+     * The same of an output type, which is a separate claim and asked separately: the encoder is
+     * composed from the behavior's return type, and what may be returned is a shorter list than what
+     * may be taken — an anonymous union is a parameter the checker refuses and an output it admits.
+     */
+    @Test
+    void anOutputTypeTheRunnerCannotEncodeIsRefusedBeforeItIsAsked() throws Exception {
+        assertOutputRefused("(Int, Int)", "(1, 2)", "a tuple", "E1311");
+        assertOutputRefused("Int?", "1", "an optional", "E1402");
+        assertOutputRefused("Map<Int, Int>", "Map.fromList([ (1, 2) ])",
+                "a map an object cannot be keyed by", "E1314");
+
+        Path file = write("outdrives.sou", """
+                data UserId = String
+                data A = { a: Int }
+                data B = { b: Int }
+                behavior f : (n: Int) -> Map<UserId, Int> constructs UserId
+                let f (n) = Map.fromList([ (UserId("u1"), n) ])
+                behavior g : (n: Int) -> A | B constructs A
+                let g (n) = A { a = n }
+                """);
+        assertEquals("{\"u1\":1}", Runner.run(file, "f", "1"));
+        // the union's own encoder writes the case, so the answer carries the discriminator
+        assertEquals("{\"a\":1,\"type\":\"A\"}", Runner.run(file, "g", "1"));
+    }
+
+    /** That a parameter of this type never reaches the runner's decoder: the compile refuses it,
+     *  naming the code that owns the rule. */
+    private void assertInputRefused(String type, String what, String code) throws Exception {
+        Path file = write("inref" + Math.abs(type.hashCode()) + ".sou", """
                 data A = { a: Int }
                 data B = { b: Int }
                 data Out = { n: Int }
@@ -450,7 +474,21 @@ class RunnerTest {
                 let f (v) = Out { n = 1 }
                 """.formatted(type));
         RuntimeException e = assertThrows(RuntimeException.class,
-                () -> Runner.run(file, "f", "1"), what + " is refused before run sees it");
+                () -> Runner.run(file, "f", "1"), what + " is refused before run decodes");
+        assertTrue(e.getMessage().contains(code), what + ": " + e.getMessage());
+    }
+
+    /** That an output of this type never reaches the runner's encoder. */
+    private void assertOutputRefused(String type, String body, String what, String code)
+            throws Exception {
+        Path file = write("outref" + Math.abs(type.hashCode()) + ".sou", """
+                data A = { a: Int }
+                data B = { b: Int }
+                behavior f : (n: Int) -> %s
+                let f (n) = %s
+                """.formatted(type, body));
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> Runner.run(file, "f", "1"), what + " is refused before run encodes");
         assertTrue(e.getMessage().contains(code), what + ": " + e.getMessage());
     }
 

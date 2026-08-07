@@ -545,21 +545,38 @@ public final class Runner {
      * settled, so a map with two bad keys says so about both. A {@code String} key is rekeyed like
      * any other: the keys of a decoded object do not pass the string leaf, so leaving them alone is
      * the one place a boundary would hand over text it had not made canonical.
+     *
+     * <p>Two keys that decode to one key are refused rather than collapsed. Making a key canonical
+     * is what lets an object arrive with the same key written twice, and a map holding one entry
+     * where the input wrote two is a value the input never described — so the second is a failure at
+     * its own key, not the winner of an overwrite.
      */
     private static Result<Map<Object, Object>> rekey(Decoder<Object, ?> key, Map<String, ?> entries,
                                                      net.unit8.raoh.Path path) {
         Map<Object, Object> out = new java.util.LinkedHashMap<>();
         Issues issues = Issues.EMPTY;
         for (Map.Entry<String, ?> entry : entries.entrySet()) {
-            Result<?> decoded = key.decode(entry.getKey(), path.append(entry.getKey()));
+            net.unit8.raoh.Path at = path.append(entry.getKey());
+            Result<?> decoded = key.decode(entry.getKey(), at);
             if (decoded instanceof Err<?> err) {
                 issues = issues.merge(err.issues());
+                continue;
+            }
+            Object rekeyed = ((Ok<?>) decoded).value();
+            if (out.containsKey(rekeyed)) {
+                issues = issues.merge(((Err<?>) Result.fail(at, DUPLICATE_KEY, DUPLICATE_KEY_MESSAGE))
+                        .issues());
             } else {
-                out.put(((Ok<?>) decoded).value(), entry.getValue());
+                out.put(rekeyed, entry.getValue());
             }
         }
         return issues.isEmpty() ? new Ok<>(out) : new Err<>(issues);
     }
+
+    /** What a key colliding with one already read is reported as — the code and the wording the
+     *  generated rekey helper uses, so the two paths refuse the same input the same way. */
+    private static final String DUPLICATE_KEY = "duplicate_key";
+    private static final String DUPLICATE_KEY_MESSAGE = "two keys are the same key once decoded";
 
     /** The named static decoder factory of a generated class — {@code jsonDecoder} for a value read
      *  from JSON, {@code decoder} for a map key, which is read from the string the object carried.

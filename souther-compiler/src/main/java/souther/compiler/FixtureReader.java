@@ -18,6 +18,7 @@ import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
+import net.unit8.raoh.decode.builtin.StringDecoder;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
@@ -1034,33 +1035,65 @@ public final class FixtureReader {
                     .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
         }
         if (type instanceof Type.MapOf map) {
-            Decoder<Object, ?> values = ObjectDecoders.map(decoderFor(map.value()));
-            return map.key() instanceof Type.Ref key ? rekeyed(values, key) : values;
+            return rekeyed(ObjectDecoders.map(decoderFor(map.value())), map.key());
         }
         throw new FixtureException("`" + Type.show(type) + "` is not supported as an example value yet");
     }
 
     /**
-     * A map whose keys are a newtype ({@code Map<商品ID, Int>}, ADR-0040): the values decode first, as
-     * the derived decoder does, then each key is built through its own type — so the key's invariant
-     * runs and a fixture that breaks it is reported instead of reaching the behavior as a bare string.
+     * A map's keys, built through the key type after the values decode — so the key's invariant runs
+     * and a fixture that breaks it is reported instead of reaching the behavior as a bare string.
      * Every key is tried and its failures merged, as the derived decoder's rekey helper does, so a
-     * fixture with two bad keys names both rather than stopping at the first.
+     * fixture with two bad keys names both rather than stopping at the first, and two keys that are
+     * one key once built are refused rather than collapsed.
+     *
+     * <p>Every key kind is rekeyed, not the named ones alone. A map that crosses may also be keyed by
+     * a temporal or by a plain {@code String}, and a key left as the text the decoded map carried is
+     * a key the behavior cannot look up by the type it was declared with.
      */
-    private Decoder<Object, ?> rekeyed(Decoder<Object, ?> values, Type.Ref key) {
-        Decoder<Object, ?> keyDecoder = decoderFor(key);
+    private Decoder<Object, ?> rekeyed(Decoder<Object, ?> values, Type key) {
+        Decoder<Object, ?> keyDecoder = keyDecoderFor(key);
         return values.flatMapWithPath((decoded, path) -> {
             Map<Object, Object> out = new LinkedHashMap<>();
             Issues issues = Issues.EMPTY;
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) decoded).entrySet()) {
-                Result<?> k = keyDecoder.decode(entry.getKey(), path.append(String.valueOf(entry.getKey())));
+                net.unit8.raoh.Path at = path.append(String.valueOf(entry.getKey()));
+                Result<?> k = keyDecoder.decode(entry.getKey(), at);
                 switch (k) {
-                    case Ok<?>(var decodedKey) -> out.put(decodedKey, entry.getValue());
+                    case Ok<?>(var decodedKey) -> {
+                        if (out.containsKey(decodedKey)) {
+                            issues = issues.merge(((Err<?>) Result.fail(at, "duplicate_key",
+                                    "two keys are the same key once decoded")).issues());
+                        } else {
+                            out.put(decodedKey, entry.getValue());
+                        }
+                    }
                     case Err<?>(var found) -> issues = issues.merge(found);
                 }
             }
             return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
         });
+    }
+
+    /** The decoder for one boundary map key, over the text the decoded map carried. A named key runs
+     *  its own decoder; the three primitives a key may be are the string leaf, parsed for a temporal.
+     *  This is not {@link #decoderFor}: there a {@code Date} is handed over already parsed, and in key
+     *  position it is the text that arrives. */
+    private Decoder<Object, ?> keyDecoderFor(Type key) {
+        if (key instanceof Type.Ref ref) {
+            return decoderFor(ref);
+        }
+        StringDecoder<Object> text = ObjectDecoders.string().normalize();
+        if (key == Type.STRING) {
+            return text;
+        }
+        if (key == Type.DATE) {
+            return text.date();
+        }
+        if (key == Type.DATETIME) {
+            return text.dateTime();
+        }
+        throw new FixtureException("`" + Type.show(key) + "` cannot key a Map that crosses");
     }
 
     /** One decoded input, in the form the compiler owns. Never throws: a value that cannot be read is

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,7 +56,7 @@ class DecoderPathAgreementTest {
 
     @Test
     void aStringKeyedMapIsReadByAllThree() throws Exception {
-        acceptedEverywhere("Map<String, Int>", Map.of("a", 1L), "{\"a\": 1}", 1L);
+        acceptedEverywhere("Map<String, Int>", Map.of("a", 7L), "{\"a\": 7}", 7L);
     }
 
     /**
@@ -88,23 +89,23 @@ class DecoderPathAgreementTest {
      */
     @Test
     void aNewtypeKeyedMapIsReadByAllThree() throws Exception {
-        acceptedEverywhere("Map<Key, Int>", Map.of("a", 1L), "{\"a\": 1}", 1L);
+        acceptedEverywhere("Map<Key, Int>", Map.of("a", 7L), "{\"a\": 7}", 7L);
     }
 
     @Test
     void aDateKeyedMapIsReadByAllThree() throws Exception {
-        acceptedEverywhere("Map<Date, Int>", Map.of("2026-01-01", 1L), "{\"2026-01-01\": 1}", 1L);
+        acceptedEverywhere("Map<Date, Int>", Map.of("2026-01-01", 7L), "{\"2026-01-01\": 7}", 7L);
     }
 
     @Test
     void aDateTimeKeyedMapIsReadByAllThree() throws Exception {
-        acceptedEverywhere("Map<DateTime, Int>", Map.of("2026-01-01T09:00", 1L),
-                "{\"2026-01-01T09:00\": 1}", 1L);
+        acceptedEverywhere("Map<DateTime, Int>", Map.of("2026-01-01T09:00", 7L),
+                "{\"2026-01-01T09:00\": 7}", 7L);
     }
 
     @Test
     void anEnumerationKeyedMapIsReadByAllThree() throws Exception {
-        acceptedEverywhere("Map<Outcome, Int>", Map.of("Won", 1L), "{\"Won\": 1}", 1L);
+        acceptedEverywhere("Map<Outcome, Int>", Map.of("Won", 7L), "{\"Won\": 7}", 1L);
     }
 
     /**
@@ -127,6 +128,31 @@ class DecoderPathAgreementTest {
                 "the key the module looks up is the key the input carried");
     }
 
+    /**
+     * Two keys that are one key once decoded are refused, by the derived codec and by {@code run}
+     * alike. Making a key canonical is what brings the two together, so it is also what lets an
+     * object carrying both spellings arrive with a key written twice — and a map holding one entry
+     * where the input wrote two is a value the input never described. Refusing where they agree is
+     * as much of the contract as reading where they agree.
+     *
+     * <p>The fixture builder is not asked. A fixture is a list of pairs, and which of two equal keys
+     * a list keeps is `Map.fromList`'s question rather than a boundary's.
+     */
+    @Test
+    void twoKeysThatAreOneKeyOnceDecodedAreRefusedByBoth() throws Exception {
+        String composed = "\u304c";
+        String decomposed = "\u304b\u3099";
+        java.util.Map<String, Object> both = new java.util.LinkedHashMap<>();
+        both.put(composed, 1L);
+        both.put(decomposed, 2L);
+        assertFalse(boundaryReads("Map<String, Int>", both), "the derived codec refuses it");
+
+        Runner.RunException refused = assertThrows(Runner.RunException.class,
+                () -> runReads("Map<String, Int>",
+                        "{\"" + composed + "\": 1, \"" + decomposed + "\": 2}"));
+        assertTrue(refused.getMessage().contains("same key once decoded"), refused.getMessage());
+    }
+
     /** A key the key type refuses is refused at that key's own path, and every key is read before
      *  the map is given up on, so a map with two bad keys is answered about both at once. */
     @Test
@@ -139,11 +165,11 @@ class DecoderPathAgreementTest {
 
     // === the three paths ===
 
-    private void acceptedEverywhere(String type, Object neutral, String runJson, Object size)
+    private void acceptedEverywhere(String type, Object neutral, String runJson, Object answer)
             throws Exception {
         assertTrue(boundaryReads(type, neutral), "the derived codec reads " + type);
-        assertTrue(fixtureReads(type, fixtureOf(type), size), "a fixture writes " + type);
-        assertEquals(String.valueOf(size), runReads(type, runJson).trim(), "run reads " + type);
+        assertTrue(fixtureReads(type, fixtureOf(type), answer), "a fixture writes " + type);
+        assertEquals(String.valueOf(answer), runReads(type, runJson).trim(), "run reads " + type);
     }
 
     private static String fixtureOf(String type) {
@@ -151,14 +177,14 @@ class DecoderPathAgreementTest {
             case "Int" -> "3";
             case "Wrapped" -> "Wrapped(3)";
             case "List<Int>" -> "[ 1, 2 ]";
-            case "Map<String, Int>" -> "[ (\"a\", 1) ]";
+            case "Map<String, Int>" -> "[ (\"a\", 7) ]";
             case "Date" -> "Date(\"2026-01-31\")";
             case "DateTime" -> "DateTime(\"2026-01-31T09:00\")";
             case "List<Date>" -> "[ Date(\"2026-01-01\") ]";
-            case "Map<Key, Int>" -> "[ (Key(\"a\"), 1) ]";
-            case "Map<Date, Int>" -> "[ (Date(\"2026-01-01\"), 1) ]";
-            case "Map<DateTime, Int>" -> "[ (DateTime(\"2026-01-01T09:00\"), 1) ]";
-            case "Map<Outcome, Int>" -> "[ (Won, 1) ]";
+            case "Map<Key, Int>" -> "[ (Key(\"a\"), 7) ]";
+            case "Map<Date, Int>" -> "[ (Date(\"2026-01-01\"), 7) ]";
+            case "Map<DateTime, Int>" -> "[ (DateTime(\"2026-01-01T09:00\"), 7) ]";
+            case "Map<Outcome, Int>" -> "[ (Won, 7) ]";
             default -> throw new IllegalArgumentException(type);
         };
     }
@@ -191,11 +217,11 @@ class DecoderPathAgreementTest {
                 module demo
                 %s
                 data Out = { n: Int }
-                behavior take : (v: %s) -> Out constructs Out
+                behavior take : (v: %s) -> Out constructs Out%s
                 let take (v) = Out { n = %s }
                 example take
                   | "reads it" : (%s) -> Out { n = %s }
-                """.formatted(DECLS, type, sizeExprFor(type), fixture, expected));
+                """.formatted(DECLS, type, constructsIn(type), probeFor(type), fixture, expected));
         return true;
     }
 
@@ -205,16 +231,29 @@ class DecoderPathAgreementTest {
         Files.writeString(file, """
                 module demo
                 %s
-                behavior take : (v: %s) -> Int
+                behavior take : (v: %s) -> Int%s
                 let take (v) = %s
-                """.formatted(DECLS, type, sizeExprFor(type)));
+                """.formatted(DECLS, type, constructsIn(type).replace(", ", " constructs "),
+                        probeFor(type)));
         return Runner.run(file, "take", json);
     }
 
-    /** An expression reducing a value of that type to the Int the three paths compare. */
-    private static String sizeExprFor(String type) {
+    /**
+     * An expression reducing a value of that type to the Int the three paths compare.
+     *
+     * <p>A map is read by looking its key up, written as the key type — never by counting its
+     * entries. Erasure is what makes the difference: a reader that hands the behavior the strings
+     * the object carried, having never turned them into keys, still answers a count, and only a
+     * lookup written in the key type misses.
+     */
+    private static String probeFor(String type) {
+        if (type.equals("Map<Outcome, Int>")) {
+            // a case value written in an argument position types as the case, not as the sum, so
+            // this row reads the keys it was given rather than looking one up
+            return "List.length(List.filter((k) -> k == Won, Map.keys(v)))";
+        }
         if (type.startsWith("Map<")) {
-            return "Map.size(v)";
+            return "Option.withDefault(0, Map.get(" + keyIn(type) + ", v))";
         }
         if (type.startsWith("List<")) {
             return "List.length(v)";
@@ -225,5 +264,29 @@ class DecoderPathAgreementTest {
             case "DateTime" -> "Date.day(DateTime.toDate(v))";
             default -> "v";
         };
+    }
+
+    /** The key the row's map holds, written as a value of the key type. */
+    private static String keyIn(String mapType) {
+        return switch (mapType) {
+            case "Map<String, Int>" -> "\"a\"";
+            case "Map<Key, Int>" -> "Key(\"a\")";
+            case "Map<Date, Int>" -> "Date(\"2026-01-01\")";
+            case "Map<DateTime, Int>" -> "DateTime(\"2026-01-01T09:00\")";
+            case "Map<Bounded, Int>" -> "Bounded(\"abc\")";
+            default -> throw new IllegalArgumentException(mapType);
+        };
+    }
+
+    /** What the probe builds, for the `constructs` the behavior running it needs. A temporal is
+     *  written with a primitive's constructor, which is nobody's to declare. */
+    private static String constructsIn(String type) {
+        if (type.contains("Key")) {
+            return ", Key";
+        }
+        if (type.contains("Bounded")) {
+            return ", Bounded";
+        }
+        return type.contains("Outcome") ? ", Won" : "";
     }
 }
