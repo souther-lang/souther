@@ -74,7 +74,7 @@ final class HelperParams {
             recursiveHelperFns = Map.of();
         }
         Map<String, Ast.FnDef> settled = new LinkedHashMap<>();
-        for (Ast.FnDef h : inliner.helpers().values()) {
+        for (Ast.FnDef h : inliner.emits().values()) {
             if (recursive.contains(h.name())) {
                 continue;   // a recursive helper is not inlined and declares its parameters (spec 13.1)
             }
@@ -86,12 +86,21 @@ final class HelperParams {
         if (settled.isEmpty()) {
             return m;
         }
-        List<Ast.FnDef> fns = new ArrayList<>();
-        for (Ast.FnDef fn : m.fns()) {
-            fns.add(settled.getOrDefault(fn.name(), fn));
-        }
+        // Both, and each back where it was. A helper the module took on to emit has parameters to
+        // settle like any other, and one written back into the wrong component would be a
+        // declaration this module never wrote.
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), m.defs(),
-                m.behaviors(), fns, m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+                m.behaviors(), written(m.fns(), settled), written(m.takenOn(), settled),
+                m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+    }
+
+    /** {@code fns} with each one that {@code settled} answered for replaced by what it settled to. */
+    private static List<Ast.FnDef> written(List<Ast.FnDef> fns, Map<String, Ast.FnDef> settled) {
+        List<Ast.FnDef> out = new ArrayList<>();
+        for (Ast.FnDef fn : fns) {
+            out.add(settled.getOrDefault(fn.name(), fn));
+        }
+        return out;
     }
 
     /**
@@ -105,13 +114,15 @@ final class HelperParams {
         for (Ast.BehaviorDef b : m.behaviors()) {
             behaviors.add(b.name());
         }
-        for (Ast.FnDef fn : m.fns()) {
-            if (behaviors.contains(fn.name())) {
-                continue;
-            }
-            for (Ast.FnParam p : fn.params()) {
-                if (p.type() == null) {
-                    return true;
+        for (List<Ast.FnDef> fns : List.of(m.fns(), m.takenOn())) {
+            for (Ast.FnDef fn : fns) {
+                if (behaviors.contains(fn.name())) {
+                    continue;
+                }
+                for (Ast.FnParam p : fn.params()) {
+                    if (p.type() == null) {
+                        return true;
+                    }
                 }
             }
         }

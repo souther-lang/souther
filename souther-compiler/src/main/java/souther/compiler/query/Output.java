@@ -956,7 +956,8 @@ public final class Output {
                 }
             }
             return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), m.defs(),
-                    m.behaviors(), m.fns(), mine, m.fakes(), m.exampleFileTarget(), m.pos());
+                    m.behaviors(), m.fns(), m.takenOn(), mine, m.fakes(), m.exampleFileTarget(),
+                    m.pos());
         }
     }
 }

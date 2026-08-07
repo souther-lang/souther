@@ -213,6 +213,23 @@ public interface Ast {
      * written in the {@code exposing} list ({@code exposing ( name : A | B )}, spec 14.5). An exposed
      * {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
      * exposed names carry no signature (their type is at the definition).
+     *
+     * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
+     * what the module emits as methods of its own without having declared them: a recursive helper it
+     * reaches, whether the standard library declares it or another module published it, has to be
+     * lowered to a method somewhere and the module compiling is where it goes. Both are emitted; only
+     * the first is declared here, and no rule reads a name to tell them apart — {@code List.foldFrom}
+     * is reached under the library's alias and declared in {@code souther.list}.
+     *
+     * <p>Two components rather than one list a later pass appends to. Appended, every reader asking
+     * what the module declared got what it declared before {@link
+     * souther.compiler.query.Shapes.Prepared} and that plus these after — the {@code exposing} check,
+     * the value namespace a body is resolved against, and what the module publishes among them.
+     *
+     * <p>Whoever rebuilds a module carries {@code takenOn} across, and there is no constructor that
+     * defaults it: a rebuild that quietly dropped it would put a module through codegen with the
+     * methods its bodies call missing, which is the failure this separation is here to make
+     * impossible.
      */
     record Module(String name,
                   List<String> exposing,
@@ -221,6 +238,7 @@ public interface Ast {
                   List<Def> defs,
                   List<BehaviorDef> behaviors,
                   List<FnDef> fns,
+                  List<FnDef> takenOn,
                   List<Example> examples,
                   List<Fake> fakes,
                   String exampleFileTarget,

@@ -135,8 +135,8 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
             return module;
         }
         return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(), needed,
-                module.defs(), module.behaviors(), module.fns(), module.examples(), module.fakes(),
-                module.exampleFileTarget(), module.pos());
+                module.defs(), module.behaviors(), module.fns(), module.takenOn(),
+                module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
     /**

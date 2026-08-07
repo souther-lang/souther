@@ -276,7 +276,8 @@ public final class Resolve {
         }
         return new Resolved(
                 new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
-                        behaviors, fns, examples, fakes, m.exampleFileTarget(), m.pos()),
+                        behaviors, fns, m.takenOn(), examples, fakes, m.exampleFileTarget(),
+                        m.pos()),
                 List.copyOf(r.denotations), List.copyOf(r.values0), List.copyOf(r.unresolved),
                 Map.copyOf(r.binders));
     }

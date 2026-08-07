@@ -138,8 +138,8 @@ public final class Names {
                 }
             }
             Ast.Module bound = new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(),
-                    binding.imports(), m.defs(), behaviors, m.fns(), m.examples(), m.fakes(),
-                    m.exampleFileTarget(), m.pos());
+                    binding.imports(), m.defs(), behaviors, m.fns(), m.takenOn(), m.examples(),
+                    m.fakes(), m.exampleFileTarget(), m.pos());
             return Answer.of(bound, binding.reports());
         }
     }

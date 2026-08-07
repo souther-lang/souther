@@ -61,8 +61,12 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         return HelperInliner.helpersOf(m).get("spin");
     }
 
-    private static void check(String module, Map<String, Ast.FnDef> fns) {
-        HelperTable table = HelperTable.of(module, fns, Map.of(), InliningPolicy.FULL);
+    /** The totality check over a module that declared {@code declared} and took {@code takenOn} on to
+     * emit. Both are walked; only the first is this module's to prove. */
+    private static void check(String module, Map<String, Ast.FnDef> declared,
+                              Map<String, Ast.FnDef> takenOn) {
+        HelperTable table =
+                HelperTable.of(module, declared, takenOn, Map.of(), InliningPolicy.FULL);
         TotalityChecker.check(HelperInliner.over(table, HelperGraph.of(table)));
     }
 
@@ -82,7 +86,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         assertEquals("maths", closed.declaredIn());
 
         CompileException refused = assertThrows(CompileException.class,
-                () -> check("maths", Map.of(closed.name(), closed)));
+                () -> check("maths", Map.of(closed.name(), closed), Map.of()));
         assertEquals("E2001", refused.code());
     }
 
@@ -101,7 +105,7 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         assertEquals("spin", foreign.name());
         assertEquals("maths", foreign.declaredIn());
 
-        assertDoesNotThrow(() -> check("order", Map.of(foreign.name(), foreign)));
+        assertDoesNotThrow(() -> check("order", Map.of(), Map.of(foreign.name(), foreign)));
     }
 
     /**
@@ -136,10 +140,11 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
                 let throughWrapped (n: Int) : Int = wrapped(n)
                 let straightToSpin (n: Int) : Int = spin(n)
                 """, Map.of("wrapped", "maths", "spin", "maths"));
-        Map<String, Ast.FnDef> fns = new LinkedHashMap<>(HelperInliner.helpersOf(order));
-        fns.put(spin.name(), spin);
-        fns.put(wrapped.name(), wrapped);
-        HelperTable table = HelperTable.of("order", fns, Map.of(), InliningPolicy.FULL);
+        Map<String, Ast.FnDef> takenOn = new LinkedHashMap<>();
+        takenOn.put(spin.name(), spin);
+        takenOn.put(wrapped.name(), wrapped);
+        HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
+                Map.of(), InliningPolicy.FULL);
         PartialReachability reachability =
                 PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
 
@@ -191,10 +196,11 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
 
                 let ownWork (n: Int) : Int = n + 1
                 """);
-        Map<String, Ast.FnDef> fns = new LinkedHashMap<>(HelperInliner.helpersOf(order));
-        fns.put(spin.name(), spin);
-        fns.put(hands.name(), hands);
-        HelperTable table = HelperTable.of("order", fns, Map.of(), InliningPolicy.FULL);
+        Map<String, Ast.FnDef> takenOn = new LinkedHashMap<>();
+        takenOn.put(spin.name(), spin);
+        takenOn.put(hands.name(), hands);
+        HelperTable table = HelperTable.of("order", HelperInliner.helpersOf(order), takenOn,
+                Map.of(), InliningPolicy.FULL);
         PartialReachability reachability =
                 PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
 

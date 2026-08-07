@@ -525,7 +525,10 @@ public final class Bodies {
                 return Answer.absent();
             }
             Map<String, Ast.FnDef> helpers = new LinkedHashMap<>(imported.value());
+            // What this module has, both components of it: a body may name a helper it took on to
+            // emit exactly as it names one it declared, and a row may apply either.
             helpers.putAll(HelperInliner.helpersOf(settled.value()));
+            helpers.putAll(HelperInliner.takenOnBy(settled.value()));
             return Answer.of(helpers);
         }
     }
@@ -792,9 +795,14 @@ public final class Bodies {
             if (!settled.present()) {
                 return Answer.absent();
             }
-            for (Ast.FnDef candidate : settled.value().fns()) {
-                if (candidate.name().equals(fn)) {
-                    return Answer.of(candidate);
+            // Either component: a body is asked for by name, and a helper the module took on to emit
+            // has one to expand exactly as one it declared does.
+            for (List<Ast.FnDef> component : List.of(
+                    settled.value().fns(), settled.value().takenOn())) {
+                for (Ast.FnDef candidate : component) {
+                    if (candidate.name().equals(fn)) {
+                        return Answer.of(candidate);
+                    }
                 }
             }
             return Answer.absent();
@@ -883,32 +891,42 @@ public final class Bodies {
                 return Answer.absent();
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
+            // A name is one question, so a name written twice is asked once and answered by the
+            // first. The check reports the duplicate and this module is not emitted; what it must
+            // not do is carry the same body twice. Shared across both components because a module
+            // that took on a helper it also declares would otherwise emit two of it.
             Set<String> taken = new LinkedHashSet<>();
-            List<Ast.FnDef> fns = new ArrayList<>();
-            for (Ast.FnDef fn : settled.value().fns()) {
-                // A non-recursive helper is fully inlined at its call sites and never emitted — it has
-                // no body of its own down here, so nothing asks for one. Unless an example row applies
-                // it (ADR-0077): a row runs a helper rather than expanding it, so that one is emitted.
-                if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())
-                        && !examples.value().contains(fn.name())) {
-                    continue;
+            List<List<Ast.FnDef>> lowered = new ArrayList<>();
+            // Both, and each stays where it was: what becomes a method is one question and what this
+            // module declared is another, and the backend reads the first while every rule about the
+            // declaring module reads the second.
+            for (List<Ast.FnDef> component : List.of(
+                    settled.value().fns(), settled.value().takenOn())) {
+                List<Ast.FnDef> fns = new ArrayList<>();
+                for (Ast.FnDef fn : component) {
+                    // A non-recursive helper is fully inlined at its call sites and never emitted —
+                    // it has no body of its own down here, so nothing asks for one. Unless an example
+                    // row applies it (ADR-0077): a row runs a helper rather than expanding it, so
+                    // that one is emitted.
+                    if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())
+                            && !examples.value().contains(fn.name())) {
+                        continue;
+                    }
+                    if (!taken.add(fn.name())) {
+                        continue;
+                    }
+                    Answer<Ast.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
+                    if (!body.present()) {
+                        // Why is the body's to say, and it said it. A module with a body that does
+                        // not expand has none to emit.
+                        return Answer.absent();
+                    }
+                    fns.add(body.value());
                 }
-                // A name is one question, so a name written twice is asked once and answered by the
-                // first. The check reports the duplicate and this module is not emitted; what it must
-                // not do is carry the same body twice.
-                if (!taken.add(fn.name())) {
-                    continue;
-                }
-                Answer<Ast.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
-                if (!body.present()) {
-                    // Why is the body's to say, and it said it. A module with a body that does not
-                    // expand has none to emit.
-                    return Answer.absent();
-                }
-                fns.add(body.value());
+                lowered.add(fns);
             }
             return Answer.of(new Lower.Lowered(settled.value(),
-                    Lower.lowered(settled.value(), fns)));
+                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1))));
         }
     }
 

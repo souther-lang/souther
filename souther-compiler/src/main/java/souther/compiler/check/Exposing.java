@@ -131,7 +131,7 @@ public final class Exposing {
             return module;
         }
         return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                kept, module.defs(), module.behaviors(), module.fns(),
+                kept, module.defs(), module.behaviors(), module.fns(), module.takenOn(),
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 

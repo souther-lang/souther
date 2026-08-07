@@ -90,8 +90,13 @@ final class JvmLimits {
                 }
             }
         }
+        // What a class is written for, which is both components: the limit is the JVM's and does not
+        // ask who declared the fn.
         Set<String> implemented = new HashSet<>();
         for (Ast.FnDef fn : module.fns()) {
+            implemented.add(fn.name());
+        }
+        for (Ast.FnDef fn : module.takenOn()) {
             implemented.add(fn.name());
         }
         for (Ast.BehaviorDef bd : module.behaviors()) {

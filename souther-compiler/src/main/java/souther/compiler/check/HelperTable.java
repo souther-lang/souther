@@ -21,17 +21,24 @@ import java.util.Map;
  * it is reached by here. A qualified call resolves to whichever of the two declared it, a bare call
  * to the module's own — the standard library has no bare names (spec §stdlib).
  *
- * <p>{@link #fns} keeps the order the module wrote its helpers in, and that is load-bearing: the
+ * <p>Three questions are asked of what is here, and each has a surface of its own, so a caller
+ * cannot ask one and be answered by another:
+ *
+ * <ul>
+ *   <li>{@link #reached} — which declaration a call expands to. A call edge, asked with a reach name.
+ *   <li>{@link #declarations} — what this module's source wrote. Declarations, keyed by the names it
+ *       declared them under.
+ *   <li>{@link #emits} — what becomes a method of this module: what it declared, and what it took on
+ *       to emit because it reaches a recursive helper it did not write.
+ * </ul>
+ *
+ * <p>{@link #emits} keeps the order the module wrote its helpers in, and that is load-bearing: the
  * checks walk it and stop at the first helper they find wrong, so the order decides which one the
  * author is told about. An author reads their file from the top.
  *
- * <p>What is in {@link #fns} is what the module <em>has as a fn</em>, which is not the same as what
- * it declared. A module emits the recursive helpers it reaches as its own methods, so from
- * {@code Shapes.Prepared} on, a prelude {@code List.foldFrom} and a helper another module published
- * sit there beside the module's own {@code let}s. Nothing here answers which module declared one:
- * the declaration answers that ({@link Ast.FnDef#declaredBy}), because the name it is reached by
- * cannot — {@code List.foldFrom} is reached under the library's alias and declared in
- * {@code souther.list}.
+ * <p>Nothing here answers which module declared a taken-on helper: the declaration answers that
+ * ({@link Ast.FnDef#declaredBy}), because the name it is reached by cannot — {@code List.foldFrom}
+ * is reached under the library's alias and declared in {@code souther.list}.
  *
  * <p>What is in the table depends on {@link InliningPolicy}, which is what an expanded tree is a
  * representation <em>of</em>. Two policies are two tables and not one table read two ways.
@@ -41,27 +48,37 @@ public final class HelperTable {
     private final String module;
     private final InliningPolicy policy;
     private final Map<String, Ast.FnDef> reached;
-    private final Map<String, Ast.FnDef> own;
+    private final Map<String, Ast.FnDef> declared;
+    private final Map<String, Ast.FnDef> emits;
 
-    private HelperTable(String module, InliningPolicy policy,
-                        Map<String, Ast.FnDef> reached, Map<String, Ast.FnDef> own) {
+    private HelperTable(String module, InliningPolicy policy, Map<String, Ast.FnDef> reached,
+                        Map<String, Ast.FnDef> declared, Map<String, Ast.FnDef> emits) {
         this.module = module;
         this.policy = policy;
         this.reached = reached;
-        this.own = own;
+        this.declared = declared;
+        this.emits = emits;
     }
 
     /**
-     * The table a body of {@code module} is expanded against: what it declares itself, what the
-     * modules it imports publish to it, and — under {@link InliningPolicy#FULL} — the standard
-     * library underneath both.
+     * The table a body of {@code module} is expanded against, built from the three sources apart:
+     * what the module declared, what it took on to emit, what the modules it imports publish to it —
+     * and, under {@link InliningPolicy#FULL}, the standard library underneath all three.
+     *
+     * <p>Apart, because what a name reaches and what this module holds are two relations and one of
+     * them cannot be recovered from the other. Handed a single joined map, a table answered that the
+     * module has every published definition as a fn of its own, and the caller that held the three
+     * apart answered that it has none of them.
      */
-    public static HelperTable of(String module, Map<String, Ast.FnDef> own,
+    public static HelperTable of(String module, Map<String, Ast.FnDef> declared,
+                                 Map<String, Ast.FnDef> takenOn,
                                  Map<String, Ast.FnDef> imported, InliningPolicy policy) {
         // In the order they are written, so a module with two helpers to complain about complains
         // about the earlier one first.
+        Map<String, Ast.FnDef> emits = new LinkedHashMap<>(declared);
+        emits.putAll(takenOn);
         Map<String, Ast.FnDef> joined = new LinkedHashMap<>(imported);
-        joined.putAll(own);
+        joined.putAll(emits);
         Map<String, Ast.FnDef> reached;
         if (policy == InliningPolicy.FULL) {
             reached = new LinkedHashMap<>(Prelude.helpers());
@@ -69,13 +86,14 @@ public final class HelperTable {
         } else {
             reached = joined;
         }
-        return new HelperTable(module, policy, reached, new LinkedHashMap<>(own));
+        return new HelperTable(module, policy, reached, new LinkedHashMap<>(declared), emits);
     }
 
-    /** The same, for a module whose own helpers are read off its declarations. */
+    /** The same, reading the two components off the module rather than being handed them. */
     public static HelperTable of(Ast.Module module, Map<String, Ast.FnDef> imported,
                                  InliningPolicy policy) {
-        return of(module.name(), HelperInliner.helpersOf(module), imported, policy);
+        return of(module.name(), HelperInliner.helpersOf(module),
+                HelperInliner.takenOnBy(module), imported, policy);
     }
 
     /**
@@ -95,7 +113,7 @@ public final class HelperTable {
         for (String name : names) {
             any |= narrowed.remove(name) != null;
         }
-        return any ? new HelperTable(module, policy, narrowed, own) : this;
+        return any ? new HelperTable(module, policy, narrowed, declared, emits) : this;
     }
 
     /** The module whose body this expands into. */
@@ -123,16 +141,19 @@ public final class HelperTable {
         return Collections.unmodifiableMap(reached);
     }
 
-    /** The module's helpers, in the order it wrote them — what it declared, and what it took on as
-     * its own fns to emit. Which of the two one is, the declaration says. */
-    public Map<String, Ast.FnDef> fns() {
-        return Collections.unmodifiableMap(own);
+    /** What this module's source wrote, in the order it wrote it. A helper the module only took on to
+     * emit is not among these, however it is reached — and which of the two one is, the declaration
+     * says ({@link Ast.FnDef#declaredBy}); a rule about the declaring module asks it there rather
+     * than reading which component a fn arrived in. */
+    public Map<String, Ast.FnDef> declarations() {
+        return Collections.unmodifiableMap(declared);
     }
 
-    /** Whether the module has {@code name} as a fn of its own — one it declared, or one it took on
-     * to emit. Not whether it declared it: for that, ask the declaration. */
-    public boolean holds(String name) {
-        return own.containsKey(name);
+    /** What becomes a method of this module, in the order it wrote its own: what it declared, and
+     * what it took on to emit. Which of the two one is, the declaration says
+     * ({@link Ast.FnDef#declaredBy}). */
+    public Map<String, Ast.FnDef> emits() {
+        return Collections.unmodifiableMap(emits);
     }
 
     /**
@@ -146,12 +167,13 @@ public final class HelperTable {
     public boolean equals(Object other) {
         return other instanceof HelperTable t
                 && module.equals(t.module) && policy == t.policy
-                && reached.equals(t.reached) && own.equals(t.own);
+                && reached.equals(t.reached) && declared.equals(t.declared)
+                && emits.equals(t.emits);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(module, policy, reached, own);
+        return java.util.Objects.hash(module, policy, reached, declared, emits);
     }
 
     @Override

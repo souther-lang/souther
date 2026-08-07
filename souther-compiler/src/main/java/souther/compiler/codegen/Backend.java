@@ -61,6 +61,21 @@ public final class Backend {
     /** The checker's elaborated bodies: what this emits from (issue #81). */
     private final TypeChecker.Checked checked;
 
+    /**
+     * Every fn {@code module} emits a method for: what its source declared, and what it took on to
+     * emit because it reaches a recursive helper it did not write.
+     *
+     * <p>The two are one question down here and two everywhere above. What may be walked, what must
+     * be proven total, what the module publishes — each of those is about the declaring module and
+     * reads the component the fn is in; a class being written is about neither, because a method is a
+     * method.
+     */
+    private static List<Ast.FnDef> emitted(Ast.Module module) {
+        List<Ast.FnDef> all = new ArrayList<>(module.fns());
+        all.addAll(module.takenOn());
+        return all;
+    }
+
     private Backend(CodegenContext ctx, TypeChecker.Checked checked) {
         this.ctx = ctx;
         this.pkg = ctx.pkg;
@@ -174,8 +189,10 @@ public final class Backend {
         for (Ast.BehaviorDef bd : module.behaviors()) {
             behaviorNames.add(bd.name());
         }
+        // Both components: a method is emitted for what the module declared and for what it took on
+        // to emit, and by the time a class is written there is no difference between them.
         Map<String, Ast.FnDef> recHelpers = new LinkedHashMap<>();
-        for (Ast.FnDef fn : module.fns()) {
+        for (Ast.FnDef fn : emitted(module)) {
             if (!behaviorNames.contains(fn.name())) {
                 recHelpers.put(fn.name(), fn);
             }
@@ -273,7 +290,7 @@ public final class Backend {
         // Behavior fn bodies arrive with their helper calls already inlined (the Lower stage,
         // ADR-0021); the backend emits them as-is and never lowers a helper on its own.
         Map<String, Ast.FnDef> fns = new HashMap<>();
-        for (Ast.FnDef fn : module.fns()) {
+        for (Ast.FnDef fn : emitted(module)) {
             fns.put(fn.name(), fn);
         }
         // Injection targets (spec 13.2): a SpecBehavior with no matching fn. Each becomes an
