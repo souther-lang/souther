@@ -571,10 +571,9 @@ public final class SpecChecker {
                 throw CompileException.of(
                         Diagnostic.of(DiagnosticCode.E1313, "check.param.optional")
                                 .at(p.written().region()).args(p.name(), Type.show(opt))
-                                .hint("check.param.optional.hint").build(),
+                                .hint("check.optional.hint").build(),
                         "parameter `" + p.name() + "` carries an optional (" + Type.show(opt)
-                                + "); an input that may be absent is a `?` field of the data that"
-                                + " carries it, or a case the model names");
+                                + "); " + OPTIONAL_ADVICE);
             }
         }
         Type opt = TypeOps.optionalInBoundaryShape(TypeOps.successType(spec.ret(), symbols));
@@ -582,13 +581,19 @@ public final class SpecChecker {
             throw CompileException.of(
                     Diagnostic.of(DiagnosticCode.E1313, "check.output.optional")
                             .at(spec.pos()).args(spec.name(), Type.show(opt))
-                            .hint("check.output.optional.hint").build(),
+                            .hint("check.optional.hint").build(),
                     "the output of `" + spec.name() + "` carries an optional (" + Type.show(opt)
-                            + "); an absence a behavior answers with is a case of the model's own sum,"
-                            + " written `-> A | <the absence>`, or a `?` field of the data that carries"
-                            + " it");
+                            + "); " + OPTIONAL_ADVICE);
         }
     }
+
+    /** What to write instead, said of the optional rather than of the position it was found in: the
+     *  optional a collection carries is not the behavior's own answer, so advice naming the behavior's
+     *  type would be advice about something else. */
+    private static final String OPTIONAL_ADVICE =
+            "a model type has to own the absence where the optional stands — put it on a `?` field of"
+                    + " a data, or name it as a case of a sum, which where the whole output is the"
+                    + " optional is written directly as `-> A | Missing`";
 
     /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
      * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the

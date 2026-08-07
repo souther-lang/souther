@@ -4180,7 +4180,7 @@ Reported at the parameter (<<a-parameter-names-one-type>>). An anonymous union i
 The output of `findMember` carries an optional (`Member?`).
 ----
 
-Reported at the parameter, or at the behavior for its output (<<an-optional-does-not-stand-in-a-boundary>>). Absence at a boundary is part of the model's vocabulary: declare the case it is — `+Member | NotFound+` — so the caller matches on a name rather than unwrapping, or put it on the `+?+` field of the data that carries it, whose own decoder reads it. The message names the optional it found, which is the whole of it when the boundary is written as one and a part of it when a collection carries it.
+Reported at the parameter, or at the behavior for its output (<<an-optional-does-not-stand-in-a-boundary>>). The message names the optional it found, which is the whole of the boundary when it is written as one and a part of it when a collection carries it — so what changes is the position that optional stands in, which is not always the behavior's own type. Absence at a boundary is part of the model's vocabulary: put it on the `+?+` field of the data that carries it, whose own decoder reads it, or name it as a case of a sum so the caller matches on a name rather than unwrapping. Where the whole output is the optional, that sum is written directly — `+-> Member | NotFound+`; a parameter takes a declared name instead, an anonymous union not being a parameter type (<<a-parameter-names-one-type>>).
 
 [#e1314]
 === A Map that crosses the boundary has a key that cannot be written
