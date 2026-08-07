@@ -244,7 +244,7 @@ public final class TypeChecker {
         for (Ast.FnDef fn : module.fns()) {
             if (fns.put(fn.name(), fn) != null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.dup.let").title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.let")
                                 .at(fn.pos()).args(fn.name()).build(),
                         "duplicate `let " + fn.name() + "`");
             }
@@ -466,7 +466,7 @@ public final class TypeChecker {
             }
             if (symbols.containsKey(def.name())) {
                 rejected.add(CompileException.of(
-                        Diagnostic.uncoded("check.dup.data").title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.data")
                                 .at(def.pos()).args(def.name()).build(),
                         "duplicate data `" + def.name() + "`"));
                 continue;

@@ -355,8 +355,7 @@ public final class CallElaborator {
             // allowed rewrites it before the check reads it. Reaching here means it was written
             // somewhere no rewrite covers, so say what it is rather than what it is not.
             case ValueName.OfType named -> CompileException.of(
-                    Diagnostic.uncoded("check.construct.position")
-                            .title("check.construct.position.title")
+                    Diagnostic.of(DiagnosticCode.E1017, "check.construct.position")
                             .at(call.name().region()).args(named.name()).build(),
                     "`" + named.name() + "` is a type, so `" + named.name()
                             + "(...)` constructs one, and a construction cannot be written here");

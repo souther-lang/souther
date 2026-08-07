@@ -512,9 +512,8 @@ public final class Output {
                             + (check.value() instanceof String s ? "\"" + s + "\"" : check.value()) + ")";
                     String clause = failingClause(db, check, ctfe);
                     reports.add(Report.raised(
-                            Diagnostic.uncoded(clause == null
+                            Diagnostic.of(DiagnosticCode.E2010, clause == null
                                             ? "check.const.invariant" : "check.const.invariant.clause")
-                                    .title("check.construct.title")
                                     .at(check.pos()).args(shown, clause).build(),
                             "`" + shown + "` violates its invariant"
                                     + (clause == null ? "." : " `" + clause + "`.")));

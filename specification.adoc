@@ -190,6 +190,13 @@ A Java Binding at the boundary (the Java implementation of a behavior with no im
 
 The extension is `+.sou+`. Each file defines one module.
 
+Two hold of the names inside it:
+
+* [[a-declaration-is-made-once]]a name is declared once in the namespace it is declared in — a `+let+`, a data, a field of one data, an entry of one clause list;
+* [[a-spelling-answers-one-thing-where-a-value-is-written]]a spelling has one answer where a value is written. A data is written as a value — a unit data is one, a newtype is applied to what it wraps — so a `+let+` and a data of one name would be one spelling with two answers.
+
+[[a-binding-does-not-shadow-a-builtin]]A binding MUST NOT take the name of a built-in value. A binding is in force over a region and everything outside it is unaffected (<<blocks>>), which is what makes shadowing a model's own names harmless; a built-in has no declaration to read instead, so a binding over one takes it away with nothing to point at.
+
 Three things hold of a module before anything in it is read:
 
 * [[a-module-is-declared-in-one-place]]a module is declared once. Two files declaring one name, or a file declaring a module that is also on the path, leave two answers to what that name means;
@@ -1675,6 +1682,10 @@ A dependency (`+depends on+`) is different and MUST *always* be written (<<depen
 
 Construction is done with a record literal that writes the constructed type name.
 
+[[a-construction-names-a-data]]What is constructed MUST be a data. [[a-construction-names-fields-of-its-type]]A field written in the literal MUST be one that data declares, and [[a-construction-is-written-where-one-may-be]]a construction MUST be written where one is allowed — not, for instance, inside an `+invariant+`, which states a condition over a value rather than building one (<<invariant-expressions>>).
+
+[[a-data-can-be-constructed]]A data MUST be constructible at all. A self-referential data reaches itself through a mandatory field with nothing to bottom out on, so no first value of it can be built; the self-reference belongs in an optional or a list field (<<self-referential-data>>).
+
 [,text]
 ----
 PreApproved {
@@ -1695,7 +1706,11 @@ To fill same-named fields together, use a spread `+...src+`. It copies `+src+`'s
 PreApproved { ...request, preApprovedAt = now(), preApprover = approverId }
 ----
 
-To replace only some fields while keeping the same type, also write the type name and use a spread. If `+x+` has type `+Member+`, write `+Member { ...x, address = newAddress }+`. No dedicated update syntax is provided.
+To replace only some fields while keeping the same type, also write the type name and use a spread.
+
+[[a-spread-copies-a-product]]What is spread MUST be a product data, or a sum whose cases all spread one. There has to be a set of fields to copy, and a sum whose cases share nothing has none.
+
+[[a-spread-supplies-what-the-fields-need]]What a spread provides MUST have the type the field it lands on needs. Copying by name is not copying by shape: two fields of one name and two types are two fields. If `+x+` has type `+Member+`, write `+Member { ...x, address = newAddress }+`. No dedicated update syntax is provided.
 
 When a field value is a binding of the same name as the field, the value may be omitted. `+Member { address }+` is shorthand for `+Member { address = address }+`, filling from the same-named binding in scope.
 
@@ -3228,6 +3243,11 @@ A declaration is emitted as classes and methods, and a class file has structural
 * [[generated-methods-fit-jvm-code-size]]a generated method's code MUST fit the JVM code-size limit;
 * [[generated-classes-fit-jvm-constant-pool]]a generated class's constant pool MUST fit what a class file can address and write out.
 
+Two more come from names rather than sizes:
+
+* [[no-two-declarations-become-one-class]]no two declarations of a module may emit one class. A behavior capitalizes into a class name (<<jvm-behavior>>), a union output becomes a sealed interface (<<jvm-sum>>), and a member joining a union from outside becomes a bridge case (<<bridge-case>>) — three ways to arrive at a name, and a model may already have declared it;
+* [[a-field-does-not-collide-with-an-object-method]]a field MUST NOT be named after a no-argument method of `+Object+`, whose accessor the generated class already has (<<jvm-product>>).
+
 The first is decided at the declaration, before anything is emitted. The other two are not known until the code is written, and are reported as the definition being emitted when the limit was met.
 
 [#target-jdk]
@@ -3569,6 +3589,99 @@ beside the fields.
 ----
 
 Reported at the field (<<a-case-does-not-declare-the-discriminator-field>>). A product case lays its fields where the tag goes, so the two would want one key and whichever was written second would be what a reader got back.
+
+[#e1011]
+=== A name is declared twice
+
+[,text]
+----
+data `Amount` is already defined.
+----
+
+Reported at the second declaration (<<a-declaration-is-made-once>>): a `+let+`, a data, a field of one data, an entry written twice in one clause list.
+
+[#e1012]
+=== A `let` and a data share a spelling
+
+[,text]
+----
+`let Amount` and data `Amount` are one name where a value is written.
+----
+
+Reported where a `+let+` and a data of one module carry one name (<<a-spelling-answers-one-thing-where-a-value-is-written>>). A data is written where a value goes, so the two would be one spelling with two answers. A behavior and its implementing `+let+` are not this: they are one thing's declaration and its body.
+
+[#e1013]
+=== A data cannot be constructed at all
+
+[,text]
+----
+data `OrgMember` cannot be constructed: it needs a value of itself through a mandatory field, with
+nothing to bottom out.
+----
+
+Reported at the declaration (<<a-data-can-be-constructed>>). Self-reference is what an org chart or a tree is made of, and it bottoms out through an optional or a list field (<<self-referential-data>>); through a mandatory one there is no first value.
+
+[#e1014]
+=== A construction writes a field the type does not have
+
+[,text]
+----
+`preApprover` is not a field of `Submitted`.
+----
+
+Reported at the field (<<a-construction-names-fields-of-its-type>>).
+
+[#e1015]
+=== A spread has no product to copy
+
+[,text]
+----
+A spread `...request` copies the fields the cases of `TravelRequest` share, and they share none: no
+data is spread by every case.
+----
+
+Reported at the spread (<<a-spread-copies-a-product>>). A spread is nominal (<<field-spread>>): what it copies is the data every case spread, and a sum whose cases share no such data has nothing for it to name.
+
+[#e1016]
+=== A spread provides a field with the wrong type
+
+[,text]
+----
+The spread provides `estimatedCost` as Int, but `PreApproved` needs Amount.
+----
+
+Reported at the spread (<<a-spread-supplies-what-the-fields-need>>). Fields are copied by name, and a name is not a type: two fields spelled alike and typed differently are two fields.
+
+[#e1017]
+=== A construction is written where one may not be
+
+[,text]
+----
+`Amount` is a type, so `Amount(...)` constructs one, and a construction cannot be written here.
+----
+
+Reported at the construction (<<a-construction-is-written-where-one-may-be>>). An `+invariant+` states a condition over a value it is given (<<invariant-expressions>>); building one inside it would run a check inside a check.
+
+[#e1018]
+=== A construction names something that is not a data
+
+[,text]
+----
+I cannot construct `submit` here.
+----
+
+Reported at the name (<<a-construction-names-a-data>>).
+
+[#e1019]
+=== A binding takes a built-in's name
+
+[,text]
+----
+`unreachable` is a built-in value and cannot be used as a binding name — it would shadow the
+built-in; choose another name.
+----
+
+Reported at the binding (<<a-binding-does-not-shadow-a-builtin>>). Shadowing a model's own name is ordinary and harmless — the outer one is still there to read — and a built-in has no declaration to read instead.
 
 [#e1101]
 === Invariant type mismatch
@@ -4523,6 +4636,28 @@ Reported where a hand-written codec is not a codec for the type it is declared o
 ----
 
 Reported at the reference (<<a-codec-reached-for-exists>>). Derivation covers what has an external representation (<<external-representation>>), and where it did not run and nothing was written by hand there is nothing to name.
+
+[#e2105]
+=== Two declarations become one class
+
+[,text]
+----
+behaviors `bill` and `Bill` both capitalize to the same JVM class `Bill`; rename one so their class
+names differ.
+----
+
+Reported at the second of the two (<<no-two-declarations-become-one-class>>). A declaration reaches a class name three ways — a behavior capitalizes (<<jvm-behavior>>), a union output becomes a sealed interface (<<jvm-sum>>), a foreign union member becomes a bridge case (<<bridge-case>>) — and a model may already have declared something of that name. Names are not reserved ahead of time: one nothing collides with stays available.
+
+[#e2106]
+=== A field is named after a method of `Object`
+
+[,text]
+----
+`hashCode` cannot be a field of `Member`: the generated class reads its fields through accessors of
+the same name, and `hashCode()` is already a method every class has.
+----
+
+Reported at the field (<<a-field-does-not-collide-with-an-object-method>>). `+equals+` is not among them: `+equals()+` and `+equals(Object)+` are different methods, and Java allows it as a component name.
 
 [#e2301]
 === A declaration is not written in its form

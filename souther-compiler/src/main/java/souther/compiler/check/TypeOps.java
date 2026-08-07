@@ -841,7 +841,7 @@ public final class TypeOps {
             TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.spread.notproduct").title("check.construct.title")
+                        Diagnostic.of(DiagnosticCode.E1015, "check.spread.notproduct")
                                 .at(inc.name().region()).args(inc.written()).build(),
                         "cannot spread `..." + inc.written() + "` (not a product data)");
             }

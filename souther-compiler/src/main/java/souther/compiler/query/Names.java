@@ -1483,7 +1483,7 @@ public final class Names {
                 continue;
             }
             reports.add(Report.raised(
-                    Diagnostic.uncoded("check.dup.valuename").title("check.duplicate.title")
+                    Diagnostic.of(DiagnosticCode.E1012, "check.dup.valuename")
                             .at(fn.pos()).args(fn.name()).build(),
                     "`let " + fn.name() + "` and data `" + fn.name()
                             + "` are one name where a value is written; rename one"));

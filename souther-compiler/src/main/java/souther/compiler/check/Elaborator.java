@@ -244,7 +244,7 @@ public final class Elaborator {
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.construct.no").title("check.construct.title")
+                            Diagnostic.of(DiagnosticCode.E1018, "check.construct.no")
                                     .at(built.name().region()).args(built.name().quoted())
                                     .build(),
                             "cannot construct `" + built.name().quoted() + "`");
@@ -1271,7 +1271,7 @@ public final class Elaborator {
     static void rejectBuiltinShadow(String name, SourcePos pos) {
         if (BUILTIN_VALUES.contains(name)) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.builtin.shadow").title("check.reserved.title")
+                    Diagnostic.of(DiagnosticCode.E1019, "check.builtin.shadow")
                             .at(pos, name.length()).args(name).build(),
                     "`" + name + "` is a built-in value and cannot be used as a binding name — it would"
                             + " shadow the built-in; choose another name");

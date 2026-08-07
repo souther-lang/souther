@@ -277,7 +277,7 @@ public final class DataChecker {
 
     private static CompileException duplicate(String written, String where, SourcePos pos) {
         return CompileException.of(
-                Diagnostic.uncoded("check.dup.name").title("check.duplicate.title")
+                Diagnostic.of(DiagnosticCode.E1011, "check.dup.name")
                         .at(pos).args(written, where).build(),
                 "`" + written + "` is listed more than once in " + where);
     }
@@ -457,7 +457,7 @@ public final class DataChecker {
                     && mandatoryReaches(symbols.own(data.name()), symbols.own(data.name()),
                             symbols, new HashSet<>())) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.construct.self").title("check.construct.title")
+                        Diagnostic.of(DiagnosticCode.E1013, "check.construct.self")
                                 .at(data.pos()).args(data.name()).build(),
                         "data `" + data.name() + "` cannot be constructed:"
                                 + " it needs a value of itself through a mandatory field, with no `?` or"
@@ -513,7 +513,7 @@ public final class DataChecker {
             // component either. Reported here rather than left to codegen, as a duplicate name is.
             if (OBJECT_METHOD_NAMES.contains(e.getKey())) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.field.objectname").title("check.reserved.title")
+                        Diagnostic.of(DiagnosticCode.E2106, "check.field.objectname")
                                 .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name(), e.getKey()).build(),
                         "`" + e.getKey() + "` cannot be a field of `" + ctx.data().name() + "`: the"
@@ -655,14 +655,14 @@ public final class DataChecker {
         for (Ast.FieldInit init : inits) {
             if (byName.put(init.name(), init) != null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.dup.field").title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.field")
                                 .at(init.pos()).args(init.name()).build(),
                         "duplicate field `" + init.name() + "`");
             }
             Type ft = fields.get(init.name());
             if (ft == null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.construct.nofield").title("check.construct.title")
+                        Diagnostic.of(DiagnosticCode.E1014, "check.construct.nofield")
                                 .at(init.written().region()).args(init.name(), typeName).build(),
                         "`" + init.name() + "` is not a field of `" + typeName + "`");
             }
@@ -701,8 +701,7 @@ public final class DataChecker {
                     && ctx.symbols().get(ref.name()) instanceof Ast.Data sd) {
                 provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
             } else {
-                Diagnostic.Builder d = Diagnostic.uncoded("check.spread.notdata")
-                        .title("check.construct.title").at(pos).args(sp);
+                Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1015, "check.spread.notdata").at(pos).args(sp);
                 if (bound instanceof Type.Union) {
                     d = d.hint("check.spread.union.hint", sp);
                 }
@@ -730,7 +729,7 @@ public final class DataChecker {
             }
             if (!TypeOps.assignable(pv, f.getValue(), ctx.symbols())) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.spread.provides").title("check.type.mismatch.title")
+                        Diagnostic.of(DiagnosticCode.E1016, "check.spread.provides")
                                 .at(pos).args(f.getKey(), Type.show(pv), typeName, Type.show(f.getValue()))
                                 .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build(),
                         "spread provides `" + f.getKey() + "` as " + pv + " but `" + typeName + "` needs "
@@ -751,7 +750,7 @@ public final class DataChecker {
         Map<String, Type> shared = TypeOps.commonSpreadFields(sum, ctx.symbols());
         if (shared.isEmpty()) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.spread.sum.unshared").title("check.construct.title")
+                    Diagnostic.of(DiagnosticCode.E1015, "check.spread.sum.unshared")
                             .at(pos).args(name, Type.show(bound)).build(),
                     "spread `.." + name + "` copies what the cases of " + Type.show(bound)
                             + " share, and they share none");
