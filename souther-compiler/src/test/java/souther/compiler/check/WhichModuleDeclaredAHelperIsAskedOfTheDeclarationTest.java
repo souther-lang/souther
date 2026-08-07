@@ -153,6 +153,58 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
     }
 
     /**
+     * The other half of the same guarantee. A {@code partial} helper may not be written where a value
+     * goes, which is what keeps it from leaving the call graph the rule above walks — and that rule is
+     * about a declaration this module wrote, for the reason the one above is.
+     *
+     * <p>Asked of every fn rather than of the helpers, since a behavior's own {@code let} may not hand
+     * one over either, so the fns of a module are exactly where a declaration it only took on to emit
+     * turns up.
+     *
+     * <p>The body below is the declaration as its own module wrote it, which is the shape
+     * {@link HelperInliner#injectedRecursiveHelpers} and {@link HelperInliner#injectedExampleHelpers}
+     * put into a reader's fns for a library helper: those read {@code Prelude.helpers()}, whose bodies
+     * were never closed. A body that <em>was</em> closed cannot carry this at all — the expansion
+     * eta-expands a helper named where a value goes — so this rule and the one above meet a foreign
+     * declaration by different routes and need the same scope either way.
+     */
+    @Test
+    void aHelperTakenOnToEmitIsNotReReadForAPartialHandedOver() {
+        Ast.Module maths = resolved("""
+                module maths exposing ( hands )
+
+                partial let spin (n: Int) : Int = spin(n)
+                partial let loop (f: (Int) -> Int, n: Int) : Int = loop(f, n)
+                let hands (n: Int) : Int = loop(spin, n)
+                """);
+        Map<String, Ast.FnDef> declared = HelperInliner.helpersOf(maths);
+        HelperInliner from = HelperInliner.forHelpers("maths", declared);
+        Ast.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
+        Ast.FnDef hands = declared.get("hands").reachedAs("maths.hands");
+
+        Ast.Module order = resolved("""
+                module order
+
+                let ownWork (n: Int) : Int = n + 1
+                """);
+        Map<String, Ast.FnDef> fns = new LinkedHashMap<>(HelperInliner.helpersOf(order));
+        fns.put(spin.name(), spin);
+        fns.put(hands.name(), hands);
+        HelperTable table = HelperTable.of("order", fns, Map.of(), InliningPolicy.FULL);
+        PartialReachability reachability =
+                PartialReachability.of(HelperInliner.over(table, HelperGraph.of(table)));
+
+        // `maths` answered for its own body. Reading it again here reports `maths.spin` against a
+        // module whose author never wrote it.
+        assertDoesNotThrow(() ->
+                PartialHelperUse.rejectNamedAsValue(hands, "order", reachability));
+        // Where it was written, the same body is the module's own to answer for.
+        CompileException refused = assertThrows(CompileException.class,
+                () -> PartialHelperUse.rejectNamedAsValue(hands, "maths", reachability));
+        assertEquals("E2001", refused.code());
+    }
+
+    /**
      * The library's own case, and the reason the name cannot be asked at all: a prelude helper is
      * reached under the library's alias and declared in the module the source says. {@code List} is
      * not {@code souther.list}, so the module a name came from is not in the name — the dot only ever

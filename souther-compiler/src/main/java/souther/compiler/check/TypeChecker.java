@@ -371,20 +371,18 @@ public final class TypeChecker {
         collect(errors, abandoned, () -> TotalityChecker.check(inliner));
         // And the guarantee covers what a helper reaches, not only its own descent: an unmarked helper
         // may reach no `partial` one, and a `partial` one may not be written where a value goes. Asked
-        // per declaration, so a module needing the word in several places says so in one build. Of the
-        // ones this module declared: a helper it took on to emit was answered for where it was
-        // written, and re-answering it here would put another module's mistake in this module's report.
+        // per declaration, so a module needing the word in several places says so in one build. Which
+        // declarations each rule is about is the rule's own to say (see PartialHelperUse): the fns here
+        // hold what this module took on to emit as well as what it wrote.
         for (Ast.FnDef helper : inliner.helpers().values()) {
-            if (!helper.declaredBy(module.name())) {
-                continue;
-            }
-            collect(errors, abandoned, () -> PartialHelperUse.rejectReachingPartial(helper, reachability));
+            collect(errors, abandoned,
+                    () -> PartialHelperUse.rejectReachingPartial(helper, module.name(), reachability));
         }
+        // Every fn and not only the helpers: a behavior's `let` may call a `partial` helper and may not
+        // hand it over either.
         for (Ast.FnDef fn : module.fns()) {
-            if (fn.body() instanceof Ast.FnBody.Written written) {
-                collect(errors, abandoned,
-                        () -> PartialHelperUse.rejectNamedAsValue(written.expr(), reachability));
-            }
+            collect(errors, abandoned,
+                    () -> PartialHelperUse.rejectNamedAsValue(fn, module.name(), reachability));
         }
         // A fn matching a pipeline is rejected (a pipeline is already its own implementation, so it
         // cannot also have a fn body — spec 13.1). A fn matching a SpecBehavior is that behavior's

@@ -31,15 +31,25 @@ import java.util.Optional;
  * may call a {@code partial} helper. That is not a boundary the walk stops at, it is a declaration the
  * walk is never asked about. A helper between the behavior and the {@code partial} one is still a
  * helper and still needs the word.
+ *
+ * <p>Both rules are about a declaration this module wrote, and each says so itself rather than leaving
+ * it to whoever loops. A module emits the recursive helpers it reaches as its own methods, so its fns
+ * hold declarations of other modules under names of the same shape; those were answered for where they
+ * were written (ADR-0098), and a report about one here would name a definition this module's author
+ * never wrote. The two rules are one guarantee seen twice — the first refuses a way around the call
+ * graph, the second refuses a way out of it — so a scope on one and not the other is the guarantee
+ * holding on one side only.
  */
 final class PartialHelperUse {
 
     private PartialHelperUse() {}
 
-    /** The first rule, for one helper: unmarked, it may reach no {@code partial} one. Asked per helper
-     * so that a module with several of them reports all of them in one build — the word goes on each. */
-    static void rejectReachingPartial(Ast.FnDef helper, PartialReachability reachability) {
-        if (helper.partial()) {
+    /** The first rule, for one helper of {@code module}: unmarked, it may reach no {@code partial} one.
+     * Asked per helper so that a module with several of them reports all of them in one build — the
+     * word goes on each. */
+    static void rejectReachingPartial(Ast.FnDef helper, String module,
+                                      PartialReachability reachability) {
+        if (!helper.declaredBy(module) || helper.partial()) {
             return;
         }
         Optional<List<String>> path = reachability.fromHelper(helper.name());
@@ -66,18 +76,33 @@ final class PartialHelperUse {
     }
 
     /**
+     * The second rule, for one fn of {@code module}: it may write no {@code partial} helper where a
+     * value goes.
+     *
+     * <p>Asked of every fn and not only of the helpers. A behavior's implementing {@code let} may call
+     * a {@code partial} helper and may not hand it over either — what the rule is about is the function
+     * value, which is the same thing wherever it is written.
+     */
+    static void rejectNamedAsValue(Ast.FnDef fn, String module, PartialReachability reachability) {
+        if (!fn.declaredBy(module) || !(fn.body() instanceof Ast.FnBody.Written written)) {
+            return;
+        }
+        walkForNamedAsValue(written.expr(), reachability);
+    }
+
+    /**
      * Walks {@code e} for a {@code partial} helper written where a value goes. The callee of an
      * application is not such a place — that is the call the rule allows — so it is skipped where it is
      * a name and walked where it is anything else.
      */
-    static void rejectNamedAsValue(Ast.Expr e, PartialReachability reachability) {
+    private static void walkForNamedAsValue(Ast.Expr e, PartialReachability reachability) {
         switch (e) {
             case Ast.Apply call -> {
                 if (!(call.function() instanceof Ast.Var)) {
-                    rejectNamedAsValue(call.function(), reachability);
+                    walkForNamedAsValue(call.function(), reachability);
                 }
                 for (Ast.Expr arg : call.args()) {
-                    rejectNamedAsValue(arg, reachability);
+                    walkForNamedAsValue(arg, reachability);
                 }
             }
             case Ast.Var v -> {
@@ -95,7 +120,7 @@ final class PartialHelperUse {
                                     + " `partial` helper may be applied but not handed over");
                 }
             }
-            default -> Ast.forEachChild(e, child -> rejectNamedAsValue(child, reachability));
+            default -> Ast.forEachChild(e, child -> walkForNamedAsValue(child, reachability));
         }
     }
 }

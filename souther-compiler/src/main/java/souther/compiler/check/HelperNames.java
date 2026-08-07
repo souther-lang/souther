@@ -14,11 +14,17 @@ import java.util.function.Predicate;
  * module it was written in.
  *
  * <p>A reader writes an imported value or helper bare, and the pair (module, name) is what it
- * denotes. Writing the qualified spelling into the tree makes the two agree, so everything
- * downstream — the table a call is expanded against, the method a recursive helper is emitted as —
- * reads the identity by reading the name, and two modules publishing a {@code tally} stay two
- * definitions. Every rewrite here reads what a name denotes and never how it was spelled, so running
- * one twice says what running it once said.
+ * denotes. Writing the qualified spelling into the tree settles the name a reader reaches it by, so
+ * everything downstream — the table a call is expanded against, the method a recursive helper is
+ * emitted as — asks and answers with one name, and two modules publishing a {@code tally} stay two
+ * entries. Every rewrite here reads what a name denotes and never how it was spelled, so running one
+ * twice says what running it once said.
+ *
+ * <p>What that spelling settles is the reach name, and it is not the declaration's identity. The two
+ * coincide for a helper another module published and part ways for the standard library, which is
+ * reached under an alias: {@code List.foldFrom} is declared in {@code souther.list}, and no reader of
+ * the name can get there from it. Which module declared a definition is carried on the declaration
+ * ({@link Ast.FnDef#declaredIn}), and every rule about the declaring module reads it there.
  *
  * <p>The marks a construction carries belong here for the same reason. What a published body builds
  * is built where that body was written; expanding it puts the construction in the reader's body,
@@ -256,19 +262,22 @@ public final class HelperNames {
 
     /**
      * The key {@code helper} is filed under in the table of the module named {@code module} — bare for
-     * one that module declares, qualified for one it imported.
+     * one that module declares, declaring-module-qualified for one it imported.
      *
-     * <p>Read off what the name denotes and never off how it was written. A reader writes an imported
-     * definition bare, so the spelling is a key only after {@link #qualifyImports} has run, and a check
-     * that keyed by the spelling would answer differently on either side of that pass — silently,
-     * because a miss is what a table does with a key it has not got. The pair (module, name) is what
-     * the definition is (ADR-0072), so it is what a table of definitions is asked with.
+     * <p>This turns a helper's identity into the name that module reaches it by, and the two are
+     * different values. What comes back is a key: it names a declaration within one module's table and
+     * says nothing outside it, and it is not something to read a declaring module back out of. That is
+     * carried on the declaration ({@link Ast.FnDef#declaredBy}).
      *
-     * <p>What comes back is a key and not an identity. It names a definition only within the module it
-     * was asked for, and it does not hold the module the definition came from: a library helper is
-     * reached under the library's alias, so {@code List.foldFrom} is what {@code souther.list}'s
-     * {@code foldFrom} is keyed as here. A reader that needs the declaring module asks the declaration
-     * ({@link Ast.FnDef#declaredBy}) rather than reading this back.
+     * <p>Asked with the identity and never with a spelling, which is what {@link ValueName.Helper}
+     * holds (ADR-0072); a reader writes an imported definition bare, so a key taken off the spelling
+     * would be one key before {@link #qualifyImports} and another after — silently, because a miss is
+     * what a table does with a key it has not got.
+     *
+     * <p>The library does not come through here. A standard-library name is reached under an alias
+     * rather than under the module that declares it — {@code souther.list}'s {@code foldFrom} is
+     * reached as {@code List.foldFrom} — and denotes a {@link ValueName.Stdlib}, which already holds
+     * that reach name and is read as it stands.
      */
     public static String keyIn(String module, ValueName.Helper helper) {
         return helper.module().equals(module) ? helper.name() : qualified(helper.module(), helper.name());
