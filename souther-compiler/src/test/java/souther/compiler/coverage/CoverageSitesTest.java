@@ -121,6 +121,116 @@ class CoverageSitesTest {
                 "the outer `No` arm answers nothing, and neither of the arms it is made of does");
     }
 
+    /**
+     * A fork nothing reaches is not a fork to cover, however ordinary its arms look.
+     *
+     * <p>The arms of the inner {@code match} answer values and would be arms anywhere else. Here they
+     * stand after a binding that aborts, so the only row that could go through one is a row that
+     * reached the {@code unreachable} first — E1911, which states nothing. Counted, they are two gaps
+     * that stay open for ever, which is this whole measure's fault one level in.
+     */
+    @Test
+    void aForkBelowSomethingThatAbortsIsNotAForkToCover() {
+        CoverageSites.Plan plan = planOf("""
+                module example.dead
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Score = Int
+
+                behavior scoreFor : (a: Answer, b: Answer) -> Score
+                    constructs Score
+
+                let scoreFor (a, b) =
+                    match a with
+                        | Yes -> Score(1)
+                        | No  -> {
+                            let impossible: Int = unreachable "no No arrives"
+                            match b with
+                                | Yes -> Score(impossible)
+                                | No  -> Score(3)
+                        }
+                """);
+
+        assertEquals(List.of("case Yes"), labels(plan),
+                "the outer `No` arm answers nothing, and the fork inside it is behind the abort");
+    }
+
+    /**
+     * The fork nothing reaches is still in the plan, with no arms.
+     *
+     * <p>The emitter generates the bytecode of a body that aborts as it generates any other, and asks
+     * the plan for the arms of each fork it passes; a fork with no entry stops it. So the structure is
+     * registered and the obligation is not.
+     */
+    @Test
+    void aForkNothingReachesIsPlannedWithNoArms() {
+        Map<String, Core> bodies = bodiesOf("""
+                module example.dead
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Score = Int
+
+                behavior scoreFor : (a: Answer, b: Answer) -> Score
+                    constructs Score
+
+                let scoreFor (a, b) =
+                    match a with
+                        | Yes -> Score(1)
+                        | No  -> {
+                            let impossible: Int = unreachable "no No arrives"
+                            match b with
+                                | Yes -> Score(impossible)
+                                | No  -> Score(3)
+                        }
+                """);
+        CoverageSites.Plan plan = CoverageSites.of("dead.sou", bodies);
+
+        Core.Match outer = (Core.Match) unwrap(bodies.get("scoreFor"));
+        Core.Match inner = innerMatch(outer.cases().get(1).body());
+        assertArrayEquals(new int[] {CoverageSites.NO_SITE, CoverageSites.NO_SITE},
+                plan.probesOf(inner), "the emitter still finds it, and finds nothing to light");
+    }
+
+    private static Core.Match innerMatch(Core arm) {
+        Core at = arm;
+        while (!(at instanceof Core.Match)) {
+            at = switch (at) {
+                case Core.LetIn let -> let.body();
+                case Core.Block block -> block.body();
+                default -> throw new AssertionError("no `match` under this arm: " + at);
+            };
+        }
+        return (Core.Match) at;
+    }
+
+    /** The same, at the top: a body that cannot answer has no arms to cover, whatever forks are
+     * written below the point it stops at. */
+    @Test
+    void aBodyThatCannotAnswerHasNoArms() {
+        CoverageSites.Plan plan = planOf("""
+                module example.dead
+
+                data Score = Int
+
+                behavior scoreFor : (senior: Bool) -> Score
+                    constructs Score
+
+                let scoreFor (senior) = {
+                    let impossible: Int = unreachable "nobody calls this"
+                    if senior then Score(impossible) else Score(0)
+                }
+                """);
+
+        assertEquals(List.of(), labels(plan));
+        assertEquals(List.of(), plan.guards(), "and no line for a row to be at either");
+    }
+
     /** The arm is one a row can be in whatever the rows happen to cover: what the denominator holds
      * is a property of the body, and a nested abort beside a reachable answer does not remove it. */
     @Test

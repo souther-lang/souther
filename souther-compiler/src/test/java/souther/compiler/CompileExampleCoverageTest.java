@@ -181,6 +181,47 @@ class CompileExampleCoverageTest {
     }
 
     /**
+     * A fork behind an abort is measured through a real compile, not only in the plan.
+     *
+     * <p>The arms are dropped from the count and the fork stays in the plan without them, and it is
+     * the emitter that says whether those two agree: it generates the bytecode of the body that
+     * aborts like any other and asks for the arms of every fork it passes. A plan that dropped the
+     * fork instead of emptying it stops the generation here rather than in a unit test.
+     */
+    @Test
+    void aForkNothingReachesIsNeitherCountedNorLostFromThePlan() {
+        Adequacy.BranchEvidence branch = branch("""
+                module example.dead
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Score = Int
+
+                behavior scoreFor : (a: Answer, b: Answer) -> Score
+                    constructs Score
+
+                let scoreFor (a, b) =
+                    match a with
+                        | Yes -> Score(1)
+                        | No  -> {
+                            let impossible: Int = unreachable "no No arrives"
+                            match b with
+                                | Yes -> Score(impossible)
+                                | No  -> Score(3)
+                        }
+
+                example scoreFor
+                    | "yes" : (Yes, Yes) -> Score(1)
+                """, "scoreFor");
+
+        assertEquals(1, branch.all().size(), "one arm a row can be in, not three");
+        assertEquals(List.of(), unreached(branch));
+        assertEquals(MeasurementStatus.COMPLETE, branch.status());
+    }
+
+    /**
      * A row that did not finish contributes nothing.
      *
      * <p>What a row reached before it ran out of time is some of what it would have reached, and

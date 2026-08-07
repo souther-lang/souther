@@ -130,6 +130,7 @@ public final class CoverageSites {
         private final List<Site> sites = new ArrayList<>();
         private final List<GuardRef> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
+        private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
         private String behavior;
         private int ordinal;
 
@@ -140,18 +141,38 @@ public final class CoverageSites {
         void behavior(String name, Core body) {
             this.behavior = name;
             this.ordinal = 0;
-            walk(body);
+            walk(body, true);
         }
 
         /**
-         * One arm, or {@link #NO_SITE} where the arm answers nothing and so is not an arm to cover.
+         * One arm, or {@link #NO_SITE} where no row that stands can be in it.
          *
-         * <p>Decided here, where the arm is made, and not while walking the arm's body: what is
-         * being asked is whether this arm is one a row can be in, which is a question about the arm
-         * and not about anything inside it.
+         * <p>Two things have to hold. The arm has to be able to answer a value, and it has to stand
+         * somewhere a row can get to — an arm of a {@code match} written after a binding that aborts
+         * is a fork nothing reaches, however ordinary the arm itself looks. A row that gets as far as
+         * an {@code unreachable} is E1911 and states nothing, so an arm only such a row could go
+         * through is an arm no row will ever be recorded in.
          */
-        private int armOf(Site.Kind kind, String label, Core owner, Core arm) {
-            return NormalReturn.of(arm) ? site(kind, label, owner, arm) : NO_SITE;
+        private int armOf(Site.Kind kind, String label, Core owner, Core arm, boolean reachable) {
+            return reachable && NormalReturn.of(arm) ? site(kind, label, owner, arm) : NO_SITE;
+        }
+
+        /**
+         * Whether {@code e} answers a value, asked once per node.
+         *
+         * <p>The walk asks this of every node it passes and of every arm it makes, and the answer is
+         * read off the whole subtree — so without this the walk would be quadratic in the size of a
+         * body. Keyed by identity, like {@link Plan#byNode}: two arms that look the same are equal
+         * records, and what is being remembered is about this one.
+         */
+        private boolean answers(Core e) {
+            Boolean known = answering.get(e);
+            if (known != null) {
+                return known;
+            }
+            boolean found = NormalReturn.of(e);
+            answering.put(e, found);
+            return found;
         }
 
         /**
@@ -178,42 +199,57 @@ public final class CoverageSites {
          * {@code Case} and an {@code ElseArm}, which are not {@code Core} and so are not children the
          * generic walk hands over. The switch is exhaustive on purpose — a node added to the IR should
          * stop here and be decided about, not fall silently into a default and go uncounted.
+         *
+         * <p>Every fork is registered in {@link Plan#byNode} whether or not it is numbered. The
+         * emitter generates the bytecode of a body that aborts as it generates any other, and asks
+         * this plan for the arms of each fork it meets while doing so; a fork the plan has no entry
+         * for stops that generation, which is what makes an omission loud. What a fork nothing
+         * reaches has is an entry of {@link #NO_SITE}s — the structure, without the obligation.
+         *
+         * @param reachable whether a row that stands can get this far. It cannot get past something
+         *                  that aborts, so nothing below such a point is a fork a row takes: the row
+         *                  that would take it is E1911 and states nothing
          */
-        private void walk(Core e) {
+        private void walk(Core e, boolean reachable) {
+            // Everything below this node is reached by way of the node, so what the node cannot do
+            // nothing inside it can do either.
+            boolean inside = reachable && answers(e);
             switch (e) {
                 case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Read _,
                      Core.UnitValue _, Core.OptionNone _ -> { }
                 // A leaf, and one holding no fork. Whether the arm it stands in is an arm to cover is
                 // decided where that arm is made, not here.
                 case Core.Unreachable _ -> { }
-                case Core.Neg n -> walk(n.operand());
-                case Core.FieldAccess fa -> walk(fa.target());
+                case Core.Neg n -> walk(n.operand(), inside);
+                case Core.FieldAccess fa -> walk(fa.target(), inside);
                 case Core.Binary b -> {
-                    walk(b.left());
-                    walk(b.right());
+                    walk(b.left(), inside);
+                    walk(b.right(), inside);
                 }
-                case Core.Call c -> c.args().forEach(this::walk);
+                case Core.Call c -> c.args().forEach(arg -> walk(arg, inside));
                 // What a representation kept standing for an analysis to read. Coverage is measured
                 // over the tree that runs, which keeps none of these, so reaching one would mean this
                 // count was taken over a tree nothing executes.
                 case Core.PreservedCall p -> throw p.unexpectedIn("coverage numbering");
-                case Core.Apply a -> a.args().forEach(this::walk);
+                case Core.Apply a -> a.args().forEach(arg -> walk(arg, inside));
                 case Core.LetIn li -> {
-                    walk(li.value());
-                    walk(li.body());
+                    walk(li.value(), inside);
+                    walk(li.body(), inside);
                 }
-                case Core.Block b -> walk(b.body());
-                case Core.ListLit lit -> lit.elements().forEach(this::walk);
-                case Core.OptionSome s -> walk(s.value());
-                case Core.Tuple t -> t.elements().forEach(this::walk);
-                case Core.TupleGet tg -> walk(tg.tuple());
-                case Core.NewData nd -> nd.inits().forEach(init -> walk(init.value()));
+                // A function value, and its arms are arms: what is written here runs when whatever
+                // this is handed to applies it, and the rows that make that happen go through them.
+                case Core.Block b -> walk(b.body(), inside);
+                case Core.ListLit lit -> lit.elements().forEach(el -> walk(el, inside));
+                case Core.OptionSome s -> walk(s.value(), inside);
+                case Core.Tuple t -> t.elements().forEach(el -> walk(el, inside));
+                case Core.TupleGet tg -> walk(tg.tuple(), inside);
+                case Core.NewData nd -> nd.inits().forEach(init -> walk(init.value(), inside));
                 case Core.If iff -> {
-                    walk(iff.cond());
-                    int then = armOf(Site.Kind.THEN, "then", iff, iff.then());
-                    walk(iff.then());
-                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.els());
-                    walk(iff.els());
+                    walk(iff.cond(), inside);
+                    int then = armOf(Site.Kind.THEN, "then", iff, iff.then(), inside);
+                    walk(iff.then(), inside);
+                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.els(), inside);
+                    walk(iff.els(), inside);
                     byNode.put(iff, new int[] {then, els});
                     if (then != NO_SITE || els != NO_SITE) {
                         guards.add(new GuardRef(behavior, then, els,
@@ -221,24 +257,24 @@ public final class CoverageSites {
                     }
                 }
                 case Core.Match m -> {
-                    walk(m.scrutinee());
+                    walk(m.scrutinee(), inside);
                     int[] arms = new int[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, arm.body());
-                        walk(arm.body());
+                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, arm.body(), inside);
+                        walk(arm.body(), inside);
                     }
                     byNode.put(m, arms);
                 }
                 case Core.IfConstructed ic -> {
-                    ic.construct().inits().forEach(init -> walk(init.value()));
+                    ic.construct().inits().forEach(init -> walk(init.value(), inside));
                     int[] arms = new int[1 + ic.els().size()];
-                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.then());
-                    walk(ic.then());
+                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.then(), inside);
+                    walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
-                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, arm.body());
-                        walk(arm.body());
+                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, arm.body(), inside);
+                        walk(arm.body(), inside);
                     }
                     byNode.put(ic, arms);
                 }
