@@ -20,9 +20,8 @@ import java.util.List;
  * <p>What a call answers is not looked into. A non-recursive helper is inlined into the body that uses
  * it, so its arms are already here; a recursive one is a shared method, and a helper that never
  * returns leaves the arm that calls it counted. The arguments are looked at, because they are
- * evaluated before the call is. No model reaches that today — an argument position states no type, so
- * an {@code unreachable} written in one is E1307 — and the rule is here because the analysis is about
- * evaluation and an exception for calls would be one to explain rather than one to rely on.
+ * evaluated before the call is — but a function passed as one is made and not run, so what its body
+ * does when the call gets round to it is the call's business and stays unread.
  */
 public final class NormalReturn {
 
@@ -53,7 +52,13 @@ public final class NormalReturn {
             case Core.PreservedCall p -> throw p.unexpectedIn("normal-return analysis");
             // The value is evaluated before the body it binds is.
             case Core.LetIn li -> of(li.value()) && of(li.body());
-            case Core.Block b -> of(b.body());
+            // A function value, not a body being run here: a block is a step handed to a combinator
+            // or a lambda a `let` binds, and evaluating this position makes the function rather than
+            // calling it. What happens when it is called is the call's business, and a call is not
+            // read through. Reading the body here says a step that aborts on an element it is never
+            // handed makes the expression around it answer nothing — which would take a class a row
+            // does sit in out of the denominator.
+            case Core.Block _ -> true;
             case Core.If iff -> of(iff.cond()) && (of(iff.then()) || of(iff.els()));
             case Core.Match m -> of(m.scrutinee())
                     && m.cases().stream().anyMatch(arm -> of(arm.body()));

@@ -98,18 +98,19 @@ public final class Exclusions {
         return byPath.getOrDefault(path, Map.of()).getOrDefault(each, List.of());
     }
 
-    /** What a body answers with, with the bindings and blocks around it removed. Only what is
-     * evaluated on the way to the answer is stepped over — nothing here enters a fork. */
+    /**
+     * What a body answers with, with the bindings around it removed.
+     *
+     * <p>Only what is evaluated on the way to the answer is stepped over. Nothing here enters a fork,
+     * and nothing enters a {@code Core.Block} either: a block is a function value, and what it
+     * matches on when something calls it is about its own parameters rather than about this
+     * behavior's inputs.
+     */
     private static Core spine(Core body) {
         Core at = body;
-        while (true) {
-            switch (at) {
-                case Core.Block block -> at = block.body();
-                case Core.LetIn let -> at = let.body();
-                default -> {
-                    return at;
-                }
-            }
+        while (at instanceof Core.LetIn let) {
+            at = let.body();
         }
+        return at;
     }
 }

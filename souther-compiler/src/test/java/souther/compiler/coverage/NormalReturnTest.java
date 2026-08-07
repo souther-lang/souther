@@ -47,14 +47,18 @@ class NormalReturnTest {
     }
 
     private static boolean answersIn(String source) {
+        return NormalReturn.of(bodyOf(source, "pick"));
+    }
+
+    private static Core bodyOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         TypeChecker.Checked checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");
-        Core body = checked.behaviorBodies().get("pick");
+        Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, "the behavior under test has a body");
-        return NormalReturn.of(body);
+        return body;
     }
 
     @Test
@@ -111,6 +115,32 @@ class NormalReturnTest {
         assertTrue(answersBoxing("""
                 let pick (f, senior) = Boxed { n = Answer(1) }.n
                 """));
+    }
+
+    /**
+     * A function handed to a call is made here and run there.
+     *
+     * <p>Evaluating this position produces the function; whether its body aborts is decided when the
+     * call gets round to applying it, and on an argument this position does not have. A step that
+     * aborts on an element it may never be handed does not stop the expression around it from
+     * answering — read the other way, a class rows really do sit in leaves the denominator.
+     */
+    @Test
+    void aFunctionPassedToACallIsMadeAndNotRun() {
+        Core tally = bodyOf("""
+                module example.higher
+
+                data Answer = Int
+
+                behavior tally : (xs: List<Int>) -> Answer
+                    constructs Answer
+
+                let tally (xs) =
+                    Answer(List.fold((acc, x) -> Answer(unreachable "no element arrives").value,
+                                     0, xs))
+                """, "tally");
+
+        assertTrue(NormalReturn.of(tally));
     }
 
     /** A binding's value is evaluated before the body that reads it. */

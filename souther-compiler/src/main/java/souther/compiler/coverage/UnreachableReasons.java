@@ -15,6 +15,11 @@ import java.util.Set;
  * would name whichever the author happened to write above the other. What comes back is every reason
  * on the paths that abort, so the caller can say the single one where there is one and say that there
  * are several where there are.
+ *
+ * <p>Every reason on those paths, and nothing after evaluation stops. A construction whose first
+ * field aborts never evaluates the second, so a second {@code unreachable} written below it is not a
+ * reason this value did not arrive — it is text that never runs. Paths that a fork keeps apart are
+ * all read, because each of them is a way this expression fails to answer.
  */
 public final class UnreachableReasons {
 
@@ -32,7 +37,6 @@ public final class UnreachableReasons {
         }
         switch (e) {
             case Core.Unreachable u -> into.add(u.reason());
-            case Core.Block b -> collect(b.body(), into);
             case Core.LetIn li -> collect(NormalReturn.of(li.value()) ? li.body() : li.value(), into);
             case Core.If iff -> {
                 if (!NormalReturn.of(iff.cond())) {
@@ -50,20 +54,38 @@ public final class UnreachableReasons {
                 }
             }
             case Core.IfConstructed ic -> {
-                List<Core> built = ic.construct().inits().stream()
-                        .map(Core.FieldInit::value).toList();
-                if (built.stream().anyMatch(v -> !NormalReturn.of(v))) {
-                    built.forEach(v -> collect(v, into));
+                Core stops = firstThatAborts(ic.construct().inits().stream()
+                        .map(Core.FieldInit::value).toList());
+                if (stops != null) {
+                    collect(stops, into);
                 } else {
                     collect(ic.then(), into);
                     ic.els().forEach(arm -> collect(arm.body(), into));
                 }
             }
-            // Anything else answers nothing because something it evaluates first does.
-            default -> children(e).forEach(child -> collect(child, into));
+            // Anything else answers nothing because something it evaluates first does, and the rest
+            // of what is written in it never runs.
+            default -> {
+                Core stops = firstThatAborts(children(e));
+                if (stops != null) {
+                    collect(stops, into);
+                }
+            }
         }
     }
 
+    /** The first of a run of strict positions that does not answer, which is where evaluation stops
+     * and where every reason below it stops being one. */
+    private static Core firstThatAborts(List<Core> evaluated) {
+        for (Core each : evaluated) {
+            if (!NormalReturn.of(each)) {
+                return each;
+            }
+        }
+        return null;
+    }
+
+    /** In the order they are evaluated, which is the order they are written. */
     private static List<Core> children(Core e) {
         List<Core> out = new ArrayList<>();
         Core.forEachChild(e, out::add);

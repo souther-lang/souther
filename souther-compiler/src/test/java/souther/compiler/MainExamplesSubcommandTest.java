@@ -200,10 +200,12 @@ class MainExamplesSubcommandTest {
     /**
      * A key added to this version is optional, so a document written before it existed is still one.
      *
-     * <p>Raising the version is for a key removed or renamed, which is what a reader keying on it is
-     * protecting itself against. An added key it does not know about it ignores — but only where the
-     * schema does not demand it, which is what is checked here: the emitted document carries
-     * {@code excluded}, and a document without it satisfies the same {@code required} list.
+     * <p>Which is one direction and not both. This schema validates a document written before the key
+     * existed, because nothing demands it — that is what is checked here. It does not follow that a
+     * reader holding the older copy of this schema accepts a document written now: every object here
+     * is {@code additionalProperties: false}, so an older validator refuses a key added since. The
+     * version says what was taken away, not what was added, and a reader that must accept newer
+     * documents needs the newer schema rather than a higher number.
      */
     @Test
     void aKeyAddedSinceIsNotDemandedOfADocumentWrittenBeforeIt() throws Exception {

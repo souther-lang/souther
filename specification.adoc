@@ -2665,6 +2665,8 @@ An `+unreachable+` (<<unreachable>>) is not an arm. Reaching one is already <<e1
 
 What a call answers is not read. A non-recursive helper is already inlined into the body that uses it, so its arms are here; a recursive one is a shared method, and an arm whose only content is a call to a helper that never answers is counted as an arm. That is a gap in the measure and is stated rather than worked around, because reading through a call means deciding what a call does.
 
+A function written where a call takes one is made there and run elsewhere. Evaluating that position produces the function; its body runs when the call applies it, on arguments the position does not have — a step that answers `+unreachable+` for an element it may never be handed does not stop the expression around it from answering. The arms inside such a function are arms, and the rows that run it go through them.
+
 *The measurement is opted into by writing a row.* A behavior that no row names is not reported as having arms nothing reaches, whether or not another behavior's rows run through it. A row about `+A+` that calls `+B+` did go through `+B+`'s arm and that arm counts as reached; what does not follow is that `+B+`'s author has been asked anything.
 
 *A row that did not finish contributes nothing.* What such a row went through before its budget ran out (<<e1910>>) is some of what it would have gone through, and it is recorded as undecided rather than counted.

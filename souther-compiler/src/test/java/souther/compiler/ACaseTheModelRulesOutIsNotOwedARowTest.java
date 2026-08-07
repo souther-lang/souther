@@ -72,12 +72,16 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     }
 
     private static PartitionEvidence.AxisCoverage axis(String source) {
+        return axis(source, "f");
+    }
+
+    private static PartitionEvidence.AxisCoverage axis(String source, String path) {
         Compilation compilation = measured(source);
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get("pick");
         assertNotNull(partition, "the model under test compiles");
-        assertEquals(1, partition.axes().size());
-        return partition.axes().get(0);
+        return partition.axes().stream().filter(each -> each.path().equals(path))
+                .findFirst().orElseThrow();
     }
 
     /**
@@ -121,6 +125,70 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     void whyItIsRuledOutIsTheReasonTheModelWrote() {
         assertEquals(List.of("the probe never passes Off"),
                 axis(MODEL).excluded().get(0).reasons());
+    }
+
+    /**
+     * The reasons on the path that aborts, and nothing written past where it stops.
+     *
+     * <p>A construction whose first field aborts never evaluates the second, so a second
+     * {@code unreachable} below it is text that never runs rather than a reason the value did not
+     * arrive. Paths a fork keeps apart are another matter: each of them is a way this arm answers
+     * nothing, so each is named.
+     */
+    @Test
+    void theReasonsAreTheOnesEvaluationReaches() {
+        String sequential = """
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Answer = Int
+                data Boxed = { a: Answer, b: Answer }
+
+                behavior pick : (f: Flag) -> Answer
+                    constructs Answer, Boxed
+
+                let pick (f) = match f with
+                    | On  -> Answer(1)
+                    | Off -> Boxed { a = unreachable "the first is never built"
+                                   , b = unreachable "and this one is never reached"
+                                   }.a
+
+                example pick
+                    | "on" : (On) -> Answer(1)
+                """;
+
+        assertEquals(List.of("the first is never built"),
+                axis(sequential).excluded().get(0).reasons());
+
+        String forked = """
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Yes
+                data No
+                data Mark = Yes | No
+                data Answer = Int
+
+                behavior pick : (f: Flag, m: Mark) -> Answer
+                    constructs Answer
+
+                let pick (f, m) = match f with
+                    | On  -> Answer(1)
+                    | Off -> match m with
+                                 | Yes -> unreachable "not a marked Off"
+                                 | No  -> unreachable "nor an unmarked one"
+
+                example pick
+                    | "on" : (On, Yes) -> Answer(1)
+                """;
+
+        assertEquals(List.of("not a marked Off", "nor an unmarked one"),
+                axis(forked).excluded().get(0).reasons(),
+                "both arms are ways this arm answers nothing");
     }
 
     /**
@@ -198,6 +266,49 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * A step handed to a combinator is not the arm running it.
+     *
+     * <p>Evaluating the position a function is written in makes the function; its body runs when the
+     * call applies it, on arguments this position does not have — a step that aborts on an element it
+     * may never be handed is not the arm failing to answer. Read the other way round, the arm holding
+     * the call is not an arm, and the case in front of it leaves the denominator: a class rows do sit
+     * in, and here a row sits in it.
+     *
+     * <p>Checked through the measures rather than on the predicate alone, because what the mistake
+     * costs is downstream of it: the row for {@code Off} is written, runs and holds, and the report
+     * used to say the position had one class and two rows specified at it.
+     */
+    @Test
+    void aStepThatAbortsDoesNotRuleOutTheCaseThatPassesItAlong() {
+        String higher = """
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Answer = Int
+
+                behavior pick : (f: Flag, xs: List<Int>) -> Answer
+                    constructs Answer
+
+                let pick (f, xs) = match f with
+                    | On  -> Answer(1)
+                    | Off -> Answer(List.fold(
+                                 (acc, x) -> Answer(unreachable "no element arrives").value, 0, xs))
+
+                example pick
+                    | "on"  : (On, [1]) -> Answer(1)
+                    | "off" : (Off, []) -> Answer(0)
+                """;
+
+        assertEquals(List.of(), input(higher, 0).excluded().stream().toList());
+        assertEquals(2, input(higher, 0).coverable().size());
+        assertEquals(List.of(), input(higher, 0).unspecified().stream().toList());
+        assertEquals(List.of("On", "Off"), axis(higher).classes());
+        assertEquals(List.of(), axis(higher).uncovered());
     }
 
     /**
