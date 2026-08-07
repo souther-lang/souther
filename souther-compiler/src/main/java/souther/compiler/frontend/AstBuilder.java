@@ -107,8 +107,10 @@ public final class AstBuilder {
                 default -> { /* MODULE_HEADER handled above; ERROR nodes are reported already */ }
             }
         }
+        // A source file declares; what the module takes on to emit follows from what its bodies reach
+        // and is worked out where that is known, which is not here.
         return new Ast.Module(name, exposing, exposedOutputs, imports, defs, behaviors, fns,
-                examples, fakes, null, pos);
+                List.of(), examples, fakes, null, pos);
     }
 
     /**
@@ -147,7 +149,7 @@ public final class AstBuilder {
             }
         }
         return new Ast.Module(target, List.of(), new HashMap<>(), List.of(), List.of(), List.of(),
-                values, examples, fakes, target, pos);
+                values, List.of(), examples, fakes, target, pos);
     }
 
     private CompileException onlyExamples(SyntaxNode n) {

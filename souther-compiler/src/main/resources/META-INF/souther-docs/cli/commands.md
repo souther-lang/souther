@@ -56,7 +56,7 @@ the rows does not reveal.
 ## doc
 
 ```
-souther doc [<anchor> | <set>/<topic>[/<section>] | --search <term> [--limit <n>]]
+souther doc [<anchor> | <error-code> | <set>/<topic>[/<section>] | --search <term> [--limit <n>]]
 ```
 
 The language specification and the documentation bundled libraries ship. With no argument it lists
@@ -64,6 +64,10 @@ every section and topic as `name<TAB>title`. A shipped file that names parts of 
 `<!-- souther-section: name -->` above a heading — has each of them listed and read as
 `<set>/<topic>/<name>`; one that names none is read whole. New to Souther? Read
 {{doc:cli/start-here}}.
+
+Every diagnostic code the compiler prints is the name of the section explaining it, in either case:
+the `E2011` in a banner is {{doc:E2011}}. Nothing else has to be read off the banner for the
+lookup to work.
 
 <!-- souther-section: api -->
 ## api
@@ -133,7 +137,7 @@ than resumed at.
 | Option | Meaning |
 | --- | --- |
 | `--format human\|json` | how to render a compile error (default `human`) |
-| `--lang <tag>` | message locale, e.g. `ja` or `en` (default: the system's, then `ja`) |
+| `--lang <tag>` | message locale, e.g. `ja` or `en`. Overrides `SOUTHER_LANG`; with neither, `en`, which is what the shipped documents are written in |
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 
 These apply to `compile`, `run` and `examples`. Passing them to another command is an error.

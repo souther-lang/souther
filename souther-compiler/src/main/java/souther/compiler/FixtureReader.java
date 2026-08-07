@@ -768,9 +768,11 @@ public final class FixtureReader {
         if (Prelude.isLibraryFunction(reached)) {
             return true;   // a standard-library function: an intrinsic, or one nothing emitted here
         }
-        for (Ast.FnDef fn : module.fns()) {
-            if (fn.name().equals(reached) && !fn.params().isEmpty()) {
-                return true;
+        for (List<Ast.FnDef> component : List.of(module.fns(), module.takenOn())) {
+            for (Ast.FnDef fn : component) {
+                if (fn.name().equals(reached) && !fn.params().isEmpty()) {
+                    return true;
+                }
             }
         }
         return false;

@@ -217,9 +217,9 @@ public final class HelperInliner {
      * <p>They are in the table and not in {@code own}, as they are for {@link #forModule}: an imported
      * definition is one this module expands and not one it declares.
      */
-    public static HelperInliner forHelpers(String module, Map<String, Ast.FnDef> own,
+    public static HelperInliner forHelpers(String module, Map<String, Ast.FnDef> declared,
                                            Map<String, Ast.FnDef> imported, InliningPolicy policy) {
-        HelperTable table = HelperTable.of(module, own, imported, policy);
+        HelperTable table = HelperTable.of(module, declared, Map.of(), imported, policy);
         return over(table, HelperGraph.of(table));
     }
 
@@ -247,19 +247,31 @@ public final class HelperInliner {
         return this;
     }
 
-    /** A module's helpers: the fns that implement no behavior, keyed by name. */
+    /** The helpers a module declares: the fns its source wrote that implement no behavior, keyed by
+     * the name it declared each under. Not what it took on to emit — that is {@link #takenOnBy}, and
+     * the two are separate components of the module so that this answer is the same at every stage. */
     public static Map<String, Ast.FnDef> helpersOf(Ast.Module module) {
+        return keyed(module, module.fns());
+    }
+
+    /** The helpers a module emits without having declared them, keyed by the name it reaches each by.
+     * Empty until the pass that works out what the module reaches has run. */
+    public static Map<String, Ast.FnDef> takenOnBy(Ast.Module module) {
+        return keyed(module, module.takenOn());
+    }
+
+    private static Map<String, Ast.FnDef> keyed(Ast.Module module, List<Ast.FnDef> fns) {
         Set<String> behaviorNames = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             behaviorNames.add(b.name());
         }
-        Map<String, Ast.FnDef> own = new LinkedHashMap<>();
-        for (Ast.FnDef fn : module.fns()) {
+        Map<String, Ast.FnDef> out = new LinkedHashMap<>();
+        for (Ast.FnDef fn : fns) {
             if (!behaviorNames.contains(fn.name())) {
-                own.put(fn.name(), fn);
+                out.put(fn.name(), fn);
             }
         }
-        return own;
+        return out;
     }
 
     /**
@@ -304,7 +316,7 @@ public final class HelperInliner {
         followingValues(work, table.reachable(),
                 e -> helpersNamedIn(e, table.reachable(), named));
         for (String name : graph.reachedFrom(named)) {
-            if (graph.recurses(name) && !table.holds(name)) {
+            if (graph.recurses(name) && !table.held().containsKey(name)) {
                 takenOnRecursive.add(name);
             }
         }
@@ -378,7 +390,7 @@ public final class HelperInliner {
     public Map<String, Ast.FnDef> injectedExampleHelpers() {
         Map<String, Ast.FnDef> out = new java.util.LinkedHashMap<>();
         for (String name : exampleHelpers) {
-            if (table.holds(name)) {
+            if (table.held().containsKey(name)) {
                 continue;
             }
             Ast.FnDef def = table.reached(name);
@@ -395,7 +407,7 @@ public final class HelperInliner {
     public Set<String> recursiveHelpers() {
         Set<String> result = new java.util.LinkedHashSet<>();
         for (String name : graph.recursive()) {
-            if (table.holds(name)) {
+            if (table.held().containsKey(name)) {
                 result.add(name);
             }
         }
@@ -426,8 +438,8 @@ public final class HelperInliner {
      * ({@link Ast.FnDef#declaredBy}), and a check whose rule is about the declaring module — what
      * may be walked, what must be proven total — asks it there.
      */
-    public Map<String, Ast.FnDef> helpers() {
-        return table.fns();
+    public Map<String, Ast.FnDef> held() {
+        return table.held();
     }
 
     /**

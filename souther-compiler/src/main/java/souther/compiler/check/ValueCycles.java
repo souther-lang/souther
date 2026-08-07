@@ -49,13 +49,17 @@ public final class ValueCycles {
      */
     public static void rejectIn(Ast.Module m, Map<String, Ast.FnDef> published) {
         HelperTable table = HelperTable.of(m, published, InliningPolicy.FULL);
+        // What the module declared, which is what a value cycle is about: a value written in terms of
+        // itself is a defect in what the author wrote, and a helper the module only took on to emit
+        // was written by somebody else and answered for there.
+        Map<String, Ast.FnDef> declared = table.declarations();
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> e : table.fns().entrySet()) {
+        for (Map.Entry<String, Ast.FnDef> e : declared.entrySet()) {
             Set<String> called = new LinkedHashSet<>();
             HelperInliner.helperCallsIn(e.getValue().writtenBody(), table.reachable(), called);
             callsOf.put(e.getKey(), called);
         }
-        reject(table.fns(), callsOf);
+        reject(declared, callsOf);
     }
 
     /**

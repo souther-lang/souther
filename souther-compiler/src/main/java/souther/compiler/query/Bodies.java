@@ -525,7 +525,10 @@ public final class Bodies {
                 return Answer.absent();
             }
             Map<String, Ast.FnDef> helpers = new LinkedHashMap<>(imported.value());
+            // What this module has, both components of it: a body may name a helper it took on to
+            // emit exactly as it names one it declared, and a row may apply either.
             helpers.putAll(HelperInliner.helpersOf(settled.value()));
+            helpers.putAll(HelperInliner.takenOnBy(settled.value()));
             return Answer.of(helpers);
         }
     }
@@ -573,17 +576,25 @@ public final class Bodies {
             Map<String, Ast.FnDef> out = new LinkedHashMap<>();
             for (Ast.Import imp : resolved.value().imports()) {
                 Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
-                // Closed against everything the declaring module can name, not only what it declares:
-                // a published body may call a helper that module imported in turn, and a chain of
-                // three is where a table of its own definitions leaves the middle one unexpanded.
-                Answer<Map<String, Ast.FnDef>> table = db.ask(new ModuleDefinitions(imp.module()));
-                if (!from.present() || !table.present()) {
+                // Closed against the table that module's own bodies are expanded against, which is
+                // everything it can name and not only what it declares: a published body may call a
+                // helper that module imported in turn, and a chain of three is where a table of its
+                // own definitions leaves the middle one unexpanded.
+                //
+                // Its table and not a map of the same entries. A map says which declarations are
+                // there and nothing about which relation each is in, so handing one over is handing
+                // over the question of what it means — and the answer taken here would be this
+                // module's guess about another module's declarations.
+                Answer<Expanding.Of> against =
+                        db.ask(new Expanding(imp.module(), InliningPolicy.FULL));
+                if (!from.present() || !against.present()) {
                     continue;
                 }
                 // Two imports reaching one definition reach one definition: the name it is keyed by
                 // is the module that declares it and its own name, so the second arrival is the same
                 // entry rather than a second copy of the method.
-                publishedClosure(from.value(), imp.names(), table.value()).forEach(out::putIfAbsent);
+                publishedClosure(from.value(), imp.names(), against.value())
+                        .forEach(out::putIfAbsent);
             }
             return Answer.of(out);
         }
@@ -607,12 +618,12 @@ public final class Bodies {
      * named, one with parameters is expanded where it is called.
      */
     public static Map<String, Ast.FnDef> publishedDefinitions(Ast.Module from, List<String> wanted,
-                                                              Map<String, Ast.FnDef> table) {
+                                                              Expanding.Of against) {
         Map<String, Ast.FnDef> out = new LinkedHashMap<>();
         HelperInliner inliner = null;
         for (Ast.FnDef fn : publishable(from, wanted)) {
             if (inliner == null) {
-                inliner = HelperInliner.forHelpers(from.name(), table);
+                inliner = HelperInliner.over(against.table(), against.graph());
             }
             Ast.FnDef closed = inliner.closeAcross(fn, from.name());
             out.put(closed.name(), closed);
@@ -631,12 +642,12 @@ public final class Bodies {
      * from the others, so following the calls collects all of them.
      */
     public static Map<String, Ast.FnDef> publishedClosure(Ast.Module from, List<String> wanted,
-                                                          Map<String, Ast.FnDef> table) {
-        Map<String, Ast.FnDef> out = publishedDefinitions(from, wanted, table);
+                                                          Expanding.Of against) {
+        Map<String, Ast.FnDef> out = publishedDefinitions(from, wanted, against);
         if (out.isEmpty()) {
             return out;
         }
-        HelperInliner inliner = HelperInliner.forHelpers(from.name(), table);
+        HelperInliner inliner = HelperInliner.over(against.table(), against.graph());
         Deque<String> work = new ArrayDeque<>(out.keySet());
         while (!work.isEmpty()) {
             for (ValueName.Helper reached : HelperNames.helpersReached(out.get(work.poll()).writtenBody())) {
@@ -649,7 +660,10 @@ public final class Bodies {
                 // there and closed here, one that reached `from` from further up is already keyed and
                 // closed by the module that declares it, and is passed along as it stands.
                 boolean ownHelper = reached.module().equals(from.name());
-                Ast.FnDef def = table.get(ownHelper ? reached.name() : qualified);
+                // Asked of what the name reaches there, which is the one relation this module has any
+                // business asking of another module's table.
+                Ast.FnDef def =
+                        against.table().reached(ownHelper ? reached.name() : qualified);
                 if (def == null) {
                     continue;   // a prelude helper, which every module emits for itself
                 }
@@ -792,9 +806,14 @@ public final class Bodies {
             if (!settled.present()) {
                 return Answer.absent();
             }
-            for (Ast.FnDef candidate : settled.value().fns()) {
-                if (candidate.name().equals(fn)) {
-                    return Answer.of(candidate);
+            // Either component: a body is asked for by name, and a helper the module took on to emit
+            // has one to expand exactly as one it declared does.
+            for (List<Ast.FnDef> component : List.of(
+                    settled.value().fns(), settled.value().takenOn())) {
+                for (Ast.FnDef candidate : component) {
+                    if (candidate.name().equals(fn)) {
+                        return Answer.of(candidate);
+                    }
                 }
             }
             return Answer.absent();
@@ -883,32 +902,42 @@ public final class Bodies {
                 return Answer.absent();
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
+            // A name is one question, so a name written twice is asked once and answered by the
+            // first. The check reports the duplicate and this module is not emitted; what it must
+            // not do is carry the same body twice. Shared across both components because a module
+            // that took on a helper it also declares would otherwise emit two of it.
             Set<String> taken = new LinkedHashSet<>();
-            List<Ast.FnDef> fns = new ArrayList<>();
-            for (Ast.FnDef fn : settled.value().fns()) {
-                // A non-recursive helper is fully inlined at its call sites and never emitted — it has
-                // no body of its own down here, so nothing asks for one. Unless an example row applies
-                // it (ADR-0077): a row runs a helper rather than expanding it, so that one is emitted.
-                if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())
-                        && !examples.value().contains(fn.name())) {
-                    continue;
+            List<List<Ast.FnDef>> lowered = new ArrayList<>();
+            // Both, and each stays where it was: what becomes a method is one question and what this
+            // module declared is another, and the backend reads the first while every rule about the
+            // declaring module reads the second.
+            for (List<Ast.FnDef> component : List.of(
+                    settled.value().fns(), settled.value().takenOn())) {
+                List<Ast.FnDef> fns = new ArrayList<>();
+                for (Ast.FnDef fn : component) {
+                    // A non-recursive helper is fully inlined at its call sites and never emitted —
+                    // it has no body of its own down here, so nothing asks for one. Unless an example
+                    // row applies it (ADR-0077): a row runs a helper rather than expanding it, so
+                    // that one is emitted.
+                    if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())
+                            && !examples.value().contains(fn.name())) {
+                        continue;
+                    }
+                    if (!taken.add(fn.name())) {
+                        continue;
+                    }
+                    Answer<Ast.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
+                    if (!body.present()) {
+                        // Why is the body's to say, and it said it. A module with a body that does
+                        // not expand has none to emit.
+                        return Answer.absent();
+                    }
+                    fns.add(body.value());
                 }
-                // A name is one question, so a name written twice is asked once and answered by the
-                // first. The check reports the duplicate and this module is not emitted; what it must
-                // not do is carry the same body twice.
-                if (!taken.add(fn.name())) {
-                    continue;
-                }
-                Answer<Ast.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
-                if (!body.present()) {
-                    // Why is the body's to say, and it said it. A module with a body that does not
-                    // expand has none to emit.
-                    return Answer.absent();
-                }
-                fns.add(body.value());
+                lowered.add(fns);
             }
             return Answer.of(new Lower.Lowered(settled.value(),
-                    Lower.lowered(settled.value(), fns)));
+                    Lower.lowered(settled.value(), lowered.get(0), lowered.get(1))));
         }
     }
 

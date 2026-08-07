@@ -186,8 +186,14 @@ public final class TypeChecker {
                                         Map<String, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<String, Ast.FnDef> publishedToHere) {
+        // Both components, because what reads this walks both: a helper is checked whether the module
+        // declared it or took it on to emit, and one missing here is a helper checked against a body
+        // it does not have.
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
         for (Ast.FnDef fn : lowered.fns()) {
+            loweredBodies.put(fn.name(), fn.writtenBody());
+        }
+        for (Ast.FnDef fn : lowered.takenOn()) {
             loweredBodies.put(fn.name(), fn.writtenBody());
         }
         // The imported definitions join the table this module's bodies are expanded against: a
@@ -375,7 +381,7 @@ public final class TypeChecker {
         // per declaration, so a module needing the word in several places says so in one build. Which
         // declarations each rule is about is the rule's own to say (see PartialHelperUse): the fns here
         // hold what this module took on to emit as well as what it wrote.
-        for (Ast.FnDef helper : inliner.helpers().values()) {
+        for (Ast.FnDef helper : inliner.held().values()) {
             collect(errors, abandoned,
                     () -> PartialHelperUse.rejectReachingPartial(helper, module.name(), reachability));
         }

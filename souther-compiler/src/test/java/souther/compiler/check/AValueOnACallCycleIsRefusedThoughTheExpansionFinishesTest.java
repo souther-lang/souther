@@ -86,7 +86,7 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
         HelperInliner inliner = HelperInliner.forModule(Resolve.module(parsed, Symbols.of(parsed)));
 
         Ast.Expr expanded = assertDoesNotThrow(() -> inliner.inline(
-                inliner.helpers().get("depth").writtenBody(), inliner.bodyOf("depth")));
+                inliner.held().get("depth").writtenBody(), inliner.bodyOf("depth")));
 
         assertTrue(expanded != null, "a body the expansion finished with");
     }

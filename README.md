@@ -212,7 +212,7 @@ Not yet implemented: incremental compilation, static invariant proofs, handwritt
 
 ## Details and examples
 
-- [Language specification (Japanese)](specification.adoc): the normative syntax and semantics
+- [Language specification](specification.adoc): the normative syntax and semantics
 - [ADRs](docs/adr/README.md): design decisions, alternatives, and prior art
 - [Examples](https://github.com/souther-lang/examples): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal). They live in their own repository because the boundary code moves on Spring / jOOQ / Kotlin's schedule rather than the compiler's; their build tracks `develop` here
 

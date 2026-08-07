@@ -31,6 +31,10 @@ import java.util.regex.Pattern;
  * guessing. Where the two do differ — {@code stdlib_api_search} takes no count because the stdlib
  * surface is answered whole — the tool's own description says so.
  *
+ * <p>For the same reason a description names these tools and never a command line. A client reading
+ * one has no way to tell a command it cannot run from an answer it failed to find, so the whole of
+ * what a capability is reached by has to be written in the table it is published from.
+ *
  * <p>Stdout carries protocol lines only; everything a command would say lands inside a response.
  */
 public final class McpServer {
@@ -91,10 +95,15 @@ public final class McpServer {
                             + " it lists every section anchor and every shipped topic as `name<TAB>title`,"
                             + " one per line — start there. With a `name` it reads that one specification"
                             + " section by its anchor (e.g. `newtype`) or that one library topic by its"
-                            + " set-qualified name (e.g. `raoh/tutorial`). A long one arrives in parts,"
-                            + " each saying how to ask for what follows it.",
+                            + " set-qualified name (e.g. `raoh/tutorial`), or the part of one that its"
+                            + " set has named (e.g. `cli/commands/japi`). A diagnostic code is a name"
+                            + " too, in either case (e.g. `E2011`): every code the compiler prints is"
+                            + " the anchor of the section explaining it, so a banner read no further"
+                            + " than its code is still enough to look up. A long answer arrives in"
+                            + " parts, each saying how to ask for what follows it.",
                     List.of(new Param("name", Kind.STRING, false,
-                                    "a section anchor or a set/topic name; omit to list every one of them"),
+                                    "a section anchor, a diagnostic code, or a set/topic name;"
+                                            + " omit to list every one of them"),
                             new Param("cursor", Kind.CURSOR, false,
                                     "to read on from where a part left off: the `cursor` that part"
                                             + " came back with, sent back with the same `name`"))),
