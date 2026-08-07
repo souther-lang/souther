@@ -55,6 +55,11 @@ public final class Formatter {
      * tree it describes. */
     private final Map<SyntaxNode, ParentComments> commentsByParent = new IdentityHashMap<>();
 
+    /** The comments written at the end of a line of code, by the construct that line belongs to.
+     * Computed once for the file: which of the two a comment is depends on the whitespace before it,
+     * which is a fact about the token stream rather than about any one parent. */
+    private Map<SyntaxNode, List<SyntaxToken>> trailing = new IdentityHashMap<>();
+
     private Formatter() {
     }
 
@@ -160,6 +165,7 @@ public final class Formatter {
     // --- top level ---
 
     private Doc file(SyntaxNode file) {
+        trailing = scanTrailing(file);
         List<Doc> parts = new ArrayList<>();
         SyntaxKind prev = null;
         for (SyntaxNode item : file.childNodes()) {
@@ -183,6 +189,9 @@ public final class Formatter {
                 parts.add(HARDLINE);
             }
             parts.add(item(item));
+            for (Doc c : trailingOf(item)) {
+                parts.add(c);
+            }
             prev = item.kind();
         }
         for (Doc c : unwritten(trailingComments(file))) {
@@ -1140,6 +1149,72 @@ public final class Formatter {
             last = concat(last, HARDLINE, c);
         }
         out.set(out.size() - 1, last);
+        return out;
+    }
+
+    /**
+     * Every comment written after code on the same line, by the construct that code ends. Whether a
+     * comment was written above a line or at the end of one is in the tree — the whitespace before a
+     * comment on its own line carries the newline that ended the line before it, and the whitespace
+     * before a trailing comment does not — so this reads it rather than guessing from position.
+     */
+    private static Map<SyntaxNode, List<SyntaxToken>> scanTrailing(SyntaxNode file) {
+        Map<SyntaxNode, List<SyntaxToken>> out = new IdentityHashMap<>();
+        SyntaxToken code = null;             // the last token that was not trivia
+        boolean lineEnded = true;            // nothing precedes the first token on its line
+        for (SyntaxToken t : tokens(file)) {
+            if (t.kind() == SyntaxKind.WHITESPACE) {
+                lineEnded |= t.text().indexOf('\n') >= 0;
+            } else if (t.kind() == SyntaxKind.LINE_COMMENT) {
+                if (!lineEnded && code != null) {
+                    out.computeIfAbsent(owner(code), _ -> new ArrayList<>()).add(t);
+                }
+                lineEnded = true;            // a line comment runs to the end of its line
+            } else {
+                code = t;
+                lineEnded = false;
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The construct a comment written after {@code code} was written about: the outermost one that
+     * ends where {@code code} does. {@code data D = A | B   // c} is about the declaration and not
+     * about {@code B}, and {@code , f: T   // c} is about the field and not about the block, and the
+     * two are the same rule — what ends on that line is what the line was about.
+     */
+    private static SyntaxNode owner(SyntaxToken code) {
+        SyntaxNode node = code.parent();
+        while (node.parent() != null && node.parent().parent() != null
+                && node.parent().end() == code.end()) {
+            node = node.parent();
+        }
+        return node;
+    }
+
+    /** {@code n}'s trailing comments, marked consumed. Empty where it has none, or where they have
+     * been written already. */
+    private List<Doc> trailingOf(SyntaxNode n) {
+        List<Doc> out = new ArrayList<>();
+        for (SyntaxToken c : trailing.getOrDefault(n, List.of())) {
+            if (consumedComments.add(c.start())) {
+                out.add(Doc.trailing(c.text().stripTrailing()));
+            }
+        }
+        return out;
+    }
+
+    /** Every token of {@code n}'s subtree, in document order. */
+    private static List<SyntaxToken> tokens(SyntaxNode n) {
+        List<SyntaxToken> out = new ArrayList<>();
+        for (SyntaxElement e : n.children()) {
+            if (e instanceof SyntaxNode c) {
+                out.addAll(tokens(c));
+            } else if (e instanceof SyntaxToken t) {
+                out.add(t);
+            }
+        }
         return out;
     }
 

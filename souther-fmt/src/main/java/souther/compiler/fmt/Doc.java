@@ -27,6 +27,13 @@ public sealed interface Doc {
     record Nest(int indent, Doc doc) implements Doc {}
     record Group(Doc doc) implements Doc {}
 
+    /**
+     * A comment written at the end of a line of code. It is not content the width has to make room
+     * for — it sits past the end of the line whatever its length — but nothing else can share the
+     * line after it, so a group holding one cannot be laid out flat.
+     */
+    record Trailing(String s) implements Doc {}
+
     static Doc text(String s) {
         return new Text(s);
     }
@@ -37,6 +44,11 @@ public sealed interface Doc {
 
     static Doc concat(List<Doc> parts) {
         return new Concat(List.copyOf(parts));
+    }
+
+    /** A comment at the end of the line the preceding document ends on. */
+    static Doc trailing(String s) {
+        return new Trailing(s);
     }
 
     static Doc nest(int indent, Doc doc) {
@@ -99,6 +111,10 @@ public sealed interface Doc {
                     sb.append('\n').append(" ".repeat(it.indent));
                     col = it.indent;
                 }
+                case Trailing t -> {
+                    sb.append(' ').append(t.s());
+                    col += t.s().length() + 1;
+                }
             }
         }
         return sb.toString();
@@ -151,6 +167,12 @@ public sealed interface Doc {
                 case Hard _ -> {
                     // a hardline cannot be laid out flat: inside the group under test (FLAT) it forces
                     // a break; in an already-broken outer context it just ends the measured line.
+                    return it.mode != Mode.FLAT;
+                }
+                case Trailing _ -> {
+                    // the same, and for the same reason: whatever follows starts a new line, so it
+                    // is measured against that line rather than this one, and the comment's own
+                    // width is measured against nothing.
                     return it.mode != Mode.FLAT;
                 }
             }
