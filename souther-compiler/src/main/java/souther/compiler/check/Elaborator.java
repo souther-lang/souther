@@ -199,7 +199,7 @@ public final class Elaborator {
             case Ast.Block block when expected instanceof Type.FnOf want ->
                     elaborateFunctionValue(block, want.params(), env, ctx);
             case Ast.Block block -> throw CompileException.of(
-                    Diagnostic.uncoded("check.block.notvalue").title("check.block.title")
+                    Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
                             .at(block.pos()).build(),
                     "a block is not a value: it may be passed as an argument or bound to a `let` and "
                             + "applied, but it cannot be returned or stored in a data (spec 12.5)");
@@ -495,7 +495,7 @@ public final class Elaborator {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
         }
         throw CompileException.of(
-                Diagnostic.uncoded("check.fn.argtype").title("check.fn.title")
+                Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
                         .at(stepArg.pos()).args(fnName, Type.show(narrowGot),
                                 Type.show(TypeOps.substitute(declaredStep.result(), bind))).build(),
                 "the step of " + fnName + " returns " + Type.show(narrowGot)
@@ -513,7 +513,7 @@ public final class Elaborator {
             if (value.type() instanceof Type.FnOf fn) {
                 if (fn.params().size() != paramTypes.size()) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.fn.callarity").title("check.fn.title")
+                            Diagnostic.of(DiagnosticCode.E1802, "check.fn.callarity")
                                     .at(arg.pos()).args(fnName, paramTypes.size(), fn.params().size())
                                     .build(),
                             fnName + " calls its function with " + paramTypes.size()
@@ -522,7 +522,7 @@ public final class Elaborator {
                 for (int i = 0; i < paramTypes.size(); i++) {
                     if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), ctx.symbols())) {
                         throw CompileException.of(
-                                Diagnostic.uncoded("check.fn.argtype").title("check.fn.title")
+                                Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
                                         .at(arg.pos()).args(fnName, Type.show(paramTypes.get(i)),
                                                 Type.show(fn.params().get(i))).build(),
                                 fnName + "'s element type " + paramTypes.get(i)
@@ -533,14 +533,14 @@ public final class Elaborator {
                 return value;
             }
             throw CompileException.of(
-                    Diagnostic.uncoded("check.fn.expectsblock").title("check.fn.title")
+                    Diagnostic.of(DiagnosticCode.E1804, "check.fn.expectsblock")
                             .at(arg.pos()).args(fnName).build(),
                     fnName + " expects a block, e.g. `" + fnName
                             + "((acc, x) -> ..., seed, xs)` (spec 12.5)");
         }
         if (block.params().size() != paramTypes.size()) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.fn.blockarity").title("check.fn.title")
+                    Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockarity")
                             .at(block.pos()).args(paramTypes.size(), block.params().size()).build(),
                     "this block takes " + paramTypes.size() + " parameter(s), got "
                             + block.params().size());
@@ -968,7 +968,7 @@ public final class Elaborator {
      * shapes a function binding takes (a bare lambda, one an {@code if} chooses) read the same. */
     static CompileException functionAnnotation(Ast.LetIn li) {
         return CompileException.of(
-                Diagnostic.uncoded("check.fn.annotation").title("check.fn.title")
+                Diagnostic.of(DiagnosticCode.E1810, "check.fn.annotation")
                         .at(li.pos()).args(li.name()).hint("check.fn.annotation.hint").build(),
                 "the binding `" + li.name() + "` is a function, so it takes no annotation: a function"
                         + " type may be written only in a helper's parameter (spec 13.1)");
@@ -989,7 +989,7 @@ public final class Elaborator {
             }
             if (declared.params().size() != lambda.params().size()) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.fn.lambdaarity").title("check.fn.title")
+                        Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
                                 .at(lambda.pos())
                                 .args(lambda.params().size(), declared.params().size()).build(),
                         "this lambda takes " + lambda.params().size()
@@ -1016,7 +1016,7 @@ public final class Elaborator {
         collectApplications(binder, body, env, ctx, uses, Set.of());
         if (uses.isEmpty()) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.fn.noinfer").title("check.fn.title")
+                    Diagnostic.of(DiagnosticCode.E1808, "check.fn.noinfer")
                             .at(body.pos()).args(binder.name()).build(),
                     "cannot infer the type of the function `" + binder.name() + "`: write its type"
                             + " (`let " + binder.name() + ": (Int) -> Bool = ...`), or apply it in"
@@ -1026,7 +1026,7 @@ public final class Elaborator {
         for (List<Type> u : uses) {
             if (!u.equals(first)) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.fn.difftypes").title("check.fn.title")
+                        Diagnostic.of(DiagnosticCode.E1807, "check.fn.difftypes")
                                 .at(body.pos()).args(binder.name(), first.toString(), u.toString())
                                 .build(),
                         "the function `" + binder.name() + "` is applied with different argument"
@@ -1214,7 +1214,7 @@ public final class Elaborator {
             case Ast.Block b -> {
                 if (b.params().size() != paramTypes.size()) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.fn.lambdaarity").title("check.fn.title")
+                            Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
                                     .at(b.pos()).args(b.params().size(), paramTypes.size()).build(),
                             "this lambda takes " + b.params().size() + " parameter(s) but is applied with "
                                     + paramTypes.size());
@@ -1234,7 +1234,7 @@ public final class Elaborator {
                 Type f = els.type();
                 if (!t.equals(f)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.fn.branchtypes").title("check.fn.title")
+                            Diagnostic.of(DiagnosticCode.E1807, "check.fn.branchtypes")
                                     .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build(),
                             "the two branches produce different function types: " + Type.show(t) + " vs " + Type.show(f));
                 }

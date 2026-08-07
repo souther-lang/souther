@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
@@ -54,7 +55,7 @@ public final class HelperTyping {
                         // a recursive helper is lowered to a method, not inlined, so no call site
                         // expands it — its parameter types cannot be inferred and must be declared.
                         throw CompileException.of(
-                                Diagnostic.uncoded("check.helper.annotate").title("check.helper.title")
+                                Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
                                         .at(p.written().region()).args(h.name(), p.name()).build(),
                                 "helper `let " + h.name() + "` must annotate parameter `" + p.name()
                                         + "` with its type (spec 13.1)");
@@ -125,7 +126,7 @@ public final class HelperTyping {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.helper.return").title("check.helper.title")
+                            Diagnostic.of(DiagnosticCode.E1812, "check.helper.return")
                                     .at(h.pos()).args(h.name(), Type.show(declared), Type.show(bodyType))
                                     .build(),
                             "helper `let " + h.name() + "` declares it returns " + Type.show(declared)
@@ -157,7 +158,7 @@ public final class HelperTyping {
             Ast.FnParam p = h.params().get(idx);
             if (HelperParams.isApplied(body, p.binder())) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.helper.fnparam").title("check.helper.title")
+                        Diagnostic.of(DiagnosticCode.E1811, "check.helper.fnparam")
                                 .at(p.written().region()).args(h.name(), p.name()).build(),
                         "helper `let " + h.name() + "` parameter `" + p.name() + "` is used as a"
                                 + " function; a function-typed parameter must be annotated with its"
@@ -223,7 +224,7 @@ public final class HelperTyping {
             Ast.FnDef h = inliner.helper(name);
             if (h.declaredReturn() == null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.rechelper.return").title("check.helper.title")
+                        Diagnostic.of(DiagnosticCode.E1813, "check.rechelper.return")
                                 .at(h.pos()).args(name).build(),
                         "recursive helper `let " + name + "` must declare its return type — `let " + name
                                 + " (...) : <type> = ...` — because its result cannot be inferred through"
@@ -233,7 +234,7 @@ public final class HelperTyping {
             for (Ast.FnParam p : h.params()) {
                 if (p.type() == null) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.helper.annotate").title("check.helper.title")
+                            Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
                                     .at(p.written().region()).args(name, p.name()).build(),
                             "helper `let " + name + "` must annotate parameter `" + p.name()
                                     + "` with its type (spec 13.1)");
@@ -355,7 +356,7 @@ public final class HelperTyping {
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
         if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.rechelper.pure").title("check.helper.title")
+                    Diagnostic.of(DiagnosticCode.E1814, "check.rechelper.pure")
                             .at(call.name().region()).args(helper, call.written()).build(),
                     "recursive helper `let " + helper + "` is pure and cannot call the injected behavior `"
                             + call.written() + "` — put the effect in the behavior that calls this helper"
@@ -456,7 +457,7 @@ public final class HelperTyping {
     private static CompileException blockReturnMismatch(Ast.FnDef h, String paramName, Type want,
                                                         Type got, SourcePos pos) {
         return CompileException.of(
-                Diagnostic.uncoded("check.fn.blockparam.return").title("check.fn.title")
+                Diagnostic.of(DiagnosticCode.E1805, "check.fn.blockparam.return")
                         .at(pos).args(paramName, h.name(), Type.show(want), Type.show(got)).build(),
                 "the block passed to `" + paramName + "` of `let " + h.name() + "` must return "
                         + Type.show(want) + " but returns " + Type.show(got));
@@ -476,7 +477,7 @@ public final class HelperTyping {
         if (arg instanceof Ast.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.fn.blockparam.arity").title("check.fn.title")
+                        Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockparam.arity")
                                 .at(arg.pos()).args(paramName, h.name(), want.params().size(),
                                         lambda.params().size()).build(),
                         "the block passed to `" + paramName + "` of `let " + h.name() + "` takes "
@@ -515,7 +516,7 @@ public final class HelperTyping {
         } else if (arg instanceof Ast.Var v
                 && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.fn.notfunction").title("check.fn.title")
+                    Diagnostic.of(DiagnosticCode.E1803, "check.fn.notfunction")
                             .at(arg.pos()).args(paramName, h.name(), v.name()).build(),
                     "`" + paramName + "` of `let " + h.name() + "` expects a function, but `" + v.name()
                             + "` is a value, not a function");

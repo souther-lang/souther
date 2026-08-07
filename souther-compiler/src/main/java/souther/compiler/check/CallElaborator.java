@@ -365,8 +365,7 @@ public final class CallElaborator {
             // report to find out. The same sentence answers both: at the point of the report, this
             // name is not a function here.
             case ValueName.Local _ -> CompileException.of(
-                    Diagnostic.uncoded("check.apply.notfunction")
-                            .title("check.apply.notfunction.title")
+                    Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
                             .at(call.name().region()).args(call.written()).build(),
                     "`" + call.written() + "` is not a function here, so it cannot be applied to"
                             + " arguments");
@@ -375,8 +374,7 @@ public final class CallElaborator {
             // A name the language itself gives (`None`), applied. `Some`/`None` applications are
             // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
             case ValueName.Builtin b -> CompileException.of(
-                    Diagnostic.uncoded("check.builtin.notfunction")
-                            .title("check.apply.notfunction.title")
+                    Diagnostic.of(DiagnosticCode.E1803, "check.builtin.notfunction")
                             .at(call.name().region()).args(b.name()).build(),
                     "`" + b.name() + "` is a name the language gives, not a function, so it cannot"
                             + " be applied to arguments");
@@ -454,8 +452,7 @@ public final class CallElaborator {
             if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
                 throw stepError;
             }
-            Diagnostic.Builder b = Diagnostic.uncoded("check.fold.seed.untyped")
-                    .title("check.fold.seed.title")
+            Diagnostic.Builder b = Diagnostic.of(DiagnosticCode.E1815, "check.fold.seed.untyped")
                     .at(Elaborator.region(args.get(seed)));
             if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
                 b.secondary(stepError.diagnostic().region(), "check.fold.seed.here");
@@ -491,8 +488,7 @@ public final class CallElaborator {
         // still accepted.
         if (entry != null && entry.declaration().params().isEmpty()) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.apply.notfunction")
-                            .title("check.apply.notfunction.title")
+                    Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
                             .at(call.name().region()).args(call.written())
                             .hint("check.stdlib.value.hint", call.written()).build(),
                     "`" + call.written() + "` is a value, not a function, so it takes no `()` — write `"
@@ -506,7 +502,7 @@ public final class CallElaborator {
             Prelude.Signature intrinsic = entry.signature();
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.arity").title("check.arity.title")
+                        Diagnostic.of(DiagnosticCode.E1802, "check.arity")
                                 .at(call.name().region())
                                 .args(call.written(), intrinsic.params().size(), args.size()).build(),
                         call.written() + " takes " + intrinsic.params().size()
@@ -547,7 +543,7 @@ public final class CallElaborator {
                 if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
                         throw CompileException.of(
-                                Diagnostic.uncoded("check.arity").title("check.arity.title")
+                                Diagnostic.of(DiagnosticCode.E1802, "check.arity")
                                         .at(call.name().region())
                                         .args(call.written(), fn.params().size(), args.size()).build(),
                                 "`" + call.written() + "` takes " + fn.params().size()
@@ -677,7 +673,7 @@ public final class CallElaborator {
             }
             if (position == null || BottomInfer.isBottom(position)) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.numeric.empty").title("check.fold.seed.title")
+                        Diagnostic.of(DiagnosticCode.E1815, "check.numeric.empty")
                                 .at(call.name().region()).args(call.written())
                                 .hint("check.numeric.empty.hint").build(),
                         call.written() + " over the empty list answers with its seed, and whether that"
@@ -758,7 +754,7 @@ public final class CallElaborator {
     static void arity(Ast.Apply call, int n) {
         if (call.args().size() != n) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.arity").title("check.arity.title")
+                    Diagnostic.of(DiagnosticCode.E1802, "check.arity")
                             .at(call.name().region())
                             .args(call.written(), n, call.args().size()).build(),
                     call.written() + " expects " + n + " argument(s), got " + call.args().size());

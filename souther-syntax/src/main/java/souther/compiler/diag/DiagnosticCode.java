@@ -103,6 +103,22 @@ public enum DiagnosticCode {
     E1702("a-stage-after-the-first-takes-one-input", "check.pipe.title"),
     E1703("a-pipeline-composes-behaviors", "check.pipe.title"),
 
+    // --- functions, helpers, and applying them ---
+    E1802("an-application-gives-the-arguments-it-takes", "check.arity.title"),
+    E1803("what-is-applied-is-a-function", "check.apply.notfunction.title"),
+    E1804("a-function-goes-where-a-function-is-taken", "check.fn.title"),
+    E1805("a-block-answers-the-type-its-position-takes", "check.fn.title"),
+    E1806("an-argument-has-the-type-its-parameter-takes", "check.fn.title"),
+    E1807("a-function-binding-has-one-type", "check.fn.title"),
+    E1808("a-function-bindings-type-is-known", "check.fn.title"),
+    E1809("a-block-is-not-a-value", "check.block.title"),
+    E1810("a-function-type-is-written-only-on-a-helper-parameter", "check.fn.title"),
+    E1811("a-helper-parameter-states-its-type", "check.helper.title"),
+    E1812("a-helper-answers-what-it-declares", "check.helper.title"),
+    E1813("a-recursive-helper-declares-its-return-type", "check.helper.title"),
+    E1814("a-recursive-helper-is-a-pure-method", "check.helper.title"),
+    E1815("an-empty-collections-element-type-is-determined", "check.fold.seed.title"),
+
     // --- examples ---
     E1901("example-target-is-a-behavior", "check.example.title"),
     E1902("example-target-is-evaluable", "check.example.title"),

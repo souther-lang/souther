@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -74,7 +75,7 @@ public final class NewtypeDesugar {
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(
-                                Diagnostic.uncoded("check.newtype.arity").title("check.arity.title")
+                                Diagnostic.of(DiagnosticCode.E1802, "check.newtype.arity")
                                         .at(call.name().region()).args(call.written(), args.size())
                                         .build(),
                                 "`" + call.written() + "` wraps one value, but is applied to " + args.size()

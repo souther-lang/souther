@@ -1933,6 +1933,26 @@ A lambda argument `+(a, b) -> ...+` is multiple arguments (<<blocks>>), distinct
 [#fn]
 == let — implementation
 
+
+What holds wherever something is applied:
+
+* [[what-is-applied-is-a-function]]what is applied MUST be something that can be — a helper, a behavior, a newtype, a block, a function-typed parameter. A name the language gives is not one;
+* [[an-application-gives-the-arguments-it-takes]]an application MUST give as many arguments as the thing takes. A newtype wraps one value, a block takes what it was written with, a helper takes its parameters;
+* [[an-argument-has-the-type-its-parameter-takes]]an argument MUST have the type its parameter takes.
+
+A block is written where a function is taken, and that position is part of what the standard library states:
+
+* [[a-function-goes-where-a-function-is-taken]]a block or a function name goes in the argument that takes a function, and only there. Which argument that is belongs to the function being called (<<stdlib>>);
+* [[a-block-answers-the-type-its-position-takes]]a block MUST answer with what its position takes — the accumulator of a `+fold+`, `+Bool+` for a predicate, the element type of what is being grown.
+
+[[a-block-is-not-a-value]]A block is not a value. It may be passed as an argument, or bound with `+let+` and applied, and it MUST NOT be returned or stored in a field: a function has no external representation (<<external-representation>>), so nothing carries it across a boundary.
+
+[[a-function-binding-has-one-type]]A binding holding a function has one type. Applied at two argument types, or given by two branches that produce different function types, it has no single one to be.
+
+[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it.
+
+[[a-function-type-is-written-only-on-a-helper-parameter]]A function type is written in one place: a helper's parameter. Everywhere else what a function is is read off what it is applied to.
+
 A `+let+` is the implementation of a behavior. A behavior is the specification (<<behavior>>), and a `+let+` is what satisfies it.
 
 [#fn-declaration]
@@ -1999,6 +2019,12 @@ A value is not module state. Its expression is elaborated in the module that dec
 
 [#fn-rules]
 ==== Rules
+
+
+* [[a-helper-parameter-states-its-type]]a helper's parameter MUST have a type that is stated or determined. A parameter only read through a field, or used as a function, names no type by being used, so it is annotated;
+* [[a-helper-answers-what-it-declares]]a helper that declares a return type MUST answer with it;
+* [[a-recursive-helper-declares-its-return-type]]a recursive helper MUST declare its return type, its result not being readable from a body that names itself;
+* [[a-recursive-helper-is-a-pure-method]]a recursive helper is a pure static method: it takes no function parameter and reaches no injected behavior. The effect belongs to the behavior that calls it.
 
 * A `+let+` with a same-named behavior does not write argument types; the type comes from the behavior. A count mismatch is a compile error. A behavior whose type takes nothing (`+() -> T+`) is implemented by a value, which writes no parameter list.
 * A `+let+` written with a parameter list defines a function; one written without defines a value. An empty `+()+` is a compile error — a definition taking nothing is the value form. A helper therefore has at least one parameter.
@@ -2897,6 +2923,9 @@ An outside-world dependency is declared as a behavior with no implementation, an
 
 [#stdlib]
 == Standard library
+
+
+[[an-empty-collections-element-type-is-determined]]An operation seeded with an empty collection MUST have its element or accumulator type determined where it is written — by the binding it feeds, by the field or output position it lands in, or by a non-empty seed. What an empty collection holds does not follow from it.
 
 [#reserved-namespace]
 === Reserved namespace
@@ -4331,6 +4360,154 @@ decode/encode are boundary edges, not pipeline stages; `>->` composes behaviors 
 ----
 
 Reported at the stage (<<a-pipeline-composes-behaviors>>). The decoder and the encoder are where a pipeline starts and ends (<<decoder>>, <<encoder>>) and are not steps within it.
+
+[#e1802]
+=== Something is applied to the wrong number of arguments
+
+[,text]
+----
+Helper `let depth` takes 2 argument(s), but is called with 1.
+----
+
+Reported at the application (<<an-application-gives-the-arguments-it-takes>>). It covers a helper, a newtype applied to more than the one value it wraps, a lambda, and a block whose parameter list does not match the position it was written in.
+
+[#e1803]
+=== Something that is not a function is applied
+
+[,text]
+----
+`unreachable` is a name the language gives, not a function, so it cannot be applied to arguments.
+----
+
+Reported at the application (<<what-is-applied-is-a-function>>).
+
+[#e1804]
+=== A function is written where a value goes, or the other way round
+
+[,text]
+----
+Argument 2 of `List.fold` is `seed`, which does not take a function. The function goes to argument 1
+(`step`).
+----
+
+Reported at the argument (<<a-function-goes-where-a-function-is-taken>>). Which argument takes the function belongs to the function being called, so the message names the one that does rather than describing the shape.
+
+[#e1805]
+=== A block does not answer what its position takes
+
+[,text]
+----
+A fold's block must return the accumulator type Amount, but got Int.
+----
+
+Reported at the block (<<a-block-answers-the-type-its-position-takes>>): a `+fold+`'s accumulator, a predicate's `+Bool+`, the element type of what is being grown.
+
+[#e1806]
+=== An argument does not have the type its parameter takes
+
+[,text]
+----
+`List.map`'s element type Amount is not acceptable to the function, which takes Int.
+----
+
+Reported at the argument (<<an-argument-has-the-type-its-parameter-takes>>).
+
+[#e1807]
+=== A function binding would need two types
+
+[,text]
+----
+The function `f` is applied with different argument types: Int vs String.
+----
+
+Reported at the binding (<<a-function-binding-has-one-type>>). Applying it at two argument types, or giving it from two branches that produce different function types, leaves the binding with no single type; Souther has no generics to give it one (<<type-variables>>).
+
+[#e1808]
+=== A function binding's type cannot be read
+
+[,text]
+----
+Cannot infer the type of the function `f`: write its type (`let f: (Int) -> Bool = ...`), or apply
+it in this scope so its parameter types follow.
+----
+
+Reported at the binding (<<a-function-bindings-type-is-known>>).
+
+[#e1809]
+=== A block is returned or stored
+
+[,text]
+----
+A block is not a value: it may be passed as an argument or bound to a `let` and applied, but it
+cannot be returned or stored in a field.
+----
+
+Reported where a block leaves the scope it was written in (<<a-block-is-not-a-value>>). A function has no external representation (<<external-representation>>), so a field holding one could not be decoded or encoded and an output holding one could not cross out.
+
+[#e1810]
+=== A function type is written outside a helper parameter
+
+[,text]
+----
+The binding `step` is a function, and a function type may be written only in a helper parameter.
+----
+
+Reported at the annotation (<<a-function-type-is-written-only-on-a-helper-parameter>>).
+
+[#e1811]
+=== A helper parameter has no type
+
+[,text]
+----
+Helper `let total` parameter `line` is only read through a field, which names no type; annotate it
+with its type.
+----
+
+Reported at the parameter (<<a-helper-parameter-states-its-type>>). Reading a field off a parameter, or applying it, does not name a type — several types have a field of that name — so the annotation is what says which.
+
+[#e1812]
+=== A helper does not answer what it declares
+
+[,text]
+----
+Helper `let total` declares it returns Amount, but its body is Int.
+----
+
+Reported at the helper (<<a-helper-answers-what-it-declares>>).
+
+[#e1813]
+=== A recursive helper declares no return type
+
+[,text]
+----
+Recursive helper `let depth` must declare its return type (`let depth (...) : <type> = ...`),
+because its result cannot be inferred from a body that names itself.
+----
+
+Reported at the helper (<<a-recursive-helper-declares-its-return-type>>).
+
+[#e1814]
+=== A recursive helper takes a function or reaches an effect
+
+[,text]
+----
+Recursive helper `let depth` is pure and cannot call the injected behavior `now` — put the effect in
+the behavior that calls this helper.
+----
+
+Reported at the helper (<<a-recursive-helper-is-a-pure-method>>). It is emitted as a pure static method (<<fn-rules>>), which is what lets its termination be proven and what keeps the effect where a reader of the behavior can see it.
+
+[#e1815]
+=== An empty collection's type cannot be read where it is written
+
+[,text]
+----
+This empty collection's element type cannot be inferred here.
+Hint: Annotate the binding it feeds (`let x: <type> = ...`), place the fold directly in a typed
+position — the field or behavior output it feeds — or seed it with a non-empty value.
+----
+
+Reported at the operation (<<an-empty-collections-element-type-is-determined>>). What an empty collection holds does not follow from the collection, so it follows from the position it is written in or from nothing at all.
 
 [#e1901]
 === Example target is not a behavior

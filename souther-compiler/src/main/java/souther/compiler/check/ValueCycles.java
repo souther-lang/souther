@@ -84,7 +84,7 @@ public final class ValueCycles {
                     && e.getValue().declaredReturn().asFn() != null;
             if (!declaredAFunction && e.getValue().writtenBody() instanceof Ast.Block block) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.block.notvalue").title("check.block.title")
+                        Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
                                 .at(block.pos()).build(),
                         "a block is not a value: `let " + e.getKey() + "` writes no parameters, so it"
                                 + " defines a value, and a block cannot be one (spec 12.5)");
