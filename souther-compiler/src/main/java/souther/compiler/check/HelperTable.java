@@ -28,11 +28,16 @@ import java.util.Map;
  *   <li>{@link #reached} — which declaration a call expands to. A call edge, asked with a reach name.
  *   <li>{@link #declarations} — what this module's source wrote. Declarations, keyed by the names it
  *       declared them under.
- *   <li>{@link #emits} — what becomes a method of this module: what it declared, and what it took on
- *       to emit because it reaches a recursive helper it did not write.
+ *   <li>{@link #held} — what this module has as fns of its own: what it declared, and what it took
+ *       on to emit for lack of anywhere else to put it.
  * </ul>
  *
- * <p>{@link #emits} keeps the order the module wrote its helpers in, and that is load-bearing: the
+ * <p>{@link #held} is not what becomes a method. Most of what a module declares is expanded into its
+ * callers and emitted nowhere, and a value has no method form at all; which of these survive is
+ * decided at lowering, over this and the answers about recursion and rows. What is held here is the
+ * question of whose fn it is, which is the one every check needs.
+ *
+ * <p>{@link #held} keeps the order the module wrote its helpers in, and that is load-bearing: the
  * checks walk it and stop at the first helper they find wrong, so the order decides which one the
  * author is told about. An author reads their file from the top.
  *
@@ -149,10 +154,10 @@ public final class HelperTable {
         return Collections.unmodifiableMap(declared);
     }
 
-    /** What becomes a method of this module, in the order it wrote its own: what it declared, and
-     * what it took on to emit. Which of the two one is, the declaration says
-     * ({@link Ast.FnDef#declaredBy}). */
-    public Map<String, Ast.FnDef> emits() {
+    /** What this module has as fns of its own, in the order it wrote its own: what it declared, and
+     * what it took on to emit. Not what becomes a method — that is decided at lowering. Which of the
+     * two one is, the declaration says ({@link Ast.FnDef#declaredBy}). */
+    public Map<String, Ast.FnDef> held() {
         return Collections.unmodifiableMap(emits);
     }
 

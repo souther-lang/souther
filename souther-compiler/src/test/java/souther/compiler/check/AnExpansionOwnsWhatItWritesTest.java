@@ -72,7 +72,7 @@ class AnExpansionOwnsWhatItWritesTest {
                 let f (x) = x
                 """.formatted(defs));
         HelperInliner inliner = HelperInliner.forModule(m);
-        return inliner.inline(inliner.emits().get(of).writtenBody(), inliner.bodyOf(of));
+        return inliner.inline(inliner.held().get(of).writtenBody(), inliner.bodyOf(of));
     }
 
     @Test

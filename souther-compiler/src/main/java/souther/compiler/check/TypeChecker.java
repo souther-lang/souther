@@ -381,7 +381,7 @@ public final class TypeChecker {
         // per declaration, so a module needing the word in several places says so in one build. Which
         // declarations each rule is about is the rule's own to say (see PartialHelperUse): the fns here
         // hold what this module took on to emit as well as what it wrote.
-        for (Ast.FnDef helper : inliner.emits().values()) {
+        for (Ast.FnDef helper : inliner.held().values()) {
             collect(errors, abandoned,
                     () -> PartialHelperUse.rejectReachingPartial(helper, module.name(), reachability));
         }

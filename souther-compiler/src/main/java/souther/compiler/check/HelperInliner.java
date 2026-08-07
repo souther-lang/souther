@@ -316,7 +316,7 @@ public final class HelperInliner {
         followingValues(work, table.reachable(),
                 e -> helpersNamedIn(e, table.reachable(), named));
         for (String name : graph.reachedFrom(named)) {
-            if (graph.recurses(name) && !table.emits().containsKey(name)) {
+            if (graph.recurses(name) && !table.held().containsKey(name)) {
                 takenOnRecursive.add(name);
             }
         }
@@ -390,7 +390,7 @@ public final class HelperInliner {
     public Map<String, Ast.FnDef> injectedExampleHelpers() {
         Map<String, Ast.FnDef> out = new java.util.LinkedHashMap<>();
         for (String name : exampleHelpers) {
-            if (table.emits().containsKey(name)) {
+            if (table.held().containsKey(name)) {
                 continue;
             }
             Ast.FnDef def = table.reached(name);
@@ -407,7 +407,7 @@ public final class HelperInliner {
     public Set<String> recursiveHelpers() {
         Set<String> result = new java.util.LinkedHashSet<>();
         for (String name : graph.recursive()) {
-            if (table.emits().containsKey(name)) {
+            if (table.held().containsKey(name)) {
                 result.add(name);
             }
         }
@@ -438,8 +438,8 @@ public final class HelperInliner {
      * ({@link Ast.FnDef#declaredBy}), and a check whose rule is about the declaring module — what
      * may be walked, what must be proven total — asks it there.
      */
-    public Map<String, Ast.FnDef> emits() {
-        return table.emits();
+    public Map<String, Ast.FnDef> held() {
+        return table.held();
     }
 
     /**

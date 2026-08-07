@@ -92,8 +92,8 @@ public final class HelperNames {
             fakes.add(new Ast.Fake(fake.target(), rows, fake.pos()));
         }
         // Nothing is taken on until the pass below this one works out what the module reaches, so
-        // there is none here to qualify — and what does arrive there is named by the module that
-        // declares it already.
+        // there is none here to qualify — and what arrives there is already named by the name this
+        // module reaches it by, which is what it will be emitted under.
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
                 m.behaviors(), fns, m.takenOn(), examples, fakes, m.exampleFileTarget(), m.pos());
     }

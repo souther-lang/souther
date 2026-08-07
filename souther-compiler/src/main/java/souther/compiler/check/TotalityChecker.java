@@ -51,7 +51,7 @@ final class TotalityChecker {
     /** Checks every non-{@code partial}, module-own recursive helper (or group) for size-change
      * termination. */
     static void check(HelperInliner inliner) {
-        Map<String, Ast.FnDef> own = inliner.emits();
+        Map<String, Ast.FnDef> own = inliner.held();
         Map<String, Set<String>> ownEdges = ownCallGraph(own);
         Set<String> handled = new HashSet<>();
         for (String name : inliner.recursiveHelpers()) {

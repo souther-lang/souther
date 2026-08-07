@@ -58,7 +58,7 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     }
 
     private static Ast.Expr expand(HelperInliner inliner, String helper) {
-        return inliner.inline(inliner.emits().get(helper).writtenBody(), inliner.bodyOf(helper));
+        return inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
     }
 
     @Test
@@ -87,7 +87,7 @@ class AnExpansionAfterARefusalIsWhatItWouldHaveBeenTest {
     void twoWritingsIntoOneBodyDoNotWriteTheSameBinding() {
         HelperInliner inliner = inliner();
         BindingOwner body = new BindingOwner.OfData(new TypeName("demo", "X"));
-        Ast.Expr clause = inliner.emits().get("right").writtenBody();
+        Ast.Expr clause = inliner.held().get("right").writtenBody();
 
         Set<BindingId> first = bindingsOf(inliner.inline(clause, body));
         Set<BindingId> second = bindingsOf(inliner.inline(clause, body));

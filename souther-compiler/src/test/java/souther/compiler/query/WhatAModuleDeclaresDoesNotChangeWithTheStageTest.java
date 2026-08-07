@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.meta.ModulePath;
@@ -7,9 +8,11 @@ import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -107,6 +110,73 @@ class WhatAModuleDeclaresDoesNotChangeWithTheStageTest {
             module.takenOn().forEach(fn -> assertFalse(fn.declaredBy("app"),
                     "the " + stage + " tree of `app` took on `" + fn.name() + "`, which it declared"));
         });
+    }
+
+    /**
+     * A row applies a published helper that does not recurse. It is taken on for that reason alone —
+     * a row runs a helper rather than expanding it (ADR-0077) — so what a module takes on is not only
+     * what it reaches recursively, and a component holding only the recursive ones would drop it.
+     */
+    @Test
+    void aHelperOnlyARowAppliesIsTakenOnToo() {
+        Db db = Compilation.ofDocuments(Map.of("rules.sou", """
+                module rules exposing ( doubled )
+
+                let doubled (n: Int) : Int = n * 2
+                """, "app.sou", """
+                module app exposing ( In, Out, run )
+
+                import rules ( doubled )
+
+                data In  = { n: Int }
+                data Out = { m: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = Out { m = i.n }
+
+                example run
+                    | "a row applies a published helper" : (In { n = doubled(3) }) -> Out { m = 6 }
+                """), Set.of(), ModulePath.EMPTY).db();
+
+        Ast.Module prepared = db.ask(new Shapes.Prepared("app")).value();
+        // `run` implements a behavior, which is not a helper and is lowered on its own.
+        assertEquals(Set.of(), HelperInliner.helpersOf(prepared).keySet());
+        assertEquals(Set.of("rules.doubled"), HelperInliner.takenOnBy(prepared).keySet());
+        assertEquals(Set.of(), db.ask(new Bodies.RecursiveHelpers("app")).value(),
+                "nothing here recurses, so this is the row's doing and not a recursion's");
+        assertEquals(Set.of("rules.doubled"),
+                db.ask(new Bodies.Lowering("app")).value().lowered().takenOn().stream()
+                        .map(Ast.FnDef::name).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    /**
+     * The same, with the row in an attached {@code examples for} file. That is the shape the two
+     * rebuilds that run either side of the pass filling {@code takenOn} are on — the one that gathers
+     * an attached file's rows into the module, and the one that keeps only the rows of one file to
+     * report against it — and the row still finds the method.
+     */
+    @Test
+    void anAttachedFilesRowStillReachesWhatTheModuleTookOn() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module rules exposing ( doubled )
+
+                let doubled (n: Int) : Int = n * 2
+                """, """
+                module app exposing ( In, Out, run )
+
+                import rules ( doubled )
+
+                data In  = { n: Int }
+                data Out = { m: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = Out { m = i.n }
+                """, """
+                examples for app
+
+                example run
+                    | "written beside the model" : (In { n = doubled(3) }) -> Out { m = 6 }
+                """)));
     }
 
     /** And the lowered tree the backend emits from keeps them apart, which is the last place a pass

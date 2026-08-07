@@ -74,7 +74,7 @@ final class HelperParams {
             recursiveHelperFns = Map.of();
         }
         Map<String, Ast.FnDef> settled = new LinkedHashMap<>();
-        for (Ast.FnDef h : inliner.emits().values()) {
+        for (Ast.FnDef h : inliner.held().values()) {
             if (recursive.contains(h.name())) {
                 continue;   // a recursive helper is not inlined and declares its parameters (spec 13.1)
             }

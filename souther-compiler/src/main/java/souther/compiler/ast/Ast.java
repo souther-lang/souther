@@ -215,11 +215,13 @@ public interface Ast {
      * exposed names carry no signature (their type is at the definition).
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
-     * what the module emits as methods of its own without having declared them: a recursive helper it
-     * reaches, whether the standard library declares it or another module published it, has to be
-     * lowered to a method somewhere and the module compiling is where it goes. Both are emitted; only
-     * the first is declared here, and no rule reads a name to tell them apart — {@code List.foldFrom}
-     * is reached under the library's alias and declared in {@code souther.list}.
+     * what the module took on to emit as methods of its own without having declared them, which is
+     * two kinds of helper: a recursive one it reaches, which cannot be inlined and has to be lowered
+     * somewhere, and a non-recursive one an {@code example} row applies, which a row runs rather than
+     * expands (ADR-0077). Either may be declared by the standard library or by a module that
+     * published it. Only {@code fns} is declared here, and no rule reads a name to tell the two apart
+     * — {@code List.foldFrom} is reached under the library's alias and declared in
+     * {@code souther.list}.
      *
      * <p>Two components rather than one list a later pass appends to. Appended, every reader asking
      * what the module declared got what it declared before {@link
@@ -229,7 +231,8 @@ public interface Ast {
      * <p>Whoever rebuilds a module carries {@code takenOn} across, and there is no constructor that
      * defaults it: a rebuild that quietly dropped it would put a module through codegen with the
      * methods its bodies call missing, which is the failure this separation is here to make
-     * impossible.
+     * impossible. The arity says something has to be passed; that it is this module's own is what a
+     * reader of the rebuild has to see, which is why every one of them names it.
      */
     record Module(String name,
                   List<String> exposing,

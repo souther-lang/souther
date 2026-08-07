@@ -49,7 +49,7 @@ class NoExpansionSubstitutesAValueIntoItselfTest {
     }
 
     private static Ast.Expr expand(HelperInliner inliner, String helper) {
-        return inliner.inline(inliner.emits().get(helper).writtenBody(), inliner.bodyOf(helper));
+        return inliner.inline(inliner.held().get(helper).writtenBody(), inliner.bodyOf(helper));
     }
 
     private static Ast.Expr expand(String source, String helper) {

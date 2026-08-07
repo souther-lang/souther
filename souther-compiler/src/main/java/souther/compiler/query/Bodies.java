@@ -576,17 +576,25 @@ public final class Bodies {
             Map<String, Ast.FnDef> out = new LinkedHashMap<>();
             for (Ast.Import imp : resolved.value().imports()) {
                 Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
-                // Closed against everything the declaring module can name, not only what it declares:
-                // a published body may call a helper that module imported in turn, and a chain of
-                // three is where a table of its own definitions leaves the middle one unexpanded.
-                Answer<Map<String, Ast.FnDef>> table = db.ask(new ModuleDefinitions(imp.module()));
-                if (!from.present() || !table.present()) {
+                // Closed against the table that module's own bodies are expanded against, which is
+                // everything it can name and not only what it declares: a published body may call a
+                // helper that module imported in turn, and a chain of three is where a table of its
+                // own definitions leaves the middle one unexpanded.
+                //
+                // Its table and not a map of the same entries. A map says which declarations are
+                // there and nothing about which relation each is in, so handing one over is handing
+                // over the question of what it means — and the answer taken here would be this
+                // module's guess about another module's declarations.
+                Answer<Expanding.Of> against =
+                        db.ask(new Expanding(imp.module(), InliningPolicy.FULL));
+                if (!from.present() || !against.present()) {
                     continue;
                 }
                 // Two imports reaching one definition reach one definition: the name it is keyed by
                 // is the module that declares it and its own name, so the second arrival is the same
                 // entry rather than a second copy of the method.
-                publishedClosure(from.value(), imp.names(), table.value()).forEach(out::putIfAbsent);
+                publishedClosure(from.value(), imp.names(), against.value())
+                        .forEach(out::putIfAbsent);
             }
             return Answer.of(out);
         }
@@ -610,12 +618,12 @@ public final class Bodies {
      * named, one with parameters is expanded where it is called.
      */
     public static Map<String, Ast.FnDef> publishedDefinitions(Ast.Module from, List<String> wanted,
-                                                              Map<String, Ast.FnDef> table) {
+                                                              Expanding.Of against) {
         Map<String, Ast.FnDef> out = new LinkedHashMap<>();
         HelperInliner inliner = null;
         for (Ast.FnDef fn : publishable(from, wanted)) {
             if (inliner == null) {
-                inliner = HelperInliner.forHelpers(from.name(), table);
+                inliner = HelperInliner.over(against.table(), against.graph());
             }
             Ast.FnDef closed = inliner.closeAcross(fn, from.name());
             out.put(closed.name(), closed);
@@ -634,12 +642,12 @@ public final class Bodies {
      * from the others, so following the calls collects all of them.
      */
     public static Map<String, Ast.FnDef> publishedClosure(Ast.Module from, List<String> wanted,
-                                                          Map<String, Ast.FnDef> table) {
-        Map<String, Ast.FnDef> out = publishedDefinitions(from, wanted, table);
+                                                          Expanding.Of against) {
+        Map<String, Ast.FnDef> out = publishedDefinitions(from, wanted, against);
         if (out.isEmpty()) {
             return out;
         }
-        HelperInliner inliner = HelperInliner.forHelpers(from.name(), table);
+        HelperInliner inliner = HelperInliner.over(against.table(), against.graph());
         Deque<String> work = new ArrayDeque<>(out.keySet());
         while (!work.isEmpty()) {
             for (ValueName.Helper reached : HelperNames.helpersReached(out.get(work.poll()).writtenBody())) {
@@ -652,7 +660,10 @@ public final class Bodies {
                 // there and closed here, one that reached `from` from further up is already keyed and
                 // closed by the module that declares it, and is passed along as it stands.
                 boolean ownHelper = reached.module().equals(from.name());
-                Ast.FnDef def = table.get(ownHelper ? reached.name() : qualified);
+                // Asked of what the name reaches there, which is the one relation this module has any
+                // business asking of another module's table.
+                Ast.FnDef def =
+                        against.table().reached(ownHelper ? reached.name() : qualified);
                 if (def == null) {
                     continue;   // a prelude helper, which every module emits for itself
                 }

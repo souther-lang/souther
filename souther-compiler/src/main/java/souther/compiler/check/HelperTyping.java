@@ -42,7 +42,7 @@ public final class HelperTyping {
                                      Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Ast.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
-        for (Ast.FnDef h : inliner.emits().values()) {
+        for (Ast.FnDef h : inliner.held().values()) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();

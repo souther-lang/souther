@@ -67,7 +67,7 @@ final class PartialReachability {
 
     static PartialReachability of(HelperInliner inliner) {
         Map<String, List<String>> calls = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> entry : inliner.emits().entrySet()) {
+        for (Map.Entry<String, Ast.FnDef> entry : inliner.held().entrySet()) {
             // Only what this module declared is a node. What it took on to emit — a prelude helper,
             // one another module published — is a terminal, because its declaration already answers
             // for its whole closure (ADR-0098). It is in the same map and under a name of the same
