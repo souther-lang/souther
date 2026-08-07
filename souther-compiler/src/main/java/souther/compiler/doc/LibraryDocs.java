@@ -63,21 +63,10 @@ public final class LibraryDocs {
      * finding it once and finding it at all the same guarantee.
      *
      * <p>{@code depth} is 0 for a document and the heading's level for a part of one, which is what
-     * a listing indents by. {@code listedFor} is null for a topic every caller is shown, which is
-     * nearly all of them. A topic that documents an interface only one caller has is named in that
-     * caller's listing alone: the listing is where a client with no other map of what is here
-     * decides what to read, and a manual for a wire this one is not on is not an answer it can use.
-     * It stays readable by name, because what the toolchain is remains worth knowing to a reader
-     * who asks.
+     * a listing indents by.
      */
     public record Topic(String name, String title, int depth, String resource, int from, int to,
-            List<Slice> own, Caller listedFor) {
-
-        /** Whether {@code caller}'s listing names this topic. */
-        boolean listedFor(Caller caller) {
-            return listedFor == null || listedFor == caller;
-        }
-    }
+            List<Slice> own) {}
 
     /** A run of a file, from one position up to another. */
     public record Slice(int from, int to) {}
@@ -124,28 +113,22 @@ public final class LibraryDocs {
                         continue;
                     }
                     for (String entry : lines(indexUrl)) {
-                        // A file, and after a tab the caller whose listing names it. An index that
-                        // writes only the file names every caller's listing, which is what a doc
-                        // set that has never had to think about wires writes.
-                        String[] written = entry.split("\t", 2);
-                        String file = written[0].strip();
+                        String file = entry.strip();
                         String topic = set + "/" + file.replaceFirst("\\.md$", "");
                         String resource = ROOT + set + "/" + file;
-                        Caller listedFor = written.length < 2
-                                ? null : listedFor(written[1].strip(), topic);
                         String text = Affordance.materialize(text(loader, resource), caller);
                         List<Named> parts = named(topic, text);
                         // The file, and then each part it names. What is searched of each is its
                         // extent with the parts named inside it taken out, so the file and its parts
                         // divide it between them: nothing is counted twice and nothing is left out.
                         Topic whole = new Topic(topic, titleOf(text, file), 0, resource, 0,
-                                text.length(), without(0, text.length(), parts), listedFor);
+                                text.length(), without(0, text.length(), parts));
                         register(byName, whole);
                         ranked.add(whole);
                         for (Named part : parts) {
                             Topic held = new Topic(part.name(), part.title(), part.level(), resource,
                                     part.from(), part.to(),
-                                    without(part.from(), part.to(), inside(part, parts)), listedFor);
+                                    without(part.from(), part.to(), inside(part, parts)));
                             register(byName, held);
                             ranked.add(held);
                         }
@@ -267,17 +250,6 @@ public final class LibraryDocs {
             left.add(new Slice(at, to));
         }
         return List.copyOf(left);
-    }
-
-    /** The caller an index names beside a topic, refusing one no caller answers to. */
-    private static Caller listedFor(String written, String topic) {
-        for (Caller caller : Caller.values()) {
-            if (caller.name().equalsIgnoreCase(written)) {
-                return caller;
-            }
-        }
-        throw new IllegalStateException("`" + topic + "` is listed for `" + written
-                + "`, which is nobody this answers");
     }
 
     /** Every shipped topic, in registry order. */
