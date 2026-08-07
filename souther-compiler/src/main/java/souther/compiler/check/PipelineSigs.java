@@ -108,7 +108,7 @@ public final class PipelineSigs {
             }
             if (!inProgress.add(s.bare())) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.pipe.selfcompose").title("check.pipe.title")
+                        Diagnostic.of(DiagnosticCode.E1608, "check.pipe.selfcompose")
                                 .at(pos).args(s.name()).build(),
                         "pipeline `" + s.name() + "` composes with itself (a cycle)");
             }
@@ -154,7 +154,7 @@ public final class PipelineSigs {
             // arity is confirmed rather than assumed, or `route` would index an empty input list.
             if (g.ins().size() != 1) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.pipe.multiinput").title("check.pipe.title")
+                        Diagnostic.of(DiagnosticCode.E1702, "check.pipe.multiinput")
                                 .at(pipe.pos()).args(stages.get(i).name(), g.ins().size(),
                                         pipe.name()).build(),
                         "`" + stages.get(i) + "` takes " + g.ins().size() + " inputs, so it cannot follow"

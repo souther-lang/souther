@@ -251,7 +251,7 @@ public final class Names {
             String last = dot < 0 ? "" : written.substring(dot + 1);
             if (last.equals("decoder") || last.equals("encoder")) {
                 return nothing(ref, Report.raised(
-                        Diagnostic.uncoded("check.pipe.boundary").title("check.pipe.title")
+                        Diagnostic.of(DiagnosticCode.E1703, "check.pipe.boundary")
                                 .at(ref.pos()).build(),
                         "decode/encode are boundary edges, not pipeline stages; `>->` composes"
                                 + " behaviors only (spec 14.1)"));

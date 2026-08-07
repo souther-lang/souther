@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -93,7 +94,7 @@ public final class ValueCycles {
                 path.add(0, e.getKey());
                 String written = String.join(" -> ", path);
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.value.cycle").title("check.value.cycle.title")
+                        Diagnostic.of(DiagnosticCode.E1022, "check.value.cycle")
                                 .at(e.getValue().written().region())
                                 .args(e.getKey(), written).build(),
                         "`let " + e.getKey() + "` is defined in terms of itself (" + written + ")");

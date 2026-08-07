@@ -394,7 +394,7 @@ public final class TypeChecker {
             for (Ast.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.impl.compose").title("check.impl.title")
+                            Diagnostic.of(DiagnosticCode.E1614, "check.impl.compose")
                                     .at(fn.pos()).args(fn.name()).build(),
                             "`let " + fn.name() + "` cannot implement the composition `behavior " + fn.name()
                                     + "`, which is already its own implementation (spec 13.1)");
@@ -459,7 +459,7 @@ public final class TypeChecker {
                 // would make a `| Some v` pattern ambiguous between Option and the user case, so the
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
                 rejected.add(CompileException.of(
-                        Diagnostic.uncoded("check.sum.optioncase").title("check.sum.title")
+                        Diagnostic.of(DiagnosticCode.E1502, "check.sum.optioncase")
                                 .at(def.written().region()).args(def.name()).build(),
                         "`" + def.name() + "` is a built-in Option case and cannot be declared as a data type"));
                 continue;

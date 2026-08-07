@@ -566,6 +566,9 @@ Re-wrapping is a computation, not a fresh construction from raw data, so it need
 [#collections]
 === Collection types
 
+
+[[a-generic-type-is-given-its-arguments]]A collection type is written with its arguments — `+List<Int>+`, `+Map<String, Int>+`, `+Set<String>+`. The bare qualifier names the module its functions are reached through (<<stdlib>>) and is not a type.
+
 [,text]
 ----
 List<T>
@@ -774,7 +777,9 @@ To hold the common items as a single value rather than flattened, nest it as a n
 [#sum-data]
 === Sum data (OR)
 
-The spec DSL's `+OR+` maps to a sum. *A case MAY reference an already-defined named data.* As in the business-trip model, where each state has its own fields, invariants, and transition behaviors and is bound together by `+OR+`, this structure is represented directly.
+The spec DSL's `+OR+` maps to a sum. *A case MAY reference an already-defined named data.*
+
+[[a-sum-case-is-a-declared-data]]A case MUST be a data that is declared. [[a-sum-does-not-contain-itself]]A sum MUST NOT contain itself, through a case or through a chain of them: a sum's cases are the values it can be, and one of them being the sum is not a value. As in the business-trip model, where each state has its own fields, invariants, and transition behaviors and is bound together by `+OR+`, this structure is represented directly.
 
 [,text]
 ----
@@ -1990,7 +1995,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 * An invariant a value breaks is reported at the value, whether or not anything names it.
 * What a value constructs is the value's own. A behavior that names one reads something already made, so the construction stays with the definition and is not required in that behavior's `+constructs+` (<<constructs>>). A spread of a value reads one the same way. This is where a value parts from a helper, whose construction set does fold into its caller.
 * A spread names a value like any other position: `+Drafting { ...standardRequest, estimatedCost = Amount(50000) }+` reads the same in a behavior's body and in an `+example+` row. A binding in force wins there too, so a parameter or a `+let+` sharing a value's name is what the spread copies.
-* A value MUST NOT reach itself, through naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (<<fn-rules>>); a value has no such form, so a cycle through one is a compile error naming the path it goes round. This is reported apart from the recursion check, which would ask for a return type the author never wrote.
+* [[a-value-does-not-reach-itself]]A value MUST NOT reach itself, through naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (<<fn-rules>>); a value has no such form, so a cycle through one is a compile error naming the path it goes round. This is reported apart from the recursion check, which would ask for a return type the author never wrote.
 
 [#fn-rules]
 ==== Rules
@@ -2013,7 +2018,11 @@ A value is not module state. Its expression is elaborated in the module that dec
 * An `+example+` is evaluated within a time budget, so a recursion that does not terminate is reported rather than hanging the compiler.
 * A local lambda (`+let f = (x) -> ...+`) cannot recurse. Recursion is a property of a named module helper.
 * Two `+let+`s MUST NOT be written for one behavior.
-* A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
+* [[an-implementing-let-takes-its-shape-from-the-behavior]]A `+let+` implementing a behavior takes its shape from that behavior: how many parameters it has, what they are, the order the injected ones arrive in, and what it answers with. None of them is written again on the `+let+`, and none of them may disagree.
+
+[[a-composition-has-no-let]]A `+>->+` composition is its own implementation, so no `+let+` may implement one.
+
+A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
 * A helper `+let+` may construct data, but its construction set is inferred transitively and MUST be included in the calling behavior's `+constructs+` (<<constructs>>, <<blocks>>) — except for what another module's published body carried in, which that module already stated (<<exposed-values>>). A helper cannot be placed in a `+>->+` stage, because it does not appear in the spec DSL. It may be written in `+exposing+`: what a module offers is not only its list of behaviors.
 * A function type (`+(A) -> B+`) is an ordinary type and may be written wherever a type is (<<delimiters>>). What refuses one is the position's requirement, not the grammar: a data field and a behavior's input and output require an external representation, and a function has none — including a function carried inside a `+List+` or a `+Map+` there. A behavior output is a sum of business results, and a function is not a business result.
 * A `+let+` may return a function (`+let adder (n: Int) = (x) -> x + n+`). An escaping function — a return value or a runtime choice — becomes a closure capturing free variables (<<blocks>>). If only passed or applied on the spot, it is expandable and no closure is needed. A helper's name written where a value goes is the function it names. A binding MAY state its type (`+let p: (Int) -> Bool = ...+`), and that is what settles the parameters of the lambda it binds. Where no type is written they are inferred from how it is applied (a local rule, distinct from global type inference, which the declarative design does not do — a behavior takes its type from the specification and a helper states its own, <<fn-declaration>>).
@@ -2156,6 +2165,10 @@ The requirement set of `+applyAll+` is empty. Whatever `+p+` requires is irrelev
 
 [#sequential-composition]
 === Sequential composition `+>->+`
+
+[[a-stage-after-the-first-takes-one-input]]Every stage after the first takes one input: what reaches it is the value the stage before answered with. A behavior taking more is called inside a stage rather than made one.
+
+[[a-pipeline-composes-behaviors]]`+>->+` composes behaviors and nothing else. A decoder and an encoder are the edges the pipeline runs between (<<decoder>>, <<encoder>>), not stages within it.
 
 `+>->+` connects behaviors. Of the previous stage's output cases, those the next stage's input type can receive flow to the next stage; the cases it does not receive are carried to the output (departing the mainline).
 
@@ -2678,7 +2691,20 @@ let approverLabel (c: TravelCompleted) =
 ----
 
 [#match-covers-every-case]
-A match on sum data MUST be exhaustive. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) does not flatten leaf cases; receive `+OwnCost+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
+A match on sum data MUST be exhaustive.
+
+Four more hold of the arms themselves:
+
+* [[a-match-subject-is-a-sum]]what a `+match+` is written on MUST be a sum. There is nothing for arms to tell apart otherwise;
+* [[a-match-has-arms]]a `+match+` MUST have at least one arm;
+* [[a-match-arm-names-a-case-of-the-subject]]an arm MUST name a case of that sum;
+* [[no-two-arms-match-one-case]]no two arms may match one case, a second one for it being unreachable.
+
+[[match-arms-agree-on-a-type]]The arms MUST agree on a type: the `+match+` answers with one value, so what the arms produce is one thing.
+
+[[a-pattern-opens-what-the-value-is]]A pattern that opens a value with `+(...)+` MUST be opening something that has one to open, and the type it names MUST be what is inside — a newtype's wrapped value, an optional's payload. This holds wherever the pattern is written, in a `+match+` arm or in a binding (<<binding-patterns>>).
+
+[[an-or-pattern-binds-the-sum-and-opens-nothing]]An or-pattern binds the sum and opens nothing. It says these cases are treated the same (<<match>>), and what they carry is not the same, so there is nothing shared for it to name. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) does not flatten leaf cases; receive `+OwnCost+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
 
 [#unreachable]
 ==== An arm may say its combination cannot arise
@@ -3683,6 +3709,37 @@ built-in; choose another name.
 
 Reported at the binding (<<a-binding-does-not-shadow-a-builtin>>). Shadowing a model's own name is ordinary and harmless — the outer one is still there to read — and a built-in has no declaration to read instead.
 
+[#e1020]
+=== A sum names a case that is not declared
+
+[,text]
+----
+Unknown case `Withdrawn` in sum `TravelRequest`.
+----
+
+Reported at the case (<<a-sum-case-is-a-declared-data>>).
+
+[#e1021]
+=== A sum contains itself
+
+[,text]
+----
+Sum `TravelRequest` contains itself through `Submitted`. A sum's cases are the values it can be, so
+one of them cannot be the sum itself.
+----
+
+Reported at the declaration (<<a-sum-does-not-contain-itself>>), naming the chain that closes. Self-reference through a *field* is how a tree is written and is unaffected (<<self-referential-data>>); this is about the cases.
+
+[#e1022]
+=== A value reaches itself
+
+[,text]
+----
+Value `ceiling` reaches itself: ceiling -> limit -> ceiling.
+----
+
+Reported wherever the cycle closes (<<a-value-does-not-reach-itself>>). A value with no parameter list is substituted where it is named, so a cycle among them has nothing to substitute first.
+
 [#e1101]
 === Invariant type mismatch
 
@@ -3733,6 +3790,76 @@ Reported where a clause is written `+invariant _ = …+` (<<invariant-clause-nam
 This `match` on TravelRequest does not cover every case.
 Hint: Add a case for: PreApproved
 ----
+
+[#e1202]
+=== `match` is written on something that is not a sum
+
+[,text]
+----
+`match` needs a sum-typed value, but got Int.
+----
+
+Reported at the subject (<<a-match-subject-is-a-sum>>). A primitive is told apart by comparing it, not by naming its cases (<<primitive-arm>>).
+
+[#e1203]
+=== A `match` arm names a case the subject does not have
+
+[,text]
+----
+`Drafting` is a case of `TravelRequest`, so this arm belongs to a match over `TravelRequest`.
+----
+
+Reported at the arm (<<a-match-arm-names-a-case-of-the-subject>>). Where the case belongs to another sum the message says which, since an arm in the wrong `+match+` reads exactly like a misspelling and is not one. Where a nested `+match+` has swallowed the arms that follow it on the line, it says that instead, that being how the arm arrived under the wrong subject.
+
+[#e1204]
+=== Two arms match one case
+
+[,text]
+----
+`Submitted` is matched by more than one case.
+----
+
+Reported at the second arm (<<no-two-arms-match-one-case>>). The first one answers it, so this one cannot be reached.
+
+[#e1205]
+=== A `match` has no arms
+
+[,text]
+----
+This `match` has no cases.
+----
+
+Reported at the `+match+` (<<a-match-has-arms>>).
+
+[#e1206]
+=== A pattern opens something that has nothing to open
+
+[,text]
+----
+`Amount` wraps `Int`, not `String`.
+----
+
+Reported at the pattern (<<a-pattern-opens-what-the-value-is>>), in a `+match+` arm or in a binding. Three ways to be wrong about it: what is opened is not a newtype and holds no wrapped value, the type named inside is not what is wrapped, or the case has no payload to open at all.
+
+[#e1207]
+=== An or-pattern opens a value
+
+[,text]
+----
+An or-pattern binds the sum type, so it cannot open a case's value with `(...)`.
+----
+
+Reported at the pattern (<<an-or-pattern-binds-the-sum-and-opens-nothing>>). What an or-pattern says is that these cases are handled the same way, and what they carry is what differs between them.
+
+[#e1208]
+=== The arms of a `match` disagree on a type
+
+[,text]
+----
+The match branches disagree: Submitted vs Int.
+----
+
+Reported at the `+match+` (<<match-arms-agree-on-a-type>>). It answers with one value, so its arms produce one type; a union of what they produce is written by declaring it.
 
 [#e1301]
 === Use of null
@@ -3861,6 +3988,16 @@ compare.
 ----
 
 Reported at the collection (<<a-collection-member-supports-equality>>). A `+Set+` asks whether two elements are the same and a `+Map+` whether two keys are; the message says which of the two asked, because that is what the author is holding.
+
+[#e1316]
+=== A collection type is written without its arguments
+
+[,text]
+----
+`List` needs a type argument, e.g. `List<Int>`.
+----
+
+Reported at the type (<<a-generic-type-is-given-its-arguments>>). The bare qualifier names the module whose functions reach the collection (<<stdlib>>), which is why writing it where a type goes is not a shorthand for anything.
 
 [#e1401]
 === Arbitrary Java calls
@@ -4028,6 +4165,28 @@ primitives, or a data type declared here or imported.
 
 Reported at the member (<<a-union-member-is-nameable-in-an-arm>>). A union is read by matching on it, so a member an arm cannot write is a case nothing can handle. The same code says when one spelling stands for two members' types, which leaves an arm naming one of them and no way to say which.
 
+[#e1614]
+=== A `let` implements a composition
+
+[,text]
+----
+`let placeOrder` cannot implement the composition `behavior placeOrder`, which is already its own
+implementation.
+----
+
+Reported at the `+let+` (<<a-composition-has-no-let>>). A `+>->+` is the body: its stages are what runs, and a second body would be a second answer to what the behavior does.
+
+[#e1615]
+=== An implementing `let` disagrees with its behavior
+
+[,text]
+----
+`let submit` parameter `now` should be `clock`: what `depends on` names becomes the trailing
+parameters, in declared order.
+----
+
+Reported at the `+let+` (<<an-implementing-let-takes-its-shape-from-the-behavior>>). The behavior states the shape — how many parameters, what they are, the order the injected ones arrive in, what it answers with — so the `+let+` writes none of them again, and the same code says whichever of the four was written or was wrong.
+
 [#e1701]
 === behavior composition type mismatch
 
@@ -4151,6 +4310,27 @@ Hint: Expose StoredData, or make it a unit data.
 ----
 
 Emitted when a data that is neither a unit nor exposed is listed in the `+constructs+` of an injection-subject behavior (implemented from Java; <<java-base-class>>), because Java would have no way to create that value.
+
+[#e1702]
+=== A pipeline stage takes more than one input
+
+[,text]
+----
+`convert` takes 2 inputs, so it cannot follow `>->` in `placeOrder`. Every stage after the first
+takes one input: call it inline, or give it a data holding both.
+----
+
+Reported at the stage (<<a-stage-after-the-first-takes-one-input>>). What reaches a stage is the one value the stage before answered with, so there is nothing to fill a second parameter from.
+
+[#e1703]
+=== A pipeline names a boundary edge as a stage
+
+[,text]
+----
+decode/encode are boundary edges, not pipeline stages; `>->` composes behaviors only.
+----
+
+Reported at the stage (<<a-pipeline-composes-behaviors>>). The decoder and the encoder are where a pipeline starts and ends (<<decoder>>, <<encoder>>) and are not steps within it.
 
 [#e1901]
 === Example target is not a behavior

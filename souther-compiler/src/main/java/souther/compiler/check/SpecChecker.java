@@ -236,7 +236,7 @@ public final class SpecChecker {
                                     List<Diagnostic> warnings) {
         if (fn.declaredReturn() != null) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.impl.noreturn").title("check.impl.title")
+                    Diagnostic.of(DiagnosticCode.E1615, "check.impl.noreturn")
                             .at(fn.pos()).args(fn.name(), spec.name()).build(),
                     "`let " + fn.name() + "` implements `behavior " + spec.name()
                             + "`, so its return type comes from the behavior — do not declare one"
@@ -254,7 +254,7 @@ public final class SpecChecker {
         int nReq = spec.dependsOn().size();
         if (fn.params().size() != nBusiness + nReq) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.impl.arity").title("check.impl.title")
+                    Diagnostic.of(DiagnosticCode.E1615, "check.impl.arity")
                             .at(fn.pos()).args(fn.name(), fn.params().size(), spec.name(), nBusiness, nReq)
                             .build(),
                     "`let " + fn.name() + "` takes " + fn.params().size()
@@ -267,7 +267,7 @@ public final class SpecChecker {
             // the input the behavior already typed
             if (p.type() != null && !p.typeFromPattern()) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.impl.noannotate").title("check.impl.title")
+                        Diagnostic.of(DiagnosticCode.E1615, "check.impl.noannotate")
                                 .at(p.pos()).args(fn.name(), spec.name(), p.name()).build(),
                         "`let " + fn.name() + "` implements `behavior " + spec.name()
                                 + "`, so its parameters take their types from it — do not annotate `"
@@ -279,7 +279,7 @@ public final class SpecChecker {
             String want = spec.dependsOn().get(i).bare();
             if (!got.equals(want)) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.impl.reqorder").title("check.impl.title")
+                        Diagnostic.of(DiagnosticCode.E1615, "check.impl.reqorder")
                                 .at(fn.pos()).args(fn.name(), got, want).build(),
                         "`let " + fn.name() + "` parameter `" + got + "` should be `" + want
                                 + "`: what `depends on` names becomes the trailing parameters in declared order"
@@ -800,7 +800,7 @@ public final class SpecChecker {
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.pipe.multiinput").title("check.pipe.title")
+                            Diagnostic.of(DiagnosticCode.E1702, "check.pipe.multiinput")
                                     .at(pipe.pos()).args(stage, n, pipe.name()).build(),
                             "`" + stage + "` takes " + n + " inputs, so it cannot follow `>->` in `"
                                     + pipe.name() + "`. Every stage after the first takes one input: "

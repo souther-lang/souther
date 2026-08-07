@@ -366,7 +366,7 @@ public final class DataChecker {
         List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
         if (cycle != null) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.sum.cycle").title("check.sum.title")
+                    Diagnostic.of(DiagnosticCode.E1021, "check.sum.cycle")
                             .at(sum.pos()).args(sum.name(), String.join(" | ", cycle)).build(),
                     "sum `" + sum.name() + "` contains itself through " + String.join(" | ", cycle)
                             + "; a sum's cases are the values it can be, so one of them cannot be the"

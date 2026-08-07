@@ -48,7 +48,17 @@ public enum DiagnosticCode {
     E1102("invariant-needs-a-value-to-constrain", "check.invariant.invalid.title"),
     E1103("invariant-clause-names-are-distinct", "check.invariant.invalid.title"),
     E1104("invariant-clause-name-is-not-underscore", "check.invariant.invalid.title"),
+    E1020("a-sum-case-is-a-declared-data", "check.sum.title"),
+    E1021("a-sum-does-not-contain-itself", "check.sum.title"),
+    E1022("a-value-does-not-reach-itself", "check.value.cycle.title"),
     E1201("match-covers-every-case", "e1201.title"),
+    E1202("a-match-subject-is-a-sum", "check.match.title"),
+    E1203("a-match-arm-names-a-case-of-the-subject", "check.match.title"),
+    E1204("no-two-arms-match-one-case", "check.match.title"),
+    E1205("a-match-has-arms", "check.match.title"),
+    E1206("a-pattern-opens-what-the-value-is", "check.open.title"),
+    E1207("an-or-pattern-binds-the-sum-and-opens-nothing", "check.match.title"),
+    E1208("match-arms-agree-on-a-type", "check.match.title"),
 
     // --- what the language does not have ---
     E1301("no-null", "e1301.title"),
@@ -62,6 +72,7 @@ public enum DiagnosticCode {
     E1313("a-behavior-does-not-output-an-optional", "check.boundary.title"),
     E1314("a-map-that-crosses-is-keyed-by-a-text-key", "check.boundary.title"),
     E1315("a-collection-member-supports-equality", "check.boundary.title"),
+    E1316("a-generic-type-is-given-its-arguments", "check.typearg.title"),
     E1401("no-arbitrary-jvm-calls", "e1401.title"),
     E1402("core-privileges-stay-in-the-core", "parse.title"),
 
@@ -86,7 +97,11 @@ public enum DiagnosticCode {
     E1611("an-exposed-signature-names-only-exposed-types", "check.module.title"),
     E1612("an-injection-target-declares-no-depends-on", "check.module.title"),
     E1613("a-union-member-is-nameable-in-an-arm", "check.boundary.title"),
+    E1614("a-composition-has-no-let", "check.impl.title"),
+    E1615("an-implementing-let-takes-its-shape-from-the-behavior", "check.impl.title"),
     E1701("composition-stages-type-route", "e1701.title"),
+    E1702("a-stage-after-the-first-takes-one-input", "check.pipe.title"),
+    E1703("a-pipeline-composes-behaviors", "check.pipe.title"),
 
     // --- examples ---
     E1901("example-target-is-a-behavior", "check.example.title"),

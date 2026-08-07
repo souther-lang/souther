@@ -409,7 +409,7 @@ public final class Resolve {
             TypeName denoted = symbols.resolve(c.written());
             if (denoted == null) {
                 throw CompileException.of(
-                        Diagnostic.uncoded("check.sum.unknowncase").title("check.sum.title")
+                        Diagnostic.of(DiagnosticCode.E1020, "check.sum.unknowncase")
                                 .at(s.pos()).args(c.written(), s.name()).build(),
                         "unknown case `" + c.written() + "` in sum `" + s.name() + "`");
             }

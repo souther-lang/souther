@@ -585,7 +585,7 @@ public final class Elaborator {
         TypeName layer = li.opens().denotes();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
             throw CompileException.of(
-                    Diagnostic.uncoded("check.open.notnewtype").title("check.open.title")
+                    Diagnostic.of(DiagnosticCode.E1206, "check.open.notnewtype")
                             .at(li.pos()).args(opened)
                             .hint("check.open.notnewtype.hint").build(),
                     "`" + opened + "` is not a newtype, so a binding cannot open it with `"
@@ -598,7 +598,7 @@ public final class Elaborator {
             String shown = layer.name();
             String actual = Type.show(valueType);
             throw CompileException.of(
-                    Diagnostic.uncoded("check.open.mismatch").title("check.open.title")
+                    Diagnostic.of(DiagnosticCode.E1206, "check.open.mismatch")
                             .at(li.pos()).args(shown, actual)
                             .diff(actual, shown).build(),
                     "this pattern opens `" + shown + "`, but the value is `" + actual + "`");
