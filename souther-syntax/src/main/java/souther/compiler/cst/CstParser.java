@@ -1,5 +1,7 @@
 package souther.compiler.cst;
 
+import souther.compiler.diag.DiagnosticCode;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -180,7 +182,7 @@ public final class CstParser {
     /** Wraps stray tokens (until the next top-level starter) in an ERROR node so the tree stays
      * whole even when the source is malformed. */
     private void recoverTopLevel() {
-        error("parse.topdef", "expected data, behavior, let, or example");
+        error(DiagnosticCode.E2301, "parse.topdef", "expected data, behavior, let, or example");
         start(SyntaxKind.ERROR_TOKEN);
         do {
             bump();
@@ -344,15 +346,15 @@ public final class CstParser {
     private void newtypeBase() {
         if (at(SyntaxKind.LPAREN)) {
             if (atFnTypeParams()) {
-                error("parse.newtype.fntype", "a function type cannot be a newtype's base");
+                error(DiagnosticCode.E1007, "parse.newtype.fntype", "a function type cannot be a newtype's base");
             } else {
-                error("parse.newtype.tuple", "a tuple cannot be a newtype's base");
+                error(DiagnosticCode.E1007, "parse.newtype.tuple", "a tuple cannot be a newtype's base");
             }
         }
         typeRef();
         eat(SyntaxKind.QUESTION);   // `Y?`, kept for the AST to read as Option<Y> and the checker to refuse
         if (at(SyntaxKind.PIPE)) {
-            error("parse.sum.case.generic",
+            error(DiagnosticCode.E1606, "parse.sum.case.generic",
                     "a sum case must be a declared named data, so it cannot be a generic type");
         }
     }
@@ -383,7 +385,7 @@ public final class CstParser {
         } else if (eat(SyntaxKind.ASSIGN)) {
             pipeBehavior();
         } else {
-            error("parse.behavior.colon", "a behavior needs `:` (signature) or `=` (composition)");
+            error(DiagnosticCode.E2301, "parse.behavior.colon", "a behavior needs `:` (signature) or `=` (composition)");
         }
         finish();
     }
@@ -450,7 +452,7 @@ public final class CstParser {
         if (atContextual("on")) {
             bump();   // on
         } else {
-            error("parse.depends.on", "expected `on` after `depends`");
+            error(DiagnosticCode.E2301, "parse.depends.on", "expected `on` after `depends`");
         }
         nameList();
         finish();
@@ -544,7 +546,7 @@ public final class CstParser {
         start(SyntaxKind.FN_PARAM_LIST);
         expect(SyntaxKind.LPAREN);
         if (at(SyntaxKind.RPAREN)) {
-            error("parse.fn.emptyparams",
+            error(DiagnosticCode.E2301, "parse.fn.emptyparams",
                     "`let " + name + "` takes no parameters, so it is written without `()`", name);
         }
         if (!at(SyntaxKind.RPAREN)) {
@@ -613,7 +615,7 @@ public final class CstParser {
         if (atContextual("for")) {
             bump();   // for
         } else {
-            error("parse.examples.for", "expected `for` after `examples`");
+            error(DiagnosticCode.E2304, "parse.examples.for", "expected `for` after `examples`");
         }
         qualifiedName();   // target module path
         finish();
@@ -626,7 +628,7 @@ public final class CstParser {
         bump();   // example
         expect(SyntaxKind.IDENT);   // target name
         if (!at(SyntaxKind.PIPE)) {
-            error("parse.example.row", "an example needs at least one `|` row");
+            error(DiagnosticCode.E2304, "parse.example.row", "an example needs at least one `|` row");
         }
         while (eat(SyntaxKind.PIPE)) {
             exampleRow();
@@ -680,7 +682,7 @@ public final class CstParser {
         bump();   // fake
         expect(SyntaxKind.IDENT);   // target injected behavior
         if (!at(SyntaxKind.PIPE)) {
-            error("parse.fake.row", "a fake needs at least one `|` row");
+            error(DiagnosticCode.E2304, "parse.fake.row", "a fake needs at least one `|` row");
         }
         while (eat(SyntaxKind.PIPE)) {
             fakeRow();
@@ -802,7 +804,7 @@ public final class CstParser {
             // absorbed: layout does not end a statement, so a line starting with `(`, `.` or an
             // operator continues the line above. At EOF the block is merely unterminated, which
             // blockExpr's expect(RBRACE) reports instead — one error, not two.
-            error("parse.block.noresult", "a block ends in a result expression, and this one has none");
+            error(DiagnosticCode.E2302, "parse.block.noresult", "a block ends in a result expression, and this one has none");
         } else if (!at(SyntaxKind.EOF)) {
             expr();   // the result expression
         }
@@ -1127,7 +1129,7 @@ public final class CstParser {
             case LBRACE -> blockExpr();
             case IDENT -> identExpr();
             default -> {
-                error("parse.expr", "expected an expression");
+                error(DiagnosticCode.E2302, "parse.expr", "expected an expression");
                 start(SyntaxKind.ERROR_TOKEN);
                 finish();   // zero-width error node; the caller resynchronises
             }
@@ -1144,7 +1146,7 @@ public final class CstParser {
             bump();
             finish();
         } else {
-            error("parse.unreachable.reason",
+            error(DiagnosticCode.E1310, "parse.unreachable.reason",
                     "`unreachable` states why the point cannot be reached: unreachable \"...\"");
         }
         finish();
@@ -1379,7 +1381,7 @@ public final class CstParser {
         if (at(SyntaxKind.LBRACE)) {
             // `Some(Booking { member })`: the parens open a *newtype*, so a record named in them has
             // nothing to open. Its fields are destructured directly, as on a user case.
-            error("parse.case.record.direct",
+            error(DiagnosticCode.E2303, "parse.case.record.direct",
                     "a record's fields are destructured directly: write `| Some { field }`");
             while (!at(SyntaxKind.RBRACE) && !at(SyntaxKind.EOF)) {
                 bump();
@@ -1544,7 +1546,7 @@ public final class CstParser {
         // Not "an expression": the bound is the tree's, and a type nested through its arguments or a
         // pattern through a tuple reaches it the same way. Naming a part with `let` is the answer to
         // one of those and not to the others, so what is asked for is the thing they share.
-        error("parse.toodeep", "this source nests too deeply to read;"
+        error(DiagnosticCode.E2104, "parse.toodeep", "this source nests too deeply to read;"
                 + " break the nesting into named parts to flatten it");
         throw new TooDeep();
     }
@@ -1606,7 +1608,7 @@ public final class CstParser {
             return;
         }
         SyntaxKind found = current();
-        error("parse.expected", "expected " + kind + " but found " + found,
+        error(DiagnosticCode.E2302, "parse.expected", "expected " + kind + " but found " + found,
                 kind.display(), found.display());
     }
 
@@ -1714,9 +1716,9 @@ public final class CstParser {
         return SyntaxKind.EOF;
     }
 
-    private void error(String messageKey, String legacyMessage, Object... args) {
+    private void error(DiagnosticCode code, String messageKey, String legacyMessage, Object... args) {
         int i = mi(0);
         int width = Math.max(1, tokens.get(i).width());
-        errors.add(new CstError(offset[i], width, messageKey, legacyMessage, args));
+        errors.add(new CstError(offset[i], width, code, messageKey, legacyMessage, args));
     }
 }

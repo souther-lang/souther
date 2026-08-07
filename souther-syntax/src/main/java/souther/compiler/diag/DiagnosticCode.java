@@ -31,7 +31,12 @@ public enum DiagnosticCode {
     E1004("spread-fields-do-not-collide", "e1004.title"),
     E1005("construction-supplies-every-field", "e1005.title"),
     E1006("constructs-no-overdeclaration", "e1006.title"),
+    E1007("newtype-wraps-an-external-representation", "parse.title"),
+    E1008("unit-data-is-written-without-a-body", "check.data.invalid.title"),
     E1101("invariant-expression-is-bool", "e1101.title"),
+    E1102("invariant-needs-a-value-to-constrain", "check.invariant.invalid.title"),
+    E1103("invariant-clause-names-are-distinct", "check.invariant.invalid.title"),
+    E1104("invariant-clause-name-is-not-underscore", "check.invariant.invalid.title"),
     E1201("match-covers-every-case", "e1201.title"),
 
     // --- what the language does not have ---
@@ -39,7 +44,10 @@ public enum DiagnosticCode {
     E1303("option-cases-are-not-written", "e1303.title"),
     E1305("injected-constructs-are-creatable", "e1305.title"),
     E1307("unreachable-stands-where-a-type-is-stated", "check.type.mismatch.title"),
+    E1308("optional-marks-one-type", "parse.title"),
+    E1310("unreachable-states-its-reason", "parse.title"),
     E1401("no-arbitrary-jvm-calls", "e1401.title"),
+    E1402("core-privileges-stay-in-the-core", "parse.title"),
 
     // --- modules, requirements, composition ---
     E1501("module-dependencies-are-acyclic", "e1501.title"),
@@ -88,10 +96,18 @@ public enum DiagnosticCode {
     E2018("attempt-arms-answer-an-attempt", "check.attempt.title"),
     E2019("attempt-answers-each-clause-once", "check.attempt.title"),
 
-    // --- what the JVM will hold ---
+    // --- what the JVM will hold, and what the compiler will walk ---
     E2101("generated-methods-fit-jvm-parameter-slots", "e2101.title"),
     E2102("generated-methods-fit-jvm-code-size", "e2102.title"),
-    E2103("generated-classes-fit-jvm-constant-pool", "e2103.title");
+    E2103("generated-classes-fit-jvm-constant-pool", "e2103.title"),
+    E2104("source-nesting-is-bounded", "e2104.title"),
+
+    // --- the text as written ---
+    E2301("declaration-syntax", "parse.title"),
+    E2302("expression-syntax", "parse.title"),
+    E2303("pattern-syntax", "parse.title"),
+    E2304("examples-syntax", "parse.title"),
+    E2305("literal-syntax", "parse.title");
 
     private final String ruleAnchor;
     private final String titleKey;

@@ -421,6 +421,14 @@ There is no type name that carries an invariant violation. A violation inside th
 
 The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and precedence needed for reading and writing are fixed here.
 
+What a text MUST be for the compiler to read it is stated with each construct, and a text that is not is refused where the reading stops. Five places it can stop, kept apart because a reader looking one up is asking about a different part of the language:
+
+* [[declaration-syntax]]a declaration — the module header, a top-level `+data+`, `+behavior+` or `+let+`, a behavior's signature, a `+depends on+` clause — MUST be written in the form given for it;
+* [[expression-syntax]]an expression MUST be written in the form given for it, and a block MUST end in one;
+* [[pattern-syntax]]a pattern MUST be written in the form given for the thing it destructures (<<binding-patterns>>, <<match>>);
+* [[examples-syntax]]an `+example+`, a `+fake+` and an `+examples for+` file MUST be written in the form given for them (<<examples>>);
+* [[literal-syntax]]a literal MUST be written in the form given for its type (<<primitives>>, <<temporal-literal>>).
+
 * Both `+data+` declaration fields and record-literal `+TypeName { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+name: type+`; a literal binds a value, so `+name = value+` (`+:+` = has this type, `+=+` = is defined as this). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>). A clause's name follows the same rule as everything else named with `+=+` — it is defined as that rule, so `+invariant nonEmpty = List.length(value) >= 1+` (<<invariant-clause-name>>).
 * Argument lists and the enumerations in `+constructs+` / `+depends on+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<depends-on>>).
 * Every `+,+`-separated list — declaration and record-literal fields, parameter and argument lists, tuple elements, list literals, and the `+constructs+` / `+depends on+` name lists — MAY carry a single trailing `+,+` before its closing delimiter. It is optional and has no meaning. The sample code in this spec keeps a leading-comma layout instead and writes no trailing comma.
@@ -634,6 +642,8 @@ This desugars to:
 preApprover: Option<EmployeeId>
 ----
 
+[[optional-marks-one-type]]`+?+` marks one type optional. It is written on a single type and not on a sum: what a sum of several cases is missing is a case of its own, not a mark on the whole.
+
 [#option-cases-are-not-written]
 To put a value in a `+?+` field, write an `+EmployeeId+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. This is the only place either name may be written as a value: what puts it there is the field, not the type of the position — a model may name `+Option<T>+` where it reads one (<<algebraic-types>>), and an annotation saying so does not license making one. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
 
@@ -782,6 +792,8 @@ The read and the spread reach the same part and no more. What a single case carr
 
 A data with no fields is declared with no body. It corresponds to the spec DSL's `+= Unit+`.
 
+[[unit-data-is-written-without-a-body]]A unit data is written without a body. An empty body names a type with one value, which is what a unit data is, so the two spellings would be one declaration written two ways.
+
 [,text]
 ----
 // spec DSL: data Reimbursement = Unit
@@ -865,7 +877,11 @@ Structural intersection types (`+A & B+`, a type operator for "a value that is b
 [#newtype]
 === newtype (`+data X = Y+`)
 
-When the right-hand side is a single type rather than a `+{ ... }+` product or a `+|+` sum, `+X+` is a newtype wrapping that type `+Y+`. `+Y+` is written the way a type is written anywhere else: a primitive (`+String+` / `+Int+` / `+Date+`, etc.), a named data, a sum, or a collection (`+List<T>+` / `+Set<T>+` / `+Map<K, V>+`, <<collections>>), including a collection of any of these. `+X+` is a distinct type from `+Y+` (nominally distinguished) with the same (bare) external representation as `+Y+`. The spec DSL's `+data X = Y+` (right-hand side a single name) is written directly.
+When the right-hand side is a single type rather than a `+{ ... }+` product or a `+|+` sum, `+X+` is a newtype wrapping that type `+Y+`.
+
+[[newtype-wraps-an-external-representation]]What a newtype wraps MUST have an external representation of its own, since the newtype takes it as its own (<<external-representation>>). A tuple has none and neither does a function, so neither can be wrapped; a named data can be.
+
+ `+Y+` is written the way a type is written anywhere else: a primitive (`+String+` / `+Int+` / `+Date+`, etc.), a named data, a sum, or a collection (`+List<T>+` / `+Set<T>+` / `+Map<K, V>+`, <<collections>>), including a collection of any of these. `+X+` is a distinct type from `+Y+` (nominally distinguished) with the same (bare) external representation as `+Y+`. The spec DSL's `+data X = Y+` (right-hand side a single name) is written directly.
 
 [,text]
 ----
@@ -904,6 +920,8 @@ A value constraint written as a comment in the spec DSL is made executable as an
 
 [[invariant-expression-is-bool]]An invariant clause states a condition, so its expression MUST have type `+Bool+`.
 
+[[invariant-needs-a-value-to-constrain]]A type an invariant is declared on MUST have a value for it to observe. A unit data has one value and no field, so there is nothing for a clause to read and nothing it could reject.
+
 [,text]
 ----
 // spec DSL: data Amount = Integer // at least 0, in yen
@@ -920,7 +938,11 @@ data DateRange =
 [#invariant-clause-name]
 === A clause MAY be named
 
-A clause MAY be given a name, which is what tells it apart from the type's other clauses: `+invariant <name> = <expr>+`. An attempted construction departs by the named clause that did not hold (<<attempted-construction>>), and a decode failure reports the name (<<decoder-error>>).
+A clause MAY be given a name, which is what tells it apart from the type's other clauses: `+invariant <name> = <expr>+`.
+
+[[invariant-clause-names-are-distinct]]No two clauses of one type may carry the same name. The name is what an attempted construction and a boundary failure call one rule by, so two rules cannot answer to it.
+
+[[invariant-clause-name-is-not-underscore]]A clause may not be named `+_+`. `+| _ -> …+` answers the clauses that carry no name (<<attempt-departures>>), so a clause named `+_+` could never be the one it answered. An attempted construction departs by the named clause that did not hold (<<attempted-construction>>), and a decode failure reports the name (<<decoder-error>>).
 
 [,text]
 ----
@@ -2616,6 +2638,8 @@ A match on sum data MUST be exhaustive. Exhaustiveness is decided over the direc
 
 A table indexed by two sums has a cell for every pair, and some of those pairs the model does not admit. `+unreachable "reason"+` is what such an arm answers: it produces no value, and reaching it aborts.
 
+[[unreachable-states-its-reason]]`+unreachable+` MUST state why the point cannot be reached, written as a string. The reason is what a reader is shown when a row gets there (<<e1911>>), and an `+unreachable+` with nothing to say leaves them the position alone.
+
 [,text]
 ----
 match age with
@@ -2803,6 +2827,8 @@ An outside-world dependency is declared as a behavior with no implementation, an
 
 [#reserved-namespace]
 === Reserved namespace
+
+[[core-privileges-stay-in-the-core]]Some forms are the core's and not a model's: `+intrinsic+`, `+private+`, a type variable, and an optional written anywhere but on a data field. A module outside the reserved `+souther+` namespace MUST NOT write them — the core is what stands between the JVM and a model, and a model that reaches for its forms is writing the layer below the one it is in.
 
 The standard library is bundled with the compiler and referenced by short qualifiers — `+List+` (list), `+Map+` (map), `+Set+` (set), `+String+` (string), `+Bool+` (boolean), `+Int+` / `+Decimal+` (numbers), `+Date+` / `+DateTime+` (temporal), `+Option+` (optional). Every function is called through this qualifier: `+List.map(f, xs)+`, `+String.trim(s)+`, `+List.length(xs)+`. There is no automatic import — names are not delivered implicitly. What may be written bare is operators (`+==+` `+<+` `+{plus}{plus}+`, etc.), `+if+` / `+match+`, literals, and the current module's helpers. Argument order follows the convention of <<pipe>> (primary subject last).
 
@@ -3365,6 +3391,8 @@ The model author does not write this type name in Souther source; they only writ
 [#compiler-pipeline]
 == Compiler structure
 
+[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler walks. Every later reading of it — checking, formatting, compiling — descends it the same way, so a text that is too deep for one is too deep for all of them, and the limit is stated as the compiler's rather than as any one pass's. Naming the parts with `+let+` flattens it.
+
 [,text]
 ----
 Source -> Lexer -> Parser -> AST
@@ -3466,6 +3494,28 @@ Construction of `PreApproved` is missing field `preApprover`.
 Hint: Supply `preApprover` explicitly; the spread does not provide it.
 ----
 
+[#e1007]
+=== A newtype wraps something with no external representation
+
+[,text]
+----
+A newtype takes the external representation of what it wraps, and a tuple has none. Wrap a named
+data instead.
+----
+
+Reported where a `+data X = Y+` names a `+Y+` carrying no external representation of its own (<<newtype-wraps-an-external-representation>>) — a tuple or a function type. A newtype's decoder and encoder are derived from the wrapped type's (<<newtype>>), so there would be nothing to derive them from.
+
+[#e1008]
+=== A data is written with an empty body
+
+[,text]
+----
+data `Rank` has an empty body, which names a type with one value — that is a unit data, and it is
+written without a body.
+----
+
+Reported at a `+data+` whose body is written and holds nothing (<<unit-data-is-written-without-a-body>>). The declaration means what a unit data means, and a unit data has one spelling.
+
 [#e1101]
 === Invariant type mismatch
 
@@ -3473,6 +3523,40 @@ Hint: Supply `preApprover` explicitly; the spread does not provide it.
 ----
 An invariant expression must have type Bool, but this is String.
 ----
+
+[#e1102]
+=== An invariant is declared on a type with nothing to observe
+
+[,text]
+----
+`Staff` is a unit data, so it has no field for this invariant to observe and nothing it could
+reject. Drop the clause, or give `Staff` the field the constraint is about.
+----
+
+Reported where an `+invariant+` is written on a unit data (<<invariant-needs-a-value-to-constrain>>). A unit data has one value, so a clause over it is true of that value or true of nothing, and neither is a constraint.
+
+[#e1103]
+=== Two invariant clauses share a name
+
+[,text]
+----
+`Amount` declares two invariant clauses named `inYen`. A name is what an attempted construction and
+a boundary issue call one rule, so two rules cannot share it.
+----
+
+Reported at the second clause of a name (<<invariant-clause-names-are-distinct>>). An attempted construction answers a clause by name (<<attempt-departures>>) and a decode failure reports one by name; neither can say which of two was meant.
+
+[#e1104]
+=== An invariant clause is named `_`
+
+[,text]
+----
+`_` cannot name an invariant clause of `Amount`.
+Hint: Give the clause a name of its own, or leave it unnamed — an unnamed clause is enforced and
+answered by `| _ -> ...`.
+----
+
+Reported where a clause is written `+invariant _ = …+` (<<invariant-clause-name-is-not-underscore>>). `+| _ -> …+` answers the clauses carrying no name, so a clause holding that name as its own could never be the one it answered.
 
 [#e1201]
 === Non-exhaustive match
@@ -3536,6 +3620,27 @@ field, a declared return, an annotated binding.
 
 Reported where an `+unreachable+` (<<unreachable>>) stands in a position that states no type and has no branch beside it that does — `+let n = unreachable "..."+`, or an arithmetic operand. No value is made there, but the code that would read one is still compiled, and it has no shape to read.
 
+[#e1308]
+=== `?` is written on a sum
+
+[,text]
+----
+`?` marks a single type optional, but it follows a sum of 3 cases.
+----
+
+Reported where `+?+` follows a sum rather than one type (<<optional-marks-one-type>>). What a sum is missing is a case of its own; marking the whole optional says the absence belongs to whoever reads the field rather than to the model (<<optional>>).
+
+[#e1310]
+=== `unreachable` states no reason
+
+[,text]
+----
+`unreachable` states why the point cannot be reached, as a string: `unreachable "twenty insured
+years cannot precede the age of thirty"`.
+----
+
+Reported at an `+unreachable+` written with nothing after it (<<unreachable-states-its-reason>>). The reason is what a reader is shown when a row reaches the point (<<e1911>>), and it is the only thing the declaration says that the position does not.
+
 [#e1401]
 === Arbitrary Java calls
 
@@ -3545,6 +3650,16 @@ Reported where an `+unreachable+` (<<unreachable>>) stands in a position that st
 Hint: Declare a behavior without a `let` and implement it from Java; arbitrary JVM calls
 are not allowed.
 ----
+
+[#e1402]
+=== A core form is written outside the core
+
+[,text]
+----
+`intrinsic` is a core privilege: only a module in the reserved `souther` namespace declares one.
+----
+
+Reported where a module outside the reserved `+souther+` namespace writes `+intrinsic+`, `+private+`, a type variable, or an optional anywhere but on a data field (<<core-privileges-stay-in-the-core>>). Each is a way of writing the layer below the model, and one code says which one it was.
 
 [#e1501]
 === Cyclic import
@@ -4143,6 +4258,69 @@ constants belong to a class of its own.
 As E2102, for the other thing a class file runs out of. The pool belongs to the class rather than to any one method of it, so this is reported as the definition the class was generated for and names no method.
 
 The pool is run out of two ways and the message says which: referring to an entry the class file cannot address, which names the entry that was wanted, and holding more entries than it can write out, which names how many there are. They are one code because the author's move is the same.
+
+[#e2104]
+=== A source nests deeper than the compiler walks
+
+[,text]
+----
+An expression in this source nests too deeply for the compiler to walk. Name its parts with `let` to
+flatten it.
+----
+
+Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). Every pass descends the same text the same way, so this is not one pass's limit; it is reported wherever the descent is made, including by the formatter, which reads sources it cannot compile.
+
+[#e2301]
+=== A declaration is not written in its form
+
+[,text]
+----
+A behavior signature uses `:` before its parameters: `behavior submit : (...) -> ...`.
+----
+
+Reported where a declaration does not read (<<declaration-syntax>>): the module header, a top-level `+data+`, `+behavior+` or `+let+`, a behavior's signature, a `+depends on+` clause. The message names the form that was expected rather than the token that was found, since what a reader needs is the shape and not the position.
+
+[#e2302]
+=== An expression is not written in its form
+
+[,text]
+----
+The right side of `|>` must be a function call or a function name.
+----
+
+Reported where an expression does not read (<<expression-syntax>>), including a block that ends in no expression: a block's value is its last expression, and one holding only `+let+` and `+guard+` lines states nothing.
+
+[#e2303]
+=== A pattern is not written in its form
+
+[,text]
+----
+A case value is bound with `as`: write `| Submitted as s`, not `| Submitted s`. Only `Some` carries
+a payload to bind positionally.
+----
+
+Reported where a pattern does not read (<<pattern-syntax>>). The forms differ by what is being destructured — a case binds with `+as+`, an optional binds its payload positionally, a record destructures its fields directly — so the message names the form for the thing at hand.
+
+[#e2304]
+=== An example is not written in its form
+
+[,text]
+----
+An `example` needs at least one `|` row.
+----
+
+Reported where an `+example+`, a `+fake+` or an `+examples for+` file does not read (<<examples-syntax>>, <<examples>>).
+
+[#e2305]
+=== A literal is not written in its form
+
+[,text]
+----
+A fractional literal is a Decimal and needs the `m` suffix (write `1.5m`); Souther has no
+floating-point type.
+----
+
+Reported while reading the text into tokens, before anything is parsed (<<literal-syntax>>): a string not closed before the end of the line, a fractional literal with no `+m+`, a type variable with no name after `+'+`, a character that begins nothing.
 
 [#example]
 == Example: the business-trip application model
