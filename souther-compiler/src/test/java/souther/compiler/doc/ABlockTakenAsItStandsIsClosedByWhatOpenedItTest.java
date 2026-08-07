@@ -71,8 +71,46 @@ class ABlockTakenAsItStandsIsClosedByWhatOpenedItTest {
                 and on"""));
     }
 
+    @Test
+    void markdownDoesNotReadAnAsciiDocDelimiterAsOpeningAnything() {
+        String[] lines = """
+                # Guide
+
+                ----
+
+                ## Still a heading""".split("\n", -1);
+
+        assertEquals(List.of(false, false, false, false, false), asList(TakenAsItStands.markdown(lines)));
+        assertEquals(List.of(false, false, true, true, true), asList(TakenAsItStands.asciiDoc(lines)));
+    }
+
+    @Test
+    void asciiDocDoesNotReadAMarkdownFenceAsOpeningAnything() {
+        String[] lines = """
+                = Guide
+
+                ```
+
+                == Still a heading""".split("\n", -1);
+
+        assertEquals(List.of(false, false, false, false, false), asList(TakenAsItStands.asciiDoc(lines)));
+        assertEquals(List.of(false, false, true, true, true), asList(TakenAsItStands.markdown(lines)));
+    }
+
+    @Test
+    void aReaderThatIsNotToldWhichNotationItHoldsTakesEither() {
+        String[] markdown = "----\nx".split("\n", -1);
+        String[] adoc = "```\nx".split("\n", -1);
+
+        assertEquals(List.of(true, true), asList(TakenAsItStands.either(markdown)));
+        assertEquals(List.of(true, true), asList(TakenAsItStands.either(adoc)));
+    }
+
     private List<Boolean> opaque(String text) {
-        boolean[] taken = TakenAsItStands.lines(text.split("\n", -1));
+        return asList(TakenAsItStands.either(text.split("\n", -1)));
+    }
+
+    private List<Boolean> asList(boolean[] taken) {
         List<Boolean> said = new java.util.ArrayList<>();
         for (boolean line : taken) {
             said.add(line);

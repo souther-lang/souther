@@ -85,7 +85,7 @@ final class Continuation {
     private static int cut(String text, int from, int budget) {
         int limit = Math.min(from + budget, text.length());
         String[] lines = text.split("\n", -1);
-        boolean[] opaque = TakenAsItStands.lines(lines);
+        boolean[] opaque = TakenAsItStands.either(lines);
         int heading = -1;
         int blank = -1;
         int attributes = -1;

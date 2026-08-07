@@ -202,6 +202,157 @@ class WhatIsAddressableIsWhatTheDocSetNamedTest {
     }
 
     @Test
+    void textUnderAHeadingTheSetDidNotNameBelongsToWhatIsAroundIt() {
+        LibraryDocs docs = shipping("""
+                # Guide
+
+                <!-- souther-section: a -->
+                ## A
+
+                About A.
+
+                ## Unnamed
+
+                unique-word
+                """);
+
+        assertEquals(List.of("somelib/guide"),
+                docs.search("unique-word").stream().map(LibraryDocs.Topic::name).toList(),
+                "an unnamed heading closes the named part before it, and what follows is the"
+                        + " file's — belonging to nobody is being unfindable");
+    }
+
+    @Test
+    void andInsideAPartItBelongsToThatPart() {
+        LibraryDocs docs = shipping("""
+                # Guide
+
+                <!-- souther-section: parent -->
+                ## Parent
+
+                parent prose
+
+                <!-- souther-section: child -->
+                ### Child
+
+                child prose
+
+                ### Unnamed sibling
+
+                unique-word
+                """);
+
+        assertEquals(List.of("somelib/guide/parent"),
+                docs.search("unique-word").stream().map(LibraryDocs.Topic::name).toList(),
+                "the nearest part that names itself and still contains it");
+    }
+
+    @Test
+    void whatIsSearchedOfAFileAndOfItsPartsIsThatFileExactlyOnce() {
+        LibraryDocs docs = shipping("""
+                # Guide
+
+                a preamble
+
+                <!-- souther-section: parent -->
+                ## Parent
+
+                parent prose
+
+                <!-- souther-section: child -->
+                ### Child
+
+                child prose
+
+                ### Unnamed sibling
+
+                more parent prose
+
+                <!-- souther-section: last -->
+                ## Last
+
+                last prose
+                """);
+
+        assertEquals(List.of("somelib/guide", "somelib/guide/parent", "somelib/guide/child",
+                "somelib/guide/last"), docs.topics().stream().map(LibraryDocs.Topic::name).toList());
+        assertTiled(docs.topics(), docs.read("somelib/guide"));
+    }
+
+    @Test
+    void andSoIsEveryFileThisCompilerShips() {
+        LibraryDocs docs = LibraryDocs.on(getClass().getClassLoader(), Caller.CLI);
+        List<LibraryDocs.Topic> shipped = docs.topics();
+
+        int named = 0;
+        for (LibraryDocs.Topic file : shipped.stream().filter(t -> t.depth() == 0).toList()) {
+            List<LibraryDocs.Topic> ofOneFile = shipped.stream()
+                    .filter(t -> t.resource().equals(file.resource())).toList();
+            assertTiled(ofOneFile, docs.read(file.name()));
+            named += ofOneFile.size() - 1;
+        }
+        assertTrue(named > 5, "only " + named + " parts named, so this is not passing on silence");
+    }
+
+    /**
+     * That the prose of one file is divided between its entries, each character searched once.
+     *
+     * <p>The lines naming the parts are nobody's. A declaration is what the file calls something
+     * rather than something it says, and a reader looking for words should not be answered with a
+     * file because of the notation it names its parts in.
+     */
+    private void assertTiled(List<LibraryDocs.Topic> ofOneFile, String text) {
+        int[] claims = new int[text.length()];
+        for (LibraryDocs.Topic topic : ofOneFile) {
+            for (LibraryDocs.Slice slice : topic.own()) {
+                for (int at = slice.from(); at < Math.min(slice.to(), text.length()); at++) {
+                    claims[at]++;
+                }
+            }
+        }
+        boolean[] declares = new boolean[text.length()];
+        for (int at = 0, i = 0; i < text.split("\n", -1).length; i++) {
+            String line = text.split("\n", -1)[i];
+            if (line.strip().matches("<!--\\s*souther-section:.*-->")) {
+                for (int c = at; c < Math.min(at + line.length() + 1, text.length()); c++) {
+                    declares[c] = true;
+                }
+            }
+            at += line.length() + 1;
+        }
+        for (int at = 0; at < text.length(); at++) {
+            assertEquals(declares[at] ? 0 : 1, claims[at],
+                    "character " + at + " of " + ofOneFile.getFirst().name() + " is searched "
+                            + claims[at] + " times: " + text.substring(Math.max(0, at - 30),
+                            Math.min(text.length(), at + 30)).replace("\n", "\\n"));
+        }
+    }
+
+    @Test
+    void aThematicBreakDoesNotOpenABlockInAFileWrittenInMarkdown() {
+        LibraryDocs docs = shipping("""
+                # Guide
+
+                <!-- souther-section: first -->
+                ## First
+
+                text
+
+                ----
+
+                <!-- souther-section: second -->
+                ## Second
+
+                more text
+                """);
+
+        assertEquals(List.of("somelib/guide", "somelib/guide/first", "somelib/guide/second"),
+                docs.topics().stream().map(LibraryDocs.Topic::name).toList(),
+                "`----` opens a listing in AsciiDoc and separates in markdown, and this is markdown"
+                        + " — read the other way, everything after it stops being structure");
+    }
+
+    @Test
     void aNameThatOpensNothingIsRefusedWhereTheSetIsRead() {
         IllegalStateException refused = assertThrows(IllegalStateException.class, () -> shipping("""
                 # A guide

@@ -226,7 +226,7 @@ public final class SpecDocument {
      * markdown file and a part of one being cut off ask the same question about their own blocks.
      */
     private static boolean[] opaqueLines(String[] lines) {
-        return TakenAsItStands.lines(lines);
+        return TakenAsItStands.asciiDoc(lines);
     }
 
     /** Every section, in document order. */
