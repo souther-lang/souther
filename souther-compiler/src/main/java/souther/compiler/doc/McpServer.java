@@ -91,9 +91,13 @@ public final class McpServer {
                             + " it lists every section anchor and every shipped topic as `name<TAB>title`,"
                             + " one per line — start there. With a `name` it reads that one specification"
                             + " section by its anchor (e.g. `newtype`) or that one library topic by its"
-                            + " set-qualified name (e.g. `raoh/tutorial`).",
+                            + " set-qualified name (e.g. `raoh/tutorial`). A long one arrives in parts,"
+                            + " each saying how to ask for what follows it.",
                     List.of(new Param("name", Kind.STRING, false,
-                            "a section anchor or a set/topic name; omit to list every one of them"))),
+                                    "a section anchor or a set/topic name; omit to list every one of them"),
+                            new Param("cursor", Kind.CURSOR, false,
+                                    "to read on from where a part left off: the `cursor` that part"
+                                            + " came back with, sent back with the same `name`"))),
             new Tool("stdlib_api",
                     "The Souther standard library's published surface with resolved signatures. No name"
                             + " lists everything; a module qualifier (`List`) or a qualified name"
@@ -147,6 +151,31 @@ public final class McpServer {
                 }
                 return SAYS_SOMETHING.matcher(value.asString()).find()
                         ? null : "`" + name + "` must not be empty";
+            }
+        },
+
+        /**
+         * A place in an answer this server issued, and nothing a client composes.
+         *
+         * <p>Its spelling is published so that a value that was never one of ours is refused
+         * against the schema rather than spent as a call. What it means is not published: a client
+         * carries it back as it arrived, and where it points is checked against the answer it is
+         * carried back to.
+         */
+        CURSOR {
+            @Override
+            void publish(ObjectNode schema) {
+                schema.put("type", "string");
+                schema.put("pattern", Continuation.SPELLED);
+            }
+
+            @Override
+            String malformed(String name, JsonNode value) {
+                if (!value.isString()) {
+                    return "`" + name + "` must be a string";
+                }
+                return value.asString().matches(Continuation.SPELLED)
+                        ? null : "`" + name + "` is not a cursor this server issued";
             }
         },
 
@@ -389,12 +418,55 @@ public final class McpServer {
                 yield 2;
             }
         };
+        String said = captured.toString(StandardCharsets.UTF_8);
+        Tool answering = TOOLS.stream().filter(t -> t.name().equals(tool)).findFirst().orElse(null);
+        if (code == 0 && answering != null && answering.param("cursor") != null) {
+            try {
+                said = part(answering, arguments, said);
+            } catch (IllegalArgumentException e) {
+                // A cursor that does not belong to this answer is this call's failure. Resuming at
+                // it anyway would answer from the middle of a document nobody asked about.
+                return failed(e.getMessage());
+            }
+        }
         ObjectNode result = JSON.createObjectNode();
         ObjectNode content = result.putArray("content").addObject();
         content.put("type", "text");
-        content.put("text", captured.toString(StandardCharsets.UTF_8));
+        content.put("text", said);
         result.put("isError", code != 0);
         return result;
+    }
+
+    /**
+     * As much of {@code said} as one answer carries, and how to ask for what follows it.
+     *
+     * <p>What follows is named as the call that reaches it rather than as a place in the text,
+     * because a place is only a place to whoever holds the whole of it, which this caller by
+     * definition does not.
+     */
+    private static String part(Tool tool, JsonNode arguments, String said) {
+        JsonNode cursor = arguments == null ? null : arguments.get("cursor");
+        Continuation.Part part = Continuation.of(said, cursor == null ? null : cursor.asString());
+        if (part.cursor() == null) {
+            return part.text();
+        }
+        return part.text() + "\n… " + part.remaining() + " more characters; `" + tool.name() + " "
+                + askedAgain(tool, arguments, part.cursor()) + "` for what follows\n";
+    }
+
+    /** The arguments this call was made with, and the cursor that carries it on. */
+    private static String askedAgain(Tool tool, JsonNode arguments, String cursor) {
+        StringBuilder written = new StringBuilder("{");
+        for (Param param : tool.params()) {
+            JsonNode value = arguments == null || param.name().equals("cursor")
+                    ? null : arguments.get(param.name());
+            if (value != null) {
+                written.append(written.length() > 1 ? ", " : "")
+                        .append(param.name()).append(": ").append(JSON.writeValueAsString(value));
+            }
+        }
+        return written.append(written.length() > 1 ? ", " : "")
+                .append("cursor: \"").append(cursor).append("\"}").toString();
     }
 
     private static ObjectNode failed(String said) {
