@@ -66,6 +66,19 @@ public final class InvariantChecker {
 
     record Findings(List<CompileException> errors, List<Diagnostic> warnings) {}
 
+    /** One construction and how this check came out on it. */
+    record Said(String type, SourcePos pos, Verdict verdict) {}
+
+    /**
+     * Where a test in this package reads the verdicts a check reached, and null everywhere else.
+     *
+     * <p>What the check <em>says</em> is its findings, and a verdict is not one of them: two of the
+     * four are silent, and which of those two a construction came out as is exactly what no
+     * diagnostic reports. A test holding that difference has nowhere else to read it, and a
+     * distinction nothing can read is one that stops being true without anything failing.
+     */
+    static List<Said> WATCHING;
+
     /**
      * What this check reads: one behavior's body and the invariants of the types around it, both in
      * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
@@ -121,17 +134,20 @@ public final class InvariantChecker {
         // assuming it.
         Core stated = c.clauses.typed(clause, data);
         Denotations fields = Denotations.none().locations(c.clauses.bindingsOf(data).values());
-        List<Predicates.Clause> owed;
+        Predicates.Owed owed;
         try {
-            owed = stated == null ? null
+            owed = stated == null ? Predicates.Owed.UNREADABLE
                     : c.predicates.obligations(stated, Known.top(), fields, false);
         } catch (RuntimeException _) {
-            owed = null;   // fail-open, as the walk is
+            owed = Predicates.Owed.UNREADABLE;   // fail-open, as the walk is
         }
-        if (owed == null || owed.isEmpty()) {
+        // A clause owing nothing is answered here as one nothing can be asked of. What it is instead
+        // — a clause that holds wherever it is built — is a fourth answer this classification does
+        // not have, and giving it one is a change to what the language states about a clause.
+        if (owed.clauses().isEmpty()) {
             return ClauseDischarge.runtimeOnly(at, c.whyUnreadable(stated, fields));
         }
-        for (Predicates.Clause owe : owed) {
+        for (Predicates.Clause owe : owed.clauses()) {
             if (owe.numeric() != null) {
                 return ClauseDischarge.derivable(at);
             }
@@ -198,18 +214,30 @@ public final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     private void walk(Core e, Known k, Denotations at, int depth) {
-        Core.If value = conditionalValueIn(e);
-        if (value != null && depth < BRANCHES_OPENED) {
+        ConditionalSite site = conditionalValueIn(e);
+        if (site != null && depth < BRANCHES_OPENED) {
             // A conditional in a value position is one of its two branches, and which one is decided
             // by its condition. So this is read once with each standing there, under that condition,
             // and what the two readings find is said once. Every place a conditional can be given —
             // to a field, to a name, to a guard — is this one place.
-            walk(value.cond(), k, at, depth);
-            Set<Core> alike = sameConditional(e, value, at);
+            Core.If value = site.conditional();
+            // Everything about the conditional is read where it stands, which is inside every binder
+            // on the way down to it and not at the outer place the reading is decided on: what its
+            // condition settles, and what the condition's own subtree is. Read at the outer place the
+            // condition names binders nothing has entered, which denote nothing — it would settle
+            // nothing, and a construction written inside it would be one nothing can be said of.
+            Entered inside = scopeOf(site, k, at);
+            Known within = inside.known();
+            Denotations there = inside.at();
+            walk(value.cond(), within, there, depth);
+            Set<Core> alike = sameConditional(e, value, there);
+            // The readings start from where the conditional stood, not from outside it. The tree each
+            // is given still holds those binders and walks into them again, which is why entering one
+            // already entered is nothing: a second transition would forget what the branch settled.
             say(reading(without(e, alike, value.then()),
-                            predicates.assumeCond(value.cond(), k, at, true), at, depth),
+                            predicates.assumeCond(value.cond(), within, there, true), there, depth),
                     reading(without(e, alike, value.els()),
-                            predicates.assumeCond(value.cond(), k, at, false), at, depth));
+                            predicates.assumeCond(value.cond(), within, there, false), there, depth));
             return;
         }
         checkIfConstruction(e, k, at, false);
@@ -244,24 +272,8 @@ public final class InvariantChecker {
                 if (!(li.value() instanceof Core.Block)) {
                     walk(li.value(), k, at, depth);
                 }
-                // The name is an alias for what its initializer denotes, so what is recorded about it
-                // is recorded under that denotation and not under the binding. Recording it under the
-                // binding is what made a named subexpression a term of its own, answering differently
-                // from the very expression it was given.
-                Denotes what = terms.denotationOf(li.value(), at, k);
-                Known k2 = k;
-                // A binding that denotes what it was given is an alias and introduces no value, so
-                // there is nothing to record of it: what holds of what it names already holds.
-                // Recording it anyway assigns that name its own form, and an assignment drops what
-                // was known of what it assigns to — the bound on it would be lost to the copy. A
-                // location is always this; a term is where the form is that term's own atom.
-                if (what instanceof Denotes.Term term && terms.isNumeric(li.value().type())) {
-                    LinearForm vf = terms.affineOf(li.value(), at, k);
-                    if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
-                        k2 = k2.assigning(term.key(), vf);
-                    }
-                }
-                walk(li.body(), k2, at.binding(li.binder().id(), li.value(), what), depth);
+                Entered in = bindLet(li, k, at);
+                walk(li.body(), in.known(), in.at(), depth);
             }
             case Core.Match m -> {
                 walk(m.scrutinee(), k, at, depth);
@@ -404,9 +416,14 @@ public final class InvariantChecker {
      * written over a conditional can be checked on each branch and answered once — which of the two
      * values it is is not decided here, so what holds of the construction is what holds of both.
      */
-    private enum Verdict {
-        /** Every clause is discharged, or none of them is expressible. */
+    enum Verdict {
+        /** Every clause is discharged. */
         PROVED,
+        /** A clause names something the check cannot read at this construction, and no clause is
+         * unproven: nothing is owed here because nothing could be asked. Silent, as a discharge is,
+         * and not the same thing — the run-time check is what stands for the clause, and an author
+         * who reads the silence as a proof is reading something that was never attempted. */
+        UNREPRESENTABLE,
         /** A clause is expressible and unproven: the construction may abort. */
         UNKNOWN,
         /** A clause the reading without the path's assumptions already refutes, so the invariant
@@ -419,6 +436,14 @@ public final class InvariantChecker {
 
         boolean refuted() {
             return this == REFUTED_ALONE || this == REFUTED_NOT_ALONE;
+        }
+
+        /** Whether the reading found nothing that may fail: every clause it could read is
+         * discharged. Not the same question as whether anything is reported — what is reported is
+         * settled at {@link #report}, and this is what the two readings of one construction are
+         * combined by. */
+        boolean holds() {
+            return this == PROVED || this == UNREPRESENTABLE;
         }
 
         /**
@@ -438,7 +463,13 @@ public final class InvariantChecker {
             if (a == b) {
                 return a;
             }
-            return a.refuted() && b.refuted() ? REFUTED_NOT_ALONE : UNKNOWN;
+            if (a.refuted() && b.refuted()) {
+                return REFUTED_NOT_ALONE;
+            }
+            // Neither reading found anything that may fail, and they are not the same reading: one
+            // discharged the invariant and the other could not read it. So neither does this, and
+            // what it is not is the invariant proven of both.
+            return a.holds() && b.holds() ? UNREPRESENTABLE : UNKNOWN;
         }
     }
 
@@ -451,17 +482,21 @@ public final class InvariantChecker {
         // cannot be guarded is not the same as what cannot be computed.
         Set<Core> unnamed = unnamed(given.values(), k, at);
         List<Predicates.Clause> owed = new ArrayList<>();
+        // A clause the check cannot read here owes nothing and proves nothing, and the two are not
+        // the same answer. Kept apart: a clause that owes nothing because it folded to what it is read
+        // with is discharged, and one that owes nothing because nothing here could be asked of it is
+        // left to the run-time check.
+        boolean unreadable = false;
         // A newtype construction from a value written out is the constant check's to report: it names
         // the clause that failed. It reads the construction as written, so a name given the value is
         // not one it sees, and this check says it instead — which is what `decidesFalse` carries.
         for (Core stated : clauses.statedAt(named, type, given)) {
-            List<Predicates.Clause> o = predicates.obligations(stated, k, at, unnamed, decidesFalse);
-            if (o != null) {
-                owed.addAll(o);
-            }
+            Predicates.Owed o = predicates.obligations(stated, k, at, unnamed, decidesFalse);
+            unreadable |= o.unreadable();
+            owed.addAll(o.clauses());
         }
         if (owed.isEmpty()) {
-            return Verdict.PROVED;   // nothing here is expressible — the run-time check stands for it
+            return unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
         }
         NumericDomain dom = k.numbers();
         // The same clauses read against the same site, under what would be known here had no
@@ -496,7 +531,12 @@ public final class InvariantChecker {
         if (alongside) {
             return Verdict.REFUTED_NOT_ALONE;
         }
-        return unknown ? Verdict.UNKNOWN : Verdict.PROVED;
+        if (unknown) {
+            return Verdict.UNKNOWN;
+        }
+        // Every clause that could be read is discharged. One that could not be read still stands, so
+        // this is not the whole invariant proven.
+        return unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
     }
 
     /** Whether the constant check reads this construction: a newtype's, over a value written where
@@ -511,6 +551,10 @@ public final class InvariantChecker {
      * construction raises no warning: what the warning reports is a possible abort, and an attempt
      * takes its else branch instead. */
     private void report(Core at, Ast.Data type, SourcePos pos, boolean attempted, Verdict verdict) {
+        List<Said> watching = WATCHING;
+        if (watching != null && capturing == null) {
+            watching.add(new Said(type.name(), pos, verdict));
+        }
         if (capturing != null) {
             capturing.found().put(new Occurrence(asWritten(at)),
                     new Reported(type, pos, verdict, attempted));
@@ -526,6 +570,10 @@ public final class InvariantChecker {
                             .hint("check.invariant.reify", type.name()).warning().build());
                 }
             }
+            // Nothing was asked here, so nothing is said. Whether that is the right thing to say of a
+            // construction the check could not read is a question about what E2011 reports, and this
+            // answers it the way it has always been answered.
+            case UNREPRESENTABLE -> { }
             case PROVED -> { }
         }
     }
@@ -600,12 +648,59 @@ public final class InvariantChecker {
     }
 
     /**
+     * A conditional a value is handed, and the bindings in scope where it stands. The two go
+     * together: a node is found by searching down from the outside, and what it means is settled by
+     * where it was found, so a search that answered with the node alone would leave the reading to
+     * work the scope out again — which is what it got wrong.
+     *
+     * <p>Every binder the search descends through is carried, and not only the ones a construction
+     * outside could have been read against. What stands in scope decides two things: what the
+     * condition settles about the value being built, and what the condition's own subtree means —
+     * a construction written inside a condition is a construction like any other, and reading it
+     * where its binders are not entered is reading it as something nothing can be said of.
+     */
+    private record ConditionalSite(Core.If conditional, List<Binder> scope) {
+
+        /** One binder the conditional stands inside, as the environment its body is read in. */
+        private interface Binder {
+            Entered entering(InvariantChecker c, Known k, Denotations at);
+        }
+
+        /** The same site, read from outside {@code binder} — so {@code binder} is the outermost of
+         * what it is inside. */
+        ConditionalSite under(Binder binder) {
+            List<Binder> outer = new ArrayList<>();
+            outer.add(binder);
+            outer.addAll(scope);
+            return new ConditionalSite(conditional, List.copyOf(outer));
+        }
+
+        /** A {@code let}'s body, read with the name standing for what it was given. */
+        static Binder of(Core.LetIn li) {
+            return (c, k, at) -> c.bindLet(li, k, at);
+        }
+
+        /** A {@code match} arm's body, read with what the arm binds standing for a value of the
+         * case's type — a location this arm introduces, carrying what that type guarantees. */
+        static Binder of(Core.Case arm) {
+            return (c, k, at) -> c.enter(Terms.read(arm.binding(), arm.bindType(), arm.pos()), k, at);
+        }
+
+        /** An attempted construction's success branch, read with the binding carrying the invariant
+         * the attempt established. */
+        static Binder of(Core.IfConstructed ic) {
+            return (c, k, at) ->
+                    c.enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
+        }
+    }
+
+    /**
      * The first conditional {@code e} gives a value to, or {@code null} where it gives none. A
      * conditional in tail position — an {@code if}'s own branches, a {@code let}'s body, a case's
      * body — is where the walk goes next rather than a value it is handed, and a closure's body is
      * read where the closure is applied.
      */
-    private static Core.If conditionalValueIn(Core e) {
+    private static ConditionalSite conditionalValueIn(Core e) {
         return switch (e) {
             // Where the walk goes next is not a value it is handed: an `if`'s own branches, a `let`'s
             // body and a case's body are read after this, each with what is known there.
@@ -617,17 +712,62 @@ public final class InvariantChecker {
         };
     }
 
-    /** The first conditional inside a value. Everything under one is part of it, including the body
-     * of a binding an expansion introduced — {@code let $0 = r in if $0.a > b then ...} is a helper
-     * called on an argument, which is one value however many bindings writing it took. */
-    private static Core.If conditionalIn(Core e) {
+    /** The first conditional inside a value, with what it is inside. Everything under one is part of
+     * it, including the body of a binding an expansion introduced — {@code let $0 = r in if $0.a > b
+     * then ...} is a helper called on an argument, which is one value however many bindings writing
+     * it took. Those bindings are what the conditional is read in the scope of; a binding is not in
+     * scope for the value it is itself given, so a conditional found there is inside nothing. */
+    private static ConditionalSite conditionalIn(Core e) {
         if (e instanceof Core.If iff) {
-            return iff;
+            return new ConditionalSite(iff, List.of());
         }
         if (e instanceof Core.Block) {
             return null;   // read where the closure is applied
         }
-        Core.If[] found = {null};
+        if (e instanceof Core.LetIn li) {
+            ConditionalSite given = conditionalIn(li.value());
+            if (given != null) {
+                return given;
+            }
+            ConditionalSite inside = conditionalIn(li.body());
+            return inside == null ? null : inside.under(ConditionalSite.of(li));
+        }
+        if (e instanceof Core.Match m) {
+            ConditionalSite asked = conditionalIn(m.scrutinee());
+            if (asked != null) {
+                return asked;
+            }
+            for (Core.Case arm : m.cases()) {
+                ConditionalSite inside = conditionalIn(arm.body());
+                if (inside == null) {
+                    continue;
+                }
+                // A case that binds nothing introduces nothing: its body is read as the arm's own.
+                return arm.binding() == null || arm.bindType() == null
+                        ? inside : inside.under(ConditionalSite.of(arm));
+            }
+            return null;
+        }
+        if (e instanceof Core.IfConstructed ic) {
+            ConditionalSite tried = conditionalIn(ic.construct());
+            if (tried != null) {
+                return tried;
+            }
+            ConditionalSite held = conditionalIn(ic.then());
+            if (held != null) {
+                return held.under(ConditionalSite.of(ic));
+            }
+            // A departure stands where the invariant did not hold and nothing was built, so it is
+            // inside nothing the attempt would have guaranteed.
+            for (Core.ElseArm arm : ic.els()) {
+                ConditionalSite departed = conditionalIn(arm.body());
+                if (departed != null) {
+                    return departed;
+                }
+            }
+            return null;
+        }
+        ConditionalSite[] found = {null};
         Core.forEachChild(e, child -> {
             if (found[0] == null) {
                 found[0] = conditionalIn(child);
@@ -664,9 +804,16 @@ public final class InvariantChecker {
         return made;
     }
 
-    /** Every conditional in {@code e} that computes what {@code value} computes, {@code value}
+    /**
+     * Every conditional in {@code e} that computes what {@code value} computes, {@code value}
      * included. Asked once for the two readings, since which nodes those are does not depend on which
-     * branch is being read. */
+     * branch is being read.
+     *
+     * <p>{@code at} is where {@code value} stands, which is what keying it needs. A candidate
+     * elsewhere in {@code e} is keyed there too rather than in its own scope, so two conditionals
+     * that compute the same value under different bindings are read as two — which is the thing this
+     * exists to prevent, still unanswered for that shape.
+     */
     private Set<Core> sameConditional(Core e, Core.If value, Denotations at) {
         Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
         alike.add(value);
@@ -728,6 +875,54 @@ public final class InvariantChecker {
      * be named without being seeded.
      */
     private record Entered(Known known, Denotations at) {}
+
+    /**
+     * The environment a binding's body is read in. Both places a body is read reach it through here:
+     * the walk on its way into one, and a conditional hoisted out of one. The bug this answers came
+     * from those two working the scope rule out separately, so there is one of it.
+     *
+     * <p>The initializer is not read here. The walk reads it before it gets here, and a hoisted
+     * conditional was found past it.
+     *
+     * <p>The name is an alias for what its initializer denotes, so what is recorded about it is
+     * recorded under that denotation and not under the binding. Recording it under the binding is
+     * what made a named subexpression a term of its own, answering differently from the very
+     * expression it was given.
+     */
+    private Entered bindLet(Core.LetIn li, Known k, Denotations at) {
+        // Entering a binding the walk is already inside is not a second binding of it. A branch is
+        // read from where its conditional stood, which is inside these, over a tree that still holds
+        // them; running the transition again would assign the name its form a second time, and an
+        // assignment forgets what was known of what it assigns to — including what the branch had
+        // just established.
+        if (at.valueOf(li.binder().id()) == li.value()) {
+            return new Entered(k, at);
+        }
+        Denotes what = terms.denotationOf(li.value(), at, k);
+        Known out = k;
+        // A binding that denotes what it was given is an alias and introduces no value, so there is
+        // nothing to record of it: what holds of what it names already holds. Recording it anyway
+        // assigns that name its own form, and an assignment drops what was known of what it assigns
+        // to — the bound on it would be lost to the copy. A location is always this; a term is where
+        // the form is that term's own atom.
+        if (what instanceof Denotes.Term term && terms.isNumeric(li.value().type())) {
+            LinearForm vf = terms.affineOf(li.value(), at, k);
+            if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
+                out = out.assigning(term.key(), vf);
+            }
+        }
+        return new Entered(out, at.binding(li.binder().id(), li.value(), what));
+    }
+
+    /** Where {@code site}'s conditional stands: {@code k} and {@code at} with every binder it is
+     * inside entered, outermost first. */
+    private Entered scopeOf(ConditionalSite site, Known k, Denotations at) {
+        Entered in = new Entered(k, at);
+        for (ConditionalSite.Binder binder : site.scope()) {
+            in = binder.entering(this, in.known(), in.at());
+        }
+        return in;
+    }
 
     /**
      * Introduces {@code root} as a location: somewhere nothing else names, holding a value of its
