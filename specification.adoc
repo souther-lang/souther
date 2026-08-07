@@ -1047,7 +1047,7 @@ let build (rows) = {
 }
 ----
 
-A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a `+let+` returned, of a string joined from parts — is not a term, and a clause needing it is left to the run-time check.
+A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a behavior answered — is not a term, and a clause needing it is left to the run-time check.
 
 [,text]
 ----
@@ -1132,6 +1132,32 @@ let build (rows) = {
 "A property of every element" is a clause like `+List.all(p, value)+` or `+List.allDistinctBy(f, value)+`: nothing new is in a sublist, so what held of every element still holds. "A particular element" is `+List.contains(x, value)+` or `+Set.contains(x, value)+`, which a selection may drop.
 
 An operation not in the table keeps nothing that can be relied on, and a clause over what it built is left to the run-time check.
+
+===== A construction whose result is no smaller than what it read
+
+An operation given two containers, or given a container and something to put in it, establishes no element relation to a single source that any of the four shapes states. Appending and union read two sources, so neither of them alone is what the result was built from; an insert puts in an element or an entry the container it read did not hold. A property of every element does not survive either way. How many there are is bounded from below all the same, and that bound is a fact of its own.
+
+[cols="2,3"]
+|===
+| what holds of the result | the operations
+
+| no smaller than either container it was given | `+List.append+`, `+Set.union+`, `+Map.union+`
+| no smaller than the container it was given | `+Set.insert+`, `+Map.insert+`
+|===
+
+`+List.append+` is written `+a ++ b+`, and a `+String+` is joined with the same operator and read the same way: `+String.length(a ++ b)+` is no less than `+String.length(a)+` and no less than `+String.length(b)+`.
+
+So a lower bound on any source named above is a lower bound on the result, and a non-empty list appended to any list is non-empty.
+
+[,text]
+----
+data Lines = List<Line> invariant List.length(value) >= 1
+
+behavior joined : (a: Lines, b: List<Line>) -> Lines
+let joined (a, b) = Lines(a.value ++ b)   // discharged: no shorter than `a`
+----
+
+Nothing is said the other way. A union answers one of what both sides hold, and an insert of something already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
 
 [#invariant-discharge-projection]
 ===== A projection the closure copied

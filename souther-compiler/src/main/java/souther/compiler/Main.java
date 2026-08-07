@@ -65,6 +65,7 @@ public final class Main {
               --strict                  exit non-zero while rows are waiting for a `let`
             options (compile):
               --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
+              --warnings report|error   refuse a compile that warns (default report)
             options (compile/examples/japi):
               -cp, --class-path <path>  where to find modules another project compiled
 
@@ -93,6 +94,7 @@ public final class Main {
             Map.entry("--class-path", "compile/examples/japi"),
             Map.entry("-d", "compile"),
             Map.entry("--adequacy", "compile"),
+            Map.entry("--warnings", "compile"),
             Map.entry("--behavior", "run/examples"),
             Map.entry("--input", "run"),
             Map.entry("-w", "fmt"),
@@ -232,6 +234,7 @@ public final class Main {
         List<Path> classPath = new ArrayList<>();
         Path outDir = Path.of(".");
         Adequacy.Asked measure = Adequacy.Asked.NOTHING;
+        boolean refuseWarnings = false;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--adequacy" -> {
@@ -240,6 +243,14 @@ public final class Main {
                         return 2;
                     }
                     measure = Adequacy.Asked.warningsAt(adequacyLevel(args[i]));
+                }
+                case "--warnings" -> {
+                    if (++i >= args.length
+                            || !(args[i].equals("report") || args[i].equals("error"))) {
+                        System.err.println("`--warnings` takes report or error");
+                        return 2;
+                    }
+                    refuseWarnings = args[i].equals("error");
                 }
                 case "-d" -> {
                     if (++i >= args.length) {
@@ -276,11 +287,14 @@ public final class Main {
         }
         List<Located> warnings = new ArrayList<>();
         try {
-            List<Path> written = compileToDir(sources, outDir, classPath, warnings, measure);
+            Map<String, byte[]> classes = compiledClasses(sources, classPath, warnings, measure);
             // Before the written files: the warnings are about the source, and a long list of paths
             // between them and the command would bury them.
             report(warnings, sources, render);
-            for (Path file : written) {
+            if (refuseWarnings && !warnings.isEmpty()) {
+                return refused(render);
+            }
+            for (Path file : writeClasses(classes, outDir)) {
                 System.out.println("wrote " + file);
             }
             return 0;
@@ -610,6 +624,23 @@ public final class Main {
         report(e.locatedDiagnostics(), sources, render);
     }
 
+    /**
+     * Says that the warnings just printed are what stopped this build, and answers with the exit code
+     * for it.
+     *
+     * <p>Not under {@code --format json}. What that format writes is one object per diagnostic with
+     * nothing around them, so a reader takes the output a line at a time; a sentence among them is a
+     * line that parses as nothing, and a reader given it cannot tell that from output it should have
+     * understood. There the exit code is what says it, which is what a tool reads anyway.
+     */
+    private static int refused(RenderOptions render) {
+        if (!render.json()) {
+            System.err.println(Messages.get("cli.warnings.refused",
+                    Messages.resolveLocale(render.lang)));
+        }
+        return 1;
+    }
+
     /** Prints each diagnostic to stderr as the chosen renderer renders it, quoting the file it
      * belongs to. Errors and warnings take the same path; only where they come from differs. */
     private static void report(List<Located> located, List<Path> sources, RenderOptions render) {
@@ -714,6 +745,21 @@ public final class Main {
     static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath,
                                    List<Located> warningsOut, Adequacy.Asked measure)
             throws IOException {
+        return writeClasses(compiledClasses(sources, classPath, warningsOut, measure), outDir);
+    }
+
+    /**
+     * The classes the sources compile to, by binary name, with the compile's warnings collected into
+     * {@code warningsOut}.
+     *
+     * <p>Held apart from writing them because a command may read the warnings before deciding whether
+     * this build is one it accepts, and a build it does not accept writes nothing: the exit code says
+     * the classes are not the output of an accepted compile, and a directory holding them anyway is
+     * what a later step would read as if they were.
+     */
+    static Map<String, byte[]> compiledClasses(List<Path> sources, List<Path> classPath,
+                                               List<Located> warningsOut, Adequacy.Asked measure)
+            throws IOException {
         List<String> texts = new ArrayList<>();
         for (Path source : sources) {
             texts.add(Files.readString(source));
@@ -728,7 +774,11 @@ public final class Main {
                         compileWarnings, measure)
                 : Compiler.compiledModules(texts, path, compileWarnings, measure);
         warningsOut.addAll(compileWarnings);
-        Map<String, byte[]> classes = compilation.classes();
+        return compilation.classes();
+    }
+
+    /** Writes each class under {@code outDir}, and answers with the paths written, in order. */
+    static List<Path> writeClasses(Map<String, byte[]> classes, Path outDir) throws IOException {
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
             Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");

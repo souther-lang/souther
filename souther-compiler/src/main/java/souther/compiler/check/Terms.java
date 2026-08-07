@@ -149,16 +149,34 @@ final class Terms {
         });
     }
 
-    /** How many elements a size call over a value written out counts, or {@code null} where its
-     * argument is not one. */
+    /**
+     * How many elements a size call over a list written out counts, or {@code null} where its
+     * argument is not one.
+     *
+     * <p>What the elements are is not asked. Whether a value is <em>written</em>
+     * ({@link #isWritten}) is a question about the whole of it, down to every part, and it is the
+     * right question where a construction is read as the value it builds — there a computed part is
+     * a value the source does not hold. Counting reads the line the list is written on, and three
+     * elements written there are three however each was arrived at. Asking the stronger question
+     * left a list of parameters with a length nothing knew, and an invariant over it with no guard
+     * an author could write: the length is not a value any condition could settle.
+     */
     BigDecimal writtenSize(Core e, Denotations at) {
         Core container = DischargeRules.sizeArgOf(e);
         if (container == null) {
             return null;
         }
-        Core written = writtenValue(container, at);
-        return written instanceof Core.ListLit list
+        return listedOut(container, at) instanceof Core.ListLit list
                 ? BigDecimal.valueOf(list.elements().size()) : null;
+    }
+
+    /** The list {@code e} is, written where it is or written where the name it is was given one. */
+    private Core listedOut(Core e, Denotations at) {
+        if (!(e instanceof Core.Read r)) {
+            return e;
+        }
+        Core given = at.valueOf(r.binding());
+        return given == null || given == e ? e : listedOut(given, at);
     }
 
     static LinearForm negate(LinearForm f) {
