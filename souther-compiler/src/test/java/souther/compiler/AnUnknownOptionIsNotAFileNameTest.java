@@ -131,6 +131,31 @@ class AnUnknownOptionIsNotAFileNameTest {
     }
 
     /**
+     * The other direction, which is the one that holds the table against the parsers: a command the
+     * table names as an owner has a case for the option. Without it the table is only checked against
+     * itself — an entry saying {@code --behavior} is compile's would be reported as compile's, and
+     * every assertion about the report would still hold.
+     *
+     * <p>What each command then does with the option is its own business: most of these are written
+     * without the value they need, and answering that is a case for the option, not the absence of
+     * one. The one answer that would mean the table is wrong is that the command has never heard of it.
+     */
+    @Test
+    void everyCommandTheTableNamesAsAnOwnerHasACaseForTheOption() {
+        for (String option : Main.knownOptions()) {
+            if (!option.startsWith("--")) {
+                continue;
+            }
+            for (String owner : Main.optionOwners(option).split("/")) {
+                Said said = run(owner, option);
+
+                assertFalse(said.err().contains("unknown option `" + option + "`"),
+                        owner + " is named as an owner of " + option + ": " + said.err());
+            }
+        }
+    }
+
+    /**
      * The table and the usage text name the same options. They say different things about them — the
      * usage groups an option under the commands it is documented with, which is not always every
      * command that takes it — but an option in one and not the other is a drift between what the
