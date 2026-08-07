@@ -130,7 +130,7 @@ final class CodecGen {
         switch (key) {
             // a named key runs its own decoder: a newtype's applies its invariant, an enumeration's
             // reads the case name
-            case BoundaryMapKey.Newtype n -> invokeCodec(code, n.name(), "decoder", MTD_Rdecoder);
+            case BoundaryMapKey.StringNewtype n -> invokeCodec(code, n.name(), "decoder", MTD_Rdecoder);
             case BoundaryMapKey.UnitEnum e -> invokeCodec(code, e.name(), "decoder", MTD_Rdecoder);
             // text is the string leaf itself, which canonicalizes and does nothing else; a temporal
             // is that leaf parsed
@@ -169,7 +169,7 @@ final class CodecGen {
      *  cannot collide with a data whose name is {@code Date}. */
     private static String rekeyMethod(BoundaryMapKey key) {
         return switch (key) {
-            case BoundaryMapKey.Newtype n -> "__rekey$" + n.name().qualified().replace('.', '$');
+            case BoundaryMapKey.StringNewtype n -> "__rekey$" + n.name().qualified().replace('.', '$');
             case BoundaryMapKey.UnitEnum e -> "__rekey$" + e.name().qualified().replace('.', '$');
             case BoundaryMapKey.Text _ -> "__rekey$$STRING";
             case BoundaryMapKey.Date _ -> "__rekey$$DATE";
@@ -191,7 +191,9 @@ final class CodecGen {
     }
 
     /** {@code invokedynamic} producing a {@code Function<K, String>} over the key newtype's bare
-     *  {@code value()} accessor, for {@code Maps.mapKeys} when encoding a newtype-keyed map. */
+     *  {@code value()} accessor, for {@code Maps.mapKeys} when encoding a newtype-keyed map. The
+     *  accessor is typed {@code () -> String} because the case is a String-backed newtype; a newtype
+     *  over another base would need a rendering step here, and is a case this does not have. */
     private DynamicCallSiteDesc keyValueCallSite(BoundaryMapKey key) {
         return switch (key) {
             // an enumeration key renders as its case's name, the same string its decoder reads
@@ -202,7 +204,7 @@ final class CodecGen {
                     MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
                             cd(e.name()), TAG_METHOD, MTD_tag),
                     MTD_tag);
-            case BoundaryMapKey.Newtype n -> {
+            case BoundaryMapKey.StringNewtype n -> {
                 DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                         DirectMethodHandleDesc.Kind.VIRTUAL, cd(n.name()), "value", MTD_value);
                 yield DynamicCallSiteDesc.of(

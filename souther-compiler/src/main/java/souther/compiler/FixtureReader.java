@@ -1077,16 +1077,17 @@ public final class FixtureReader {
     }
 
     /** The decoder for one boundary map key, over the text the decoded map carried. Which key it is
-     *  was settled when the checker admitted it, so this reads that witness rather than asking the
-     *  type again. This is not {@link #decoderFor}: there a {@code Date} is handed over already
-     *  parsed, and in key position it is the text that arrives. */
+     *  is the checker's rule to say, asked here rather than written out again — a fixture is read
+     *  from a written expression, not from the codec IR the witness travels in. This is not
+     *  {@link #decoderFor}: there a {@code Date} is handed over already parsed, and in key position
+     *  it is the text that arrives. */
     private Decoder<Object, ?> keyDecoderFor(Type key) {
         BoundaryMapKey classified = TypeOps.classifyConcreteMapKey(key, symbols);
         if (classified == null) {
             throw new FixtureException("`" + Type.show(key) + "` cannot key a Map that crosses");
         }
         return switch (classified) {
-            case BoundaryMapKey.Newtype n -> decoderFor(Type.ref(n.name()));
+            case BoundaryMapKey.StringNewtype n -> decoderFor(Type.ref(n.name()));
             case BoundaryMapKey.UnitEnum e -> decoderFor(Type.ref(e.name()));
             case BoundaryMapKey.Text _ -> keyText();
             case BoundaryMapKey.Date _ -> keyText().date();

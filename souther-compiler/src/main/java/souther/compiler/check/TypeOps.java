@@ -1013,19 +1013,14 @@ public final class TypeOps {
         return null;
     }
 
-    /**
-     * The representation a newtype's own value crosses as in key position, or null when it has none.
-     * {@code data X = String} is the whole of it today: a key is a JSON object's key, so what a
-     * newtype wraps has to be text already. This is the one place that set is written, so admitting a
-     * second base is a change here and a case in {@link BoundaryMapKey}, not a line in every reader.
-     */
-    private static BoundaryMapKey newtypeKeyRepresentation(TypeName name, Symbols symbols) {
-        if (symbols.get(name) instanceof Ast.Data d && d.newtype()
+    /** Whether {@code name} is a newtype over {@code String} ({@code data X = String}). A key is a
+     *  JSON object's key, so what a newtype wraps has to be text already; a newtype over another
+     *  base would be converted and rendered differently, which is a case of its own in
+     *  {@link BoundaryMapKey} rather than a widening of this. */
+    private static boolean isStringNewtype(TypeName name, Symbols symbols) {
+        return symbols.get(name) instanceof Ast.Data d && d.newtype()
                 && d.fields().size() == 1
-                && d.fields().get(0).type() instanceof Ast.TypeRef base && "String".equals(base.name())) {
-            return new BoundaryMapKey.Text();
-        }
-        return null;
+                && d.fields().get(0).type() instanceof Ast.TypeRef base && "String".equals(base.name());
     }
 
     /** How a refused {@code Map} key is described to a Java caller, in one place. Which types are
@@ -1069,9 +1064,8 @@ public final class TypeOps {
             return new BoundaryMapKey.DateTime();
         }
         if (key instanceof Type.Ref r) {
-            BoundaryMapKey wrapped = newtypeKeyRepresentation(r.name(), symbols);
-            if (wrapped != null) {
-                return new BoundaryMapKey.Newtype(r.name(), wrapped);
+            if (isStringNewtype(r.name(), symbols)) {
+                return new BoundaryMapKey.StringNewtype(r.name());
             }
             if (isUnitOnlySum(key, symbols)) {
                 return new BoundaryMapKey.UnitEnum(r.name());

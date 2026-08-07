@@ -158,8 +158,9 @@ public final class Compilation {
         return db.ask(new Shapes.Prepared(name)).value();
     }
 
-    /** What the names in {@code module} denote — the table a question about a type is asked against,
-     *  for a reader outside the compile that holds a type and has to ask what it is. */
+    /** What the names in {@code module} denote — the table a question about a type is asked against.
+     *  {@code souther run} needs it because it is handed the behavior's types rather than the codec
+     *  IR: a classification it cannot be given, it has to ask the same rule for. */
     public Symbols symbols(String module) {
         return db.ask(new Shapes.Scope(module)).value();
     }

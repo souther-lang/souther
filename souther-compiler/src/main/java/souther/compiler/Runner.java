@@ -521,11 +521,12 @@ public final class Runner {
      * neutral source, whichever source the map itself came from. This is the decoder
      * {@code CodecGen.emitKeyDecoder} builds, in Java.
      *
-     * <p>Which key types arrive here is not worked out again. The checker classified the key when it
-     * admitted it, and this reads that witness: a named key runs its own decoder, and a
-     * representation is the string leaf, parsed for a temporal. A key that classifies as nothing
-     * never reached a codec, so it is reported as an input this cannot decode rather than asserted
-     * away.
+     * <p>Which key types arrive here is not decided again. The classification is asked for rather
+     * than carried — {@code run} holds a {@code Type} the compile handed back, not the codec IR the
+     * witness travels in — but it is the checker's rule that answers, so this reads the answer
+     * instead of writing the kinds out: a named key runs its own decoder, and a representation is
+     * the string leaf, parsed for a temporal. A key that classifies as nothing never reached a
+     * codec, so it is reported as an input this cannot decode rather than asserted away.
      */
     private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, Symbols symbols, Type key,
                                                  Type map, int index) {
@@ -537,7 +538,7 @@ public final class Runner {
                             + " collection of those).", index + 1, Type.show(map));
         }
         return switch (classified) {
-            case BoundaryMapKey.Newtype n -> codecOf(loader, n.name(), "decoder");
+            case BoundaryMapKey.StringNewtype n -> codecOf(loader, n.name(), "decoder");
             case BoundaryMapKey.UnitEnum e -> codecOf(loader, e.name(), "decoder");
             case BoundaryMapKey.Text _ -> text();
             case BoundaryMapKey.Date _ -> text().date();

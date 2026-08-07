@@ -14,14 +14,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Admitting a boundary Map key establishes what its text representation is, and that is what the
- * checker hands on: a witness, not a yes. What a reader that has to build a codec needs is which
- * representation, and it must not have to work that out again from the type.
+ * checker answers with: a witness, not a yes. Every reader that has to build a codec asks this one
+ * rule which representation it has, rather than writing the kinds out again.
  *
  * <p>The two questions the one predicate used to answer are separate here. Whether a type may stand
  * as a key in a signature admits a type variable, which the core's generic signatures are written
  * with; whether a concrete key can be converted does not, because a variable is evidence of nothing.
  */
-class ABoundaryMapKeyIsClassifiedOnceTest {
+class ABoundaryMapKeyIsClassifiedByOneRuleTest {
 
     private static final String MODULE = """
             module demo
@@ -66,11 +66,13 @@ class ABoundaryMapKeyIsClassifiedOnceTest {
         assertEquals(new BoundaryMapKey.DateTime(), classify(Type.DATETIME));
     }
 
-    /** A newtype carries both what it is called and what it is admitted through, so a reader that
-     *  wraps a key and a reader that converts the text it wraps take different parts of one answer. */
+    /** The base a newtype wraps is in the case rather than beside it. Every reader of a named key
+     *  delegates to that type's own decoder and to a {@code value()} typed {@code () -> String},
+     *  which is true of a String-backed newtype and of nothing else — so a newtype over another base
+     *  is a case of its own, and reaches every reader as one. */
     @Test
-    void aNewtypeCarriesTheRepresentationItIsAdmittedThrough() {
-        assertEquals(new BoundaryMapKey.Newtype(symbols.own("ProductId"), new BoundaryMapKey.Text()),
+    void aStringBackedNewtypeIsItsOwnCase() {
+        assertEquals(new BoundaryMapKey.StringNewtype(symbols.own("ProductId")),
                 classify(named("ProductId")));
     }
 
@@ -79,9 +81,8 @@ class ABoundaryMapKeyIsClassifiedOnceTest {
         assertEquals(new BoundaryMapKey.UnitEnum(symbols.own("Outcome")), classify(named("Outcome")));
     }
 
-    /** The representations a newtype may be admitted through are the rule's, not the witness type's.
-     *  A newtype over a primitive with no key representation is refused, and the refusal is the
-     *  classifier's — nothing downstream repeats it. */
+    /** Which bases a newtype key may wrap is the rule's, and the refusal is the classifier's —
+     *  nothing downstream repeats it. */
     @Test
     void aNewtypeOverAPrimitiveWithNoKeyRepresentationIsNotClassified() {
         assertNull(classify(named("EmployeeNo")));

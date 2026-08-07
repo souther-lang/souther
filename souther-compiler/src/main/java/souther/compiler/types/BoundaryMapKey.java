@@ -10,11 +10,18 @@ package souther.compiler.types;
  * that fact; before this, each worked it out again from whatever representation it held, and the
  * checker's own rule was read a second time in the backend.
  *
- * <p>The set closed here is the representations a reader branches on, not the types a key may be
- * written as. Another {@code data CustomerId = String} is a {@link Newtype} over {@link Text} and
- * moves nothing. A representation that does not yet exist is a new case, and every reader that acts
- * on a representation stops compiling until it says what to do with it — while a reader that only
- * wraps and unwraps a named key is left alone, because that distinction is not the one that changed.
+ * <p>The cases are flat, and {@link StringNewtype} names the base it wraps rather than holding it.
+ * A nested case — a newtype carrying its representation inside it — would be a witness no reader
+ * reads: a named key is decoded by that type's own generated {@code decoder()}, which has the
+ * conversion and the invariant inside it, and encoded through a {@code value()} accessor typed
+ * {@code () -> String}. Both hold of a String-backed newtype and of nothing else, so the base
+ * belongs in the case's name, where admitting a newtype over another base is a new case and every
+ * reader is asked what to do with it. Nested, the same widening would leave the newtype arm
+ * untouched and compiling.
+ *
+ * <p>What the set closes over is that: the representations a reader branches on, not the types a key
+ * may be written as. Another {@code data CustomerId = String} is a {@link StringNewtype} and moves
+ * nothing.
  */
 public sealed interface BoundaryMapKey {
 
@@ -22,7 +29,7 @@ public sealed interface BoundaryMapKey {
      *  Answered per case rather than by switching, so a case added here cannot forget it. */
     Type type();
 
-    /** A bare string: {@code String} itself, and what a String-backed newtype is admitted through. */
+    /** A bare string, {@code String} itself. */
     record Text() implements BoundaryMapKey {
         @Override
         public Type type() {
@@ -46,12 +53,10 @@ public sealed interface BoundaryMapKey {
         }
     }
 
-    /**
-     * A newtype key: the type to construct and unwrap, and the representation the value inside it
-     * crosses as. The two are separate because different readers need different halves — the codec
-     * wraps and unwraps by name, and only the text conversion depends on {@code representation}.
-     */
-    record Newtype(TypeName name, BoundaryMapKey representation) implements BoundaryMapKey {
+    /** A newtype over {@code String} ({@code data X = String}): built by its own decoder, which
+     *  applies its invariant, and rendered by its {@code value()}, which is the bare string. Both
+     *  hold because the base is text, which is why the base is in the name. */
+    record StringNewtype(TypeName name) implements BoundaryMapKey {
         @Override
         public Type type() {
             return Type.ref(name);
@@ -59,8 +64,8 @@ public sealed interface BoundaryMapKey {
     }
 
     /** A sum every case of which is a unit data: it crosses as the case's name, a bare string
-     *  (issue #161). Not a {@link Newtype}: it is built from and rendered to that name rather than
-     *  wrapping a value, which is a difference the encoder's call site branches on. */
+     *  (issue #161). Not a {@link StringNewtype}: it is built from and rendered to that name rather
+     *  than wrapping a value, which is a difference the encoder's call site branches on. */
     record UnitEnum(TypeName name) implements BoundaryMapKey {
         @Override
         public Type type() {
