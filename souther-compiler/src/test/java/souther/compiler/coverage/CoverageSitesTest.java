@@ -10,7 +10,9 @@ import souther.compiler.query.Compilation;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -66,21 +68,117 @@ class CoverageSitesTest {
     void everyArmOfEveryForkIsASiteAndNothingElseIs() {
         CoverageSites.Plan plan = planOf(MODEL);
 
-        assertEquals(List.of("case UnderThirty", "then", "else", "case ThirtyOrOver"), labels(plan));
+        assertEquals(List.of("case UnderThirty", "then", "else"), labels(plan));
         assertEquals(List.of(CoverageSites.Site.Kind.CASE, CoverageSites.Site.Kind.THEN,
-                        CoverageSites.Site.Kind.ELSE, CoverageSites.Site.Kind.CASE),
+                        CoverageSites.Site.Kind.ELSE),
                 plan.sites().stream().map(CoverageSites.Site::kind).toList());
     }
 
-    /** Reaching one is already an error, so a probe there would leave a correct model one arm short
-     * for ever and make every denominator wrong. */
+    /**
+     * Reaching one is already an error, so a probe there would leave a correct model one arm short
+     * for ever and make every denominator wrong.
+     *
+     * <p>Asserted as the whole list of arms rather than as the absence of a word: an arm answering
+     * {@code unreachable} is labelled by the case it stands for, so nothing about the label of the
+     * one that should be missing tells it from the ones that should be there.
+     */
     @Test
-    void anUnreachableArmIsNotCounted() {
+    void anArmThatAnswersNothingIsNotAnArm() {
         CoverageSites.Plan plan = planOf(MODEL);
 
-        assertTrue(plan.sites().stream().noneMatch(s -> s.label().contains("unreachable")));
-        assertEquals(4, plan.sites().size(),
-                "the `ThirtyOrOver` case is a site; what it answers with is not");
+        assertFalse(labels(plan).contains("case ThirtyOrOver"),
+                "the arm answers `unreachable`, so no row can be in it");
+        assertEquals(3, plan.sites().size());
+    }
+
+    /** An arm every path of which ends in an {@code unreachable} answers as little as one written as
+     * a bare {@code unreachable}, however many forks stand between. */
+    @Test
+    void anArmWhoseEveryPathAbortsIsNotAnArmEither() {
+        CoverageSites.Plan plan = planOf("""
+                module example.nested
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Score = Int
+
+                behavior scoreFor : (a: Answer, b: Answer) -> Score
+                    constructs Score
+
+                let scoreFor (a, b) =
+                    match a with
+                        | Yes -> match b with
+                                     | Yes -> Score(1)
+                                     | No  -> unreachable "no follows yes elsewhere"
+                        | No  -> match b with
+                                     | Yes -> unreachable "no answer here"
+                                     | No  -> unreachable "nor here"
+                """);
+
+        assertEquals(List.of("case Yes", "case Yes"), labels(plan),
+                "the outer `No` arm answers nothing, and neither of the arms it is made of does");
+    }
+
+    /** The arm is one a row can be in whatever the rows happen to cover: what the denominator holds
+     * is a property of the body, and a nested abort beside a reachable answer does not remove it. */
+    @Test
+    void anArmWithOneAnsweringPathIsStillAnArm() {
+        CoverageSites.Plan plan = planOf("""
+                module example.partial
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Score = Int
+
+                behavior scoreFor : (a: Answer, b: Answer) -> Score
+                    constructs Score
+
+                let scoreFor (a, b) =
+                    match a with
+                        | Yes -> Score(1)
+                        | No  -> match b with
+                                     | Yes -> Score(0)
+                                     | No  -> unreachable "not both"
+                """);
+
+        assertEquals(List.of("case Yes", "case No", "case Yes"), labels(plan));
+    }
+
+    /**
+     * The emitter indexes a node's arms by position, so an arm without a probe keeps its place.
+     *
+     * <p>A compacted array would move every arm after the missing one down by one, and the emitter
+     * would light its neighbour's probe. Nothing downstream could tell such a hit from a real one:
+     * the count would be right and the arm it was recorded against would be wrong.
+     */
+    @Test
+    void anArmWithoutAProbeKeepsItsPlaceInTheArray() {
+        Map<String, Core> bodies = bodiesOf("""
+                module example.order
+
+                data Yes
+                data No
+                data Answer = Yes | No
+
+                data Score = Int
+
+                behavior scoreFor : (a: Answer) -> Score
+                    constructs Score
+
+                let scoreFor (a) =
+                    match a with
+                        | Yes -> unreachable "the caller has already refused a yes"
+                        | No  -> Score(0)
+                """);
+        CoverageSites.Plan plan = CoverageSites.of("order.sou", bodies);
+
+        Core.Match match = (Core.Match) unwrap(bodies.get("scoreFor"));
+        assertArrayEquals(new int[] {CoverageSites.NO_SITE, 0}, plan.probesOf(match),
+                "the surviving arm is second, and it is the second entry that holds its probe");
     }
 
     @Test
@@ -91,6 +189,54 @@ class CoverageSitesTest {
         CoverageSites.GuardRef guard = plan.guards().get(0);
         assertEquals("then", plan.site(guard.siteIndexThen()).label());
         assertEquals("else", plan.site(guard.siteIndexElse()).label());
+    }
+
+    /** The comparison was evaluated to reach the arm that is left, so the line it draws is still one
+     * a row can be at. */
+    @Test
+    void aGuardWithOneArmLeftIsStillAGuard() {
+        CoverageSites.Plan plan = planOf(MODEL.replace("if senior then Days(120) else Days(90)",
+                "if senior then unreachable \"no senior is under thirty\" else Days(90)"));
+
+        assertEquals(1, plan.guards().size());
+        CoverageSites.GuardRef guard = plan.guards().get(0);
+        assertEquals(CoverageSites.NO_SITE, guard.siteIndexThen());
+        assertEquals("else", plan.site(guard.siteIndexElse()).label());
+    }
+
+    /**
+     * An {@code if} whose arms both answer nothing draws no line for a row to be at.
+     *
+     * <p>Kept as a reference with two absent sides, the boundary it drew would be reported as unmet
+     * however the model is exercised — the same permanent gap this arm rule is about, moved from the
+     * branch measure to the boundary one.
+     */
+    @Test
+    void anIfWithNoArmsLeftIsNotAGuard() {
+        CoverageSites.Plan plan = planOf("""
+                module example.leave
+
+                data UnderThirty
+                data ThirtyOrOver
+                data AgeBand = UnderThirty | ThirtyOrOver
+
+                data Days = Int invariant value >= 90 && value <= 330
+
+                behavior daysFor : (age: AgeBand, senior: Bool) -> Days
+                    constructs Days
+
+                let daysFor (age, senior) =
+                    match age with
+                        | UnderThirty ->
+                            if senior
+                                then unreachable "no senior is under thirty"
+                                else unreachable "and no one else reaches here"
+                        | ThirtyOrOver -> Days(90)
+                """);
+
+        assertEquals(List.of(), plan.guards());
+        assertEquals(List.of("case ThirtyOrOver"), labels(plan),
+                "and the arm the `if` is the whole of answers nothing either");
     }
 
     @Test

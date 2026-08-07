@@ -114,6 +114,73 @@ class CompileExampleCoverageTest {
     }
 
     /**
+     * An arm that answers {@code unreachable} is not an arm, so a model that says where its
+     * combinations cannot arise can still reach every arm it has.
+     *
+     * <p>Reaching one is already E1911, so counting it would leave such a model permanently one arm
+     * short and reward inventing a fallback answer over stating the premise.
+     */
+    @Test
+    void anArmThatAnswersUnreachableIsNotOneARowIsOwedFor() {
+        Adequacy.BranchEvidence branch = branch("""
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Answer = Int
+
+                behavior pick : (f: Flag) -> Answer
+                    constructs Answer
+
+                let pick (f) = match f with
+                    | On  -> Answer(1)
+                    | Off -> unreachable "the probe only ever passes On"
+
+                example pick
+                    | "on" : (On) -> Answer(1)
+                """, "pick");
+
+        assertEquals(1, branch.all().size(), "one arm, not two");
+        assertEquals(List.of(), unreached(branch));
+    }
+
+    /**
+     * The arm that is left keeps its own probe, whichever side of the missing one it is written.
+     *
+     * <p>The emitter asks for a node's arms as an array and indexes it by the arm's position. Were
+     * the arm that answers nothing dropped from that array rather than left empty in it, the arm
+     * below would take its number and light the wrong probe — and the count would still be one, so
+     * nothing downstream could see it. Here the surviving arm is written second, so it is the second
+     * entry that has to hold the probe.
+     */
+    @Test
+    void theArmAfterAnUnreachableOneIsStillItself() {
+        Adequacy.BranchEvidence branch = branch("""
+                module example.probe
+
+                data On
+                data Off
+                data Flag = On | Off
+                data Answer = Int
+
+                behavior pick : (f: Flag) -> Answer
+                    constructs Answer
+
+                let pick (f) = match f with
+                    | On  -> unreachable "the probe never passes On"
+                    | Off -> Answer(0)
+
+                example pick
+                    | "off" : (Off) -> Answer(0)
+                """, "pick");
+
+        assertEquals(List.of("case Off"),
+                branch.all().stream().map(site -> site.label()).toList());
+        assertEquals(List.of(), unreached(branch), "the row went through the arm that is left");
+    }
+
+    /**
      * A row that did not finish contributes nothing.
      *
      * <p>What a row reached before it ran out of time is some of what it would have reached, and

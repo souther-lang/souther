@@ -197,6 +197,45 @@ class MainExamplesSubcommandTest {
                 behaviorDef.get("required"));
     }
 
+    /**
+     * A key added to this version is optional, so a document written before it existed is still one.
+     *
+     * <p>Raising the version is for a key removed or renamed, which is what a reader keying on it is
+     * protecting itself against. An added key it does not know about it ignores — but only where the
+     * schema does not demand it, which is what is checked here: the emitted document carries
+     * {@code excluded}, and a document without it satisfies the same {@code required} list.
+     */
+    @Test
+    void aKeyAddedSinceIsNotDemandedOfADocumentWrittenBeforeIt() throws Exception {
+        JsonNode schema;
+        try (java.io.InputStream in =
+                     Main.class.getResourceAsStream("/souther/adequacy-schema-1.json")) {
+            assertNotNull(in);
+            schema = JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+        }
+        JsonNode axis = schema.get("$defs").get("partition")
+                .get("properties").get("axes").get("items");
+        JsonNode input = schema.get("$defs").get("signature")
+                .get("properties").get("inputs").get("items");
+
+        for (JsonNode where : List.of(axis, input)) {
+            assertTrue(where.get("properties").has("excluded"), "the key is declared");
+            assertFalse(required(where).contains("excluded"),
+                    "and not demanded, or a document written before it would stop being valid");
+        }
+
+        JsonNode emitted = JSON.readTree(run("--format", "json"))
+                .get("modules").get(0).get("behaviors").get(1);
+        assertTrue(emitted.get("signature").get("inputs").get(0).has("excluded"),
+                "what is written now carries it");
+    }
+
+    private static List<String> required(JsonNode of) {
+        List<String> names = new ArrayList<>();
+        of.get("required").forEach(each -> names.add(each.asString()));
+        return names;
+    }
+
     private static void agrees(JsonNode emitted, JsonNode properties, JsonNode required) {
         for (JsonNode key : required) {
             assertTrue(emitted.has(key.asString()),

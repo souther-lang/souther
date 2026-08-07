@@ -22,16 +22,28 @@ import java.util.Map;
  * coverage is a lower bound on covering the paths a body has, not the same thing, and a report that
  * says "code paths" invites the author to stop looking.
  *
- * <p>An {@code unreachable} arm gets no site. Reaching one is already an error ({@code E1911}), so a
+ * <p>An arm that answers nothing gets no site. Reaching one is already an error ({@code E1911}), so a
  * probe there would leave every correct model permanently one arm short and make the denominator lie.
- * An invariant clause gets none either: it is a property of a type, not a fork in this body, and
- * whether the rows reach its edges is a different measure asked another way.
+ * Which arms those are is {@link NormalReturn}'s answer, so an arm whose every path ends in an
+ * {@code unreachable} is as much not an arm as one written as a bare {@code unreachable}. An
+ * invariant clause gets none either: it is a property of a type, not a fork in this body, and whether
+ * the rows reach its edges is a different measure asked another way.
  *
  * <p>A {@code guard … else} is an {@code if} by the time it gets here, so it needs no case of its own.
  * Helper bodies are not walked: a non-recursive helper is already inlined into the body that uses it,
  * and a recursive one is a shared method rather than a fork in any one behavior.
  */
 public final class CoverageSites {
+
+    /**
+     * What stands in an arm's place where the arm answers nothing.
+     *
+     * <p>The arms of a node are handed to the emitter as an array it indexes by the arm's position, so
+     * an arm without a probe has to keep its place. Compacting the array would move every arm after
+     * it down one and the emitter would light its neighbour's probe — a hit recorded against an arm
+     * nothing ran, which no count can be told apart from a real one.
+     */
+    public static final int NO_SITE = -1;
 
     /**
      * One arm.
@@ -68,6 +80,11 @@ public final class CoverageSites {
      * <p>Reaching a value is not reaching a comparison. A row can hand a behavior the exact boundary
      * value and never get to the guard that cares about it, because an earlier branch went the other
      * way — so a boundary drawn by a guard is met only by a row that also lit one of these.
+     *
+     * <p>Either side may be {@link #NO_SITE}, where that arm answers nothing: the comparison was
+     * still evaluated to reach the arm beside it. An {@code if} whose arms both answer nothing has no
+     * {@code GuardRef} at all — there is nothing left for a row to reach, and a reference with two
+     * absent sides would report the line as never met however the model is exercised.
      */
     public record GuardRef(String behavior, int siteIndexThen, int siteIndexElse, SourceRef at) {}
 
@@ -87,7 +104,7 @@ public final class CoverageSites {
         }
 
         /** The probe numbers of {@code node}'s arms, in the order the emitter emits them, or null
-         * where this node has none. */
+         * where this node has none. An entry is {@link #NO_SITE} where that arm answers nothing. */
         public int[] probesOf(Core node) {
             return byNode.get(node);
         }
@@ -127,6 +144,17 @@ public final class CoverageSites {
         }
 
         /**
+         * One arm, or {@link #NO_SITE} where the arm answers nothing and so is not an arm to cover.
+         *
+         * <p>Decided here, where the arm is made, and not while walking the arm's body: what is
+         * being asked is whether this arm is one a row can be in, which is a question about the arm
+         * and not about anything inside it.
+         */
+        private int armOf(Site.Kind kind, String label, Core owner, Core arm) {
+            return NormalReturn.of(arm) ? site(kind, label, owner, arm) : NO_SITE;
+        }
+
+        /**
          * One arm, quoted at the fork it belongs to rather than at its own body.
          *
          * <p>The fork is written by the author and survives lowering; an arm's body is what lowering
@@ -155,7 +183,8 @@ public final class CoverageSites {
             switch (e) {
                 case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Read _,
                      Core.UnitValue _, Core.OptionNone _ -> { }
-                // An arm that says nothing arrives here is not an arm to cover.
+                // A leaf, and one holding no fork. Whether the arm it stands in is an arm to cover is
+                // decided where that arm is made, not here.
                 case Core.Unreachable _ -> { }
                 case Core.Neg n -> walk(n.operand());
                 case Core.FieldAccess fa -> walk(fa.target());
@@ -181,20 +210,22 @@ public final class CoverageSites {
                 case Core.NewData nd -> nd.inits().forEach(init -> walk(init.value()));
                 case Core.If iff -> {
                     walk(iff.cond());
-                    int then = site(Site.Kind.THEN, "then", iff, iff.then());
+                    int then = armOf(Site.Kind.THEN, "then", iff, iff.then());
                     walk(iff.then());
-                    int els = site(Site.Kind.ELSE, "else", iff, iff.els());
+                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.els());
                     walk(iff.els());
                     byNode.put(iff, new int[] {then, els});
-                    guards.add(new GuardRef(behavior, then, els,
-                            new SourceRef(sourceId, iff.pos())));
+                    if (then != NO_SITE || els != NO_SITE) {
+                        guards.add(new GuardRef(behavior, then, els,
+                                new SourceRef(sourceId, iff.pos())));
+                    }
                 }
                 case Core.Match m -> {
                     walk(m.scrutinee());
                     int[] arms = new int[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = site(Site.Kind.CASE, label(arm), m, arm.body());
+                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, arm.body());
                         walk(arm.body());
                     }
                     byNode.put(m, arms);
@@ -202,11 +233,11 @@ public final class CoverageSites {
                 case Core.IfConstructed ic -> {
                     ic.construct().inits().forEach(init -> walk(init.value()));
                     int[] arms = new int[1 + ic.els().size()];
-                    arms[0] = site(Site.Kind.CONSTRUCTED, "constructed", ic, ic.then());
+                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.then());
                     walk(ic.then());
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
-                        arms[i + 1] = site(Site.Kind.DEPARTURE, label(arm), ic, arm.body());
+                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, arm.body());
                         walk(arm.body());
                     }
                     byNode.put(ic, arms);

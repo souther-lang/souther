@@ -21,26 +21,38 @@ import java.util.Set;
  * <p>Covering every case of an input is the mechanised half of asking whether a behavior is total:
  * every case the input can be, tried, and a result defined for it.
  *
+ * @param excluded         cases the body says it does not answer for. Declared and not coverable: the
+ *                         type has them, and a row naming one would reach an {@code unreachable} and
+ *                         be E1911. They stay in {@link #declared} because what the type can be is
+ *                         part of what the model says, and they are out of {@link #coverable} because
+ *                         no row can be written at them
  * @param unclassifiedRows rows whose input case could not be read
  */
 public record InputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
                                 Set<TypeName> executed, Set<TypeName> verified,
-                                int unclassifiedRows) {
+                                Set<TypeName> excluded, int unclassifiedRows) {
 
     public InputCaseEvidence {
         declared = Evidence.ordered(declared);
         specified = Evidence.ordered(specified);
         executed = Evidence.ordered(executed);
         verified = Evidence.ordered(verified);
+        excluded = Evidence.ordered(excluded);
     }
 
     public static InputCaseEvidence none() {
-        return new InputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), 0);
+        return new InputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), 0);
     }
 
-    /** Cases this input can be that no row uses. */
+    /** The cases a row can be written at: what the type declares, less what the body rules out. */
+    public List<TypeName> coverable() {
+        return declared.stream().filter(each -> !excluded.contains(each)).toList();
+    }
+
+    /** Cases this input can be that no row uses, and that a row could have been written for. */
     public List<TypeName> unspecified() {
-        return Evidence.missingFrom(declared, specified);
+        return Evidence.missingFrom(declared, specified).stream()
+                .filter(each -> !excluded.contains(each)).toList();
     }
 
     public MeasurementStatus status() {

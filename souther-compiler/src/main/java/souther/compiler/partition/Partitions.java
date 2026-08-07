@@ -71,12 +71,15 @@ public final class Partitions {
 
     /** The axes of one behavior. {@code sig} says the types; {@code behavior} says the parameter names,
      * which is what a path is written from. */
-    public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols) {
+    public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
+                                  Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
         for (int i = 0; i < sig.ins().size() && i < behavior.params().size(); i++) {
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), sig.ins().get(i),
                     0, symbols, found);
         }
+        found.replaceAll(axis -> axis.excluding(
+                excluded.at(axis.path()).stream().map(TypeName::name).toList()));
         List<Axis> kept = new ArrayList<>();
         List<OmittedAxis> omitted = new ArrayList<>();
         int measured = 0;
@@ -128,9 +131,11 @@ public final class Partitions {
             // off the bound, every such position would be called an integer and a threshold of
             // `0.5m` would be asked for its exact `long`.
             boolean decimal = TypeOps.base(axis.type(), symbols) == Type.DECIMAL;
+            // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
+            // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), axis.path(), axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), here, decimal)));
+                    merged(axis.cuts(), here, decimal)).excluding(axis.excluded()));
         }
         return new Partitioning(out, base.omitted());
     }

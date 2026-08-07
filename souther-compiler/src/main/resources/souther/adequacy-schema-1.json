@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://souther-lang.org/schema/adequacy-1.json",
   "title": "Souther adequacy report",
-  "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it.",
+  "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it. A key added since is optional, so a document written before it existed is still a document of this version.",
   "type": "object",
   "required": ["schemaVersion", "compilerVersion", "status", "adequacy", "modules"],
   "additionalProperties": false,
@@ -118,8 +118,25 @@
             "properties": {
               "axis": { "type": "string" },
               "path": { "type": "string", "description": "The input position, as a parameter and the fields read off it. A newtype's `value` is never a step." },
-              "classes": { "type": "array", "items": { "type": "string" } },
+              "classes": { "type": "array", "items": { "type": "string" }, "description": "The classes a row can be written at: what the model divides this position into, less what the body declares unreachable." },
               "covered": { "type": "array", "items": { "type": "string" } },
+              "excluded": {
+                "type": "array",
+                "description": "Classes the body answers `unreachable` for. Out of `classes` because a row naming one would reach the `unreachable` and be refused, and named here because the type still has them.",
+                "items": {
+                  "type": "object",
+                  "required": ["class", "reasons"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "class": { "type": "string" },
+                    "reasons": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "The reasons written at the `unreachable`s this class leads to — one, unless several paths abort for different reasons."
+                    }
+                  }
+                }
+              },
               "unclassifiedRows": { "type": "integer", "minimum": 0 },
               "status": { "$ref": "#/$defs/status" }
             }
@@ -229,6 +246,10 @@
                 "description": "Cases the behavior was applied to. Not `observed`: nothing is claimed about what came back."
               },
               "verified": { "$ref": "#/$defs/caseNames" },
+              "excluded": {
+                "$ref": "#/$defs/caseNames",
+                "description": "Cases the body answers `unreachable` for. Declared and not coverable: a row naming one would reach the `unreachable` and be refused, so they are counted out of what the rows are held to."
+              },
               "unclassifiedRows": { "type": "integer", "minimum": 0 }
             }
           }
