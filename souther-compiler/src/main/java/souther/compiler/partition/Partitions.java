@@ -37,12 +37,27 @@ public final class Partitions {
     static final int MAX_AXES = 12;
 
     /**
+     * A position dropped for being past the limit, and what dropping it cost.
+     *
+     * <p>The two are not the same loss. An axis with a cut in it was carrying boundaries some rule
+     * drew, and nothing can ask about them now — what the rows cover there is unknown rather than
+     * complete. An axis with only classes was carrying a measure nothing refuses a build over, so
+     * losing it costs a line in a report and no more. Recorded here because the difference cannot be
+     * read back afterwards: neither leaves a boundary behind, and a position nobody measured looks
+     * exactly like one the rows cover.
+     *
+     * @param reason              what to say about it, which is the same either way
+     * @param carriedAnObligation whether a rule had drawn a line on this position
+     */
+    public record OmittedAxis(Incompleteness reason, boolean carriedAnObligation) {}
+
+    /**
      * @param axes    the positions this behavior is measured at, in parameter order
      * @param omitted axes past {@link #MAX_AXES}, dropped rather than merged: an axis whose path
      *                nobody can name is not an axis, and folding several into one would put a class
      *                nothing can classify into the denominator
      */
-    public record Partitioning(List<Axis> axes, List<Incompleteness> omitted) {
+    public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
@@ -63,7 +78,7 @@ public final class Partitions {
                     0, symbols, found);
         }
         List<Axis> kept = new ArrayList<>();
-        List<Incompleteness> omitted = new ArrayList<>();
+        List<OmittedAxis> omitted = new ArrayList<>();
         int measured = 0;
         for (Axis axis : found) {
             if (!axis.measurable()) {
@@ -72,8 +87,14 @@ public final class Partitions {
                 kept.add(axis);
                 measured++;
             } else {
-                omitted.add(Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
-                        Incompleteness.Scope.POSITION, axis.id().toString()));
+                // Whether this one was carrying an obligation is decided here and not later. A cut is
+                // where a boundary comes from, and an axis dropped before `withThresholds` never gets
+                // the ones a `guard` would have drawn — so what it has now is what it had. A position
+                // that could take a threshold and has no cut yet is not measurable at all and is kept;
+                // one with classes and no cuts is a sum or a `Bool`, which no comparison divides.
+                omitted.add(new OmittedAxis(Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
+                        Incompleteness.Scope.POSITION, axis.id().toString()),
+                        !axis.cuts().isEmpty()));
             }
         }
         return new Partitioning(kept, omitted);

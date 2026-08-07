@@ -778,9 +778,10 @@ public final class Adequacy {
                 out.add(new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
                         MeasurementStatus.COMPLETE, behavior.pos(), List.of(position)));
             }
-            for (Incompleteness dropped : partition.omitted()) {
+            for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
-                        MeasurementStatus.COMPLETE, behavior.pos(), List.of(dropped.subject())));
+                        MeasurementStatus.COMPLETE, behavior.pos(),
+                        List.of(dropped.reason().subject())));
             }
         }
 

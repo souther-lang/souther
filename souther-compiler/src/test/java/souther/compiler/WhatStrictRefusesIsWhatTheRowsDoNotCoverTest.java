@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -212,29 +213,42 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
-     * An axis dropped for being past the limit leaves no boundary to miss.
+     * What a dropped axis cost decides whether the verdict stays open.
      *
-     * <p>Which is exactly what a covered position looks like from the evidence: no boundary, nothing
-     * unmet. The rules that axis drew are unmeasured and could have carried a gap, so the verdict says
-     * it does not know rather than saying the rows cover a position nothing looked at.
+     * <p>Neither kind leaves a boundary behind, which is also what a position the rows cover looks
+     * like. An axis that was carrying a line some rule drew took boundaries nothing can ask about now,
+     * so the rows there are unmeasured rather than adequate. An axis that was only classifying took a
+     * measure no build refuses over, and holding the verdict open for it would report a doubt nobody
+     * can act on.
      *
-     * <p>Written from the evidence rather than from a source, because reaching the limit takes
-     * thirteen axes on one behavior and the fixture would say less than this does.
+     * <p>Written from the evidence rather than from a source: reaching the limit takes thirteen axes
+     * on one behavior, and a fixture that size says less than this does about which of the two it is.
      */
     @Test
-    void anAxisDroppedPastTheLimitLeavesTheVerdictUndetermined() {
+    void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
         PartitionEvidence.BoundaryCoverage met = new PartitionEvidence.BoundaryCoverage(
                 "weigh/w.a", "guard", BoundaryObligation.BoundarySide.AT, "100", true,
                 MeasurementStatus.COMPLETE);
-        Incompleteness dropped = Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
-                Incompleteness.Scope.BEHAVIOR, "weigh/w.m");
 
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
+                "nothing dropped");
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                verdictOf(new PartitionEvidence(List.of(), List.of(met),
-                        PartitionEvidence.PairSpace.NONE, List.of(), List.of())));
+                verdictOf(partition(met, dropped("weigh/w.flag", false))),
+                "a dropped axis that was only classifying");
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                verdictOf(new PartitionEvidence(List.of(), List.of(met),
-                        PartitionEvidence.PairSpace.NONE, List.of(), List.of(dropped))));
+                verdictOf(partition(met, dropped("weigh/w.m", true))),
+                "a dropped axis that was carrying a boundary");
+    }
+
+    private static Partitions.OmittedAxis dropped(String position, boolean carriedAnObligation) {
+        return new Partitions.OmittedAxis(Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
+                Incompleteness.Scope.POSITION, position), carriedAnObligation);
+    }
+
+    private static PartitionEvidence partition(PartitionEvidence.BoundaryCoverage boundary,
+                                               Partitions.OmittedAxis... omitted) {
+        return new PartitionEvidence(List.of(), List.of(boundary), PartitionEvidence.PairSpace.NONE,
+                List.of(), List.of(omitted));
     }
 
     /** What one behavior's partition makes of the whole report, with nothing else asked about. */

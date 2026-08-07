@@ -59,9 +59,12 @@ This is the command worth running on a model you believe is finished. It names g
 the rows does not reveal.
 
 The report closes with two answers, and they are different questions. `measurement` says how much of
-itself the measuring could make; `adequacy` says whether what it measured is covered — `satisfied`,
-`not satisfied` (`not_satisfied` in the JSON), or `undetermined` where a measure was not asked for,
-does not apply, or could not be made. `--strict`
+itself the measuring could make; `adequacy` says whether what it measured is covered. It is
+`satisfied` where every measure that was asked for, and applies, came to an answer and none of them
+found a gap; `not satisfied` (`not_satisfied` in the JSON) where one found a gap; and `undetermined`
+where nothing that could find a gap was asked about, or one of those measures could not be made. A
+measure that does not apply — the arms of a `>->` composition, which has none of its own — is neither
+asked nor missing, and does not hold the answer open. `--strict`
 refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy all
 --warnings error` refuses. How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the

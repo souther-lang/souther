@@ -208,8 +208,13 @@ class PartitionsTest {
         assertEquals(Partitions.MAX_AXES, partitioning.derivable().size());
         assertEquals(3, partitioning.omitted().size());
         assertTrue(partitioning.omitted().stream()
-                .allMatch(i -> i.code() == Incompleteness.Code.AXIS_OMITTED));
-        assertTrue(partitioning.omitted().get(0).subject().contains("run/wide.f12"),
-                partitioning.omitted().get(0).subject());
+                .allMatch(i -> i.reason().code() == Incompleteness.Code.AXIS_OMITTED));
+        assertTrue(partitioning.omitted().get(0).reason().subject().contains("run/wide.f12"),
+                partitioning.omitted().get(0).reason().subject());
+        // A `Bool` is classified and never cut, so dropping one loses a measure nothing refuses a
+        // build over. What a dropped axis was carrying is decided here because it cannot be read back:
+        // a position nobody measured leaves the same absence as one the rows cover.
+        assertTrue(partitioning.omitted().stream()
+                .noneMatch(Partitions.OmittedAxis::carriedAnObligation));
     }
 }

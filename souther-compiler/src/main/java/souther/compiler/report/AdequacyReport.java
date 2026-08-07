@@ -8,6 +8,7 @@ import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.observe.RowOutcome;
+import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
@@ -329,9 +330,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     continue;
                 }
                 behavior.partition().boundaries().forEach(b -> measures.add(b.status()));
-                // An axis that was dropped carried the boundaries nothing can now ask about. The pair
-                // space is not one of these: a combination is not where a boundary comes from.
-                if (!behavior.partition().omitted().isEmpty()) {
+                // A dropped axis that was carrying a line some rule drew took boundaries with it, and
+                // nothing can ask about them now. One that was only classifying took a measure no
+                // build refuses over, so it costs a line in the report and not the verdict. The pair
+                // space is neither: a combination is not where a boundary comes from.
+                if (behavior.partition().omitted().stream()
+                        .anyMatch(Partitions.OmittedAxis::carriedAnObligation)) {
                     measures.add(MeasurementStatus.PARTIAL);
                 }
             }
@@ -635,7 +639,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         pairs.put("status", partition.pairs().status().name().toLowerCase(java.util.Locale.ROOT));
         partition.notDerivable().forEach(out.putArray("notDerivable")::add);
         ArrayNode omitted = out.putArray("omitted");
-        partition.omitted().forEach(o -> omitted.add(o.subject()));
+        partition.omitted().forEach(o -> omitted.add(o.reason().subject()));
     }
 
     private static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch) {
