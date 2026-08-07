@@ -36,6 +36,12 @@ public final class SpecDocument {
     private static final String RESOURCE = "/META-INF/souther/specification.adoc";
     private static final Pattern ANCHOR = Pattern.compile("^\\[#([^\\]]+)]\\s*$");
     private static final Pattern ALSO_NAMED = Pattern.compile("^\\[also-named=\"([^\"]*)\"]\\s*$");
+    /**
+     * An anchor written into the line rather than above it — {@code [[id]]Text}. A rule stated as a
+     * list item has nowhere to put a block anchor, so this is how one is named, and it names the
+     * same kind of place: somewhere inside a section rather than a section.
+     */
+    private static final Pattern INLINE_ANCHOR = Pattern.compile("\\[\\[([a-zA-Z0-9_-]+)]]");
     private static final Pattern HEADING = Pattern.compile("^(={2,})\\s+(.*\\S)\\s*$");
     /**
      * The delimiter of a block AsciiDoc takes as it stands: listing {@code ----}, literal
@@ -184,6 +190,11 @@ public final class SpecDocument {
             Matcher anchor = ANCHOR.matcher(lines[i]);
             if (anchor.matches()) {
                 register(byAnchor, writtenAs, anchor.group(1), standingIn);
+                continue;
+            }
+            Matcher inline = INLINE_ANCHOR.matcher(lines[i]);
+            while (inline.find()) {
+                register(byAnchor, writtenAs, inline.group(1), standingIn);
             }
         }
         return new SpecDocument(sections, ownTexts, byAnchor, List.copyOf(writtenAs.values()));

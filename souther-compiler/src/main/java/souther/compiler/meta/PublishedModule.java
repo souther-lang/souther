@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.frontend.CstFrontend;
 
 import java.util.ArrayList;
@@ -186,7 +187,7 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         String text = found == null ? null : member.apply(found);
         if (text == null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.module.publishedincomplete").title("check.module.title")
+                    Diagnostic.of(DiagnosticCode.E1504, "check.module.publishedincomplete")
                             .args(name, m.name()).hint("check.module.publishedincomplete.hint", m.name())
                             .build(),
                     "module `" + m.name() + "` says it declares `" + name
@@ -197,7 +198,7 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
 
     private static CompileException incompatible(SoutherModuleView m) {
         return CompileException.of(
-                Diagnostic.of(null, "check.module.incompatible").title("check.module.title")
+                Diagnostic.of(DiagnosticCode.E1505, "check.module.incompatible")
                         .args(m.name(), m.compiler())
                         .hint("check.module.incompatible.hint", m.name()).build(),
                 "module `" + m.name() + "` was compiled by Souther " + m.compiler()

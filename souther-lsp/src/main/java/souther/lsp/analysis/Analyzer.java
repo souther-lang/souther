@@ -105,10 +105,7 @@ public final class Analyzer {
         List<LspDiagnostic> out = new ArrayList<>();
 
         try {
-            for (CstError e : CstParser.parse(text).errors()) {
-                out.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
-                        LspDiagnostic.ERROR, null, e.legacyMessage()));
-            }
+            out.addAll(syntaxOf(text, lines));
         } catch (RuntimeException | StackOverflowError e) {
             return List.of(internalError(lines, e));   // the parse itself did not finish
         }
@@ -143,6 +140,24 @@ public final class Analyzer {
      * a file the editor calls clean. {@code StackOverflowError} is included deliberately — it is an
      * {@code Error}, not a {@code RuntimeException}, and a deeply nested expression raises it.
      */
+    /**
+     * What the recovering parser found, as the editor reads it.
+     *
+     * <p>One reader for both routes. The single-file route and the workspace route asked the parser
+     * the same question and built the answer twice, which is how one of them came to hand over the
+     * code and the other a null: a reader in an editor met a syntax error with nothing to look up,
+     * and only in a workspace. What is tested is one route, and what makes that cover the other is
+     * that there is only one of these.
+     */
+    private List<LspDiagnostic> syntaxOf(String text, LineIndex lines) {
+        List<LspDiagnostic> found = new ArrayList<>();
+        for (CstError e : CstParser.parse(text).errors()) {
+            found.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
+                    LspDiagnostic.ERROR, e.code().name(), e.legacyMessage()));
+        }
+        return found;
+    }
+
     private LspDiagnostic internalError(LineIndex lines, Throwable t) {
         return new LspDiagnostic(range(lines, 0, 1), LspDiagnostic.ERROR, null,
                 "the compiler could not finish reading this file ("
@@ -175,10 +190,7 @@ public final class Analyzer {
             List<LspDiagnostic> syntax = new ArrayList<>();
             boolean readable = true;
             try {
-                for (CstError e : CstParser.parse(text).errors()) {
-                    syntax.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
-                            LspDiagnostic.ERROR, null, e.legacyMessage()));
-                }
+                syntax.addAll(syntaxOf(text, lines));
             } catch (RuntimeException | StackOverflowError e) {
                 syntax.add(internalError(lines, e));   // the parse itself did not finish
                 readable = false;

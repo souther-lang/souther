@@ -6,6 +6,7 @@ import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -521,8 +522,7 @@ public final class InvariantChecker {
                     reportViolation(type, pos, "check.invariant.violation.assumed");
             case UNKNOWN -> {
                 if (!attempted) {
-                    warnings.add(Diagnostic.of("E2011", "check.invariant.unproven")
-                            .title("check.invariant.title").at(pos).args(type.name())
+                    warnings.add(Diagnostic.of(DiagnosticCode.E2011, "check.invariant.unproven").at(pos).args(type.name())
                             .hint("check.invariant.reify", type.name()).warning().build());
                 }
             }
@@ -714,7 +714,7 @@ public final class InvariantChecker {
      * a guard. */
     private void reportViolation(Ast.Data type, SourcePos pos, String reason) {
         errors.add(CompileException.of(
-                Diagnostic.of("E2010", reason).title("check.invariant.title")
+                Diagnostic.of(DiagnosticCode.E2010, reason)
                         .at(pos).args(type.name()).build(),
                 "constructing `" + type.name() + "` here violates its invariant"));
     }

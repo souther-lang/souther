@@ -148,6 +148,36 @@ class MessageCatalogFormatTest {
         assertEquals(Set.of(), unshown);
     }
 
+    /**
+     * The same question over every namespace, not just the example one: a message the catalog
+     * defines and nothing names is a message no compile can show. Four of them were found by
+     * reading rather than by a build while the codes were being assigned, and two of those had a
+     * rule written for them in the specification off the strength of text nobody could reach.
+     *
+     * <p>Held to the keys a site writes out. A key built by concatenation is invisible to a scan of
+     * literals and would read as unused: the hints, which are `+<key> + ".hint"+` at several sites,
+     * and the two namespaces whose leaf is chosen at run time.
+     */
+    @Test
+    void noMessageIsDefinedAndNeverShown() throws IOException {
+        Set<String> named = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                named.add(m.group(1));
+            }
+        }
+        Set<String> unshown = new TreeSet<>();
+        for (String key : keysOf("/souther/compiler/diag/messages.properties")) {
+            if (key.endsWith(".hint") || key.startsWith("check.typearg.") || key.startsWith("kind.")
+                    || named.contains(key)) {
+                continue;
+            }
+            unshown.add(key);
+        }
+        assertEquals(Set.of(), unshown, "defined and unreachable — nothing can show these");
+    }
+
     @Test
     void bothCatalogsDefineTheSameKeys() throws IOException {
         Set<String> english = keysOf("/souther/compiler/diag/messages.properties");
@@ -173,7 +203,7 @@ class MessageCatalogFormatTest {
 
     /** Every module's main sources. The test runs in its own module directory, so the repo root is
      *  that directory's parent, and any module may name a message key. */
-    private static List<Path> mainSources() throws IOException {
+    static List<Path> mainSources() throws IOException {
         Path module = Path.of("").toAbsolutePath();
         Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
                 ? module.getParent() : module;

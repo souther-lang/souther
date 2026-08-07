@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -82,8 +83,7 @@ public final class DataChecker {
             String name = clause.name().orElse(null);
             if (name != null && !seen.add(name)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.invariant.duplicate")
-                                .title("check.invariant.invalid.title")
+                        Diagnostic.of(DiagnosticCode.E1103, "check.invariant.duplicate")
                                 .at(clause.pos()).args(name, data.name()).build(),
                         "two invariant clauses of `" + data.name() + "` are named `" + name + "`");
             }
@@ -276,7 +276,7 @@ public final class DataChecker {
 
     private static CompileException duplicate(String written, String where, SourcePos pos) {
         return CompileException.of(
-                Diagnostic.of(null, "check.dup.name").title("check.duplicate.title")
+                Diagnostic.of(DiagnosticCode.E1011, "check.dup.name")
                         .at(pos).args(written, where).build(),
                 "`" + written + "` is listed more than once in " + where);
     }
@@ -352,7 +352,7 @@ public final class DataChecker {
         for (Ast.Name c : sum.cases()) {
             if (symbols.isForeign(c.denotes())) {
                 throw CompileException.of(
-                        Diagnostic.of("E1606", "check.sum.foreigncase").title("check.sum.title")
+                        Diagnostic.of(DiagnosticCode.E1606, "check.sum.foreigncase")
                                 .at(c.name().region())
                                 .args(c.written(), sum.name(), c.denotes().module())
                                 .hint("check.sum.foreigncase.hint").build(),
@@ -365,7 +365,7 @@ public final class DataChecker {
         List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
         if (cycle != null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.sum.cycle").title("check.sum.title")
+                    Diagnostic.of(DiagnosticCode.E1021, "check.sum.cycle")
                             .at(sum.pos()).args(sum.name(), String.join(" | ", cycle)).build(),
                     "sum `" + sum.name() + "` contains itself through " + String.join(" | ", cycle)
                             + "; a sum's cases are the values it can be, so one of them cannot be the"
@@ -378,7 +378,7 @@ public final class DataChecker {
                 Ast.Def caseDef = symbols.get(v.caseType().denotes());
                 if (!dispatchable.contains(v.caseType().denotes())) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.notcase").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.notcase")
                                     .at(v.pos()).args(v.caseType().written(), sum.name()).build(),
                             "variant `" + v.caseType().written() + "` is not a case of `" + sum.name() + "`");
                 }
@@ -389,7 +389,7 @@ public final class DataChecker {
                         || (caseDef instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!caseDecodes) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.needdecoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.needdecoder")
                                     .at(v.pos()).args(v.caseType().written()).build(),
                             "variant `" + v.caseType().written() + "` needs a decoder");
                 }
@@ -403,7 +403,7 @@ public final class DataChecker {
                     Type.ref(symbols.own(sum.name())), enc.key(), symbols);
             if (carrying != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.case.discriminatorfield").title("check.codec.title")
+                        Diagnostic.of(DiagnosticCode.E1010, "check.case.discriminatorfield")
                                 .at(sum.pos()).args(carrying.name(), enc.key(), sum.name())
                                 .hint("check.case.discriminatorfield.hint", enc.key()).build(),
                         "`" + carrying.name() + "` is a case of `" + sum.name() + "` and declares a"
@@ -415,7 +415,7 @@ public final class DataChecker {
             for (Ast.EncVariant v : enc.variants()) {
                 if (!encodable.contains(v.caseType().denotes())) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.notcase").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.notcase")
                                     .at(v.pos()).args(v.caseType().written(), sum.name()).build(),
                             "`" + v.caseType().written() + "` is not a case of `" + sum.name() + "`");
                 }
@@ -425,7 +425,7 @@ public final class DataChecker {
                         || (caseDef instanceof Ast.SumData s && s.encoder().isPresent());
                 if (!caseEncodes) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.needencoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.needencoder")
                                     .at(v.pos()).args(v.caseType().written()).build(),
                             "case `" + v.caseType().written() + "` needs an encoder");
                 }
@@ -434,7 +434,7 @@ public final class DataChecker {
             for (TypeName caseName : encodable) {
                 if (!covered.contains(caseName)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.missingcase").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.missingcase")
                                     .at(enc.pos()).args(sum.name(), caseName.name()).build(),
                             "encoder for `" + sum.name() + "` is missing case `" + caseName.name() + "`");
                 }
@@ -456,7 +456,7 @@ public final class DataChecker {
                     && mandatoryReaches(symbols.own(data.name()), symbols.own(data.name()),
                             symbols, new HashSet<>())) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.construct.self").title("check.construct.title")
+                        Diagnostic.of(DiagnosticCode.E1013, "check.construct.self")
                                 .at(data.pos()).args(data.name()).build(),
                         "data `" + data.name() + "` cannot be constructed:"
                                 + " it needs a value of itself through a mandatory field, with no `?` or"
@@ -497,7 +497,7 @@ public final class DataChecker {
         // to have named `Option` is an ordinary named data here.
         if (ctx.data().newtype() && fields.get("value") instanceof Type.OptionOf o) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.newtype.optional").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1009, "check.newtype.optional")
                             .at(fieldRegion(ctx.data(), "value"))
                             .args(ctx.data().name(), Type.show(o.element()))
                             .hint("check.newtype.optional.hint", ctx.data().name()).build(),
@@ -512,7 +512,7 @@ public final class DataChecker {
             // component either. Reported here rather than left to codegen, as a duplicate name is.
             if (OBJECT_METHOD_NAMES.contains(e.getKey())) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.field.objectname").title("check.reserved.title")
+                        Diagnostic.of(DiagnosticCode.E2106, "check.field.objectname")
                                 .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name(), e.getKey()).build(),
                         "`" + e.getKey() + "` cannot be a field of `" + ctx.data().name() + "`: the"
@@ -521,7 +521,7 @@ public final class DataChecker {
             }
             if (TypeOps.withoutExternalForm(e.getValue(), ctx.symbols()) instanceof Type.TupleOf) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.field.tuple").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1311, "check.field.tuple")
                                 .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name(), e.getKey()).build(),
                         "a tuple cannot be a data field (`" + ctx.data().name() + "." + e.getKey()
@@ -533,7 +533,7 @@ public final class DataChecker {
             Type badKey = TypeOps.nonBoundaryMapKey(e.getValue(), ctx.symbols());
             if (badKey != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.map.key.field").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
                                 .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name() + "." + e.getKey(), Type.show(badKey))
                                 .hint("check.map.key.field.hint").build(),
@@ -556,7 +556,7 @@ public final class DataChecker {
             Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx.inAnotherRepresentation());
             if (t != Type.BOOL) {
                 throw CompileException.of(
-                        Diagnostic.of("E1101", "e1101.msg").at(clause.expr().pos())
+                        Diagnostic.of(DiagnosticCode.E1101, "e1101.msg").at(clause.expr().pos())
                                 .args(Type.show(t)).build(),
                         "Invariant expression must have type Bool. Found: " + t);
             }
@@ -617,7 +617,7 @@ public final class DataChecker {
                         || (def instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!hasDecoder) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.nodecoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2202, "check.codec.nodecoder")
                                     .at(d.pos()).args(d.typeName().written()).build(),
                             "`" + d.typeName().written() + "` has no decoder to call `"
                                     + d.typeName().written() + ".decoder`");
@@ -635,7 +635,7 @@ public final class DataChecker {
                                        Scope env) {
         if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.codec.mustconstruct").title("check.codec.title")
+                    Diagnostic.of(DiagnosticCode.E2201, "check.codec.mustconstruct")
                             .at(c.pos()).args(ctx.data().name(), c.typeName().written()).build(),
                     "decoder for `" + ctx.data().name() + "` must construct `" + ctx.data().name()
                             + "`, but constructs `" + c.typeName().written() + "`");
@@ -654,14 +654,14 @@ public final class DataChecker {
         for (Ast.FieldInit init : inits) {
             if (byName.put(init.name(), init) != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.dup.field").title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.field")
                                 .at(init.pos()).args(init.name()).build(),
                         "duplicate field `" + init.name() + "`");
             }
             Type ft = fields.get(init.name());
             if (ft == null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.construct.nofield").title("check.construct.title")
+                        Diagnostic.of(DiagnosticCode.E1014, "check.construct.nofield")
                                 .at(init.written().region()).args(init.name(), typeName).build(),
                         "`" + init.name() + "` is not a field of `" + typeName + "`");
             }
@@ -677,7 +677,7 @@ public final class DataChecker {
             Type vt = value.type();
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.field.type").title("check.type.mismatch.title")
+                        Diagnostic.of(DiagnosticCode.E1317, "check.field.type")
                                 .at(init.written().region())
                                 .args(init.name(), Type.show(ft), Type.show(vt))
                                 .diff(Type.show(vt, ft), Type.show(ft, vt)).build(),
@@ -700,8 +700,7 @@ public final class DataChecker {
                     && ctx.symbols().get(ref.name()) instanceof Ast.Data sd) {
                 provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
             } else {
-                Diagnostic.Builder d = Diagnostic.of(null, "check.spread.notdata")
-                        .title("check.construct.title").at(pos).args(sp);
+                Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1015, "check.spread.notdata").at(pos).args(sp);
                 if (bound instanceof Type.Union) {
                     d = d.hint("check.spread.union.hint", sp);
                 }
@@ -715,7 +714,7 @@ public final class DataChecker {
             }
             Type pv = provided.get(f.getKey());
             if (pv == null) {
-                Diagnostic.Builder d = Diagnostic.of("E1005", "e1005.msg").at(pos)
+                Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1005, "e1005.msg").at(pos)
                         .args(typeName, f.getKey());
                 d = switch (fromSums.size()) {
                     case 0 -> d.hint("e1005.hint");
@@ -729,7 +728,7 @@ public final class DataChecker {
             }
             if (!TypeOps.assignable(pv, f.getValue(), ctx.symbols())) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.spread.provides").title("check.type.mismatch.title")
+                        Diagnostic.of(DiagnosticCode.E1016, "check.spread.provides")
                                 .at(pos).args(f.getKey(), Type.show(pv), typeName, Type.show(f.getValue()))
                                 .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build(),
                         "spread provides `" + f.getKey() + "` as " + pv + " but `" + typeName + "` needs "
@@ -750,7 +749,7 @@ public final class DataChecker {
         Map<String, Type> shared = TypeOps.commonSpreadFields(sum, ctx.symbols());
         if (shared.isEmpty()) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.spread.sum.unshared").title("check.construct.title")
+                    Diagnostic.of(DiagnosticCode.E1015, "check.spread.sum.unshared")
                             .at(pos).args(name, Type.show(bound)).build(),
                     "spread `.." + name + "` copies what the cases of " + Type.show(bound)
                             + " share, and they share none");
@@ -777,7 +776,7 @@ public final class DataChecker {
                 Type at = Elaborator.typeOf(t.arg(), env, ctx);
                 if (at != Type.DATE && at != Type.DATETIME) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.iso").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.iso")
                                     .at(t.pos()).args(Type.show(at)).build(),
                             "ISO text encoder expects Date or DateTime, got " + at);
                 }
@@ -786,7 +785,7 @@ public final class DataChecker {
                 Type at = Elaborator.typeOf(o.access(), env, ctx);
                 if (!(at instanceof Type.OptionOf oo)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.option").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.option")
                                     .at(o.pos()).args(Type.show(at)).build(),
                             "optional encoder expects an Option, got " + at);
                 }
@@ -803,7 +802,7 @@ public final class DataChecker {
                         || (encDef instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!hasEncoder) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.noencoder").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2202, "check.codec.noencoder")
                                     .at(e.pos()).args(e.typeName().written()).build(),
                             "`" + e.typeName().written() + "` has no encoder to call `"
                                     + e.typeName().written() + ".encode`");
@@ -815,7 +814,7 @@ public final class DataChecker {
                 Type st = Elaborator.typeOf(le.source(), env, ctx);
                 if (!(st instanceof Type.ListOf lo)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.listsource").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.listsource")
                                     .at(le.pos()).args(Type.show(st)).build(),
                             "list(...) source must be a List, got " + st);
                 }
@@ -825,7 +824,7 @@ public final class DataChecker {
                 Type st = Elaborator.typeOf(se.source(), env, ctx);
                 if (!(st instanceof Type.SetOf so)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.setsource").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.setsource")
                                     .at(se.pos()).args(Type.show(st)).build(),
                             "set encoder source must be a Set, got " + st);
                 }
@@ -835,7 +834,7 @@ public final class DataChecker {
                 Type st = Elaborator.typeOf(me.source(), env, ctx);
                 if (!(st instanceof Type.MapOf mo)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.mapsource").title("check.codec.title")
+                            Diagnostic.of(DiagnosticCode.E2201, "check.codec.mapsource")
                                     .at(me.pos()).args(Type.show(st)).build(),
                             "map encoder source must be a Map, got " + st);
                 }
@@ -887,7 +886,7 @@ public final class DataChecker {
      * encoder by the type it encodes (`String`, `商品ID`, `List`), the element by {@link Type#show}. */
     private static CompileException elemEncMismatch(String encoder, Type elemType, SourcePos pos) {
         return CompileException.of(
-                Diagnostic.of(null, "check.codec.elemenc").title("check.codec.title")
+                Diagnostic.of(DiagnosticCode.E2201, "check.codec.elemenc")
                         .at(pos).args("`" + encoder + "`", Type.show(elemType)).build(),
                 "element encoder `" + encoder + "` does not match " + Type.show(elemType));
     }

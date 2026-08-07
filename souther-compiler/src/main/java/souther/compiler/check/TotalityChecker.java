@@ -5,6 +5,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -469,14 +470,14 @@ final class TotalityChecker {
      *  underlines the keyword rather than what it is about. */
     private static CompileException error(Ast.FnDef h, String name, String key, String message) {
         return CompileException.of(
-                Diagnostic.of("E2001", key).title("check.totality.title")
+                Diagnostic.of(DiagnosticCode.E2001, key)
                         .at(h.written().region()).args(name).build(),
                 message);
     }
 
     private static CompileException error(Ast.Apply call, String name, String key, String message) {
         return CompileException.of(
-                Diagnostic.of("E2001", key).title("check.totality.title")
+                Diagnostic.of(DiagnosticCode.E2001, key)
                         .at(call.name().region()).args(name).build(),
                 message);
     }

@@ -43,8 +43,8 @@ class CallElaboratorNoCalleeTest {
     @Test
     void aBehaviorIsToldItIsABehavior() {
         RuntimeException e = answerFor(new ValueName.Behavior("m", "f"));
-        assertEquals("E1401", assertInstanceOf(CompileException.class, e).code());
-        assertEquals("e1401.behavior", ((CompileException) e).diagnostic().messageKey());
+        assertEquals("E1818", assertInstanceOf(CompileException.class, e).code());
+        assertEquals("check.behavior.notcallablehere", ((CompileException) e).diagnostic().messageKey());
     }
 
     /**

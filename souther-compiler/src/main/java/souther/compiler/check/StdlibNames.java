@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.Prelude;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 
 import java.util.List;
@@ -37,7 +38,7 @@ final class StdlibNames {
         }
         String list = Prelude.candidateList(bare);
         return CompileException.of(
-                Diagnostic.of(null, "check.stdlib.qualified.msg").title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1025, "check.stdlib.qualified.msg")
                         .at(region).args(written, list).build(),
                 "`" + written + "` is a standard-library name. Write it qualified (" + list
                         + ") or import the name you mean (spec §stdlib).");

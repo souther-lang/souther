@@ -29,14 +29,6 @@ public class CompileException extends RuntimeException {
      *  Parallel to {@link #diagnostics}, so the order here is that list's order and nothing else. */
     private final transient List<String> sources;
 
-    public CompileException(SourcePos pos, String message) {
-        this(pos, null, message);
-    }
-
-    public CompileException(SourcePos pos, String code, String message) {
-        this(Diagnostic.literal(pos, code, message), format(pos, code, message));
-    }
-
     /** Throws with a fully structured diagnostic (a migrated site). */
     public CompileException(Diagnostic diagnostic, String legacyMessage) {
         this(List.of(diagnostic), legacyMessage, NO_SOURCE);

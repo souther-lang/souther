@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 
 import java.util.List;
 import java.util.Optional;
@@ -68,7 +69,7 @@ final class PartialHelperUse {
         String reached = path.get(path.size() - 1);
         String rendered = PartialReachability.render(path);
         return CompileException.of(
-                Diagnostic.of("E2001", "check.totality.reachespartial").title("check.totality.title")
+                Diagnostic.of(DiagnosticCode.E2001, "check.totality.reachespartial")
                         .at(helper.written().region()).args(helper.name(), reached, rendered).build(),
                 "`let " + helper.name() + "` does not carry the termination guarantee it claims: it"
                         + " reaches the `partial` helper `" + reached + "` (" + rendered + ")."
@@ -112,8 +113,7 @@ final class PartialHelperUse {
                 // function type would have to carry the guarantee for and cannot.
                 if (reachability.isPartialFunctionNamed(v)) {
                     throw CompileException.of(
-                            Diagnostic.of("E2001", "check.totality.partialasvalue")
-                                    .title("check.totality.title")
+                            Diagnostic.of(DiagnosticCode.E2001, "check.totality.partialasvalue")
                                     .at(v.written().region()).args(v.name()).build(),
                             "the `partial` helper `" + v.name() + "` is written where a value goes."
                                     + " A function type carries no termination guarantee, so a"

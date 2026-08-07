@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourcePos;
@@ -161,7 +162,8 @@ class MultiFileDiagnosticOriginTest {
     void anUntaggedMultiFileErrorStillRendersWithoutASnippet(@TempDir Path dir) {
         Path a = dir.resolve("a.sou");
         Path b = dir.resolve("b.sou");
-        CompileException untagged = new CompileException(new SourcePos(1, 1), "boom");
+        CompileException untagged = new CompileException(
+                Diagnostic.literal(new SourcePos(1, 1), "boom"), "boom");
 
         assertNull(Main.sourceOf(List.of(a, b), untagged));
     }

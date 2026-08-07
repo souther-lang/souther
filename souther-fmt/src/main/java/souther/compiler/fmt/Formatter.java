@@ -7,6 +7,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -83,7 +84,7 @@ public final class Formatter {
      */
     private static CompileException tooDeep() {
         return CompileException.of(
-                Diagnostic.of(null, "parse.toodeep").title("parse.title").build(),
+                Diagnostic.of(DiagnosticCode.E2104, "parse.toodeep").build(),
                 "this source nests too deeply to format;"
                         + " break the nesting into named parts to flatten it");
     }

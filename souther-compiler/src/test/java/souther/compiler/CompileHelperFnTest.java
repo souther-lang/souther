@@ -108,7 +108,7 @@ class CompileHelperFnTest {
                 let ping (x: Int) = pong(x)
                 let pong (x: Int) = ping(x)
                 """));
-        assertEquals(null, e.code());
+        assertEquals("E1813", e.code());
     }
 
     /** A helper may call another helper; the expansion nests, α-renaming each level (spec 12.5). */

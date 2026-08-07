@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ public final class ValueCycles {
                     && e.getValue().declaredReturn().asFn() != null;
             if (!declaredAFunction && e.getValue().writtenBody() instanceof Ast.Block block) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
+                        Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
                                 .at(block.pos()).build(),
                         "a block is not a value: `let " + e.getKey() + "` writes no parameters, so it"
                                 + " defines a value, and a block cannot be one (spec 12.5)");
@@ -93,7 +94,7 @@ public final class ValueCycles {
                 path.add(0, e.getKey());
                 String written = String.join(" -> ", path);
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.value.cycle").title("check.value.cycle.title")
+                        Diagnostic.of(DiagnosticCode.E1022, "check.value.cycle")
                                 .at(e.getValue().written().region())
                                 .args(e.getKey(), written).build(),
                         "`let " + e.getKey() + "` is defined in terms of itself (" + written + ")");

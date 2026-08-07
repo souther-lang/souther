@@ -140,12 +140,12 @@ final class CodecGen {
                     case DATE -> "date";
                     case DATETIME -> "dateTime";
                     case STRING, INT, BOOL, DECIMAL ->
-                            throw new CompileException(key.pos(), "not a map key decoder: " + p.kind());
+                            throw new IllegalStateException("not a map key decoder: " + p.kind());
                 };
                 emitStringLeaf(code, CD_ObjectDecoders);
                 code.invokevirtual(CD_StringDecoder, parse, MTD_leafTemporal);
             }
-            default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
+            default -> throw new IllegalStateException("not a map key decoder: " + key);
         }
     }
 
@@ -174,7 +174,7 @@ final class CodecGen {
         return switch (key) {
             case Ast.DataDecRef d -> "__rekey$" + d.typeName().denotes().qualified().replace('.', '$');
             case Ast.PrimDecRef p -> "__rekey$$" + p.kind();
-            default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
+            default -> throw new IllegalStateException("not a map key decoder: " + key);
         };
     }
 
@@ -223,7 +223,7 @@ final class CodecGen {
                     MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_String,
                             "valueOf", MethodTypeDesc.of(CD_String, CD_Object)),
                     MethodTypeDesc.of(CD_String, CD_Object));
-            default -> throw new CompileException(key.pos(), "not a map key encoder: " + key);
+            default -> throw new IllegalStateException("not a map key encoder: " + key);
         };
     }
 
@@ -1213,8 +1213,7 @@ final class CodecGen {
                 code.invokedynamic(setFromListCallSite());                   // Function: List -> Set
                 code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);  // Decoder<I, Set<T>> (dedup)
             }
-            case Ast.OptionDecRef o -> throw new CompileException(o.pos(),
-                    "optional is only supported as a direct object field");
+            case Ast.OptionDecRef o -> throw new IllegalStateException("optional is only supported as a direct object field");
             case Ast.MapDecRef mp -> {
                 emitDecoderObject(code, mp.value(), src);
                 code.invokestatic(srcListOwner(src), "map", MTD_mapDec);   // Decoder<I, Map<String,V>>

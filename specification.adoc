@@ -157,10 +157,10 @@ Souther -> arbitrary Java API    forbidden (touch the outside only via a behavio
 
 Souther does not have the following. These are design decisions, not features to be added later.
 
-* arbitrary Java API calls
+* [[no-arbitrary-jvm-calls]]arbitrary Java API calls
 * mutable state
 * exceptions (see below)
-* null
+* [[no-null]]null
 * threads
 * asynchronous processing in the language
 * inheritance
@@ -189,6 +189,25 @@ A Java Binding at the boundary (the Java implementation of a behavior with no im
 == Source files and modules
 
 The extension is `+.sou+`. Each file defines one module.
+
+Two hold of the names inside it:
+
+* [[a-declaration-is-made-once]]a name is written once where one is expected — a `+let+`, a data, a field of one data, a field of one construction, an entry of one clause list;
+* [[a-spelling-answers-one-thing-where-a-value-is-written]]a spelling has one answer where a value is written. A data is written as a value — a unit data is one, a newtype is applied to what it wraps — so a `+let+` and a data of one name would be one spelling with two answers.
+
+[[a-binding-does-not-shadow-a-builtin]]A binding MUST NOT take the name of a built-in value. A binding is in force over a region and everything outside it is unaffected (<<blocks>>), which is what makes shadowing a model's own names harmless; a built-in has no declaration to read instead, so a binding over one takes it away with nothing to point at.
+
+[[a-name-is-in-scope]]A name written in an expression, a type position or a pipeline MUST be in scope there. The nearest name that is gets suggested, since a name out of scope and a name misspelled read the same.
+
+[[a-name-held-as-a-value-is-a-value]]A name held as a value MUST be one. A behavior, a module qualifier and a type are names of other things, and writing one where a value goes is naming the thing rather than a value of it.
+
+[[a-standard-library-function-is-called-qualified]]A standard-library function is called through its qualifier — `+List.map+`, not `+map+`. The qualifier is the only spelling that reaches the library (<<stdlib>>).
+
+Three things hold of a module before anything in it is read:
+
+* [[a-module-is-declared-in-one-place]]a module is declared once. Two files declaring one name, or a file declaring a module that is also on the path, leave two answers to what that name means;
+* [[a-core-name-is-not-taken]]a module MUST NOT take a name the core has — the reserved `+souther+` namespace, or a standard-library qualifier such as `+List+` (<<reserved-namespace>>). A data MUST NOT take a qualifier's name either: the qualifier is the only spelling that reaches the library, so a declaration of that name hides it;
+* [[every-module-reached-is-on-the-path]]every module a compile reaches — imported, named in a qualified reference, or needed by one that is — MUST be among the modules being compiled or on the path, and what it says it declares MUST be there to read.
 
 [,text]
 ----
@@ -236,6 +255,10 @@ module example.order exposing (
 [#exposed-values]
 ==== A value and a helper are published
 
+[[exposing-lists-this-modules-own-definitions]]`+exposing+` lists what this module declares. A name it does not declare is not published by writing it here, and neither is an imported one: a module re-exporting another's vocabulary would put one declaration behind two surfaces.
+
+[[exposing-is-type-granular]]`+exposing+` is granular to the type. A data's derived `+decoder+` and `+encoder+` are published with it and are not named separately — they are how the type crosses a boundary, and a type that crosses one carries them (<<decoder>>, <<encoder>>).
+
 `+exposing+` MAY name a *value* — a `+let+` with no parameter list (<<fn-declaration>>) — and a *helper* — a `+let+` with them — alongside the module's data and behaviors. A limit a rule is written against, the representative record its examples are stated with, and the rule itself are part of what the module offers, and a reader names them instead of writing them out again.
 
 [,text]
@@ -261,7 +284,7 @@ A published body's source travels in the jar and is read back by the importing c
 [#exposed-surface]
 ==== What reaches out may not rest on what is kept
 
-What a module reaches out with SHALL NOT rest on a type it keeps to itself. An exposed data's field types, and an exposed behavior's input and output, are exposed by the module that declares them. A type carried inside a collection counts — `+List<UserId>+` names `+UserId+` as surely as a bare `+UserId+` does.
+[[an-exposed-signature-names-only-exposed-types]]What a module reaches out with SHALL NOT rest on a type it keeps to itself. An exposed data's field types, and an exposed behavior's input and output, are exposed by the module that declares them. A type carried inside a collection counts — `+List<UserId>+` names `+UserId+` as surely as a bare `+UserId+` does.
 
 An exposed value SHALL NOT stand for a type the module keeps to itself, and an exposed helper SHALL NOT return one or take one — a reader would hold a value it has no name for, or be unable to write the argument it has to pass. What a definition stands for is its *type*, settled from its body (<<fn-rules>>), and not the constructions the body makes on the way: a definition may name a type it never builds (`+let published (n: Int) : List<Hidden> = []+`), and a type its body reached for on the way is its own workings — requiring those would put every inner type back in the reader's import list, which is what publishing the definition was for.
 
@@ -272,7 +295,11 @@ Otherwise a reader is handed a value it has no name for, and the generated class
 This does not reach the *cases* of a sum, or of an output written as more than one case. Those are generated as a union interface that is public regardless (<<jvm-anonymous-union>>), and a case reaches a reader through the decoder or through the `+protected+` factory rather than by being named — which is what E1305's unit-data allowance rests on. A module keeping a case to itself therefore stays a decision about the union, not about this rule.
 
 [#imports]
-Imports SHALL be listed explicitly. Wildcard imports are forbidden. A cyclic import is a compile error.
+Imports SHALL be listed explicitly. Wildcard imports are forbidden.
+
+[[module-dependencies-are-acyclic]]A module depends on every module it imports and on every module it names in a qualified reference (<<qualified-reference>>). Those dependencies MUST have no cycle.
+
+[[imports-are-used]]An entry on an import list MUST be written bare somewhere below it. What another module declares is reachable qualified whether or not it is imported, so an entry earns its place only by being used under the name it brings in.
 
 [,text]
 ----
@@ -298,6 +325,8 @@ A declaration is not a binding in force and does not shadow an import. Importing
 
 [#published-modules]
 === Importing a module another project compiled
+
+[[a-published-module-agrees-with-this-compiler]]A module read from compiled output MUST have been compiled by a Souther that agrees with this one about what an importing module may reach. What it published is read back as declarations, so a disagreement about the surface is a disagreement about the text of this compile.
 
 A module MAY be imported from the compiled output of another project, with no `+.sou+` of it in this
 one. A compiled module carries what it declares — its `+data+` definitions, its behavior
@@ -332,7 +361,11 @@ satisfy: a dependency's implementation-only dependencies need not be on the clas
 [#qualified-reference]
 === Qualified reference
 
-A type is also reachable through the module that declares it, written as the module name and the type name. Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
+A type is also reachable through the module that declares it, written as the module name and the type name.
+
+[[a-reached-name-is-declared-by-its-module]]A name reached across a module boundary MUST be one that module declares, and [[a-reached-name-is-exposed-by-its-module]]it MUST be one that module exposes. The two are separate: a name the module never declared is a mistake about what is there, and a name it declared and kept is a mistake about what it publishes, which is the module's own decision to make (<<exposed-surface>>). Both hold whether the name arrives by `+import+` or is written qualified.
+
+[[an-imported-name-denotes-one-thing]]A name an `+import+` brings in MUST denote one thing here. Two modules exposing it, an alias already in use, or this module's own declaration of that spelling each leave the reader with a name and no single answer; reaching one of them qualified is what says which. Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
 
 [,text]
 ----
@@ -419,6 +452,15 @@ There is no type name that carries an invariant violation. A violation inside th
 
 The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and precedence needed for reading and writing are fixed here.
 
+What a text MUST be for the compiler to read it is stated with each construct, and a text that is not is refused where the reading stops. Five places it can stop, kept apart because a reader looking one up is asking about a different part of the language:
+
+* [[declaration-syntax]]a declaration — the module header, a top-level `+data+`, `+behavior+` or `+let+`, a behavior's signature, a `+depends on+` clause — MUST be written in the form given for it;
+* [[expression-syntax]]an expression MUST be written in the form given for it, and a block MUST end in one;
+* [[pattern-syntax]]a pattern MUST be written in the form given for the thing it destructures (<<binding-patterns>>, <<match>>);
+* [[examples-syntax]]an `+example+`, a `+fake+` and an `+examples for+` file MUST be written in the form given for them (<<examples>>);
+* [[literal-syntax]]a literal MUST be written in the form given for its type (<<primitives>>, <<temporal-literal>>);
+* [[the-source-is-made-of-tokens]]the text MUST be made of tokens the language has. This one is answered before anything is parsed, so it says nothing about where in the language the text was — a character that begins nothing, and a `+'+` with no name after it, are the two ways to reach it.
+
 * Both `+data+` declaration fields and record-literal `+TypeName { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+name: type+`; a literal binds a value, so `+name = value+` (`+:+` = has this type, `+=+` = is defined as this). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>). A clause's name follows the same rule as everything else named with `+=+` — it is defined as that rule, so `+invariant nonEmpty = List.length(value) >= 1+` (<<invariant-clause-name>>).
 * Argument lists and the enumerations in `+constructs+` / `+depends on+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<depends-on>>).
 * Every `+,+`-separated list — declaration and record-literal fields, parameter and argument lists, tuple elements, list literals, and the `+constructs+` / `+depends on+` name lists — MAY carry a single trailing `+,+` before its closing delimiter. It is optional and has no meaning. The sample code in this spec keeps a leading-comma layout instead and writes no trailing comma.
@@ -434,6 +476,14 @@ The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and 
 [#external-representation]
 == External representation
 
+What crosses a decoder/encoder boundary is decided by representation, and five obligations fall out of it:
+
+* [[what-crosses-the-boundary-has-an-external-representation]]a value that crosses MUST have an external representation. A tuple has none and neither does a function, so neither can be a behavior's parameter or output, a data's field, or anything a codec would be derived from;
+* [[a-parameter-names-one-type]]a parameter MUST name a single type. An anonymous union is the shape of one behavior's answer and nobody names it (<<union-member>>), so it is written on an output and not taken as an input;
+* [[a-behavior-does-not-output-an-optional]]a behavior MUST NOT answer with an optional. Absence a caller is handed is a case the model owns and names (<<optional>>), not a value that may not be there;
+* [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, `+Date+`, `+DateTime+`, or an enumeration, a sum every one of whose cases is a unit data (<<collections>>). The boundary writes a key as text, and a key with no text is a key nothing can address;
+* [[a-collection-member-supports-equality]]a `+Set+`'s element and a `+Map+`'s key MUST support equality. Both ask whether two of them are the same, and a function has no value to compare (<<equality>>).
+
 The external representation handled by Decoders and Encoders is not Souther's own types but the neutral value model of the boundary library Raoh (a tree of scalar / List / Map). Souther owns the domain's types, invariants, and behaviors; the external representation and its parsing and generation are delegated to the peripheral library Raoh (<<separate-representation>>, <<decoder>>).
 
 From a data's shape, Souther derives the decode side per input source (bare values / Map = raoh-core, JSON `+JsonNode+` = raoh-json, jOOQ `+Record+` = raoh-jooq) and the encode side to a neutral Map (raoh-core). The decode skeleton (fields, keys, discriminator) is common across sources; only the terminal field access varies per source. JSON output serializes the Map at the boundary (`+objectMapper.valueToTree+`, etc.; <<codec-generation>>).
@@ -442,6 +492,21 @@ An external representation may contain null, but internal data forbids null. nul
 
 [#builtin-types]
 == Built-in types
+
+
+[[a-value-has-the-type-its-position-requires]]A value MUST have the type its position requires — a field, a parameter, a declared return, an annotated binding, a type argument. This is the rule most others here are a special case of, and it is what a diagnostic falls back to where no narrower one applies.
+
+[[a-lists-elements-have-one-type]]A list literal's elements MUST all have one type. A list is `+List<T>+` for a single `+T+`; a sequence of several types is a list of a sum they are cases of.
+
+[[an-operator-takes-the-types-it-is-defined-for]]An operator MUST be given the types it is defined for: `+++++` joins two lists or two strings, unary minus takes an `+Int+` or a `+Decimal+`, a comparison takes two ordered values of one type, and `+==+` takes values that have something to compare — a function does not (<<equality>>).
+
+[[a-tuple-pattern-matches-its-tuple]]A tuple pattern MUST be written on a tuple, and MUST bind as many names as the tuple has elements.
+
+[[a-field-read-is-declared-by-the-value]]A field read MUST be a field the value has. A sum has no fields of its own — its cases do — and it exposes one only where every case spreads the data declaring it (<<sum-data>>); which case a value is is not known until it is opened.
+
+[[a-temporal-value-is-written-as-a-literal]]`+Date+` and `+DateTime+` are written as literals with the text spelled out (<<temporal-literal>>), so the text can be read at compile time and refused there rather than at run time.
+
+[[a-matches-pattern-is-a-literal-regular-expression]]`+String.matches+` takes a pattern that is a string literal and a valid regular expression. Both are read at compile time, which is the point of writing it out: a pattern computed at run time could not be checked at all.
 
 [#primitives]
 === Primitive types
@@ -512,6 +577,9 @@ The `+hashCode+` of a data containing `+Decimal+` is computed after dropping sca
 [#newtype-arithmetic]
 ===== Arithmetic on a newtype
 
+
+[[newtype-arithmetic-follows-the-units]]Arithmetic on newtypes MUST follow the units. Two newtypes over one base add and subtract only where they are the same newtype; a product and a quotient answer with what the units make, and where that is not a type the model declares there is nothing for the result to be. The refusal names the rule it is: which of them was broken is what an author needs, and it is not readable from the operand types alone.
+
 A single-value newtype over `+Int+` or `+Decimal+` supports `+{plus}+` and `+-+`, and the result stays in the newtype: `+Money {plus} Money+` and `+Money - Money+` are `+Money+`. The operator opens each operand to its wrapped value, computes on the base, and re-wraps the result — so the result's invariant is re-checked at construction, exactly as any other construction is (<<invariant-mvp>>). A subtraction that leaves the invariant (a non-negative `+Money+` going below zero) *aborts* inside the domain (<<violation-destination>>). To make that a business result, guard it with `+guard ... else+` (<<guard>>); the compiler then confirms the guard discharges the construction (<<invariant-discharge>>).
 
 Operand pairing is the same as comparison (<<newtype-comparison>>): the *same* newtype, or a newtype with a bare literal of its base (`+Money {plus} 100+`, the `+100+` taken as `+Money+`). Two *different* newtypes do not combine — `+Money - Quantity+` is a compile error even though both wrap `+Int+` — and a non-literal value of the wrapped type is not taken implicitly.
@@ -524,6 +592,9 @@ Re-wrapping is a computation, not a fresh construction from raw data, so it need
 
 [#collections]
 === Collection types
+
+
+[[a-generic-type-is-given-its-arguments]]A collection type is written with its arguments — `+List<Int>+`, `+Map<String, Int>+`, `+Set<String>+`. The bare qualifier names the module its functions are reached through (<<stdlib>>) and is not a type.
 
 [,text]
 ----
@@ -632,7 +703,10 @@ This desugars to:
 preApprover: Option<EmployeeId>
 ----
 
-To put a value in a `+?+` field, write an `+EmployeeId+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. This is the only place `+None+` may be written as a value: what puts it there is the field, not the type of the position — a model may name `+Option<T>+` where it reads one (<<algebraic-types>>), and an annotation saying so does not license making one. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
+[[optional-marks-one-type]]`+?+` marks one type optional. It is written on a single type and not on a sum: what a sum of several cases is missing is a case of its own, not a mark on the whole.
+
+[#option-cases-are-not-written]
+To put a value in a `+?+` field, write an `+EmployeeId+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. This is the only place either name may be written as a value: what puts it there is the field, not the type of the position — a model may name `+Option<T>+` where it reads one (<<algebraic-types>>), and an annotation saying so does not license making one. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
 
 [,text]
 ----
@@ -721,7 +795,7 @@ The `+...+` spread is defined as follows.
 
 * The taken-in fields are laid out flatly. A `+Submitted+` value is referenced directly as `+x.applicant+` (not nested as `+x.common.applicant+`).
 * The taken-in data's invariants are inherited too. The invariants of `+TravelRequestCommon+` are checked when `+Submitted+` is constructed. The spread carries not only fields but invariants.
-* A field-name collision is a compile error.
+* [[spread-fields-do-not-collide]]A field-name collision is a compile error.
 * A spread is not inheritance. `+Submitted+` is not a subtype of `+TravelRequestCommon+`; the two are not assignment-compatible. They only share fields.
 * A spread is an element of the same comma sequence as fields. It appears inside `+{+` separated by `+,+`, and multiple may be written. By convention it is placed first. It uses the same `+...+` as the value-level record-literal spread (<<record-literal>>).
 
@@ -730,7 +804,9 @@ To hold the common items as a single value rather than flattened, nest it as a n
 [#sum-data]
 === Sum data (OR)
 
-The spec DSL's `+OR+` maps to a sum. *A case MAY reference an already-defined named data.* As in the business-trip model, where each state has its own fields, invariants, and transition behaviors and is bound together by `+OR+`, this structure is represented directly.
+The spec DSL's `+OR+` maps to a sum. *A case MAY reference an already-defined named data.*
+
+[[a-sum-case-is-a-declared-data]]A case MUST be a data that is declared. [[a-sum-does-not-contain-itself]]A sum MUST NOT contain itself, through a case or through a chain of them: a sum's cases are the values it can be, and one of them being the sum is not a value. As in the business-trip model, where each state has its own fields, invariants, and transition behaviors and is bound together by `+OR+`, this structure is represented directly.
 
 [,text]
 ----
@@ -754,6 +830,8 @@ A case names a data; an inline record MUST NOT be written in a case position. A 
 
 *A case value is a value of its sum.* As in functional languages, a value of a case type (e.g. `+Submitted+`) may be used transparently wherever its sum type (`+TravelRequest+`) is expected — field assignment, argument, or return value. Only the upward direction (case→sum) is allowed; the downward direction (sum→specific case) requires `+match+`. A nested sum (`+data OwnCost = Reimbursement | Advance+` being a case of `+CostBearer+`) is decided the same way, folding to the leaf case.
 
+[[sum-cases-are-declared-with-the-sum]]A sum's cases are declared with it. A case a module imports MUST NOT be one of them: the sum is published as a sealed interface its own module closes, so another module's type cannot be a member of it. What crosses a boundary is matched and restated as a case of this module.
+
 *What holds of every case is a property of the sum.* A sum has no fields of its own, so reading one is an error and the value must be opened with `+match+` — except for a field that *every* case spreads (<<field-spread>>): the sum exposes the fields of a data all of its cases include, and `+d.id+` reads it without opening the value. The same part is spread from the sum into a construction, so `+Filed { ...d, filedOn = on }+` writes at once what a `+match+` arm per case would write alike.
 
 [,text]
@@ -776,6 +854,8 @@ The read and the spread reach the same part and no more. What a single case carr
 === Unit data
 
 A data with no fields is declared with no body. It corresponds to the spec DSL's `+= Unit+`.
+
+[[unit-data-is-written-without-a-body]]A unit data is written without a body. An empty body names a type with one value, which is what a unit data is, so the two spellings would be one declaration written two ways.
 
 [,text]
 ----
@@ -849,7 +929,7 @@ Souther has union types. They appear in three forms.
 An anonymous union appears *only in a behavior's output*. An anonymous union MUST NOT be written in an input (parameter) type. To pass a sum, make a named data (<<unmarked-output>>); naming it makes it sealed, with exhaustiveness checking and a JVM type (<<jvm-sum>>). Where the spec DSL writes `+(A OR B)+` in an input, the sum is named as a `+data+` and then referenced. A JVM type is generated for an output anonymous union (<<jvm-anonymous-union>>).
 
 [#union-member]
-A member of an anonymous union MUST be nominal and MUST tell itself apart from the other members at run time, and it MUST have a form a `+match+` arm can write. The primitives (`+Int+` / `+Bool+` / `+Decimal+` / `+String+` / `+Date+` / `+DateTime+`) and named data types meet both, a data whether this module declares it or imports it. A collection meets neither: its type argument is erased, so `+List<Order>+` and `+List<Item>+` are one type at run time and no arm could choose between them, and no arm form names one. `+Option+` and a function type are outside for the same reason. What a member may be does not depend on where the union came from — a union written as a behavior's output and one a `+>->+` composition arrived at (<<type-routing>>) are the same union.
+[[a-union-member-is-nameable-in-an-arm]]A member of an anonymous union MUST be nominal and MUST tell itself apart from the other members at run time, and it MUST have a form a `+match+` arm can write. The primitives (`+Int+` / `+Bool+` / `+Decimal+` / `+String+` / `+Date+` / `+DateTime+`) and named data types meet both, a data whether this module declares it or imports it. A collection meets neither: its type argument is erased, so `+List<Order>+` and `+List<Item>+` are one type at run time and no arm could choose between them, and no arm form names one. `+Option+` and a function type are outside for the same reason. What a member may be does not depend on where the union came from — a union written as a behavior's output and one a `+>->+` composition arrived at (<<type-routing>>) are the same union.
 
 A named sum member contributes its cases and not itself, as it does in an external representation (<<sum-discrimination>>). The members a union is checked and generated from are therefore its *effective* members: every member written, with each named sum expanded to its leaves.
 
@@ -860,7 +940,13 @@ Structural intersection types (`+A & B+`, a type operator for "a value that is b
 [#newtype]
 === newtype (`+data X = Y+`)
 
-When the right-hand side is a single type rather than a `+{ ... }+` product or a `+|+` sum, `+X+` is a newtype wrapping that type `+Y+`. `+Y+` is written the way a type is written anywhere else: a primitive (`+String+` / `+Int+` / `+Date+`, etc.), a named data, a sum, or a collection (`+List<T>+` / `+Set<T>+` / `+Map<K, V>+`, <<collections>>), including a collection of any of these. `+X+` is a distinct type from `+Y+` (nominally distinguished) with the same (bare) external representation as `+Y+`. The spec DSL's `+data X = Y+` (right-hand side a single name) is written directly.
+When the right-hand side is a single type rather than a `+{ ... }+` product or a `+|+` sum, `+X+` is a newtype wrapping that type `+Y+`.
+
+[[newtype-wraps-a-value-that-is-always-there]]What a newtype wraps MUST be there. A newtype is one value under another name and takes that value's representation, so an optional leaves it nothing to be when the value is absent; the absence belongs to the field that holds the newtype (<<optional>>).
+
+[[newtype-wraps-an-external-representation]]What a newtype wraps MUST have an external representation of its own, since the newtype takes it as its own (<<external-representation>>). A tuple has none and neither does a function, so neither can be wrapped; a named data can be.
+
+ `+Y+` is written the way a type is written anywhere else: a primitive (`+String+` / `+Int+` / `+Date+`, etc.), a named data, a sum, or a collection (`+List<T>+` / `+Set<T>+` / `+Map<K, V>+`, <<collections>>), including a collection of any of these. `+X+` is a distinct type from `+Y+` (nominally distinguished) with the same (bare) external representation as `+Y+`. The spec DSL's `+data X = Y+` (right-hand side a single name) is written directly.
 
 [,text]
 ----
@@ -897,6 +983,14 @@ Because there is no `+|+`, there is no room to read `+data InsufficientAuthority
 
 A value constraint written as a comment in the spec DSL is made executable as an `+invariant+`.
 
+[[invariant-expression-is-bool]]An invariant clause states a condition, so its expression MUST have type `+Bool+`.
+
+[[invariant-needs-a-value-to-constrain]]A type an invariant is declared on MUST have a value for it to observe. A unit data has one value and no field, so there is nothing for a clause to read and nothing it could reject.
+
+[[an-invariant-observes-and-does-not-build]]An invariant observes the value being built and MUST NOT build one. A construction inside it would run the built type's own check inside this one, and the answer to whether this value holds would depend on whether another one did.
+
+[[an-invariant-answers-on-every-path]]An invariant MUST answer on every path through it. It is checked on every construction and at every boundary (<<invariant-mvp>>), so it may not reach an `+unreachable+` and may not reach a `+partial+` helper, which publishes no termination guarantee (<<fn-rules>>).
+
 [,text]
 ----
 // spec DSL: data Amount = Integer // at least 0, in yen
@@ -913,7 +1007,11 @@ data DateRange =
 [#invariant-clause-name]
 === A clause MAY be named
 
-A clause MAY be given a name, which is what tells it apart from the type's other clauses: `+invariant <name> = <expr>+`. An attempted construction departs by the named clause that did not hold (<<attempted-construction>>), and a decode failure reports the name (<<decoder-error>>).
+A clause MAY be given a name, which is what tells it apart from the type's other clauses: `+invariant <name> = <expr>+`.
+
+[[invariant-clause-names-are-distinct]]No two clauses of one type may carry the same name. The name is what an attempted construction and a boundary failure call one rule by, so two rules cannot answer to it.
+
+[[invariant-clause-name-is-not-underscore]]A clause may not be named `+_+`. `+| _ -> …+` answers the clauses that carry no name (<<attempt-departures>>), so a clause named `+_+` could never be the one it answered. An attempted construction departs by the named clause that did not hold (<<attempted-construction>>), and a decode failure reports the name (<<decoder-error>>).
 
 [,text]
 ----
@@ -1009,8 +1107,8 @@ An invariant is checked at run time on every construction (<<invariant-mvp>>), a
 The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+guard+` / `+if+` guard (<<guard>>, <<if>>), and at every construction asks whether the guards prove its invariant.
 
 * *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
-* *Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
-* *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
+* [[construction-satisfies-its-invariant]]*Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
+* [[construction-invariant-is-discharged]]*Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
 * *Not expressible* — a clause outside the checked fragment. No diagnostic for it; the run-time check stands. The other clauses of the same invariant are answered on their own, so writing one the check cannot read beside one it can does not cost the second its report (<<invariant-discharge-capability>>).
 
 Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
@@ -1352,7 +1450,7 @@ Folding is done because only the leaf identifies the value. Tagging a direct cas
 A case's contents are decided by the case's shape. A product case lays fields flatly in the same Object as `+"type"+` (`+{"type":"Submitted", "applicant":…, …}+`). A unit case writes only `+"type"+` (`+{"type":"Staff"}+`). A newtype case (`+data X = Y+`; <<newtype>>) cannot place `+"type"+` on a bare scalar, so it puts the contents under the `+"value"+` key.
 
 [#discriminator-field]
-Because a product case lays its fields there, a case MUST NOT declare a field named `+"type"+` — the field and the tag would want one key, and whichever was written second would be all that was left. This is a compile error where the case is declared, not a value quietly written over where it is encoded. It holds of a member of a behavior's output union for the same reason (<<union-encoder>>), and of a field a case takes in by spread as much as one it writes. A data that is neither a case nor a union member may have the field: nothing writes a discriminator beside it.
+[[a-case-does-not-declare-the-discriminator-field]]Because a product case lays its fields there, a case MUST NOT declare a field named `+"type"+` — the field and the tag would want one key, and whichever was written second would be all that was left. This is a compile error where the case is declared, not a value quietly written over where it is encoded. It holds of a member of a behavior's output union for the same reason (<<union-encoder>>), and of a field a case takes in by spread as much as one it writes. A data that is neither a case nor a union member may have the field: nothing writes a discriminator beside it.
 
 [,text]
 ----
@@ -1370,6 +1468,10 @@ When the discriminator key or tag is business-specific (reading `+"status"+` and
 
 [#custom-codec]
 === Custom boundary codec
+
+[[a-custom-codec-agrees-with-its-type]]A codec written by hand MUST be a codec for the type it is declared on: a decoder for `+T+` constructs a `+T+`, an encoder for a sum writes every case, an element encoder matches the element type, and a source-shaped encoder is given that shape. What is derived agrees with the type because it was read off it; what is written has to be checked against it.
+
+[[a-codec-reached-for-exists]]`+T.decoder+` and `+T.encode+` MAY be written only where `+T+` has one. A type whose representation was never derived and never given has neither to reach for.
 
 When the default derivation is insufficient (a different key name, normalization, default filling, a business-specific discriminator, persistence version branching), write a Decoder on the Java side that assembles the external representation and calls the data's (invariant-checking) construction. The `+JdbcFindMember+` calling `+Member.decoder()+` in <<java-example>> is this form. External-representation conversion stays confined to the boundary and is not brought into domain definitions.
 
@@ -1591,7 +1693,12 @@ An anonymous union appears only in a behavior's *output* (<<union-intersection>>
 [#constructs]
 === Data construction authority (constructs)
 
-A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body (too few = E1002, too many = E1006). An injected behavior has no body, and its declaration is the input to factory generation, so it MUST always write it (<<java-base-class>>).
+A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body. An injected behavior has no body, and its declaration is the input to factory generation, so it MUST always write it (<<java-base-class>>).
+
+Exact agreement is two obligations, and a declaration can fail either one on its own:
+
+* [[constructs-authority-complete]]every data the implementation constructs MUST appear in the clause (<<e1002>>);
+* [[constructs-no-overdeclaration]]every data the clause names MUST actually be constructed (<<e1006>>).
 
 [,text]
 ----
@@ -1637,6 +1744,10 @@ A dependency (`+depends on+`) is different and MUST *always* be written (<<depen
 
 Construction is done with a record literal that writes the constructed type name.
 
+[[a-construction-names-a-data]]What is constructed MUST be a data. [[a-construction-names-fields-of-its-type]]A field written in the literal MUST be one that data declares, and [[a-construction-is-written-where-one-may-be]]a construction MUST be written where one is allowed — not, for instance, inside an `+invariant+`, which states a condition over a value rather than building one (<<invariant-expressions>>).
+
+[[a-data-can-be-constructed]]A data MUST be constructible at all. A self-referential data reaches itself through a mandatory field with nothing to bottom out on, so no first value of it can be built; the self-reference belongs in an optional or a list field (<<self-referential-data>>).
+
 [,text]
 ----
 PreApproved {
@@ -1657,11 +1768,17 @@ To fill same-named fields together, use a spread `+...src+`. It copies `+src+`'s
 PreApproved { ...request, preApprovedAt = now(), preApprover = approverId }
 ----
 
-To replace only some fields while keeping the same type, also write the type name and use a spread. If `+x+` has type `+Member+`, write `+Member { ...x, address = newAddress }+`. No dedicated update syntax is provided.
+To replace only some fields while keeping the same type, also write the type name and use a spread.
+
+[[a-spread-copies-a-product]]What is spread MUST be a product data, or a sum whose cases all spread one. There has to be a set of fields to copy, and a sum whose cases share nothing has none.
+
+[[a-spread-supplies-what-the-fields-need]]What a spread provides MUST have the type the field it lands on needs. Copying by name is not copying by shape: two fields of one name and two types are two fields. If `+x+` has type `+Member+`, write `+Member { ...x, address = newAddress }+`. No dedicated update syntax is provided.
 
 When a field value is a binding of the same name as the field, the value may be omitted. `+Member { address }+` is shorthand for `+Member { address = address }+`, filling from the same-named binding in scope.
 
 A record literal and a spread both require construction authority (`+constructs+`). Because the type name appears at the construction point, the authority check and field check are done on the spot.
+
+[[construction-supplies-every-field]]Every field the constructed type declares MUST be given a value — written out, filled from a same-named binding, or supplied by a spread. A spread supplies what the type it copies from declares and nothing else.
 
 [#blocks]
 === Blocks
@@ -1810,14 +1927,21 @@ The `+now+` appearing inside a `+let+` is an argument in either case. There is n
 
 ==== Checking
 
-The set of behaviors with a non-empty requirement set that a `+let+` uses and the set written in `+depends on+` MUST match. Too few is E1602, too many is E1603 (<<e1602>>, <<e1603>>). An over-declaration erring on the safe side is not admitted either.
+The set of behaviors with a non-empty requirement set that a `+let+` uses and the set written in `+depends on+` MUST match. As with `+constructs+`, matching is two obligations and either can fail alone. An over-declaration erring on the safe side is not admitted.
+
+* [[depends-on-names-every-requirement]]every behavior the implementation reaches that requires something MUST appear in the clause (<<e1602>>);
+* [[depends-on-names-no-more]]every behavior the clause names MUST actually be reached by the implementation (<<e1603>>).
+
+[[depends-on-names-a-dependency]]An entry MUST name something there is to inject: a behavior in scope whose own requirement set is not empty (<<e1607>>). A behavior that requires nothing is reached by name, and a `+>->+` composition infers its requirements from its stages rather than being handed them.
 
 [#calling-a-behavior]
 === Calling a behavior
 
 A behavior's `+let+` may call a behavior. Which ones it may call is decided by one question — the requirement set — and the answer does not depend on where the behavior was declared. A behavior this module declares and one it imported are called the same way.
 
-A helper `+let+` may not. A helper is expanded into what calls it, and an invariant that names one carries it to an importing module as source (<<published-modules>>); it names only what travels with it, which is what keeps an invariant's rule a single question about the requirement set rather than a second one about where a name came from. A behavior a helper wanted is called from the behavior's own `+let+` and its result passed in.
+[[behavior-does-not-reach-itself]]A behavior MUST NOT reach itself, whether through calls, `+depends on+` or `+>->+` stages, or a mixture of them. A `+depends on+` cycle leaves nothing to build first and a call cycle does not terminate; recursion belongs to a helper `+let+`, where it is proven total (<<fn-rules>>).
+
+[[a-helper-does-not-call-a-behavior]]A helper `+let+` may not. A helper is expanded into what calls it, and an invariant that names one carries it to an importing module as source (<<published-modules>>); it names only what travels with it, which is what keeps an invariant's rule a single question about the requirement set rather than a second one about where a name came from. A behavior a helper wanted is called from the behavior's own `+let+` and its result passed in.
 
 * An *empty* requirement set: call it by name. Nothing is injected and nothing is written in `+depends on+`.
 * A *non-empty* requirement set: write it in `+depends on+` and call it through that name (<<depends-on>>). It arrives already bound, as any requirement does.
@@ -1865,6 +1989,26 @@ A lambda argument `+(a, b) -> ...+` is multiple arguments (<<blocks>>), distinct
 
 [#fn]
 == let — implementation
+
+
+What holds wherever something is applied:
+
+* [[what-is-applied-is-a-function]]what is applied MUST be something that can be — a helper, a behavior, a newtype, a block, a function-typed parameter. A name the language gives is not one;
+* [[an-application-gives-the-arguments-it-takes]]an application MUST give as many arguments as the thing takes. A newtype wraps one value, a block takes what it was written with, a helper takes its parameters;
+* [[an-argument-has-the-type-its-parameter-takes]]an argument MUST have the type its parameter takes.
+
+A block is written where a function is taken, and that position is part of what the standard library states:
+
+* [[a-function-goes-where-a-function-is-taken]]a block or a function name goes in the argument that takes a function, and only there. Which argument that is belongs to the function being called (<<stdlib>>);
+* [[a-block-answers-the-type-its-position-takes]]a block MUST answer with what its position takes — the accumulator of a `+fold+`, `+Bool+` for a predicate, the element type of what is being grown.
+
+[[a-block-is-not-a-value]]A block is not a value. It may be passed as an argument, or bound with `+let+` and applied, and it MUST NOT be returned or stored in a field: a function has no external representation (<<external-representation>>), so nothing carries it across a boundary.
+
+[[a-function-binding-has-one-type]]A binding holding a function has one type. Applied at two argument types, or given by two branches that produce different function types, it has no single one to be.
+
+[[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it.
+
+[[a-function-type-is-written-only-on-a-helper-parameter]]A function type is written in one place: a helper's parameter. Everywhere else what a function is is read off what it is applied to.
 
 A `+let+` is the implementation of a behavior. A behavior is the specification (<<behavior>>), and a `+let+` is what satisfies it.
 
@@ -1928,10 +2072,16 @@ A value is not module state. Its expression is elaborated in the module that dec
 * An invariant a value breaks is reported at the value, whether or not anything names it.
 * What a value constructs is the value's own. A behavior that names one reads something already made, so the construction stays with the definition and is not required in that behavior's `+constructs+` (<<constructs>>). A spread of a value reads one the same way. This is where a value parts from a helper, whose construction set does fold into its caller.
 * A spread names a value like any other position: `+Drafting { ...standardRequest, estimatedCost = Amount(50000) }+` reads the same in a behavior's body and in an `+example+` row. A binding in force wins there too, so a parameter or a `+let+` sharing a value's name is what the spread copies.
-* A value MUST NOT reach itself, through naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (<<fn-rules>>); a value has no such form, so a cycle through one is a compile error naming the path it goes round. This is reported apart from the recursion check, which would ask for a return type the author never wrote.
+* [[a-value-does-not-reach-itself]]A value MUST NOT reach itself, through naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (<<fn-rules>>); a value has no such form, so a cycle through one is a compile error naming the path it goes round. This is reported apart from the recursion check, which would ask for a return type the author never wrote.
 
 [#fn-rules]
 ==== Rules
+
+
+* [[a-helper-parameter-states-its-type]]a helper's parameter MUST have a type that is stated or determined. A parameter only read through a field, or used as a function, names no type by being used, so it is annotated;
+* [[a-helper-answers-what-it-declares]]a helper that declares a return type MUST answer with it;
+* [[a-recursive-helper-declares-its-return-type]]a recursive helper MUST declare its return type, its result not being readable from a body that names itself;
+* [[a-recursive-helper-does-not-reach-an-injected-behavior]]a recursive helper's own body MUST NOT call an injected behavior. It is emitted as a pure static method, and the effect belongs to the behavior that calls it. Applying a function argument that reaches one is unaffected — the effect is then the caller's, declared in the caller's `+depends on+` (<<fn-rules>>).
 
 * A `+let+` with a same-named behavior does not write argument types; the type comes from the behavior. A count mismatch is a compile error. A behavior whose type takes nothing (`+() -> T+`) is implemented by a value, which writes no parameter list.
 * A `+let+` written with a parameter list defines a function; one written without defines a value. An empty `+()+` is a compile error — a definition taking nothing is the value form. A helper therefore has at least one parameter.
@@ -1943,7 +2093,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 * A helper *may recurse* (self- and mutual recursion). A non-recursive helper is inline-expanded at its call site; a recursive helper is not inlined but lowered to a method — self- and mutual calls become plain method calls. Traversal of self-referential data that `+fold+` cannot write (climbing the manager chain to the root, counting tree depth) is written this way.
 * A recursive helper MUST *declare its return type* (above). Without a declaration it is a compile error.
 * A recursive helper MUST be *pure*: its own body MUST NOT call an injected behavior (`+depends on+`). It MAY apply a function argument that does — the effect is then the caller's, declared in the caller's `+depends on+` and carried in by the closure (<<blocks>>). An effect touching the outside world is placed on the behavior that calls the helper, or on the function it is handed.
-* Recursion is *total by default*. A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.manager with | Some b -> depth(b)+` passes the unwrapped `+OrgMember+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + depth(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.manager |> Option.map(b -> depth(b) + 1)+` — the payload of `+s.manager+` is a smaller `+OrgMember+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` — private, reached through `+List.fold+` — is trusted total.
+* [[helper-carries-its-termination-guarantee]]Recursion is *total by default*. A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.manager with | Some b -> depth(b)+` passes the unwrapped `+OrgMember+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + depth(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.manager |> Option.map(b -> depth(b) + 1)+` — the payload of `+s.manager+` is a smaller `+OrgMember+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` — private, reached through `+List.fold+` — is trusted total.
 * `+partial+` *declares that the helper does not carry Souther's termination guarantee*. It does not assert that the helper diverges: a recursion that does terminate and that the analysis cannot prove is written this way too, and so is one the analysis gave up on as too large. What it disclaims is the termination guarantee and nothing else — the helper is type-checked, its `+match+` is checked for exhaustiveness, and its invariants hold as any other's do. A helper written without the word does carry the guarantee.
 * *A helper's totality covers everything it reaches.* An unmarked helper MUST NOT reach a `+partial+` one, directly or through any chain of calls; doing so is a compile error (E2001) naming the path. Its caller has to say `+partial+` as well. Every member of a mutually-recursive group holding a `+partial+` member therefore needs the word — each reaches the others. Reading a `+let+` written with no parameter list is reaching it, because the value is substituted where it is named. A behavior's implementing `+let+` is not a helper and publishes no termination guarantee, so this rule is not asked of it: it MAY call a `+partial+` helper. That is not a boundary the walk stops at — it is a declaration the walk is never asked about, and a helper between the behavior and the `+partial+` one still needs the word.
 * A `+partial+` helper MUST NOT be written where a value goes. It may be applied; it may not be handed over. A function type (<<fn-value-semantics>>) says nothing about termination, so a `+partial+` helper stored in one leaves the call graph and arrives somewhere the rule above cannot see it. Writing the name in an argument, or anywhere else a function value is expected, is a compile error (E2001). A `+let+` with no parameter list is a value rather than a function and is not covered by this: reading it is reaching it, which the rule above already answers.
@@ -1951,7 +2101,11 @@ A value is not module state. Its expression is elaborated in the module that dec
 * An `+example+` is evaluated within a time budget, so a recursion that does not terminate is reported rather than hanging the compiler.
 * A local lambda (`+let f = (x) -> ...+`) cannot recurse. Recursion is a property of a named module helper.
 * Two `+let+`s MUST NOT be written for one behavior.
-* A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
+* [[an-implementing-let-takes-its-shape-from-the-behavior]]A `+let+` implementing a behavior takes its shape from that behavior: how many parameters it has, what they are, the order the injected ones arrive in, and what it answers with. None of them is written again on the `+let+`, and none of them may disagree.
+
+[[a-composition-has-no-let]]A `+>->+` composition is its own implementation, so no `+let+` may implement one.
+
+A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
 * A helper `+let+` may construct data, but its construction set is inferred transitively and MUST be included in the calling behavior's `+constructs+` (<<constructs>>, <<blocks>>) — except for what another module's published body carried in, which that module already stated (<<exposed-values>>). A helper cannot be placed in a `+>->+` stage, because it does not appear in the spec DSL. It may be written in `+exposing+`: what a module offers is not only its list of behaviors.
 * A function type (`+(A) -> B+`) is an ordinary type and may be written wherever a type is (<<delimiters>>). What refuses one is the position's requirement, not the grammar: a data field and a behavior's input and output require an external representation, and a function has none — including a function carried inside a `+List+` or a `+Map+` there. A behavior output is a sum of business results, and a function is not a business result.
 * A `+let+` may return a function (`+let adder (n: Int) = (x) -> x + n+`). An escaping function — a return value or a runtime choice — becomes a closure capturing free variables (<<blocks>>). If only passed or applied on the spot, it is expandable and no closure is needed. A helper's name written where a value goes is the function it names. A binding MAY state its type (`+let p: (Int) -> Bool = ...+`), and that is what settles the parameters of the lambda it binds. Where no type is written they are inferred from how it is applied (a local rule, distinct from global type inference, which the declarative design does not do — a behavior takes its type from the specification and a helper states its own, <<fn-declaration>>).
@@ -1959,7 +2113,9 @@ A value is not module state. Its expression is elaborated in the module that dec
 [#injected-behavior]
 === A behavior with no implementation — outside-world dependency
 
-*If a behavior with only a type has no implementation*, its implementation is injected from Java. It corresponds to the spec DSL's `+// depends:+` and `+// side effect:+`.
+*If a behavior with only a type has no implementation*, its implementation is injected from Java.
+
+[[an-injection-target-declares-no-depends-on]]A behavior with no `+let+` MUST NOT declare `+depends on+`. It is what gets injected, and what a dependency is supplied to is the behavior that calls or composes it (<<depends-on>>); a target declaring its own would be asking to be handed something before it exists. It corresponds to the spec DSL's `+// depends:+` and `+// side effect:+`.
 
 An implementation is either a same-named `+let+` (<<fn-declaration>>) or a right-hand `+>->+` composition (<<composition>>). A `+>->+` composition behavior has no `+let+` but does have an implementation, so it is not subject to injection. What is injected is only one that wrote a type and no `+let+`.
 
@@ -2015,6 +2171,7 @@ This abstract base class is *always public*, regardless of whether it is in `+ex
 
 Because the base is public and the implementation overrides `+apply+` from outside the module, the implementation *writes* the behavior's input type and its output type. A type the module keeps to itself cannot be written there, and no raw-typed override stands in for it — the erased signature clashes with the one being overridden. So an injected behavior's input and output MUST be exposed by the module that declares them, whether or not the behavior itself is in `+exposing+` (<<exposed-surface>>).
 
+[#injected-constructs-are-creatable]
 When a *non-unit* data is listed in `+constructs+` and that data is not exposed with `+exposing+`, it is a compile error (E1305). A factory is generated only for a unit data, and a non-exposed data has no decoder either, so a Java implementation would have no way to create that value. If exposed, it can be created via the decoder (<<jvm-codec>>). The requirement is that it be either a unit data or an exposed data.
 
 What is confined is <<invariant-on-construct>>. An invariant-bearing data is always checked whether it goes through `+__construct+` or the decoder. So even if it can be created from outside, *no unvalidated value can be created*. A unit data has nothing to validate, so nothing is lost by allowing it to be created from outside.
@@ -2092,6 +2249,10 @@ The requirement set of `+applyAll+` is empty. Whatever `+p+` requires is irrelev
 [#sequential-composition]
 === Sequential composition `+>->+`
 
+[[a-stage-after-the-first-takes-one-input]]Every stage after the first takes one input: what reaches it is the value the stage before answered with. A behavior taking more is called inside a stage rather than made one.
+
+[[a-pipeline-composes-behaviors]]`+>->+` composes behaviors and nothing else. A decoder and an encoder are the edges the pipeline runs between (<<decoder>>, <<encoder>>), not stages within it.
+
 `+>->+` connects behaviors. Of the previous stage's output cases, those the next stage's input type can receive flow to the next stage; the cases it does not receive are carried to the output (departing the mainline).
 
 [,text]
@@ -2122,6 +2283,9 @@ Decode / encode are not behaviors but edges of the boundary and are not `+>->+` 
 
 [#type-routing]
 === Type-routing composition rule
+
+[#composition-stages-type-route]
+Every stage of a `+>->+` composition MUST be able to receive what the stage before it answers with: of the previous output, the cases the next input accepts flow on and the rest depart, and a stage that accepts none of them routes nothing.
 
 A pipeline carries the *mainline*. Only the mainline is passed to a stage; a case a stage did not receive departs the mainline and is *never passed to the remaining stages* of that pipeline. A departed case is piled onto the output.
 
@@ -2204,6 +2368,7 @@ A `+>->+` composition's output is inferred from its stages (<<composition-with-r
 
 An inferred output *changes silently on a distant change* when a stage is a behavior of another module. If an upstream stage adds a case, the composition output grows silently; if a downstream stage narrows its input, a previously processed case moves to departed (<<type-routing>>) and likewise increases the output. The composition's definition site has nothing to signal this.
 
+[#composition-output-agrees-with-inference]
 So a composition *MAY optionally declare its output*. If written, it MUST *exactly match* the inferred output or it is a compile error (E1604). Neither too few (a case appears that is not declared) nor too many (a declared case does not appear) is admitted.
 
 [,text]
@@ -2216,6 +2381,7 @@ behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock
 
 Input is not declared. A pipeline is point-free, and the input is decided by the first stage (<<sequential-composition>>). Only the output may be declared. A dependency (`+depends on+`) has the same distant-change risk, but a composition leaves it inferred (<<depends-on>>).
 
+[#exposed-composition-declares-its-output]
 For an internal composition this declaration is optional. But for a composition exposed with `+exposing+` it is *required*, written not on the definition line but in the exposing list as `+name : cases+` (<<modules>>). Leaving a public boundary to inference means that when an upstream stage adds a case, it reaches another compilation unit (another module, or a non-exhaustive Java switch or JSON serialization) silently, and the definition site has nothing to signal it. Placing a signature in `+exposing+` makes the composition's definition error (E1604) the moment a case is added, and the author chooses to handle the case or update the signature. If no signature exists, it is E1605. A non-composition behavior writes its type at the definition, so it MUST NOT write a signature in `+exposing+` (doing so is E1605). This division corresponds to.
 
 [#case-propagation]
@@ -2251,12 +2417,23 @@ example submitTravelRequest
             -> AwaitingPreApproval
 ----
 
+What a row is held to, and what holding a build to it requires:
+
+* [[example-target-is-a-behavior]]the target MUST be a behavior of the module the example is attached to;
+* [[example-holds]]an evaluated row's result MUST match what it expects;
+* [[example-does-not-reach-unreachable]]a row's evaluation MUST NOT reach an `+unreachable+` (<<unreachable>>): either the row states a combination the model rules out, or the reason written there does not hold;
+* [[example-evaluation-stays-within-budget]]a row's evaluation MUST come to a value within the counted budget it is held to — the points it may pass and the depth a recursion may go to;
+* [[example-evaluation-stays-within-stack]]and it MUST reach that counted depth limit before the JVM stack runs out, the two being set so the counted one is met first;
+* [[example-evaluation-answers]]the work around the counted evaluation — loading a class, decoding a value, comparing two of them — MUST answer within the wait the policy allows. Unlike the two above, this says nothing about the model.
+
 An `+example+` names a target behavior, then lists one or more `+|+`-led rows. A row is an optional description string (a business-case name, followed by `+:+`), an input argument tuple, `+->+`, and an expected result. `+example+`, `+examples+`, and `+for+` are contextual keywords, not reserved words, so they do not collide with an identifier or the `+example.*+` namespace.
 
 [#example-expected]
 === The expected result
 
 The expected side asserts at one of two granularities.
+
+[[example-expected-arm-is-an-output-case]]Where a row expects an arm, that arm MUST be one of the target behavior's output cases.
 
 * A bare type name (`+-> Submitted+`) asserts only the *arm* — which case of the output sum the result is — and ignores its fields.
 * A construction (`+-> Rejected { reason = "high_cost" }+`), a newtype application (`+-> Amount(0)+`), or a literal asserts the *whole value* by structural equality.
@@ -2267,6 +2444,11 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 
 [#example-evaluable]
 === What can carry an example
+
+[#example-target-is-evaluable]
+The target MUST be something this module can run: a behavior with a `+let+` implementation, or a `+>->+` composition of them. A helper `+let+` is not one.
+
+[[example-fixtures-are-buildable]]Every fixture a row writes MUST build — each input against its parameter type and the expected result against the output type — through that type's derived Decoder and its invariant. The expectation is built before the behavior is applied.
 
 A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) has nothing to run, so its rows are *recorded* rather than evaluated (<<example-pending>>). A target that is not a behavior at all — a helper `+let+` of that name — is <<e1902>>. A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
@@ -2325,6 +2507,12 @@ When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior pro
 [#example-fakes]
 === Faking a dependency
 
+[[example-dependency-has-a-usable-fake]]Every dependency required to evaluate a row MUST have a usable fake: one supplied, by a `+with+` on the row or a `+fake+` table, and one whose fixture builds.
+
+[[fake-answers-the-inputs-it-is-asked]]A `+fake+` table MUST answer every input it is asked for, by listing it or by carrying a `+_+` default row.
+
+[[fake-table-builds]]Building a `+fake+` table MUST come to a value within the budget and the wait it is held to; where it does not, the table states nothing that was checked.
+
 To evaluate a behavior that `+depends on+` an injected dependency (<<depends-on>>), the example supplies a fake for it. Best is to need none: an outside-world value written as an *input* rather than an injected behavior keeps the behavior example-able with no fake (<<purity>>). When a dependency stays injected, a fake stands in, scoped to the example and never shipped (no run-time class is produced).
 
 A *value dependency* — one whose faked result is a constant — is given on the row with `+with+`:
@@ -2352,6 +2540,10 @@ A composition's dependencies are its stages' (<<composition-with-requirements>>)
 
 [#example-pending]
 === A row waits for the implementation it is about
+
+[[stand-in-and-recorded-row-agree]]A stand-in and a recorded row MUST NOT state different answers for one input. Which of the two the model is to be held to is not readable from the text, so neither is named as the right one.
+
+[[stand-in-comparison-completes]]Reading a `+fake+` against the rows recorded for that behavior MUST come to a value, so that what the two state was compared. Being told nothing was found and being told nothing was compared are different answers.
 
 An injected behavior (<<injected-behavior>>) has no `+let+` to apply, so a row naming one is *recorded* rather than evaluated. It is not refused. A model that a system is being migrated onto is injected everywhere at the start, and the rows harvested from the system it replaces are the record of what each behavior will owe; refusing them would mean keeping that record somewhere the compiler cannot read, which is where it stops being checked.
 
@@ -2385,12 +2577,21 @@ How many rows are waiting is what `+souther examples+` reports; it is not a comp
 [#example-placement]
 === Inline or an attached file
 
+[[examples-file-holds-only-examples]]An `+examples for+` file MUST hold only examples, the fakes they run against and the values their rows name, and MUST NOT declare a name the target module already declares.
+
+[[examples-file-names-a-compiled-module]]An `+examples for <module>+` file MUST name a module among those being compiled.
+
 The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
 
 [#example-adequacy]
 === What the rows establish
 
 An `+example+` fixes the value rule for one input. Whether a model's rows together say enough about it is a different question, and `+souther examples+` answers it from what evaluating them observed. Nothing here changes what compiles; it reports.
+
+These are the questions the dial asks of a model's rows, each answered where the measurement was complete:
+
+* [[every-output-case-is-expected-by-a-row]]where a behavior's output is a sum, some row SHOULD expect each of its cases;
+* [[every-input-case-is-used-by-a-row]]where an input position is a sum, some row SHOULD apply the behavior to each of its cases.
 
 *Evidence is graded, not counted.* How far a row got decides what it proves, and three claims are kept apart rather than collapsed into one:
 
@@ -2431,6 +2632,11 @@ A rule that drew a line is kept per line. The same value can be a boundary of an
 === Which arms of the body the rows go through
 
 Where a behavior has a body, `+souther examples+` also reports which of its arms the rows run through. An arm is one branch of an `+if+` or a `+guard+` (<<if>>), one arm of a `+match+` (<<match>>), or the success branch or one departure of an attempted construction (<<attempted-construction>>). Cases written together on one arm are one arm: they are one run of code, and a row takes it or does not.
+
+Two more the dial asks, needing the arms measured:
+
+* [[every-arm-has-a-row]]some row SHOULD go through each arm of an `+if+`, a `+guard+` or an attempted construction;
+* [[every-guard-boundary-has-a-row]]and some row SHOULD be at each line a `+guard+` draws, a row on the line being what tells a rule written `+<=+` from one written `+<+`.
 
 This is *branch-arm* coverage and nothing wider. Going through both arms of two nested conditions is four arms and says nothing about whether their combinations were tried, so covering every arm is a lower bound on covering what a body can do rather than the same thing.
 
@@ -2567,12 +2773,28 @@ let approverLabel (c: TravelCompleted) =
         | None              -> "None"
 ----
 
-A match on sum data MUST be exhaustive. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) does not flatten leaf cases; receive `+OwnCost+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
+[#match-covers-every-case]
+A match on sum data MUST be exhaustive.
+
+Four more hold of the arms themselves:
+
+* [[a-match-subject-is-a-sum]]what a `+match+` is written on MUST be a sum. There is nothing for arms to tell apart otherwise;
+* [[a-match-has-arms]]a `+match+` MUST have at least one arm;
+* [[a-match-arm-names-a-case-of-the-subject]]an arm MUST name a case of that sum;
+* [[no-two-arms-match-one-case]]no two arms may match one case, a second one for it being unreachable.
+
+[[branches-agree-on-a-type]]The arms MUST agree on a type: a `+match+` answers with one value, so what its arms produce is one thing. The same holds of an `+if+`, whose two branches are arms of the same kind.
+
+[[a-pattern-opens-what-the-value-is]]A pattern that opens a value with `+(...)+` MUST be opening something that has one to open, and the type it names MUST be what is inside — a newtype's wrapped value, an optional's payload. This holds wherever the pattern is written, in a `+match+` arm or in a binding (<<binding-patterns>>).
+
+[[an-or-pattern-binds-the-sum-and-opens-nothing]]An or-pattern binds the sum and opens nothing. It says these cases are treated the same (<<match>>), and what they carry is not the same, so there is nothing shared for it to name. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) does not flatten leaf cases; receive `+OwnCost+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
 
 [#unreachable]
 ==== An arm may say its combination cannot arise
 
 A table indexed by two sums has a cell for every pair, and some of those pairs the model does not admit. `+unreachable "reason"+` is what such an arm answers: it produces no value, and reaching it aborts.
+
+[[unreachable-states-its-reason]]`+unreachable+` MUST state why the point cannot be reached, written as a string. The reason is what a reader is shown when a row gets there (<<e1911>>), and an `+unreachable+` with nothing to say leaves them the position alone.
 
 [,text]
 ----
@@ -2592,7 +2814,7 @@ The rules it obeys:
 
 * The reason is a string literal and MUST be written. It is read without running the model — by a reader, by the diagnostic an `+example+` gets (<<e1911>>), and by the abort's message — so it is not an expression that builds one.
 * Its type is `+Never+` (<<algebraic-types>>), which fits whatever the position expects. An arm answering it contributes no case to what the `+match+` answers: the type is the one the other arms agree on.
-* The position it stands in MUST state what it holds, or a branch beside it MUST — a field, a declared return, an annotated binding, an arm beside one that answers a value. Written where nothing does (`+let n = unreachable "..."+`, `+1 + unreachable "..."+`), it is <<e1307>>: the value it stands for is never made, but the code around it is still compiled, and nothing there says what shape that code reads.
+* [[unreachable-stands-where-a-type-is-stated]]The position it stands in MUST state what it holds, or a branch beside it MUST — a field, a declared return, an annotated binding, an arm beside one that answers a value. Written where nothing does (`+let n = unreachable "..."+`, `+1 + unreachable "..."+`), it is <<e1307>>: the value it stands for is never made, but the code around it is still compiled, and nothing there says what shape that code reads.
 * Exhaustiveness counts the arm like any other. Nothing here relaxes <<e1201>>, and there is still no `+_+`.
 * Reaching it *aborts*, as an invariant violation does (<<invariant-abort>>) and for the same reason: what failed is the model, not the business. It is not catchable, and a boundary maps it to a 500, apart from a business failure's 400.
 * It is not written in an `+invariant+` (<<invariant-expressions>>): an invariant answers whether the value being built holds, on every path through it.
@@ -2634,8 +2856,12 @@ guard DomainName(d) as name else BadDomain
 if DomainName(d) as name then [ name ] else []
 ----
 
+[#attempt-subject-is-a-construction]
 Where the condition is a construction followed by `+as <name>+`, that construction's invariant decides
-the branch. The invariant is run — the type's own and every invariant a `+...+` spread brought in
+the branch. `+as+` names the value a construction builds, so what it is written on MUST be one; a
+condition that is anything else states no invariant for the branch to be decided by.
+
+The invariant is run — the type's own and every invariant a `+...+` spread brought in
 (<<invariant-mvp>>, <<field-spread>>). Holding, the value is built and `+<name>+` names it in the
 success branch; failing, the `+else+` value is taken and no value is built. The invariant runs once.
 
@@ -2682,10 +2908,17 @@ effect; which clause failed is decided by the order the clauses are declared in 
 
 The arms MUST cover what can fail, so that no failure reaches a branch that is not there:
 
-* every named clause of the type MUST have an arm, and an arm MUST name a clause the type has;
-* `+| _ -> …+` MUST be written when the type has a clause carrying no name, and MUST NOT be written when
-  it has none — it answers the clauses that cannot be named, and there being none to answer is worth
-  saying.
+* [[attempt-answers-every-failing-clause]]every named clause of the type MUST have an arm;
+* [[attempt-arm-names-a-declared-clause]]an arm MUST name a clause the type has;
+* [[attempt-answers-each-clause-once]]no clause may be answered twice — the arm is chosen by the clause
+  that failed, so a second arm for it could never be reached;
+* [[attempt-answers-unnamed-clauses]]`+| _ -> …+` MUST be written when the type has a clause carrying no
+  name — it answers the clauses that cannot be named;
+* [[attempt-catch-all-has-clauses-to-answer]]and MUST NOT be written when the type has none, there being
+  nothing left for it to answer.
+
+[[attempt-arms-answer-an-attempt]]Arms of this shape answer for an attempted construction, so there MUST
+be one for them to answer for. The `+else+` of a condition that is not an attempt takes one value.
 
 Adding an unnamed clause to a type whose clauses are all named is therefore a compile error at every
 mapping site, which is what adding a rule to a published type should be: today it shows up only as more
@@ -2698,9 +2931,12 @@ A construction inside an argument is an ordinary construction and aborts on viol
 (<<violation-destination>>); what is attempted is the outer construction alone.
 
 An attempt builds a value on its success branch, so the enclosing behavior's `+constructs+` MUST name
-the type (<<constructs>>). The type MUST carry an invariant, its own or one a spread brought in:
-without one the `+else+` value could never be reached, so writing it is a compile error rather than a
-branch that is not one.
+the type (<<constructs>>).
+
+[#attempt-subject-declares-an-invariant]
+The attempted type MUST carry an invariant, its own or one a spread brought in: without one the
+`+else+` value could never be reached, so writing it is a compile error rather than a branch that is
+not one.
 
 Writing `+T(v)+` on its own still aborts (<<violation-destination>>). This is the form a writer
 chooses at the site, and it is what lets a rule be stated once — the rule lives in the type's
@@ -2745,8 +2981,13 @@ An outside-world dependency is declared as a behavior with no implementation, an
 [#stdlib]
 == Standard library
 
+
+[[an-empty-collections-element-type-is-determined]]An operation seeded with an empty collection MUST have its element or accumulator type determined where it is written — by the binding it feeds, by the field or output position it lands in, or by a non-empty seed. What an empty collection holds does not follow from it.
+
 [#reserved-namespace]
 === Reserved namespace
+
+[[core-privileges-stay-in-the-core]]Some forms are the core's and not a model's: `+intrinsic+`, `+private+`, a type variable, and an optional written anywhere but on a data field. A module outside the reserved `+souther+` namespace MUST NOT write them — the core is what stands between the JVM and a model, and a model that reaches for its forms is writing the layer below the one it is in.
 
 The standard library is bundled with the compiler and referenced by short qualifiers — `+List+` (list), `+Map+` (map), `+Set+` (set), `+String+` (string), `+Bool+` (boolean), `+Int+` / `+Decimal+` (numbers), `+Date+` / `+DateTime+` (temporal), `+Option+` (optional). Every function is called through this qualifier: `+List.map(f, xs)+`, `+String.trim(s)+`, `+List.length(xs)+`. There is no automatic import — names are not delivered implicitly. What may be written bare is operators (`+==+` `+<+` `+{plus}{plus}+`, etc.), `+if+` / `+match+`, literals, and the current module's helpers. Argument order follows the convention of <<pipe>> (primary subject last).
 
@@ -2788,7 +3029,10 @@ A core module may also write `+private let+`. A `+private+` declaration is part 
 *Every* standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature — there is no compiler table of signatures, and a function the compiler can call but a declaration does not describe does not exist. What stays in the compiler is what the *type language cannot say*, as a side condition on a declared signature rather than in place of one:
 
 * the operators (`{plus}` `+-+` `+*+` `+/+` `+==+` `+<+` `+<=+` `+>+` `+>=+`) are syntax, and the arithmetic ones carry the closed-newtype rules (<<newtype>>) a plain function does not;
-* "the element is an ordered value" — Souther has no `+comparable+` type class, so `+List.sort+` / `+max+` / `+min+` / `+sortBy+` declare `+List<'a>+` and the constraint on `+'a+` is checked in the compiler.
+* [[what-is-ordered-by-is-an-ordered-value]]"the element is an ordered value" — Souther has no `+comparable+` type class, so `+List.sort+` / `+max+` / `+min+` declare `+List<'a>+` and the constraint on `+'a+` is checked in the compiler. `+sortBy+` states it of what its key function answers with, which is the value being ordered by;
+* [[what-is-summed-is-a-number]]"the element is a number" — `+List.sum+` / `+product+` declare `+List<'a>+` for the same reason, and the constraint that `+'a+` is `+Int+` or `+Decimal+`, the two types arithmetic is defined for, is checked in the compiler.
+
+Neither is a type mismatch, and a diagnostic about one does not read as one: the argument has the type its parameter takes, and what it does not have is a capability the signature had no way to ask for.
 
 Because a signature is a declaration and nothing else, a standard-library function is a function value like any other: `+List.map(String.trim, xs)+` and `+let f = String.length+` are ordinary (<<blocks>>). A value the library offers is declared the same way, with no parameter list — `+let empty : Map<'k, 'a> = intrinsic "map.empty"+` — and is written `+Map.empty+`.
 
@@ -3108,6 +3352,19 @@ Decoders and Encoders do not appear in Souther's syntax. Derived from a data's s
 [#jvm-output]
 == JVM output
 
+A declaration is emitted as classes and methods, and a class file has structural limits a declaration can be written past. What the compiler emits MUST fit inside them, since past any of the three the class cannot be loaded at all:
+
+* [[generated-methods-fit-jvm-parameter-slots]]a generated method MUST fit the JVM argument-slot limit, which is what bounds how many fields a `+data+` may declare and how many parameters and dependencies a `+behavior+` may take;
+* [[generated-methods-fit-jvm-code-size]]a generated method's code MUST fit the JVM code-size limit;
+* [[generated-classes-fit-jvm-constant-pool]]a generated class's constant pool MUST fit what a class file can address and write out.
+
+Two more come from names rather than sizes:
+
+* [[no-two-declarations-become-one-class]]no two declarations of a module may emit one class. A behavior capitalizes into a class name (<<jvm-behavior>>), a union output becomes a sealed interface (<<jvm-sum>>), and a member joining a union from outside becomes a bridge case (<<bridge-case>>) — three ways to arrive at a name, and a model may already have declared it;
+* [[a-field-does-not-collide-with-an-object-method]]a field MUST NOT be named after a no-argument method of `+Object+`, whose accessor the generated class already has (<<jvm-product>>).
+
+The first is decided at the declaration, before anything is emitted. The other two are not known until the code is written, and are reported as the definition being emitted when the limit was met.
+
 [#target-jdk]
 === Target JDK
 
@@ -3301,6 +3558,8 @@ The model author does not write this type name in Souther source; they only writ
 [#compiler-pipeline]
 == Compiler structure
 
+[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler walks. Every later reading of it — checking, formatting, compiling — descends it the same way, so a text that is too deep for one is too deep for all of them, and the limit is stated as the compiler's rather than as any one pass's. Naming the parts with `+let+` flattens it.
+
 [,text]
 ----
 Source -> Lexer -> Parser -> AST
@@ -3402,6 +3661,204 @@ Construction of `PreApproved` is missing field `preApprover`.
 Hint: Supply `preApprover` explicitly; the spread does not provide it.
 ----
 
+[#e1007]
+=== A newtype wraps something with no external representation
+
+[,text]
+----
+A newtype takes the external representation of what it wraps, and a tuple has none. Wrap a named
+data instead.
+----
+
+Reported where a `+data X = Y+` names a `+Y+` carrying no external representation of its own (<<newtype-wraps-an-external-representation>>) — a tuple or a function type. A newtype's decoder and encoder are derived from the wrapped type's (<<newtype>>), so there would be nothing to derive them from.
+
+[#e1008]
+=== A data is written with an empty body
+
+[,text]
+----
+data `Rank` has an empty body, which names a type with one value — that is a unit data, and it is
+written without a body.
+----
+
+Reported at a `+data+` whose body is written and holds nothing (<<unit-data-is-written-without-a-body>>). The declaration means what a unit data means, and a unit data has one spelling.
+
+[#e1009]
+=== A newtype wraps an optional
+
+[,text]
+----
+`Approver` wraps `EmployeeId?`, but a newtype wraps one value and takes its representation, so there
+is nothing for it to be when the value is absent.
+----
+
+Reported at a `+data X = Y?+` (<<newtype-wraps-a-value-that-is-always-there>>). The absence belongs to the field that holds the newtype — `+approver: Approver?+` — where a reader can see it; inside the newtype it would be a value that is sometimes not one.
+
+[#e1010]
+=== A case declares the discriminator as a field
+
+[,text]
+----
+`Manager` is a case of `Rank` and declares a field `type`, which is the discriminator its sum writes
+beside the fields.
+----
+
+Reported at the field (<<a-case-does-not-declare-the-discriminator-field>>). A product case lays its fields where the tag goes, so the two would want one key and whichever was written second would be what a reader got back.
+
+[#e1011]
+=== A name is declared twice
+
+[,text]
+----
+data `Amount` is already defined.
+----
+
+Reported at the second declaration (<<a-declaration-is-made-once>>): a `+let+`, a data, a field of one data, an entry written twice in one clause list.
+
+[#e1012]
+=== A `let` and a data share a spelling
+
+[,text]
+----
+`let Amount` and data `Amount` are one name where a value is written.
+----
+
+Reported where a `+let+` and a data of one module carry one name (<<a-spelling-answers-one-thing-where-a-value-is-written>>). A data is written where a value goes, so the two would be one spelling with two answers. A behavior and its implementing `+let+` are not this: they are one thing's declaration and its body.
+
+[#e1013]
+=== A data cannot be constructed at all
+
+[,text]
+----
+data `OrgMember` cannot be constructed: it needs a value of itself through a mandatory field, with
+nothing to bottom out.
+----
+
+Reported at the declaration (<<a-data-can-be-constructed>>). Self-reference is what an org chart or a tree is made of, and it bottoms out through an optional or a list field (<<self-referential-data>>); through a mandatory one there is no first value.
+
+[#e1014]
+=== A construction writes a field the type does not have
+
+[,text]
+----
+`preApprover` is not a field of `Submitted`.
+----
+
+Reported at the field (<<a-construction-names-fields-of-its-type>>).
+
+[#e1015]
+=== A spread has no product to copy
+
+[,text]
+----
+A spread `...request` copies the fields the cases of `TravelRequest` share, and they share none: no
+data is spread by every case.
+----
+
+Reported at the spread (<<a-spread-copies-a-product>>). A spread is nominal (<<field-spread>>): what it copies is the data every case spread, and a sum whose cases share no such data has nothing for it to name.
+
+[#e1016]
+=== A spread provides a field with the wrong type
+
+[,text]
+----
+The spread provides `estimatedCost` as Int, but `PreApproved` needs Amount.
+----
+
+Reported at the spread (<<a-spread-supplies-what-the-fields-need>>). Fields are copied by name, and a name is not a type: two fields spelled alike and typed differently are two fields.
+
+[#e1017]
+=== A construction is written where one may not be
+
+[,text]
+----
+`Amount` is a type, so `Amount(...)` constructs one, and a construction cannot be written here.
+----
+
+Reported at the construction (<<a-construction-is-written-where-one-may-be>>). An `+invariant+` states a condition over a value it is given (<<invariant-expressions>>); building one inside it would run a check inside a check.
+
+[#e1018]
+=== A construction names something that is not a data
+
+[,text]
+----
+I cannot construct `submit` here.
+----
+
+Reported at the name (<<a-construction-names-a-data>>).
+
+[#e1019]
+=== A binding takes a built-in's name
+
+[,text]
+----
+`unreachable` is a built-in value and cannot be used as a binding name — it would shadow the
+built-in; choose another name.
+----
+
+Reported at the binding (<<a-binding-does-not-shadow-a-builtin>>). Shadowing a model's own name is ordinary and harmless — the outer one is still there to read — and a built-in has no declaration to read instead.
+
+[#e1020]
+=== A sum names a case that is not declared
+
+[,text]
+----
+Unknown case `Withdrawn` in sum `TravelRequest`.
+----
+
+Reported at the case (<<a-sum-case-is-a-declared-data>>).
+
+[#e1021]
+=== A sum contains itself
+
+[,text]
+----
+Sum `TravelRequest` contains itself through `Submitted`. A sum's cases are the values it can be, so
+one of them cannot be the sum itself.
+----
+
+Reported at the declaration (<<a-sum-does-not-contain-itself>>), naming the chain that closes. Self-reference through a *field* is how a tree is written and is unaffected (<<self-referential-data>>); this is about the cases.
+
+[#e1022]
+=== A value reaches itself
+
+[,text]
+----
+Value `ceiling` reaches itself: ceiling -> limit -> ceiling.
+----
+
+Reported wherever the cycle closes (<<a-value-does-not-reach-itself>>). A value with no parameter list is substituted where it is named, so a cycle among them has nothing to substitute first.
+
+[#e1023]
+=== A name is not in scope
+
+[,text]
+----
+I cannot find a value named `estimatdCost` in scope.
+----
+
+Reported at the name (<<a-name-is-in-scope>>), with the nearest name in scope suggested. A value, a type and a behavior each say which of the three was being looked for, because that is what narrows where to look.
+
+[#e1024]
+=== A name is held as a value and is not one
+
+[,text]
+----
+`submit` is a behavior, and cannot be held as a value here.
+----
+
+Reported at the name (<<a-name-held-as-a-value-is-a-value>>). A behavior, a module qualifier and a type are names of other things; writing one where a value goes names the thing rather than a value of it.
+
+[#e1025]
+=== A standard-library function is written bare
+
+[,text]
+----
+`map` is a standard-library function and must be called qualified, as `List.map`.
+----
+
+Reported at the name (<<a-standard-library-function-is-called-qualified>>). The qualifier is what reaches the library, and it is also what tells `+List.length+` from `+String.length+`.
+
 [#e1101]
 === Invariant type mismatch
 
@@ -3409,6 +3866,62 @@ Hint: Supply `preApprover` explicitly; the spread does not provide it.
 ----
 An invariant expression must have type Bool, but this is String.
 ----
+
+[#e1102]
+=== An invariant is declared on a type with nothing to observe
+
+[,text]
+----
+`Staff` is a unit data, so it has no field for this invariant to observe and nothing it could
+reject. Drop the clause, or give `Staff` the field the constraint is about.
+----
+
+Reported where an `+invariant+` is written on a unit data (<<invariant-needs-a-value-to-constrain>>). A unit data has one value, so a clause over it is true of that value or true of nothing, and neither is a constraint.
+
+[#e1103]
+=== Two invariant clauses share a name
+
+[,text]
+----
+`Amount` declares two invariant clauses named `inYen`. A name is what an attempted construction and
+a boundary issue call one rule, so two rules cannot share it.
+----
+
+Reported at the second clause of a name (<<invariant-clause-names-are-distinct>>). An attempted construction answers a clause by name (<<attempt-departures>>) and a decode failure reports one by name; neither can say which of two was meant.
+
+[#e1104]
+=== An invariant clause is named `_`
+
+[,text]
+----
+`_` cannot name an invariant clause of `Amount`.
+Hint: Give the clause a name of its own, or leave it unnamed — an unnamed clause is enforced and
+answered by `| _ -> ...`.
+----
+
+Reported where a clause is written `+invariant _ = …+` (<<invariant-clause-name-is-not-underscore>>). `+| _ -> …+` answers the clauses carrying no name, so a clause holding that name as its own could never be the one it answered.
+
+[#e1105]
+=== An invariant constructs a data
+
+[,text]
+----
+The invariant of `QuoteLines` constructs `Line`, but an invariant may not construct a data — it
+observes the value being built, it does not build one.
+----
+
+Reported at the construction (<<an-invariant-observes-and-does-not-build>>), naming the clause it is written in or reached from. Building inside a check would run that type's own check inside this one, so whether this value holds would depend on whether another one did.
+
+[#e1106]
+=== An invariant does not answer on every path
+
+[,text]
+----
+The invariant of `Amount` reaches the `partial` helper `spin`, which carries no termination
+guarantee; an invariant is checked on every construction.
+----
+
+Reported at the clause (<<an-invariant-answers-on-every-path>>). An invariant runs at every construction and at every boundary, so a path through it that answers nothing — an `+unreachable+`, or a `+partial+` helper that may not stop — is a check that may not come back.
 
 [#e1201]
 === Non-exhaustive match
@@ -3418,6 +3931,76 @@ An invariant expression must have type Bool, but this is String.
 This `match` on TravelRequest does not cover every case.
 Hint: Add a case for: PreApproved
 ----
+
+[#e1202]
+=== `match` is written on something that is not a sum
+
+[,text]
+----
+`match` needs a sum-typed value, but got Int.
+----
+
+Reported at the subject (<<a-match-subject-is-a-sum>>). A primitive is told apart by comparing it, not by naming its cases (<<primitive-arm>>).
+
+[#e1203]
+=== A `match` arm names a case the subject does not have
+
+[,text]
+----
+`Drafting` is a case of `TravelRequest`, so this arm belongs to a match over `TravelRequest`.
+----
+
+Reported at the arm (<<a-match-arm-names-a-case-of-the-subject>>). Where the case belongs to another sum the message says which, since an arm in the wrong `+match+` reads exactly like a misspelling and is not one. Where a nested `+match+` has swallowed the arms that follow it on the line, it says that instead, that being how the arm arrived under the wrong subject.
+
+[#e1204]
+=== Two arms match one case
+
+[,text]
+----
+`Submitted` is matched by more than one case.
+----
+
+Reported at the second arm (<<no-two-arms-match-one-case>>). The first one answers it, so this one cannot be reached.
+
+[#e1205]
+=== A `match` has no arms
+
+[,text]
+----
+This `match` has no cases.
+----
+
+Reported at the `+match+` (<<a-match-has-arms>>).
+
+[#e1206]
+=== A pattern opens something that has nothing to open
+
+[,text]
+----
+`Amount` wraps `Int`, not `String`.
+----
+
+Reported at the pattern (<<a-pattern-opens-what-the-value-is>>), in a `+match+` arm or in a binding. Three ways to be wrong about it: what is opened is not a newtype and holds no wrapped value, the type named inside is not what is wrapped, or the case has no payload to open at all.
+
+[#e1207]
+=== An or-pattern opens a value
+
+[,text]
+----
+An or-pattern binds the sum type, so it cannot open a case's value with `(...)`.
+----
+
+Reported at the pattern (<<an-or-pattern-binds-the-sum-and-opens-nothing>>). What an or-pattern says is that these cases are handled the same way, and what they carry is what differs between them.
+
+[#e1208]
+=== The arms of a `match` disagree on a type
+
+[,text]
+----
+The match branches disagree: Submitted vs Int.
+----
+
+Reported at the `+match+` (<<branches-agree-on-a-type>>). It answers with one value, so its arms produce one type; a union of what they produce is written by declaring it.
 
 [#e1301]
 === Use of null
@@ -3472,6 +4055,174 @@ field, a declared return, an annotated binding.
 
 Reported where an `+unreachable+` (<<unreachable>>) stands in a position that states no type and has no branch beside it that does — `+let n = unreachable "..."+`, or an arithmetic operand. No value is made there, but the code that would read one is still compiled, and it has no shape to read.
 
+[#e1308]
+=== `?` is written on a sum
+
+[,text]
+----
+`?` marks a single type optional, but it follows a sum of 3 cases.
+----
+
+Reported where `+?+` follows a sum rather than one type (<<optional-marks-one-type>>). What a sum is missing is a case of its own; marking the whole optional says the absence belongs to whoever reads the field rather than to the model (<<optional>>).
+
+[#e1310]
+=== `unreachable` states no reason
+
+[,text]
+----
+`unreachable` states why the point cannot be reached, as a string: `unreachable "twenty insured
+years cannot precede the age of thirty"`.
+----
+
+Reported at an `+unreachable+` written with nothing after it (<<unreachable-states-its-reason>>). The reason is what a reader is shown when a row reaches the point (<<e1911>>), and it is the only thing the declaration says that the position does not.
+
+[#e1311]
+=== A value that cannot cross the boundary is written where one has to
+
+[,text]
+----
+parameter `range` is a tuple; a tuple has no external representation and cannot cross the boundary,
+so a behavior's input must be a named data.
+----
+
+Reported wherever a value with no external representation is written where one crosses (<<what-crosses-the-boundary-has-an-external-representation>>): a behavior's parameter or output, a data's field, or a type a codec would be derived from. A tuple and a function are the two, and the message says which position it was in — the position is what the author changes.
+
+[#e1312]
+=== A parameter is written as an anonymous union
+
+[,text]
+----
+parameter `outcome` has an anonymous union type `Allocated | OutOfStock`; a parameter type must be a
+single named type — declare `data ... = Allocated | OutOfStock` and take that.
+----
+
+Reported at the parameter (<<a-parameter-names-one-type>>). An anonymous union is the shape of one behavior's answer and introduces no name (<<union-member>>); an input is a type the caller names, so it takes a declared one.
+
+[#e1313]
+=== A behavior outputs an optional
+
+[,text]
+----
+Behavior `findMember` outputs an optional (`Member?`).
+----
+
+Reported at the behavior (<<a-behavior-does-not-output-an-optional>>). Absence a caller is handed is part of the model's vocabulary: declare the case it is — `+Member | NotFound+` — so the caller matches on a name rather than unwrapping.
+
+[#e1314]
+=== A Map that crosses the boundary has a key that cannot be written
+
+[,text]
+----
+`inventory` crosses the boundary, so the Map it holds must be keyed by String, a String-backed
+newtype (`data X = String`), Date, DateTime, or an enumeration.
+----
+
+Reported at the field, parameter or output holding the Map (<<a-map-that-crosses-is-keyed-by-a-text-key>>). The boundary writes a key as text and reads it back the same way, so a key with no text form is one nothing outside can address.
+
+[#e1315]
+=== A collection would have to compare something that cannot be compared
+
+[,text]
+----
+This collection would have to compare (Int) -> Int as its key, and a function has no value to
+compare.
+----
+
+Reported at the collection (<<a-collection-member-supports-equality>>). A `+Set+` asks whether two elements are the same and a `+Map+` whether two keys are; the message says which of the two asked, because that is what the author is holding.
+
+[#e1316]
+=== A collection type is written without its arguments
+
+[,text]
+----
+`List` needs a type argument, e.g. `List<Int>`.
+----
+
+Reported at the type (<<a-generic-type-is-given-its-arguments>>). The bare qualifier names the module whose functions reach the collection (<<stdlib>>), which is why writing it where a type goes is not a shorthand for anything.
+
+[#e1317]
+=== A value does not have the type its position requires
+
+[,text]
+----
+Field `estimatedCost` expects Amount, but got Int.
+----
+
+Reported at the value (<<a-value-has-the-type-its-position-requires>>). The rule most of the others in this range are a special case of, and what a diagnostic says where no narrower one applies: a field, a parameter, a declared return, an annotated binding, a type argument.
+
+[#e1318]
+=== A list's elements do not all have one type
+
+[,text]
+----
+The elements of this list do not all have the same type.
+Hint: One element is Amount and another is Int; make every element the same type.
+----
+
+Reported at the list (<<a-lists-elements-have-one-type>>). A list is `+List<T>+` for a single `+T+`; a sequence of several types is a list of a sum they are cases of.
+
+[#e1319]
+=== An operator is given types it is not defined for
+
+[,text]
+----
+`++` joins two lists or two strings, but the operands are Int and String.
+----
+
+Reported at the operator or at the operand it is about (<<an-operator-takes-the-types-it-is-defined-for>>) — at the operator where the rule is about the pair, as comparing two unrelated types is.
+
+[#e1320]
+=== A tuple pattern does not match its tuple
+
+[,text]
+----
+This pattern binds 2 name(s), but the tuple has 3 element(s).
+----
+
+Reported at the pattern (<<a-tuple-pattern-matches-its-tuple>>).
+
+[#e1321]
+=== A field is read off a value that does not have it
+
+[,text]
+----
+I cannot read a field `submittedAt` on `TravelRequest`: a sum has no fields of its own, its cases
+do, and which case this is is not known until it is opened.
+----
+
+Reported at the read (<<a-field-read-is-declared-by-the-value>>). A sum exposes a field only where every case spreads the data declaring it (<<sum-data>>), so the message says which of the two it is: no case has the field, or each case declares its own and nothing is shared.
+
+[#e1322]
+=== A temporal value is not written as a literal
+
+[,text]
+----
+`2026-13-01` is not a Date. Write `Date("2026-07-01")` / `DateTime("2026-07-01T09:00")`.
+----
+
+Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text is spelled out so it can be read at compile time, which is what lets a malformed one be refused here instead of at run time.
+
+[#e1323]
+=== A `String.matches` pattern is not a literal regular expression
+
+[,text]
+----
+The pattern of `String.matches` must evaluate to a string at compile time, so it can be validated
+there: write a string literal.
+----
+
+Reported at the pattern (<<a-matches-pattern-is-a-literal-regular-expression>>). A pattern computed at run time could not be checked at all, so writing it out is what makes the check possible; the same code says when what was written is not a valid expression.
+
+[#e1324]
+=== Newtype arithmetic does not follow the units
+
+[,text]
+----
+`Amount` and `Rate` are newtypes over Int, and adding them would answer with neither.
+----
+
+Reported at the operator (<<newtype-arithmetic-follows-the-units>>). Which rule was broken — same-newtype addition, a product's units, a quotient's, a scalar, a reciprocal — is what an author needs and is not readable from the operand types, so the refusal names its own rule rather than reporting a type mismatch.
+
 [#e1401]
 === Arbitrary Java calls
 
@@ -3481,6 +4232,16 @@ Reported where an `+unreachable+` (<<unreachable>>) stands in a position that st
 Hint: Declare a behavior without a `let` and implement it from Java; arbitrary JVM calls
 are not allowed.
 ----
+
+[#e1402]
+=== A core form is written outside the core
+
+[,text]
+----
+`intrinsic` is a core privilege: only a module in the reserved `souther` namespace declares one.
+----
+
+Reported where a module outside the reserved `+souther+` namespace writes `+intrinsic+`, `+private+`, a type variable, or an optional anywhere but on a data field (<<core-privileges-stay-in-the-core>>). Each is a way of writing the layer below the model, and one code says which one it was.
 
 [#e1501]
 === Cyclic import
@@ -3492,6 +4253,78 @@ Cyclic module dependency detected.
 
 A module depends on every module it imports and on every module it names in a qualified reference (<<qualified-reference>>), so the cycle is reported whichever of the two closes it.
 
+[#e1502]
+=== A declaration takes a name the core has
+
+[,text]
+----
+module `List` uses a name reserved for the standard-library qualifier `List` (as in `List.…` /
+`import List ( … )`); pick another module name.
+----
+
+Reported where a module or a data takes a name the core holds (<<a-core-name-is-not-taken>>) — the reserved `+souther+` namespace, or a standard-library qualifier. The qualifier is the only spelling that reaches the library, so a declaration of that name does not shadow it in one place, it hides it everywhere.
+
+[#e1503]
+=== A module is declared in two places
+
+[,text]
+----
+Module `example.employee` is compiled here and is also on the path.
+----
+
+Reported when two sources declare one module, or a compiled source declares one that is also on the path (<<a-module-is-declared-in-one-place>>). Which of the two an importer would read is not decided by the text, so neither is chosen.
+
+[#e1504]
+=== A module a compile reaches is not there
+
+[,text]
+----
+Module `example.travel` needs `example.employee`, which is not on the path either.
+----
+
+Reported where a module a compile reaches is neither compiled here nor on the path (<<every-module-reached-is-on-the-path>>) — imported, written qualified, or needed by a module that is. It also covers a module on the path that says it declares something the classpath does not carry: what it publishes is read back as declarations, and a declaration with no class behind it is not one.
+
+[#e1505]
+=== A module on the path was compiled by another Souther
+
+[,text]
+----
+Module `example.employee` was compiled by Souther 0.4.0, which does not agree with this compiler
+about what an importing module may reach.
+----
+
+Reported when reading a published module whose compiler does not agree with this one about the surface (<<a-published-module-agrees-with-this-compiler>>). Not a warning: what an importing module may reach decides what this compile's text means, so a disagreement is about the source being compiled and not about the artifact.
+
+[#e1506]
+=== A name reached across a boundary is not declared there
+
+[,text]
+----
+`Amount` is not defined in `example.employee`.
+----
+
+Reported where a name written on an `+import+` list or after a module qualifier is not one that module declares (<<a-reached-name-is-declared-by-its-module>>). The nearest name it does declare is suggested. Separate from <<e1507>>: this is a mistake about what is there, not about what is published.
+
+[#e1507]
+=== A name reached across a boundary is not exposed
+
+[,text]
+----
+`Amount` is declared in `example.employee` but not exposed by it.
+----
+
+Reported where the name exists and the module keeps it (<<a-reached-name-is-exposed-by-its-module>>). What a module publishes is its own decision (<<exposed-surface>>), so the move is to expose it there rather than to reach past the decision from here.
+
+[#e1508]
+=== An imported name denotes more than one thing
+
+[,text]
+----
+`Amount` is imported from both `example.employee` and `example.billing`.
+----
+
+Reported where a name an `+import+` brings in has more than one answer here (<<an-imported-name-denotes-one-thing>>): exposed by two modules, colliding with this module's own declaration, or an alias already in use. Reaching one of them qualified is what says which, and is why the answer is not to pick one for the author.
+
 [#e1601-removed]
 === (retired)
 
@@ -3501,6 +4334,82 @@ E1601 is retired. A requirement is reconciled between the `+depends on+` clause 
 === (retired)
 
 The `+error+` declaration and E1801 are retired. A failure is ordinary data, and whether it departs the mainline is decided by composition, so there is no distinction between a success position and a failure position (<<unmarked-sum>>, <<behavior>>, <<composition>>).
+
+[#e1609]
+=== `exposing` names something this module does not declare
+
+[,text]
+----
+`exposing` names `Amount`, which is imported into this module, not defined here; `exposing` lists a
+module's own definitions and does not re-export imported names.
+----
+
+Reported where `+exposing+` names something this module does not declare (<<exposing-lists-this-modules-own-definitions>>), whether that is nothing at all or a name it imported. Re-export is the second of those and is refused on purpose: one declaration behind two surfaces leaves a reader two modules to ask about it.
+
+[#e1610]
+=== `exposing` names a derived codec
+
+[,text]
+----
+`exposing` is type-granular: a data's `decoder`/`encoder` are always public once the data is
+exposed. Write `Amount`, not `Amount.decoder`.
+----
+
+Reported where `+exposing+` names a data's `+decoder+` or `+encoder+` (<<exposing-is-type-granular>>). They are how the type crosses a boundary, so a type that crosses one carries them; there is no state in which the data is published and they are not.
+
+[#e1611]
+=== An exposed signature names a type the module keeps
+
+[,text]
+----
+Behavior `submit` is exposed and its input names `Draft`, which this module does not expose.
+----
+
+Reported where an exposed behavior's input or output, or an exposed data's field, names a type this module keeps to itself (<<an-exposed-signature-names-only-exposed-types>>). A caller would be handed a value of a type it cannot name. An injection target says it differently, because there the caller is Java.
+
+[#e1612]
+=== An injection target declares `depends on`
+
+[,text]
+----
+behavior `now` has no `let`, so it is an injection target; it cannot declare `depends on` — the
+behavior that calls or composes it does.
+----
+
+Reported where a behavior with no `+let+` writes a `+depends on+` clause (<<an-injection-target-declares-no-depends-on>>). It is the thing being supplied, and what a dependency is supplied to is the behavior that reaches it.
+
+[#e1613]
+=== A union member cannot be named in an arm
+
+[,text]
+----
+`(Int, Int)` cannot be a union member: a member is a type a `match` arm can name — one of the
+primitives, or a data type declared here or imported.
+----
+
+Reported at the member (<<a-union-member-is-nameable-in-an-arm>>). A union is read by matching on it, so a member an arm cannot write is a case nothing can handle. The same code says when one spelling stands for two members' types, which leaves an arm naming one of them and no way to say which.
+
+[#e1614]
+=== A `let` implements a composition
+
+[,text]
+----
+`let placeOrder` cannot implement the composition `behavior placeOrder`, which is already its own
+implementation.
+----
+
+Reported at the `+let+` (<<a-composition-has-no-let>>). A `+>->+` is the body: its stages are what runs, and a second body would be a second answer to what the behavior does.
+
+[#e1615]
+=== An implementing `let` disagrees with its behavior
+
+[,text]
+----
+`let submit` parameter `now` should be `clock`: what `depends on` names becomes the trailing
+parameters, in declared order.
+----
+
+Reported at the `+let+` (<<an-implementing-let-takes-its-shape-from-the-behavior>>). The behavior states the shape — how many parameters, what they are, the order the injected ones arrive in, what it answers with — so the `+let+` writes none of them again, and the same code says whichever of the four was written or was wrong.
 
 [#e1701]
 === behavior composition type mismatch
@@ -3625,6 +4534,206 @@ Hint: Expose StoredData, or make it a unit data.
 ----
 
 Emitted when a data that is neither a unit nor exposed is listed in the `+constructs+` of an injection-subject behavior (implemented from Java; <<java-base-class>>), because Java would have no way to create that value.
+
+[#e1702]
+=== A pipeline stage takes more than one input
+
+[,text]
+----
+`convert` takes 2 inputs, so it cannot follow `>->` in `placeOrder`. Every stage after the first
+takes one input: call it inline, or give it a data holding both.
+----
+
+Reported at the stage (<<a-stage-after-the-first-takes-one-input>>). What reaches a stage is the one value the stage before answered with, so there is nothing to fill a second parameter from.
+
+[#e1703]
+=== A pipeline names a boundary edge as a stage
+
+[,text]
+----
+decode/encode are boundary edges, not pipeline stages; `>->` composes behaviors only.
+----
+
+Reported at the stage (<<a-pipeline-composes-behaviors>>). The decoder and the encoder are where a pipeline starts and ends (<<decoder>>, <<encoder>>) and are not steps within it.
+
+[#e1802]
+=== Something is applied to the wrong number of arguments
+
+[,text]
+----
+Helper `let depth` takes 2 argument(s), but is called with 1.
+----
+
+Reported at the application (<<an-application-gives-the-arguments-it-takes>>). It covers a helper, a newtype applied to more than the one value it wraps, a lambda, and a block whose parameter list does not match the position it was written in.
+
+[#e1803]
+=== Something that is not a function is applied
+
+[,text]
+----
+`unreachable` is a name the language gives, not a function, so it cannot be applied to arguments.
+----
+
+Reported at the application (<<what-is-applied-is-a-function>>).
+
+[#e1804]
+=== A function is written where a value goes, or the other way round
+
+[,text]
+----
+Argument 2 of `List.fold` is `seed`, which does not take a function. The function goes to argument 1
+(`step`).
+----
+
+Reported at the argument (<<a-function-goes-where-a-function-is-taken>>). Which argument takes the function belongs to the function being called, so the message names the one that does rather than describing the shape.
+
+[#e1805]
+=== A block does not answer what its position takes
+
+[,text]
+----
+A fold's block must return the accumulator type Amount, but got Int.
+----
+
+Reported at the block (<<a-block-answers-the-type-its-position-takes>>): a `+fold+`'s accumulator, a predicate's `+Bool+`, the element type of what is being grown.
+
+[#e1806]
+=== An argument does not have the type its parameter takes
+
+[,text]
+----
+`List.map`'s element type Amount is not acceptable to the function, which takes Int.
+----
+
+Reported at the argument (<<an-argument-has-the-type-its-parameter-takes>>).
+
+[#e1807]
+=== A function binding would need two types
+
+[,text]
+----
+The function `f` is applied with different argument types: Int vs String.
+----
+
+Reported at the binding (<<a-function-binding-has-one-type>>). Applying it at two argument types, or giving it from two branches that produce different function types, leaves the binding with no single type; Souther has no generics to give it one (<<type-variables>>).
+
+[#e1808]
+=== A function binding's type cannot be read
+
+[,text]
+----
+Cannot infer the type of the function `f`: write its type (`let f: (Int) -> Bool = ...`), or apply
+it in this scope so its parameter types follow.
+----
+
+Reported at the binding (<<a-function-bindings-type-is-known>>).
+
+[#e1809]
+=== A block is returned or stored
+
+[,text]
+----
+A block is not a value: it may be passed as an argument or bound to a `let` and applied, but it
+cannot be returned or stored in a field.
+----
+
+Reported where a block leaves the scope it was written in (<<a-block-is-not-a-value>>). A function has no external representation (<<external-representation>>), so a field holding one could not be decoded or encoded and an output holding one could not cross out.
+
+[#e1810]
+=== A function type is written outside a helper parameter
+
+[,text]
+----
+The binding `step` is a function, and a function type may be written only in a helper parameter.
+----
+
+Reported at the annotation (<<a-function-type-is-written-only-on-a-helper-parameter>>).
+
+[#e1811]
+=== A helper parameter has no type
+
+[,text]
+----
+Helper `let total` parameter `line` is only read through a field, which names no type; annotate it
+with its type.
+----
+
+Reported at the parameter (<<a-helper-parameter-states-its-type>>). Reading a field off a parameter, or applying it, does not name a type — several types have a field of that name — so the annotation is what says which.
+
+[#e1812]
+=== A helper does not answer what it declares
+
+[,text]
+----
+Helper `let total` declares it returns Amount, but its body is Int.
+----
+
+Reported at the helper (<<a-helper-answers-what-it-declares>>).
+
+[#e1813]
+=== A recursive helper declares no return type
+
+[,text]
+----
+Recursive helper `let depth` must declare its return type (`let depth (...) : <type> = ...`),
+because its result cannot be inferred from a body that names itself.
+----
+
+Reported at the helper (<<a-recursive-helper-declares-its-return-type>>).
+
+[#e1814]
+=== A recursive helper reaches an injected behavior
+
+[,text]
+----
+Recursive helper `let depth` is pure and cannot call the injected behavior `now` — put the effect in
+the behavior that calls this helper.
+----
+
+Reported at the call (<<a-recursive-helper-does-not-reach-an-injected-behavior>>). The helper is emitted as a pure static method (<<fn-rules>>), which is what lets its termination be proven and what keeps the effect where a reader of the behavior can see it. A function argument that reaches an effect is not this: the effect is the caller's and is declared there.
+
+[#e1815]
+=== An empty collection's type cannot be read where it is written
+
+[,text]
+----
+This empty collection's element type cannot be inferred here.
+Hint: Annotate the binding it feeds (`let x: <type> = ...`), place the fold directly in a typed
+position — the field or behavior output it feeds — or seed it with a non-empty value.
+----
+
+Reported at the operation (<<an-empty-collections-element-type-is-determined>>). What an empty collection holds does not follow from the collection, so it follows from the position it is written in or from nothing at all.
+
+[#e1816]
+=== What is ordered by is not an ordered value
+
+[,text]
+----
+`sort` needs an ordered element, but the element is Member.
+----
+
+Reported at the call (<<what-is-ordered-by-is-an-ordered-value>>). Not a type mismatch: `+sort+`, `+max+`, `+min+` declare `+List<'a>+` and the argument fits, and `+sortBy+`'s key function fits its declared signature too. What is missing is a capability the signature had no way to ask for, Souther having no `+comparable+` type class (<<stdlib>>), so the compiler asks it beside the signature. For `+sortBy+` it is asked of what the key answers with, that being the value being ordered by.
+
+[#e1817]
+=== What is summed is not a number
+
+[,text]
+----
+`sum` needs an Int or a Decimal element, but the element is String.
+----
+
+Reported at the call (<<what-is-summed-is-a-number>>). The same shape as <<e1816>> and a different obligation: `+sum+` and `+product+` declare `+List<'a>+`, and what `+'a+` has to be is one of the two types arithmetic is defined for.
+
+[#e1818]
+=== A behavior is called from somewhere that does not reach one
+
+[,text]
+----
+`allocate` is a behavior, and it cannot be called from here.
+Hint: Call it from the behavior's own `let` and pass the result in, or name it in `depends on`.
+----
+
+Reported at the call (<<a-helper-does-not-call-a-behavior>>). A helper is expanded into whatever calls it and travels to an importing module as source, so what it may name is what travels with it; a `+>->+` composition is composed with a behavior rather than calling one. Not <<e1401>>, which is about a name that is no behavior at all.
 
 [#e1901]
 === Example target is not a behavior
@@ -3855,7 +4964,7 @@ whether or not it is imported, so an entry here earns its place only by being wr
 somewhere below.
 ----
 
-A warning, at the entry on the list rather than at the import as a whole. What an import list buys is the bare name; an entry no bare use reads buys nothing and still says the module depends on that name. A qualified reach does not keep an entry: it reads the same whether or not the name is listed (<<imports>>), so a name reached only that way is on the list for nothing. An editor is told the entry is unnecessary rather than merely told about it, since what to do with it is to delete it.
+A warning, at the entry on the list rather than at the import as a whole (<<imports-are-used>>). What an import list buys is the bare name; an entry no bare use reads buys nothing and still says the module depends on that name. A qualified reach does not keep an entry: it reads the same whether or not the name is listed (<<imports>>), so a name reached only that way is on the list for nothing. An editor is told the entry is unnecessary rather than merely told about it, since what to do with it is to delete it.
 
 [#e1923]
 === An example evaluation did not answer
@@ -3952,7 +5061,6 @@ What to do about it is therefore a choice and not a repair. Guarding the constru
 An attempted construction raises no warning. What this reports is a possible abort, and an attempt takes its `+else+` value instead of aborting (<<attempted-construction>>).
 
 [#e2012]
-[also-named="e2013"]
 === An attempted construction that cannot be read
 
 Two codes, for the two ways the form does not read at all (<<attempted-construction>>). E2012 is `+as+` naming something that does not build a value:
@@ -3973,8 +5081,19 @@ E2013 is the form reading and having nothing to decide, since a type declaring n
 Hint: Construct `Amount` directly, or give it the invariant that decides the branch.
 ----
 
+[#e2013]
+=== An attempted type declares no invariant
+
+[,text]
+----
+`Rank` declares no invariant, so an attempted construction of it always succeeds and the `else`
+value is never reached.
+Hint: Construct `Rank` directly, or give it the invariant that decides the branch.
+----
+
+Emitted when the type attempted declares no invariant, its own or one a spread brought in (<<attempt-subject-declares-an-invariant>>). The `+else+` is written to be reached, and here nothing can reach it: the branch is not one, so writing it is an error rather than dead code that reads as a decision.
+
 [#e2014]
-[also-named="e2015,e2016,e2017,e2018,e2019"]
 === A per-clause departure and the clauses it answers for
 
 Six codes, for the ways a departure answering one invariant clause at a time does not line up with the clauses the type declares (<<attempt-departures>>, <<invariant-clause-name>>). E2014 answers a clause by a name the type does not declare:
@@ -4028,6 +5147,63 @@ The clause `inYen` is answered twice. An arm is chosen by the clause that failed
 second arm for it could never be reached.
 ----
 
+[#e2015]
+=== A clause that can fail has no arm
+
+[,text]
+----
+These clauses of `Amount` have no arm: inYen. A failure reaches one arm, so every clause that can
+fail needs one.
+Hint: Answer each of them, or give the `else` one value, which answers any failure.
+----
+
+Emitted when a named clause of the attempted type has no arm answering it (<<attempt-answers-every-failing-clause>>). All the unanswered clauses are named in one report: which of them a build meets first is not a property of the text, and telling an author about one at a time would make adding a clause a sequence of compiles.
+
+[#e2016]
+=== Unnamed clauses are left unanswered
+
+[,text]
+----
+`Amount` has invariant clauses declared without a name, and nothing here answers them.
+Hint: Add `| _ -> ...` for them, or name them where they are declared.
+----
+
+Emitted when the attempted type has a clause carrying no name and the arms do not write `+| _ -> …+` (<<attempt-answers-unnamed-clauses>>). A clause with no name cannot be answered by name, so `+| _+` is the only arm that can hold it; the other move is to name the clause where it is declared (<<invariant-clause-name>>).
+
+[#e2017]
+=== A catch-all arm has nothing to answer
+
+[,text]
+----
+Every invariant clause of `Amount` is named and answered, so `| _ -> ...` answers nothing.
+Hint: Drop it. It would come back the moment `Amount` declares a clause without a name.
+----
+
+Emitted when `+| _ -> …+` is written and the type has no clause carrying a name (<<attempt-catch-all-has-clauses-to-answer>>). It is worth saying rather than allowing as harmless: an arm that answers nothing reads as cover the mapping does not have, and the day a clause is added without a name it would silently start carrying it.
+
+[#e2018]
+=== Arms answer for no attempted construction
+
+[,text]
+----
+These arms answer one invariant clause each, and there is no attempted construction here for them to
+answer for.
+Hint: Attempt the construction (`guard T(v) as x else ...`), or give the `else` one value.
+----
+
+Emitted when per-clause arms are written on a condition that is not an attempted construction (<<attempt-arms-answer-an-attempt>>). What an arm names is a clause of the type being built, and where nothing is being built there are no clauses for them to name.
+
+[#e2019]
+=== A clause is answered twice
+
+[,text]
+----
+The clause `inYen` is answered twice. An arm is chosen by the clause that failed, so a second arm for
+it could never be reached.
+----
+
+Emitted when two arms name the same clause (<<attempt-answers-each-clause-once>>). Which arm is taken is decided by the clause that failed and not by the order the arms are written in (<<attempt-departures>>), so the second one is unreachable rather than a fallback.
+
 [#e2101]
 === A generated method exceeds the JVM parameter-slot limit
 
@@ -4071,6 +5247,121 @@ constants belong to a class of its own.
 As E2102, for the other thing a class file runs out of. The pool belongs to the class rather than to any one method of it, so this is reported as the definition the class was generated for and names no method.
 
 The pool is run out of two ways and the message says which: referring to an entry the class file cannot address, which names the entry that was wanted, and holding more entries than it can write out, which names how many there are. They are one code because the author's move is the same.
+
+[#e2104]
+=== A source nests deeper than the compiler walks
+
+[,text]
+----
+An expression in this source nests too deeply for the compiler to walk. Name its parts with `let` to
+flatten it.
+----
+
+Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). Every pass descends the same text the same way, so this is not one pass's limit; it is reported wherever the descent is made, including by the formatter, which reads sources it cannot compile.
+
+[#e2105]
+=== Two declarations become one class
+
+[,text]
+----
+behaviors `bill` and `Bill` both capitalize to the same JVM class `Bill`; rename one so their class
+names differ.
+----
+
+Reported at the second of the two (<<no-two-declarations-become-one-class>>). A declaration reaches a class name three ways — a behavior capitalizes (<<jvm-behavior>>), a union output becomes a sealed interface (<<jvm-sum>>), a foreign union member becomes a bridge case (<<bridge-case>>) — and a model may already have declared something of that name. Names are not reserved ahead of time: one nothing collides with stays available.
+
+[#e2106]
+=== A field is named after a method of `Object`
+
+[,text]
+----
+`hashCode` cannot be a field of `Member`: the generated class reads its fields through accessors of
+the same name, and `hashCode()` is already a method every class has.
+----
+
+Reported at the field (<<a-field-does-not-collide-with-an-object-method>>). `+equals+` is not among them: `+equals()+` and `+equals(Object)+` are different methods, and Java allows it as a component name.
+
+[#e2201]
+=== A written codec does not agree with its type
+
+[,text]
+----
+The decoder for `Amount` must construct `Amount`, but constructs `Level`.
+----
+
+Reported where a hand-written codec is not a codec for the type it is declared on (<<a-custom-codec-agrees-with-its-type>>): a decoder constructing something else, an encoder missing a case of its sum, an element encoder against a different element type, a source-shaped encoder given another shape. A derived codec agrees because it was read off the type; a written one is held to the same agreement.
+
+[#e2202]
+=== A codec is reached for where there is none
+
+[,text]
+----
+`Wide` has no decoder, so `Wide.decoder` cannot be called.
+----
+
+Reported at the reference (<<a-codec-reached-for-exists>>). Derivation covers what has an external representation (<<external-representation>>), and where it did not run and nothing was written by hand there is nothing to name.
+
+[#e2301]
+=== A declaration is not written in its form
+
+[,text]
+----
+A behavior signature uses `:` before its parameters: `behavior submit : (...) -> ...`.
+----
+
+Reported where a declaration does not read (<<declaration-syntax>>): the module header, a top-level `+data+`, `+behavior+` or `+let+`, a behavior's signature, a `+depends on+` clause. The message names the form that was expected rather than the token that was found, since what a reader needs is the shape and not the position.
+
+[#e2302]
+=== An expression is not written in its form
+
+[,text]
+----
+The right side of `|>` must be a function call or a function name.
+----
+
+Reported where an expression does not read (<<expression-syntax>>), including a block that ends in no expression: a block's value is its last expression, and one holding only `+let+` and `+guard+` lines states nothing.
+
+[#e2303]
+=== A pattern is not written in its form
+
+[,text]
+----
+A case value is bound with `as`: write `| Submitted as s`, not `| Submitted s`. Only `Some` carries
+a payload to bind positionally.
+----
+
+Reported where a pattern does not read (<<pattern-syntax>>). The forms differ by what is being destructured — a case binds with `+as+`, an optional binds its payload positionally, a record destructures its fields directly — so the message names the form for the thing at hand.
+
+[#e2304]
+=== An example is not written in its form
+
+[,text]
+----
+An `example` needs at least one `|` row.
+----
+
+Reported where an `+example+`, a `+fake+` or an `+examples for+` file does not read (<<examples-syntax>>, <<examples>>).
+
+[#e2305]
+=== A literal is not written in its form
+
+[,text]
+----
+A fractional literal is a Decimal and needs the `m` suffix (write `1.5m`); Souther has no
+floating-point type.
+----
+
+Reported while reading the text into tokens, before anything is parsed (<<literal-syntax>>): a string not closed before the end of the line, a fractional literal with no `+m+`, a type variable with no name after `+'+`, a character that begins nothing.
+
+[#e2306]
+=== The text is not made of tokens
+
+[,text]
+----
+Unexpected character `@`.
+----
+
+Reported while reading the text into tokens (<<the-source-is-made-of-tokens>>), before anything is parsed. Unlike the five syntax codes it says nothing about where in the language the text was, nothing having been read yet: a character that begins nothing, and a `+'+` with no name after it, are the two ways to reach it.
 
 [#example]
 == Example: the business-trip application model

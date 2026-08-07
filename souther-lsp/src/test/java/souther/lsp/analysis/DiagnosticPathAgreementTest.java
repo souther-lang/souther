@@ -100,6 +100,43 @@ class DiagnosticPathAgreementTest {
                             let Labels(xs) = t
                             Out { v = 1 }
                         }
+                        """),
+                // Syntax errors reach the editor through the recovering parser rather than through a
+                // compile, so they are the one family whose agreement is not implied by the others.
+                arguments("a behavior signature that does not read", """
+                        module demo
+                        behavior submit : (id Int) -> Int
+                        """),
+                arguments("a lambda missing its arrow", """
+                        module demo
+                        let f (xs: List<Int>) : List<Int> = List.map((x) x, xs)
+                        """),
+                arguments("a case pattern that does not read", """
+                        module demo
+                        data Rank = Manager | Staff
+                        data Manager
+                        data Staff
+                        let name (r: Rank) : Int =
+                            match r with
+                                | Manager as -> 1
+                                | Staff -> 2
+                        """),
+                arguments("an example row that does not read", """
+                        module demo
+                        data Amount = Int
+                        behavior double : (a: Amount) -> Amount
+                            constructs Amount
+                        let double (a) = Amount(a.value * 2)
+                        example double
+                            | (Amount(1)) Amount(2)
+                        """),
+                arguments("a fractional literal without its suffix", """
+                        module demo
+                        let rate () : Int = 1.5
+                        """),
+                arguments("a character that begins nothing", """
+                        module demo
+                        let f () : Int = @
                         """));
     }
 

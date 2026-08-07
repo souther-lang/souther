@@ -4,6 +4,7 @@ import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CheckContext;
@@ -662,7 +663,7 @@ final class BodyGen {
                 case Core.Read v -> {
                     Var var = locals.get(v.binding());
                     if (var == null) {
-                        throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
+                        throw new IllegalStateException("unbound identifier `" + v.name() + "`");
                     }
                     load(code, var.slot(), var.type());
                 }
@@ -743,7 +744,7 @@ final class BodyGen {
                     genExpr(li.body(), expected);
                 }
                 // a block has no value of its own; it is inlined by the call it is passed to
-                case Core.Block b -> throw new CompileException(b.pos(), "a block is not a value");
+                case Core.Block b -> throw new IllegalStateException("a block is not a value");
             }
             // `unreachable` is typed Never, and what is on the stack is the shape the position asked
             // for, so that is what the caller is told is there.
@@ -774,8 +775,7 @@ final class BodyGen {
             Type shape = expected != null ? expected : u.type();
             if (shape instanceof Type.Never) {
                 throw CompileException.of(
-                        Diagnostic.of("E1307", "check.unreachable.untyped")
-                                .title("check.type.mismatch.title")
+                        Diagnostic.of(DiagnosticCode.E1307, "check.unreachable.untyped")
                                 .at(u.pos(), "unreachable".length())
                                 .hint("check.unreachable.untyped.hint").build(),
                         "nothing here says what this position holds, and `unreachable` answers no"
@@ -1232,7 +1232,7 @@ final class BodyGen {
                     } else if (ctx.calleeSig(call.name()) != null) {
                         behaviorCall(call);
                     } else {
-                        throw new CompileException(call.pos(), "unknown function `" + call.name() + "`");
+                        throw new IllegalStateException("unknown function `" + call.name() + "`");
                     }
                 }
             }

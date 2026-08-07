@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -203,7 +204,7 @@ public final class TypeOps {
             TypeName name = memberName(m);
             if (name == null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.union.members").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1613, "check.union.members")
                                 .at(ret.pos()).args(Type.show(m)).build(),
                         "`" + Type.show(m) + "` cannot be a union member: a member is a type that is"
                                 + " nominal, tells itself apart at run time, and can be written as a"
@@ -588,7 +589,7 @@ public final class TypeOps {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (!assignable(arg, bound, symbols) && !assignable(bound, arg, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.generic.arg").title("check.type.mismatch.title")
+                            Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                                     .at(pos).args(what, Type.show(bound), Type.show(arg))
                                     .diff(Type.show(arg, bound), Type.show(bound, arg)).build(),
                             what + ": expected " + bound + " but got " + arg);
@@ -619,7 +620,7 @@ public final class TypeOps {
             default -> {
                 if (!assignable(arg, param, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.generic.arg").title("check.type.mismatch.title")
+                            Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                                     .at(pos).args(what, Type.show(param), Type.show(arg))
                                     .diff(Type.show(arg, param), Type.show(param, arg)).build(),
                             what + ": expected " + param + " but got " + arg);
@@ -840,14 +841,14 @@ public final class TypeOps {
             TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.spread.notproduct").title("check.construct.title")
+                        Diagnostic.of(DiagnosticCode.E1015, "check.spread.notproduct")
                                 .at(inc.name().region()).args(inc.written()).build(),
                         "cannot spread `..." + inc.written() + "` (not a product data)");
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
                 if (types.put(e.getKey(), e.getValue()) != null) {
                     throw CompileException.of(
-                            Diagnostic.of("E1004", "e1004.msg").at(data.pos())
+                            Diagnostic.of(DiagnosticCode.E1004, "e1004.msg").at(data.pos())
                                     .args(e.getKey(), inc.written(), data.name()).build(),
                             "Field `" + e.getKey() + "` from `..." + inc.written() + "` conflicts with a field of `"
                                     + data.name() + "`.");
@@ -857,7 +858,7 @@ public final class TypeOps {
         for (Ast.Field f : data.fields()) {
             if (types.put(f.name(), fieldType(f)) != null) {
                 throw CompileException.of(
-                        Diagnostic.of("E1004", "e1004.dup").at(f.pos())
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.declaredfield").at(f.pos())
                                 .args(f.name(), data.name()).build(),
                         "duplicate field `" + f.name() + "` in `" + data.name() + "`");
             }
@@ -1374,7 +1375,7 @@ public final class TypeOps {
                                         String message) {
         if (!supportsEquality(t, symbols)) {
             throw CompileException.of(
-                    Diagnostic.of(null, key).title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1315, key)
                             .at(at.pos()).args(Type.show(t)).build(),
                     message + ": " + Type.show(t));
         }
@@ -1385,7 +1386,7 @@ public final class TypeOps {
                                 String message) {
         if (ref.arg() == null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.typearg." + key).title("check.typearg.title")
+                    Diagnostic.of(DiagnosticCode.E1316, "check.typearg." + key)
                             .at(ref.pos(), width).build(),
                     message);
         }
@@ -1410,26 +1411,25 @@ public final class TypeOps {
             String module = symbols.moduleOfQualifier(qualifier);
             if (module == null) {
                 return CompileException.of(
-                        Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
+                        Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
                                 .at(written.region()).args(qualifier, name)
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build(),
                         "no module named `" + qualifier + "`");
             }
-            String key = symbols.contains(new TypeName(module, name))
-                    ? "check.qualified.notexposed" : "check.qualified.notdefined";
+            boolean declared = symbols.contains(new TypeName(module, name));
             return CompileException.of(
-                    Diagnostic.of(null, key).title("check.module.title")
+                    Diagnostic.of(declared ? DiagnosticCode.E1507 : DiagnosticCode.E1506,
+                                    declared ? "check.qualified.notexposed" : "check.qualified.notdefined")
                             .at(written.region()).args(name, module)
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
                             .build(),
-                    "`" + name + "` is not " + (key.endsWith("notexposed") ? "exposed by" : "defined in")
+                    "`" + name + "` is not " + (declared ? "exposed by" : "defined in")
                             + " `" + module + "`");
         }
         Set<String> known = symbols.namesInScope();
         return CompileException.of(
-                Diagnostic.of(null, "check.unknown.type.msg")
-                        .title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.type.msg")
                         .at(written.region())
                         .args(written.quoted())
                         .suggestion(Suggest.candidate(canonical, known))

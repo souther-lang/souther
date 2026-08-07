@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -55,7 +56,7 @@ class ASecondaryRegionNamesItsFileTest {
     }
 
     private static Diagnostic withSecondary(String secondarySourceId) {
-        return Diagnostic.of("E9001", "diag.hint.label")
+        return Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                 .at(new SourcePos(3, 3), 5)
                 .secondaryIn(secondarySourceId, Region.ofWidth(new SourcePos(3, 3), 4),
                         "diag.hint.label")
@@ -100,7 +101,7 @@ class ASecondaryRegionNamesItsFileTest {
     @Test
     void aSourceIsReadOnceHoweverManyRegionsAreInIt() {
         Asked asked = resolver();
-        Diagnostic d = Diagnostic.of("E9001", "diag.hint.label")
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                 .at(new SourcePos(3, 3), 5)
                 .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4), "diag.hint.label")
                 .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4), "diag.hint.label")
@@ -171,7 +172,7 @@ class ASecondaryRegionNamesItsFileTest {
 
     @Test
     void whereOneFileHoldsSeveralRegionsTheFirstWrittenIsTheAnchor() {
-        Diagnostic d = Diagnostic.of("E9001", "diag.hint.label")
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                 .at(new SourcePos(3, 3), 5)
                 .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4), "diag.hint.label")
                 .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4), "diag.hint.label")

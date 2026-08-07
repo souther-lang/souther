@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -409,7 +410,7 @@ public final class Resolve {
             TypeName denoted = symbols.resolve(c.written());
             if (denoted == null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.sum.unknowncase").title("check.sum.title")
+                        Diagnostic.of(DiagnosticCode.E1020, "check.sum.unknowncase")
                                 .at(s.pos()).args(c.written(), s.name()).build(),
                         "unknown case `" + c.written() + "` in sum `" + s.name() + "`");
             }
@@ -934,7 +935,7 @@ public final class Resolve {
             return null;
         }
         return CompileException.of(
-                Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
                         .at(written.region()).args(written.quoted()).build(),
                 "`" + written.quoted() + "` is not a standard-library function.");
     }
@@ -942,7 +943,8 @@ public final class Resolve {
     private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
         String name = written.canonical();
         if (name.equals("null")) {
-            return new CompileException(written.pos(), "E1301",
+            return CompileException.of(
+                    Diagnostic.of(DiagnosticCode.E1301, "e1301.msg").at(written.region()).build(),
                     "`null` is not part of the language. Use an optional field with `?`.");
         }
         CompileException notALibraryMember = notALibraryMember(written);
@@ -959,7 +961,7 @@ public final class Resolve {
         }
         List<String> candidates = reachable(bound);
         return CompileException.of(
-                Diagnostic.of(null, "check.unknown.name.msg").title("check.unknown.title")
+                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                         .at(written.region()).args(written.quoted())
                         .suggestion(Suggest.candidate(name, candidates)).build(),
                 "unknown identifier `" + written.quoted() + "`" + Suggest.hint(name, candidates));
@@ -983,7 +985,7 @@ public final class Resolve {
         }
         List<String> candidates = reachable(bound);
         return CompileException.of(
-                Diagnostic.of("E1401", "e1401.msg").at(written.region())
+                Diagnostic.of(DiagnosticCode.E1401, "e1401.msg").at(written.region())
                         .args(written.quoted())
                         .suggestion(Suggest.candidate(name, candidates))
                         .hint("e1401.hint").build(),

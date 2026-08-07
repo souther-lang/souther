@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -243,7 +244,7 @@ public final class TypeChecker {
         for (Ast.FnDef fn : module.fns()) {
             if (fns.put(fn.name(), fn) != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.dup.let").title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.let")
                                 .at(fn.pos()).args(fn.name()).build(),
                         "duplicate `let " + fn.name() + "`");
             }
@@ -293,7 +294,7 @@ public final class TypeChecker {
             // does not exist.
             if (dot >= 0) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.exposing.granular").title("check.module.title")
+                        Diagnostic.of(DiagnosticCode.E1610, "check.exposing.granular")
                                 .at(module.pos()).args(e.substring(0, dot), e).build(),
                         "`exposing` is type-granular: a data's `decoder`/`encoder` are always public"
                                 + " once the data is exposed (spec 19.4). Write `" + e.substring(0, dot)
@@ -317,7 +318,7 @@ public final class TypeChecker {
                           + " module's own definitions and does not re-export imported names"
                         : ", which is not a data or behavior of this module";
                 throw CompileException.of(
-                        Diagnostic.of(null, key).title("check.module.title")
+                        Diagnostic.of(DiagnosticCode.E1609, key)
                                 .at(module.pos()).args(e).build(),
                         "`exposing` names `" + e + "`" + why);
             }
@@ -340,7 +341,7 @@ public final class TypeChecker {
                 // behavior that composes or calls this one carries the requirement instead (13.2).
                 if (!spec.dependsOn().isEmpty()) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.inject.depends").title("check.module.title")
+                            Diagnostic.of(DiagnosticCode.E1612, "check.inject.depends")
                                     .at(spec.pos()).args(spec.name()).build(),
                             "behavior `" + spec.name() + "` has no `let`, so it is an injection target"
                                     + " (spec 13.2); it cannot declare `depends on` — the behavior that"
@@ -393,7 +394,7 @@ public final class TypeChecker {
             for (Ast.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.impl.compose").title("check.impl.title")
+                            Diagnostic.of(DiagnosticCode.E1614, "check.impl.compose")
                                     .at(fn.pos()).args(fn.name()).build(),
                             "`let " + fn.name() + "` cannot implement the composition `behavior " + fn.name()
                                     + "`, which is already its own implementation (spec 13.1)");
@@ -458,14 +459,14 @@ public final class TypeChecker {
                 // would make a `| Some v` pattern ambiguous between Option and the user case, so the
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
                 rejected.add(CompileException.of(
-                        Diagnostic.of(null, "check.sum.optioncase").title("check.sum.title")
+                        Diagnostic.of(DiagnosticCode.E1502, "check.sum.optioncase")
                                 .at(def.written().region()).args(def.name()).build(),
                         "`" + def.name() + "` is a built-in Option case and cannot be declared as a data type"));
                 continue;
             }
             if (symbols.containsKey(def.name())) {
                 rejected.add(CompileException.of(
-                        Diagnostic.of(null, "check.dup.data").title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.data")
                                 .at(def.pos()).args(def.name()).build(),
                         "duplicate data `" + def.name() + "`"));
                 continue;

@@ -9,6 +9,7 @@ import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
@@ -317,10 +318,10 @@ public final class ExampleVerifier {
         String name = ex.target();
         boolean isHelper = module.fns().stream().anyMatch(f -> f.name().equals(name));
         if (!isHelper) {
-            return Diagnostic.of("E1901", "check.example.unknown").title("check.example.title")
+            return Diagnostic.of(DiagnosticCode.E1901, "check.example.unknown")
                     .at(ex.pos()).args(name).build();
         }
-        return Diagnostic.of("E1902", "check.example.notrunnable").title("check.example.title")
+        return Diagnostic.of(DiagnosticCode.E1902, "check.example.notrunnable")
                 .at(ex.pos()).args(name)
                 .hint("check.example.notrunnable.hint",
                         "it is a helper `let`, and this module declares no behavior of that name")
@@ -482,9 +483,8 @@ public final class ExampleVerifier {
                 // compile did not generate looks like. Saying the model does not terminate here would
                 // put a diagnostic on a model that may be right, and send its author to make
                 // something structural that already is.
-                out.add(Diagnostic.of("E1923", helper == null
+                out.add(Diagnostic.of(DiagnosticCode.E1923, helper == null
                                 ? "check.example.unanswered" : "check.example.unanswered.helper")
-                        .title("check.example.title")
                         .at(row.pos())
                         .args(helper == null ? new Object[] {Long.toString(deadline.budgetMs())}
                                 : new Object[] {Long.toString(deadline.budgetMs()), helper})
@@ -576,9 +576,8 @@ public final class ExampleVerifier {
      */
     private Diagnostic overBudget(Ast.ExampleRow row, FailurePhase which) {
         boolean depth = which == FailurePhase.DEPTH_LIMIT;
-        return Diagnostic.of("E1910", depth ? "check.example.overbudget.depth"
-                        : "check.example.overbudget.steps")
-                .title("check.example.title").at(row.pos())
+        return Diagnostic.of(DiagnosticCode.E1910, depth ? "check.example.overbudget.depth"
+                        : "check.example.overbudget.steps").at(row.pos())
                 // As written, not as a number the locale groups: `50,000` is not a budget anyone
                 // set, and the setting that sets it takes the ungrouped form.
                 .args(depth ? Integer.toString(policy.recursionDepthLimit())
@@ -597,7 +596,7 @@ public final class ExampleVerifier {
      * — which the author can act on, and which says nothing about whether the recursion terminates.
      */
     private Diagnostic stackRanOut(Ast.ExampleRow row, String why) {
-        return Diagnostic.of("E1924", "check.example.stack").title("check.example.title")
+        return Diagnostic.of(DiagnosticCode.E1924, "check.example.stack")
                 .at(row.pos()).args(why, Integer.toString(policy.recursionDepthLimit()))
                 .hint("check.example.stack.hint").build();
     }
@@ -607,7 +606,7 @@ public final class ExampleVerifier {
                              RowState state) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
-            out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
+            out.add(Diagnostic.of(DiagnosticCode.E1903, "check.example.arity")
                     .at(row.pos()).args(target.name(), ins.size(), row.inputs().size()).build());
             state.failed(FailurePhase.INPUT_FIXTURE);
             return;
@@ -617,7 +616,7 @@ public final class ExampleVerifier {
             try {
                 args[i] = fixtures.built(row.inputs().get(i), ins.get(i));
             } catch (FixtureException fe) {
-                out.add(Diagnostic.of("E1903", "check.example.input").title("check.example.title")
+                out.add(Diagnostic.of(DiagnosticCode.E1903, "check.example.input")
                         .at(row.pos()).args(target.name(), i + 1, fe.getMessage()).build());
                 state.failed(FailurePhase.INPUT_FIXTURE);
                 return;
@@ -638,7 +637,7 @@ public final class ExampleVerifier {
             for (TypeName c : outCases) {
                 names.add(c.name());
             }
-            out.add(Diagnostic.of("E1904", "check.example.arm").title("check.example.title")
+            out.add(Diagnostic.of(DiagnosticCode.E1904, "check.example.arm")
                     .at(row.pos()).args(expectedArm != null ? expectedArm : named.name(), target.name())
                     .hint("check.example.arm.hint", String.join(", ", names)).build());
             state.failed(FailurePhase.EXPECTED_FIXTURE);
@@ -652,7 +651,7 @@ public final class ExampleVerifier {
             expectedValue = fixtures.caseOnly(row.expected()) != null ? null
                     : fixtures.builtExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
-            out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
+            out.add(Diagnostic.of(DiagnosticCode.E1903, "check.example.expected")
                     .at(row.pos()).args(target.name(), fe.getMessage()).build());
             state.failed(FailurePhase.EXPECTED_FIXTURE);
             return;
@@ -677,12 +676,12 @@ public final class ExampleVerifier {
         try {
             result = invoke(target, args, fakes);
         } catch (FakeMissException fm) {
-            out.add(Diagnostic.of("E1909", "check.fake.miss").title("check.example.title")
+            out.add(Diagnostic.of(DiagnosticCode.E1909, "check.fake.miss")
                     .at(row.pos()).args(fm.getMessage()).build());
             state.failed(FailurePhase.FAKE_RESOLUTION);
             return;
         } catch (UnreachableException ue) {
-            out.add(Diagnostic.of("E1911", "check.example.unreachable").title("check.example.title")
+            out.add(Diagnostic.of(DiagnosticCode.E1911, "check.example.unreachable")
                     .at(row.pos()).args(ue.getMessage())
                     .hint("check.example.unreachable.hint").build());
             state.failed(FailurePhase.INVOCATION);
@@ -785,7 +784,7 @@ public final class ExampleVerifier {
                 } catch (FixtureException fe) {
                     // The row does supply a fake. What failed is building its value, which is a
                     // different problem from a dependency nothing stands in for.
-                    out.add(Diagnostic.of("E1908", "check.fake.value").title("check.example.title")
+                    out.add(Diagnostic.of(DiagnosticCode.E1908, "check.fake.value")
                             .at(w.value().pos()).args(depName, fe.getMessage()).build());
                     return null;
                 }
@@ -816,10 +815,10 @@ public final class ExampleVerifier {
             }
         }
         Diagnostic.Builder d = stages.isEmpty()
-                ? Diagnostic.of("E1908", "check.fake.missing").args(target, req.dependency())
-                : Diagnostic.of("E1908", "check.fake.missing.through")
+                ? Diagnostic.of(DiagnosticCode.E1908, "check.fake.missing").args(target, req.dependency())
+                : Diagnostic.of(DiagnosticCode.E1908, "check.fake.missing.through")
                         .args(target, req.dependency(), String.join(", ", stages));
-        return d.title("check.example.title").at(row.pos())
+        return d.at(row.pos())
                 .hint("check.fake.missing.hint", detail).build();
     }
 
@@ -978,8 +977,7 @@ public final class ExampleVerifier {
         // lands on something meaningful rather than a single column at the row's start.
         SourcePos pos = row.expected() != null ? row.expected().pos() : row.pos();
         int width = Math.max(1, expected.length());
-        Diagnostic.Builder b = Diagnostic.of("E1905", "check.example.mismatch")
-                .title("check.example.title")
+        Diagnostic.Builder b = Diagnostic.of(DiagnosticCode.E1905, "check.example.mismatch")
                 .at(pos, width)
                 .diff(actual, expected);
         if (row.description() != null) {

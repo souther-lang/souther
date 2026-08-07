@@ -280,7 +280,7 @@ class CompileUnusedImportWarningTest {
                 """);
 
         assertFalse(said.contains("E1922"), said.toString());
-        assertTrue(said.contains("check.import.notexposed"),
+        assertTrue(said.contains("E1507"),
                 "the import itself is still reported: " + said);
     }
 

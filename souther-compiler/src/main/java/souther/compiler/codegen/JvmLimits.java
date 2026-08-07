@@ -7,6 +7,7 @@ import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 
@@ -145,14 +146,14 @@ final class JvmLimits {
      * wanted, and refusing to write the pool out says how many entries there are.
      */
     enum Limit {
-        CODE_SIZE("E2102", "e2102.msg"),
-        CONSTANT_POOL_INDEX("E2103", "e2103.index"),
-        CONSTANT_POOL_SIZE("E2103", "e2103.size");
+        CODE_SIZE(DiagnosticCode.E2102, "e2102.msg"),
+        CONSTANT_POOL_INDEX(DiagnosticCode.E2103, "e2103.index"),
+        CONSTANT_POOL_SIZE(DiagnosticCode.E2103, "e2103.size");
 
-        private final String code;
+        private final DiagnosticCode code;
         private final String messageKey;
 
-        Limit(String code, String messageKey) {
+        Limit(DiagnosticCode code, String messageKey) {
             this.code = code;
             this.messageKey = messageKey;
         }
@@ -229,7 +230,7 @@ final class JvmLimits {
                                             int limit, String message) {
         String name = written.canonical();
         return CompileException.of(
-                Diagnostic.of("E2101", key).at(written.region())
+                Diagnostic.of(DiagnosticCode.E2101, key).at(written.region())
                         .args(name, String.valueOf(needed), String.valueOf(limit))
                         .hint(key + ".hint").build(),
                 message);

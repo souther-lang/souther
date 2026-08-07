@@ -56,7 +56,7 @@ class HighValueDiagnosticTest {
                 """);
         assertEquals(2, d.secondary().size(), "the then and else branches are each pointed at");
         assertNull(d.diff());
-        assertEquals("check.if.title", d.titleKey());
+        assertEquals("check.type.mismatch.title", d.titleKey());
     }
 
     @Test

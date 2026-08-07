@@ -1,5 +1,7 @@
 package souther.compiler.cst;
 
+import souther.compiler.diag.DiagnosticCode;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -141,7 +143,7 @@ public final class CstLexer {
         if (fractional) {
             // A fractional literal with no `m` is not a Decimal and there is no float type. Keep the
             // whole slice as one token so the tree stays lossless, and record the error.
-            errors.add(CstError.of(start, pos - start, "lex.decimal.m",
+            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2305, "lex.decimal.m",
                     "a fractional literal is a Decimal and needs the `m` suffix (write `"
                             + src.substring(start, pos) + "m`); Souther has no floating-point type",
                     src.substring(start, pos)));
@@ -161,7 +163,7 @@ public final class CstLexer {
             }
         }
         if (pos >= src.length()) {
-            errors.add(CstError.of(start, pos - start, "lex.string.unterminated",
+            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2305, "lex.string.unterminated",
                     "unterminated string literal"));
             emit(SyntaxKind.STRING_LIT, start);   // covers to EOF, keeping the tree lossless
             return;
@@ -174,7 +176,7 @@ public final class CstLexer {
     private void typeVar(int start) {
         pos++;   // the apostrophe
         if (pos >= src.length() || !Character.isJavaIdentifierStart(src.charAt(pos))) {
-            errors.add(CstError.of(start, pos - start, "lex.typevar",
+            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2306, "lex.typevar",
                     "a type variable needs a name after `'`, e.g. `'a`"));
             emit(SyntaxKind.ERROR_TOKEN, start);
             return;
@@ -226,7 +228,7 @@ public final class CstLexer {
             default -> null;
         };
         if (kind == null) {
-            errors.add(CstError.of(start, pos - start, "lex.unexpected",
+            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2306, "lex.unexpected",
                     "unexpected character '" + c + "'", String.valueOf(c)));
             emit(SyntaxKind.ERROR_TOKEN, start);
             return;

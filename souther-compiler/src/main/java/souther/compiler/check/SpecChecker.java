@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -81,7 +82,7 @@ public final class SpecChecker {
             if (reaches(b.name(), b.name(), edges, path, new HashSet<>())) {
                 path.add(b.name());
                 throw CompileException.of(
-                        Diagnostic.of("E1608", "e1608.msg").title("e1608.title")
+                        Diagnostic.of(DiagnosticCode.E1608, "e1608.msg")
                                 .at(b.pos()).args(b.name(), String.join(" -> ", path))
                                 .hint("e1608.hint", b.name()).build(),
                         "behavior `" + b.name() + "` reaches itself: "
@@ -143,7 +144,7 @@ public final class SpecChecker {
                         : required.denotes() instanceof ValueName.Behavior ? "e1607.composition"
                         : "e1607.unknown";
                 throw CompileException.of(
-                        Diagnostic.of("E1607", key).title("e1607.title")
+                        Diagnostic.of(DiagnosticCode.E1607, key)
                                 .at(required.written().region())
                                 .args(spec.name(), req)
                                 .hint(key + ".hint", spec.name(), req)
@@ -176,7 +177,7 @@ public final class SpecChecker {
         for (String name : module.exposedOutputs().keySet()) {
             if (!pipeNames.contains(name)) {
                 throw CompileException.of(
-                        Diagnostic.of("E1605", "e1605.notcomposition").at(module.pos()).args(name).build(),
+                        Diagnostic.of(DiagnosticCode.E1605, "e1605.notcomposition").at(module.pos()).args(name).build(),
                         "`exposing` gives an output signature to `" + name + "`, which is not a"
                                 + " composition (`>->`) behavior; only a composition needs one — every"
                                 + " other definition states its type where it is written (spec 14.5)");
@@ -198,7 +199,7 @@ public final class SpecChecker {
             Ast.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(
-                        Diagnostic.of("E1605", "e1605.missing").at(pipe.pos())
+                        Diagnostic.of(DiagnosticCode.E1605, "e1605.missing").at(pipe.pos())
                                 .args(pipe.name())
                                 .hint("e1605.missing.hint", pipe.name(), PipelineSigs.caseList(inferred))
                                 .build(),
@@ -209,7 +210,7 @@ public final class SpecChecker {
             Set<TypeName> declaredCases = TypeOps.leafCases(TypeOps.successType(declared, symbols), symbols);
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(
-                        Diagnostic.of("E1604", "e1604.msg").at(pipe.pos())
+                        Diagnostic.of(DiagnosticCode.E1604, "e1604.msg").at(pipe.pos())
                                 .args(pipe.name(), PipelineSigs.caseList(declaredCases), PipelineSigs.caseList(inferred))
                                 .hint("e1604.hint")
                                 .build(),
@@ -235,7 +236,7 @@ public final class SpecChecker {
                                     List<Diagnostic> warnings) {
         if (fn.declaredReturn() != null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.impl.noreturn").title("check.impl.title")
+                    Diagnostic.of(DiagnosticCode.E1615, "check.impl.noreturn")
                             .at(fn.pos()).args(fn.name(), spec.name()).build(),
                     "`let " + fn.name() + "` implements `behavior " + spec.name()
                             + "`, so its return type comes from the behavior — do not declare one"
@@ -253,7 +254,7 @@ public final class SpecChecker {
         int nReq = spec.dependsOn().size();
         if (fn.params().size() != nBusiness + nReq) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.impl.arity").title("check.impl.title")
+                    Diagnostic.of(DiagnosticCode.E1615, "check.impl.arity")
                             .at(fn.pos()).args(fn.name(), fn.params().size(), spec.name(), nBusiness, nReq)
                             .build(),
                     "`let " + fn.name() + "` takes " + fn.params().size()
@@ -266,7 +267,7 @@ public final class SpecChecker {
             // the input the behavior already typed
             if (p.type() != null && !p.typeFromPattern()) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.impl.noannotate").title("check.impl.title")
+                        Diagnostic.of(DiagnosticCode.E1615, "check.impl.noannotate")
                                 .at(p.pos()).args(fn.name(), spec.name(), p.name()).build(),
                         "`let " + fn.name() + "` implements `behavior " + spec.name()
                                 + "`, so its parameters take their types from it — do not annotate `"
@@ -278,7 +279,7 @@ public final class SpecChecker {
             String want = spec.dependsOn().get(i).bare();
             if (!got.equals(want)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.impl.reqorder").title("check.impl.title")
+                        Diagnostic.of(DiagnosticCode.E1615, "check.impl.reqorder")
                                 .at(fn.pos()).args(fn.name(), got, want).build(),
                         "`let " + fn.name() + "` parameter `" + got + "` should be `" + want
                                 + "`: what `depends on` names becomes the trailing parameters in declared order"
@@ -317,7 +318,7 @@ public final class SpecChecker {
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.behavior.return").title("check.type.mismatch.title")
+                    Diagnostic.of(DiagnosticCode.E1317, "check.behavior.return")
                             .at(body.pos()).args(spec.name(), Type.show(output), Type.show(rt))
                             .diff(Type.show(rt, output), Type.show(output, rt)).build(),
                     "behavior `" + spec.name() + "` returns " + output + " but its `let` body is " + rt);
@@ -343,7 +344,7 @@ public final class SpecChecker {
                 if (!declared.contains(built.getKey())) {
                     String c = built.getValue();
                     throw CompileException.of(
-                            Diagnostic.of("E1002", "e1002.msg").at(spec.pos())
+                            Diagnostic.of(DiagnosticCode.E1002, "e1002.msg").at(spec.pos())
                                     .args(spec.name(), c).hint("e1002.hint").build(),
                             "Behavior `" + spec.name() + "` constructs `" + c
                                     + "` but does not declare `constructs " + c + "`.");
@@ -353,7 +354,7 @@ public final class SpecChecker {
                 String name = declaredName.written();
                 if (!constructed.builds(declaredName.denotes())) {
                     throw CompileException.of(
-                            Diagnostic.of("E1006", "e1006.msg").at(spec.pos())
+                            Diagnostic.of(DiagnosticCode.E1006, "e1006.msg").at(spec.pos())
                                     .args(spec.name(), name).hint("e1006.hint").build(),
                             "Behavior `" + spec.name() + "` declares `constructs " + name
                                     + "` but never builds " + name + " — it passes an existing"
@@ -371,7 +372,7 @@ public final class SpecChecker {
         for (String call : actual) {
             if (!declared.contains(call)) {
                 throw CompileException.of(
-                        Diagnostic.of("E1602", "e1602.msg").at(spec.pos())
+                        Diagnostic.of(DiagnosticCode.E1602, "e1602.msg").at(spec.pos())
                                 .args(fn.name(), call, spec.name()).hint("e1602.hint").build(),
                         "`let " + fn.name() + "` calls `" + call + "`, which has no implementation, but"
                                 + " `behavior " + spec.name() + "` does not declare `depends on " + call + "`.");
@@ -380,7 +381,7 @@ public final class SpecChecker {
         for (String req : declared) {
             if (!actual.contains(req)) {
                 throw CompileException.of(
-                        Diagnostic.of("E1603", "e1603.msg").at(spec.pos())
+                        Diagnostic.of(DiagnosticCode.E1603, "e1603.msg").at(spec.pos())
                                 .args(spec.name(), req, fn.name()).hint("e1603.hint").build(),
                         "`behavior " + spec.name() + "` declares `depends on " + req + "`, but `let "
                                 + fn.name() + "` never calls it. Remove it from the `depends on` clause.");
@@ -427,7 +428,7 @@ public final class SpecChecker {
                         .map(SpecChecker::termName)
                         .collect(java.util.stream.Collectors.joining(" | "));
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.param.union").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1312, "check.param.union")
                                 .at(p.written().region()).args(p.name(), union).build(),
                         "parameter `" + p.name() + "` has an anonymous union type `" + union
                                 + "`; a parameter type must be a single named type — declare `data ... = "
@@ -444,7 +445,7 @@ public final class SpecChecker {
             for (Ast.TypeTerm c : p.type().cases()) {
                 if (carriesTuple(c, symbols)) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.param.tuple").title("check.boundary.title")
+                            Diagnostic.of(DiagnosticCode.E1311, "check.param.tuple")
                                     .at(p.written().region()).args(p.name()).build(),
                             "parameter `" + p.name() + "` is a tuple; a tuple has no external"
                                     + " representation and cannot cross the boundary, so a behavior's"
@@ -455,7 +456,7 @@ public final class SpecChecker {
         for (Ast.TypeTerm c : spec.ret().cases()) {
             if (carriesTuple(c, symbols)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.output.tuple").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1311, "check.output.tuple")
                                 .at(spec.pos()).args(spec.name()).build(),
                         "behavior `" + spec.name() + "` outputs a tuple; a tuple cannot cross the"
                                 + " boundary, so a behavior's output must be a named data or a sum of"
@@ -484,7 +485,7 @@ public final class SpecChecker {
                 continue;
             }
             throw CompileException.of(
-                    Diagnostic.of(null, "check.union.samename").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1613, "check.union.samename")
                             .at(b.pos()).args(clash[1].name(), clash[0].module(), clash[1].module())
                             .hint("check.union.samename.hint").build(),
                     "the output of `" + b.name() + "` has two members written `" + clash[1].name()
@@ -509,7 +510,7 @@ public final class SpecChecker {
                 continue;
             }
             throw CompileException.of(
-                    Diagnostic.of(null, "check.member.discriminatorfield").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1010, "check.member.discriminatorfield")
                             .at(b.pos()).args(carrying.name(), DISCRIMINATOR, b.name())
                             .hint("check.case.discriminatorfield.hint", DISCRIMINATOR).build(),
                     "`" + carrying.name() + "` is a member of the output of `" + b.name() + "` and"
@@ -532,7 +533,7 @@ public final class SpecChecker {
             Type t = TypeOps.successType(p.type(), symbols);
             if (!TypeOps.hasExternalForm(t, symbols)) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.param.function").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1311, "check.param.function")
                                 .at(p.written().region()).args(p.name(), Type.show(t)).build(),
                         "parameter `" + p.name() + "` carries a function (" + Type.show(t)
                                 + "); a function has no external representation, so it cannot cross"
@@ -542,7 +543,7 @@ public final class SpecChecker {
         Type out = TypeOps.successType(spec.ret(), symbols);
         if (!TypeOps.hasExternalForm(out, symbols)) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.output.function").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1311, "check.output.function")
                             .at(spec.pos()).args(spec.name(), Type.show(out)).build(),
                     "behavior `" + spec.name() + "` outputs a function (" + Type.show(out)
                             + "); a function has no external representation, so it cannot cross the"
@@ -568,7 +569,7 @@ public final class SpecChecker {
         }
         String element = Type.show(opt.element());
         throw CompileException.of(
-                Diagnostic.of(null, "check.output.optional").title("check.boundary.title")
+                Diagnostic.of(DiagnosticCode.E1313, "check.output.optional")
                         .at(spec.pos()).args(spec.name(), Type.show(opt))
                         .hint("check.output.optional.hint", element).build(),
                 "behavior `" + spec.name() + "` outputs an optional (" + Type.show(opt)
@@ -584,7 +585,7 @@ public final class SpecChecker {
             Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(p.type(), symbols), symbols);
             if (bad != null) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.map.key.param").title("check.boundary.title")
+                        Diagnostic.of(DiagnosticCode.E1314, "check.map.key.param")
                                 .at(p.written().region()).args(p.name(), Type.show(bad))
                                 .hint("check.map.key.param.hint").build(),
                         "parameter `" + p.name() + "` carries a Map keyed by " + Type.show(bad)
@@ -596,7 +597,7 @@ public final class SpecChecker {
         Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(spec.ret(), symbols), symbols);
         if (bad != null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.map.key.output").title("check.boundary.title")
+                    Diagnostic.of(DiagnosticCode.E1314, "check.map.key.output")
                             .at(spec.pos()).args(spec.name(), Type.show(bad))
                             .hint("check.map.key.output.hint").build(),
                     "behavior `" + spec.name() + "` outputs a Map keyed by " + Type.show(bad)
@@ -636,7 +637,7 @@ public final class SpecChecker {
                     ? symbols.isExposed(built) : exposeAll || exposed.contains(built.name());
             if (!buildable) {
                 throw CompileException.of(
-                        Diagnostic.of("E1305", "e1305.msg").at(spec.pos())
+                        Diagnostic.of(DiagnosticCode.E1305, "e1305.msg").at(spec.pos())
                                 .args(spec.name(), c).hint("e1305.hint").build(),
                         "Injected behavior `" + spec.name() + "` declares `constructs " + c + "`, but "
                                 + c + " is neither a unit data nor exposed. Java cannot build it: no"
@@ -754,7 +755,7 @@ public final class SpecChecker {
             return;
         }
         String name = hidden[0].name();
-        Diagnostic.Builder d = Diagnostic.of(null, key).title("check.module.title").at(pos);
+        Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1611, key).at(pos);
         d = field == null ? d.args(owner, name) : d.args(owner, field, name);
         throw CompileException.of(d.hint(hint, name, owner).build(),
                 "`" + owner + "` reaches outside this module and rests on `" + name
@@ -799,7 +800,7 @@ public final class SpecChecker {
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.pipe.multiinput").title("check.pipe.title")
+                            Diagnostic.of(DiagnosticCode.E1702, "check.pipe.multiinput")
                                     .at(pipe.pos()).args(stage, n, pipe.name()).build(),
                             "`" + stage + "` takes " + n + " inputs, so it cannot follow `>->` in `"
                                     + pipe.name() + "`. Every stage after the first takes one input: "

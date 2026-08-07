@@ -4,6 +4,7 @@ import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -177,8 +178,7 @@ public final class BottomInfer {
             return joined;
         }
         throw CompileException.of(
-                Diagnostic.of(null, "check.list.msg")
-                        .title("check.list.title")
+                Diagnostic.of(DiagnosticCode.E1318, "check.list.msg")
                         .at(pos)
                         .hint("check.list.hint", Type.show(a), Type.show(b))
                         .build(),

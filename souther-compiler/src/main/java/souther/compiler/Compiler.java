@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -89,7 +90,7 @@ public final class Compiler {
      */
     private static CompileException tooDeep() {
         return CompileException.of(
-                Diagnostic.of(null, "check.expr.toodeep").title("check.boundary.title").build(),
+                Diagnostic.of(DiagnosticCode.E2104, "check.expr.toodeep").build(),
                 "an expression in this source nests too deeply for the compiler to walk;"
                         + " name its parts with `let` to flatten it");
     }

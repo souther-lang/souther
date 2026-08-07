@@ -1,5 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.DiagnosticCode;
+
+
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
@@ -71,7 +74,7 @@ class DbTest {
         @Override
         public Answer<String> compute(Db db) {
             ran("complains");
-            return Answer.absent(Report.of(Diagnostic.literal(null, "E9999", about)));
+            return Answer.absent(Report.of(Diagnostic.literal(null, about)));
         }
     }
 
@@ -119,7 +122,7 @@ class DbTest {
 
     @Test
     void raisesTheMessageAPassRaisedItWith() {
-        Diagnostic d = Diagnostic.of("E1234", "check.module.duplicate").build();
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1503, "check.module.duplicate").build();
         CompileException raised = CompileException.of(d, "duplicate module `a`");
         List<Report> reports = Report.of(raised);
         assertEquals(raised.getMessage(), reports.get(0).asException().getMessage());

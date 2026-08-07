@@ -5,6 +5,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.evaluate.DepthLimitExceeded;
@@ -845,7 +846,7 @@ public final class ExampleStatements {
      * missing where one was written (issue #206).
      */
     static Diagnostic unbuildableFake(SourcePos pos, String dependency, String reason) {
-        return Diagnostic.of("E1908", "check.fake.unbuildable").title("check.example.title")
+        return Diagnostic.of(DiagnosticCode.E1908, "check.fake.unbuildable")
                 .at(pos).args(dependency, reason).build();
     }
 
@@ -858,11 +859,11 @@ public final class ExampleStatements {
      * written out rather than passed as a number, which a locale would group into a budget nobody set.
      */
     private static Diagnostic unreadableFake(Ast.Fake fk, Unread why) {
-        Diagnostic.Builder said = Diagnostic.of("E1921", why.isDepth() ? "check.fake.unchecked.deep"
+        Diagnostic.Builder said = Diagnostic.of(DiagnosticCode.E1921, why.isDepth() ? "check.fake.unchecked.deep"
                         : why.isSteps() ? "check.fake.unchecked.steps"
                         : why.isStack() ? "check.fake.unchecked.stack"
                         : "check.fake.unchecked.unanswered")
-                .warning().title("check.example.title")
+                .warning()
                 .at(fk.pos(), fk.target().length())
                 .args(fk.target(), why.limitShown());
         return (why.isDepth() ? said.hint("check.fake.unchecked.deep.hint", fk.target())

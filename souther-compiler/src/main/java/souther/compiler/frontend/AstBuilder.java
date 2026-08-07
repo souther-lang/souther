@@ -9,6 +9,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
@@ -83,7 +84,7 @@ public final class AstBuilder {
             name = defaultModuleName;
             pos = pos(file);
         } else {
-            throw error(pos(file), "parse.module", "expected `module` declaration");
+            throw error(pos(file), DiagnosticCode.E2301, "parse.module", "expected `module` declaration");
         }
         moduleName = name;   // set before any type is read, so type-variable gating knows the namespace
         header.flatMap(h -> h.child(SyntaxKind.EXPOSING_CLAUSE))
@@ -151,7 +152,7 @@ public final class AstBuilder {
 
     private CompileException onlyExamples(SyntaxNode n) {
         return CompileException.of(
-                Diagnostic.of("E1906", "check.example.file.only").title("check.example.title")
+                Diagnostic.of(DiagnosticCode.E1906, "check.example.file.only")
                         .at(pos(n)).build(),
                 "an `examples for` file holds examples, the fakes they run against and the values they"
                         + " name; a data, a behavior, an import and a `let` with parameters belong in the"
@@ -267,7 +268,7 @@ public final class AstBuilder {
             // thing and reject each other's construction. One way to write it (spec §unit-data).
             if (includes.isEmpty() && fields.isEmpty()) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.data.emptybody").title("check.data.invalid.title")
+                        Diagnostic.of(DiagnosticCode.E1008, "check.data.emptybody")
                                 .at(bodyRegion(product.get())).args(name)
                                 .hint("check.data.emptybody.hint", name).build(),
                         "data `" + name + "` has an empty body");
@@ -300,7 +301,7 @@ public final class AstBuilder {
         // slot for one, would silently drop it and with it any error inside it.
         for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.invariant.onunit").title("check.invariant.invalid.title")
+                    Diagnostic.of(DiagnosticCode.E1102, "check.invariant.onunit")
                             .at(pos(clause)).args(name).build(),
                     "unit data `" + name + "` cannot carry an invariant");
         }
@@ -327,16 +328,14 @@ public final class AstBuilder {
                 // Refused here rather than left to be discovered at the attempt.
                 if (ident(label).equals("_")) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.invariant.underscore")
-                                    .title("check.invariant.invalid.title")
+                            Diagnostic.of(DiagnosticCode.E1104, "check.invariant.underscore")
                                     .at(posOf(label)).args(typeName)
                                     .hint("check.invariant.underscore.hint").build(),
                             "`_` cannot name an invariant clause");
                 }
                 if (!named.add(ident(label))) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.invariant.duplicate")
-                                    .title("check.invariant.invalid.title")
+                            Diagnostic.of(DiagnosticCode.E1103, "check.invariant.duplicate")
                                     .at(posOf(label)).args(ident(label), typeName).build(),
                             "`" + typeName + "` declares two invariant clauses named `"
                                     + ident(label) + "`");
@@ -421,7 +420,7 @@ public final class AstBuilder {
             // Like `intrinsic`, and for the same reason: what the standard library keeps to itself
             // is the library's own business, and a user module has no surface to hide anything from
             // — everything it declares is published (ADR-0075).
-            throw error(pos(privateModifier.get()), "parse.private.core",
+            throw error(pos(privateModifier.get()), DiagnosticCode.E1402, "parse.private.core",
                     "`private` is a core privilege: only a module in the reserved `souther`"
                             + " namespace may declare one");
         }
@@ -430,7 +429,7 @@ public final class AstBuilder {
         Optional<SyntaxNode> intrinsic = n.child(SyntaxKind.INTRINSIC_BODY);
         if (intrinsic.isPresent()) {
             if (!isReservedNamespace(moduleName)) {
-                throw error(pos, "parse.intrinsic.core",
+                throw error(pos, DiagnosticCode.E1402, "parse.intrinsic.core",
                         "`intrinsic` is a core privilege: only a module in the reserved `souther`"
                                 + " namespace may declare one (ADR-0028)");
             }
@@ -570,7 +569,7 @@ public final class AstBuilder {
      */
     private Ast.TypeRef optional(List<Ast.TypeTerm> cases, SourcePos pos) {
         if (!isReservedNamespace(moduleName)) {
-            throw errorWithHint(pos, "parse.optional.core", "parse.optional.core.hint",
+            throw errorWithHint(pos, DiagnosticCode.E1402, "parse.optional.core", "parse.optional.core.hint",
                     "an optional type `T?` may be written only on a data field, or in the core (the"
                             + " reserved `souther` namespace); a user model never names an optional"
                             + " elsewhere (ADR-0011). On the result of a helper, leave the type off and"
@@ -578,7 +577,7 @@ public final class AstBuilder {
                             + " list of nought or one and use `List.flatMap`");
         }
         if (cases.size() > 1) {
-            throw error(pos, "parse.optional.sum",
+            throw error(pos, DiagnosticCode.E1308, "parse.optional.sum",
                     "`?` marks a single type optional, but it follows a sum of "
                             + cases.size() + " cases");
         }
@@ -604,7 +603,7 @@ public final class AstBuilder {
         if (typevar.isPresent()) {
             String v = souther.compiler.Reserved.name(typevar.get().text());
             if (!isReservedNamespace(moduleName)) {
-                throw error(pos(n), "parse.typevar.core",
+                throw error(pos(n), DiagnosticCode.E1402, "parse.typevar.core",
                         "type variable `" + v + "` is only allowed in the core (the reserved `souther`"
                                 + " namespace); a user model stays bounded (ADR-0028)", v);
             }
@@ -657,7 +656,7 @@ public final class AstBuilder {
             case NEW_DATA_EXPR -> newData(n);
             case BLOCK_EXPR -> block(n);
             case UNREACHABLE_EXPR -> unreachable(n);
-            default -> throw error(pos(n), "parse.expr", "expected an expression");
+            default -> throw error(pos(n), DiagnosticCode.E2302, "parse.expr", "expected an expression");
         };
     }
 
@@ -670,7 +669,7 @@ public final class AstBuilder {
             case STRING_LIT -> new Ast.StringLit(stringValue(t.text()), pos);
             case TRUE_KW -> new Ast.BoolLit(true, pos);
             case FALSE_KW -> new Ast.BoolLit(false, pos);
-            default -> throw error(pos, "parse.expr", "expected a literal");
+            default -> throw error(pos, DiagnosticCode.E2305, "parse.expr", "expected a literal");
         };
     }
 
@@ -678,7 +677,7 @@ public final class AstBuilder {
     private Ast.Expr unreachable(SyntaxNode n) {
         Ast.Expr reason = expr(firstExprChild(n));
         if (!(reason instanceof Ast.StringLit lit)) {
-            throw error(pos(n), "parse.unreachable.reason", "`unreachable` states a reason");
+            throw error(pos(n), DiagnosticCode.E1310, "parse.unreachable.reason", "`unreachable` states a reason");
         }
         return new Ast.Unreachable(lit.value(), pos(n));
     }
@@ -755,7 +754,7 @@ public final class AstBuilder {
                     pos(operands.get(1)));
         }
         throw CompileException.of(
-                Diagnostic.of(null, "parse.vpipe.right").title("parse.title").at(right.pos()).build(),
+                Diagnostic.of(DiagnosticCode.E2302, "parse.vpipe.right").at(right.pos()).build(),
                 "the right side of `|>` must be a function call or a function name");
     }
 
@@ -797,8 +796,7 @@ public final class AstBuilder {
         }
         if (binder == null) {
             throw CompileException.of(
-                    Diagnostic.of("E2018", "check.attempt.armswithoutattempt")
-                            .title("check.attempt.title").at(pos(node.get()))
+                    Diagnostic.of(DiagnosticCode.E2018, "check.attempt.armswithoutattempt").at(pos(node.get()))
                             .hint("check.attempt.armswithoutattempt.hint").build(),
                     "departure arms need an attempted construction to answer for");
         }
@@ -808,8 +806,7 @@ public final class AstBuilder {
             SyntaxToken label = identTokens(arm).get(0);
             if (!answered.add(ident(label))) {
                 throw CompileException.of(
-                        Diagnostic.of("E2019", "check.attempt.armtwice")
-                                .title("check.attempt.title").at(posOf(label))
+                        Diagnostic.of(DiagnosticCode.E2019, "check.attempt.armtwice").at(posOf(label))
                                 .args(ident(label)).build(),
                         "the arm `" + ident(label) + "` is written twice");
             }
@@ -1007,7 +1004,7 @@ public final class AstBuilder {
             // saying so is resolution's to do. The parser has no answer for a name yet.
             boolean qualified = caseTypes.get(caseTypes.size() - 1).written().indexOf('.') >= 0;
             if (!isSome && !qualified) {
-                throw error(posOf((SyntaxToken) es.get(i)), "parse.case.positional",
+                throw error(posOf((SyntaxToken) es.get(i)), DiagnosticCode.E2303, "parse.case.positional",
                         "a case value is bound with `as`: write `| " + caseTypes.get(caseTypes.size() - 1).written()
                                 + " as " + ident + "`",
                         caseTypes.get(caseTypes.size() - 1).written(), ident);
@@ -1048,13 +1045,13 @@ public final class AstBuilder {
             bindingToken = (SyntaxToken) es.get(i++);
         }
         if (isSome && asBinding != null) {
-            throw error(casePos, "parse.option.positional",
+            throw error(casePos, DiagnosticCode.E2303, "parse.option.positional",
                     "Option's wrapped value is bound positionally: write `| Some v`, not `| Some as v`");
         }
         // `Some(a)` opens nothing (unlike `X(a)` on a user case); the whole-element spelling is `Some v`.
         // Only `Some(X(...))`, which opens a wrapped newtype, uses the paren form.
         if (isSome && unwrapNames.size() == 1) {
-            throw error(casePos, "parse.option.positional",
+            throw error(casePos, DiagnosticCode.E2303, "parse.option.positional",
                     "write `| Some v` to bind the whole value; `Some(...)` opens a wrapped newtype, as in `| Some(" + unwrapNames.get(0).written() + "(v))`");
         }
         // skip the arrow, then the body is the trailing expression node
@@ -1154,7 +1151,7 @@ public final class AstBuilder {
                 yield bindPattern(pat, expr(onlyExpr(s)),
                         foldStatements(stmts, index + 1, result), pos(pat));
             }
-            default -> throw error(pos, "parse.expr", "unexpected statement");
+            default -> throw error(pos, DiagnosticCode.E2302, "parse.expr", "unexpected statement");
         };
     }
 
@@ -1200,7 +1197,7 @@ public final class AstBuilder {
                 }
                 yield new Ast.LetIn(whole, value, body, pos);
             }
-            default -> throw error(pos, "parse.expr", "unexpected pattern");
+            default -> throw error(pos, DiagnosticCode.E2303, "parse.expr", "unexpected pattern");
         };
     }
 
@@ -1534,17 +1531,18 @@ public final class AstBuilder {
         return sb.toString();
     }
 
-    private CompileException error(SourcePos pos, String messageKey, String legacyMessage, Object... args) {
+    private CompileException error(SourcePos pos, DiagnosticCode code, String messageKey,
+                                   String legacyMessage, Object... args) {
         return CompileException.of(
-                Diagnostic.of(null, messageKey).title("parse.title").at(pos).args(args).build(),
+                Diagnostic.of(code, messageKey).at(pos).args(args).build(),
                 legacyMessage);
     }
 
     /** As {@link #error}, with a hint under it naming the way out. */
-    private CompileException errorWithHint(SourcePos pos, String messageKey, String hintKey,
+    private CompileException errorWithHint(SourcePos pos, DiagnosticCode code, String messageKey, String hintKey,
                                            String legacyMessage, Object... args) {
         return CompileException.of(
-                Diagnostic.of(null, messageKey).title("parse.title").at(pos).args(args)
+                Diagnostic.of(code, messageKey).at(pos).args(args)
                         .hint(hintKey).build(),
                 legacyMessage);
     }
