@@ -1166,6 +1166,10 @@ public final class TypeOps {
      */
     public static TypeName foreignNameInBoundaryShape(Type t, Symbols symbols) {
         return switch (t) {
+            // Asked of the type, not of the name a source spelling resolved to. `Raw` is the
+            // language's own — an encoder's output at a railway's edge, which no stage produces — and
+            // it answers the same whether it arrives as the primitive or as a name that denotes it.
+            case Type.Prim p -> p == Type.Prim.RAW ? TypeName.primitive("Raw") : null;
             case Type.Ref r -> declaredByAModel(r.name(), symbols) ? null : r.name();
             case Type.Union u -> u.members().stream()
                     .filter(m -> !declaredByAModel(m, symbols)).findFirst().orElse(null);
@@ -1179,7 +1183,13 @@ public final class TypeOps {
             case Type.TupleOf tu -> tu.elements().stream()
                     .map(e -> foreignNameInBoundaryShape(e, symbols))
                     .filter(n -> n != null).findFirst().orElse(null);
-            default -> null;
+            // Each of these is refused before this is asked, by the obligation that owns it: a
+            // function has no external form, and an open type, a bottom or an error type is not
+            // something a signature can be written with. Answering null for them is a decision about
+            // each, written here rather than left to a default arm that would also answer for a
+            // constructor added later.
+            case Type.FnOf _, Type.Var _, Type.MetaVar _,
+                 Type.Nothing _, Type.Never _, Type.Erroneous _ -> null;
         };
     }
 

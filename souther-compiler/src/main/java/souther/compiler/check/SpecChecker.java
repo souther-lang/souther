@@ -631,10 +631,11 @@ public final class SpecChecker {
         }
     }
 
-    /** What to write instead. Said as declaring the case rather than as supplying a codec: the name is
-     *  refused for whose vocabulary it is, and a codec for it would not change that. */
+    /** What to write instead. Said as declaring a type rather than as supplying a codec: the name is
+     *  refused for whose vocabulary it is, and a codec for it would not change that. Said of a type
+     *  rather than of a case, because a parameter is refused for the same reason and takes one. */
     private static final String FOREIGN_NAME_ADVICE =
-            "declare the case this model has to report and answer that";
+            "declare this as a type of the model and write that at the boundary";
 
     /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
      * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the
