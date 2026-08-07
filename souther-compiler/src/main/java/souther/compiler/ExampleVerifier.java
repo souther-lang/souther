@@ -10,10 +10,10 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
 import souther.compiler.evaluate.StepLimitExceeded;
-import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Disposition;
@@ -146,8 +146,11 @@ public final class ExampleVerifier {
                 : failures.size() + " examples do not hold; " + legacyOf(first);
     }
 
-    /** A one-line message for a failing example, used where only the legacy string is shown (the LSP
-     * surfaces this rather than the rendered catalog message). */
+    /** A one-line message for a failing example: the body {@code getMessage()} is built from on the
+     * exception these are thrown in. No surface prints it — the CLI, the annotation processor and the LSP all
+     * render the diagnostics, which this exception carries — so what reads it is a caller holding
+     * the exception, and it takes no language for the same reason
+     * {@link DiagnosticRenderer#legacyBody} does not. */
     private static String legacyOf(Diagnostic d) {
         if (d.diff() != null) {
             // JUnit order: the expected value (what the example asserts) first, then what the
@@ -159,7 +162,7 @@ public final class ExampleVerifier {
         // non-termination): render the diagnostic's own catalog message so the reason travels
         // through the annotation processor, rather than collapsing to a bare "example failed".
         if (d.messageKey() != null) {
-            return Messages.get(d.messageKey(), Messages.defaultLocale(), d.args());
+            return DiagnosticRenderer.legacyBody(d);
         }
         return "example failed";
     }

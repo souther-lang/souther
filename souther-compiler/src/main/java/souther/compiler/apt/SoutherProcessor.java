@@ -131,9 +131,20 @@ public final class SoutherProcessor extends AbstractProcessor {
 
     /** The same rendering for a warning, which arrives already carrying the source it belongs to. */
     private List<String> render(List<Located> located, List<Source> sources) {
-        Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
         return DiagnosticRenderer.renderAll(
-                located, sourcesOf(sources), new HumanRenderer(false), locale);
+                located, sourcesOf(sources), new HumanRenderer(false), locale());
+    }
+
+    /**
+     * The language this compile answers in: the {@code souther.lang} processor option if the build
+     * passes one, then {@code SOUTHER_LANG}, then the default.
+     *
+     * <p>The processor's policy, in the processor. javac tells a processor nothing about who reads
+     * its output, so the option is what there is to read; a build that passes none is answered like
+     * a CLI invocation that named none.
+     */
+    private Locale locale() {
+        return Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
     }
 
     /** What to quote for each source a diagnostic points into, under names no two of these files

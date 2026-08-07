@@ -73,10 +73,32 @@ Amending in place rather than superseding: what changed is a default, the reason
 catalog has to be to ship — not the shape of the decision. Diagnostics are still data rendered by a
 locale-aware layer, and the code
 and type strings are still locale-independent, which is what makes a code a lookup that survives
-being answered in a language the reader does not read. Two surfaces still name a language of their
-own and are untouched here: the LSP renders in English because a language server is not told the
-editor's UI locale, and the annotation processor resolves from `souther.lang`. That the policy is
-written in each adapter rather than in one place is a separate problem from which language it names.
+being answered in a language the reader does not read.
+
+Three surfaces answer a reader, and each writes its own policy where the surface is. The CLI
+resolves from `--lang`, the annotation processor from `souther.lang`, and a language server names
+English outright, because an editor tells it which files the workspace holds and nothing about which
+language its user reads. Not one table in the diagnostics layer: an adapter's language comes from
+the adapter's own option, and a layer holding the list would know every adapter in order to answer a
+question each of them can answer for itself. What the layer does hold is that each surface answers
+once — a surface picking a language twice has no policy, only two sites that happened to agree.
+
+The one-line body a `CompileException` builds its `getMessage()` from is not one of them and takes no
+language at all. No adapter prints it while the exception carries a diagnostic, and the sites that
+build it always supply one, so it is read by callers holding the exception rather than by anyone it
+is written for. What it has to do is not change when the language a reader is answered in is decided
+again, which is what `Messages.defaultLocale()` was the wrong way to say: the fallback is the answer
+to *which language when nobody named one*, so a text that reads it moves whenever that is settled
+again, and the text of a failing example was Japanese for that reason and no other. `legacyBody` now
+builds it and takes no locale, and `defaultLocale()` is private — the resolution's own last step,
+reachable only from the resolution.
+
+Which means no locale has to stop meaning the default one. A message lookup used to read a null
+locale as the default, which is the same reach spelled so that nothing looking for a locale being
+chosen would see it: a site with no reader to resolve for passes nothing and is answered out of the
+language chosen for readers who named none. So `Messages.get`, `Messages.has` and
+`DiagnosticRenderer.body` refuse a null locale. A caller has either resolved a language for a reader
+or is building a text that has no reader, and there is a way to say each.
 
 ## Context
 

@@ -85,7 +85,7 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      *
      * <p>The base file carries no language in its name. To {@link ResourceBundle} it is the root
      * bundle, which is a fallback rather than a language; to Souther it is the English catalog,
-     * which is what {@link Messages#defaultLocale()} says and what makes "the same keys as the base"
+     * which is what Souther answers when nobody names a language and what makes "the same keys as the base"
      * a statement about a language rather than about a default.
      */
     private record Catalog(Path path, Locale locale) {
@@ -523,7 +523,7 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
     /**
      * The language a catalog file's name says it is in. The base names none and is English.
      *
-     * <p>English as a fact about the file, not as {@link Messages#defaultLocale()}. The two agree
+     * <p>English as a fact about the file, not as the language Souther falls back to. The two agree
      * and are different things: one is the language the base catalog is written in, the other is
      * which language is chosen when nobody names one. Reading the second here would make the base's
      * text get checked against whatever the default becomes.

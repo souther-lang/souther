@@ -7,7 +7,6 @@ import souther.compiler.diag.Severity;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * One thing a query found: the structured {@link Diagnostic} a renderer works from, and the
@@ -145,11 +144,11 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
     }
 
     /** This report as an error to throw. One built from a raised exception throws that exception's
-     * message again; one built any other way renders its own, in English, because that message has
-     * always been English and a test that reads it should not move with the reader's locale. */
+     * message again; one built any other way renders its own, which is the legacy body and so takes
+     * no language — see {@link DiagnosticRenderer#legacyBody}. */
     public CompileException asException() {
         return legacyMessage == null
-                ? CompileException.of(diagnostic, DiagnosticRenderer.body(diagnostic, Locale.ENGLISH))
+                ? CompileException.of(diagnostic, DiagnosticRenderer.legacyBody(diagnostic))
                 : new CompileException(diagnostic, legacyMessage);
     }
 }

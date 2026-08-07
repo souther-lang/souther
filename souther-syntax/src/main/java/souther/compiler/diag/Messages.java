@@ -2,6 +2,7 @@ package souther.compiler.diag;
 
 import java.text.MessageFormat;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
@@ -56,8 +57,16 @@ public final class Messages {
         return defaultLocale();
     }
 
-    /** The locale when none is chosen: English, the one the shipped documents are written in. */
-    public static Locale defaultLocale() {
+    /**
+     * The locale when none is chosen: English, the one the shipped documents are written in.
+     *
+     * <p>Not callable from outside. It is the tail of the resolution above and nothing else: it
+     * answers the reader who named no language. Offered as a way to get a locale it reads as one,
+     * and a caller that needs a value but has no reader to resolve for takes it — after which that
+     * caller's text changes language the next time the default is decided, which is a decision
+     * about readers who named nothing and not about that caller.
+     */
+    private static Locale defaultLocale() {
         return Locale.ENGLISH;
     }
 
@@ -77,6 +86,7 @@ public final class Messages {
      * place to raise another one.
      */
     public static String get(String key, Locale locale, Object... args) {
+        Objects.requireNonNull(locale, NEEDS_A_LANGUAGE);
         String template = lookup(key, locale);
         if (template == null) {
             return key;
@@ -94,8 +104,23 @@ public final class Messages {
 
     /** Whether the catalog defines {@code key} for {@code locale} (or its English base). */
     public static boolean has(String key, Locale locale) {
+        Objects.requireNonNull(locale, NEEDS_A_LANGUAGE);
         return lookup(key, locale) != null;
     }
+
+    /**
+     * What a caller passing no locale is told.
+     *
+     * <p>No locale is not the default one. Reading it that way puts the default back within reach of
+     * every caller — a site with no reader to resolve for passes nothing and is answered out of the
+     * language chosen for readers who named none, which is the same mistake a public
+     * {@link #defaultLocale()} allowed, spelled so that nothing looking for a locale being picked
+     * would see it. A caller either resolved a language for a reader or is building text that has no
+     * reader, and the second has {@link DiagnosticRenderer#legacyBody}.
+     */
+    static final String NEEDS_A_LANGUAGE =
+            "a message is written in a language, and no language is not one of them:"
+                    + " resolve one for the reader, or take the body that has no reader";
 
     // No-fallback control so an explicit `--lang en` resolves to the English base rather than being
     // diverted to the JVM default locale's bundle (which ResourceBundle would otherwise insert into
@@ -106,8 +131,7 @@ public final class Messages {
 
     private static String lookup(String key, Locale locale) {
         try {
-            ResourceBundle bundle = ResourceBundle.getBundle(BUNDLE,
-                    locale == null ? defaultLocale() : locale, CONTROL);
+            ResourceBundle bundle = ResourceBundle.getBundle(BUNDLE, locale, CONTROL);
             return bundle.getString(key);
         } catch (MissingResourceException _) {
             return null;
