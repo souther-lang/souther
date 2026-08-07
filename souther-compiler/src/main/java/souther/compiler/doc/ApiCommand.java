@@ -25,6 +25,10 @@ public final class ApiCommand {
     private ApiCommand() {}
 
     public static int run(String[] args, PrintStream out, PrintStream err) {
+        return run(args, out, err, Caller.CLI);
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
         if (args.length == 0) {
             listPublished(out, null);
             return 0;
@@ -64,8 +68,7 @@ public final class ApiCommand {
             out.println(line(asked, signature));
             // A signature says what to pass, not what it means — whether a span counts both ends,
             // whether a division aborts or answers a case. That is in the module's own source.
-            err.println("`souther api --source " + asked.substring(0, asked.indexOf('.'))
-                    + "` for what it means");
+            err.println(caller.stdlibSource(asked.substring(0, asked.indexOf('.'))));
             return 0;
         }
         if (!Prelude.isQualifier(asked)) {
@@ -96,18 +99,26 @@ public final class ApiCommand {
      * what the specification tells a reader to call, so it is listed under its own name and with
      * only the arguments its caller writes. Leaving it out would have this command contradict the
      * specification about what exists.
+     *
+     * <p>Which names those are and what order they come in are both {@link Prelude#published()}'s
+     * answer, walked here rather than rebuilt: a listing assembled from the declarations and then
+     * the rewrites puts every sugar after every module, whichever module it reads as. What each
+     * name's signature comes from is this command's own question, and the only one it decides.
      */
     static Map<String, Signature> surface() {
         Map<String, Signature> surface = new LinkedHashMap<>();
-        for (Map.Entry<String, Prelude.PreludeEntry> e : Prelude.entries().entrySet()) {
-            if (Prelude.published().contains(e.getKey())) {
-                surface.put(e.getKey(), declared(e.getValue(), e.getValue().signature().params().size()));
+        for (String name : Prelude.published()) {
+            Prelude.Rewrite rewrite = Prelude.rewriteOf(name);
+            if (rewrite != null) {
+                Prelude.PreludeEntry target = Prelude.entry(rewrite.target().qualified());
+                if (target != null) {
+                    surface.put(name, declared(target, rewrite.keptArgs()));
+                }
+                continue;
             }
-        }
-        for (Map.Entry<String, Prelude.Rewrite> e : Prelude.rewrites().entrySet()) {
-            Prelude.PreludeEntry target = Prelude.entry(e.getValue().target().qualified());
-            if (target != null) {
-                surface.put(e.getKey(), declared(target, e.getValue().keptArgs()));
+            Prelude.PreludeEntry entry = Prelude.entry(name);
+            if (entry != null) {
+                surface.put(name, declared(entry, entry.signature().params().size()));
             }
         }
         return surface;

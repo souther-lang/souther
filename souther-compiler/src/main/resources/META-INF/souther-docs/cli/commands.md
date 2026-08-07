@@ -97,7 +97,16 @@ souther mcp
 
 Serves the `doc`, `api` and `japi` answers over the Model Context Protocol on stdio, for agent
 harnesses that take tools rather than shell commands. The tools are `doc_search`, `doc_read`,
-`stdlib_api` and `jar_api`.
+`stdlib_api`, `stdlib_api_search`, `stdlib_api_source` and `jar_api`.
+
+Each tool publishes a capability rather than one spelling of an argument vector, because a client
+here has no prompt to fall back to. `doc_read` with no `name` is the listing `souther doc` prints
+for no argument, and `doc_search` takes the `limit` the flag takes. What `souther api` selects with
+`--search` and `--source` is a tool each. `stdlib_api_search` answers every match, so it takes no
+count.
+
+The schema a client reads is the one the server enforces: every argument publishes its domain, and
+one no tool declares is refused rather than dropped.
 
 ## Options every command shares
 

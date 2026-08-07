@@ -1,6 +1,7 @@
 package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.Prelude;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -36,6 +37,23 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
         List<String> lines = answer.out().lines().toList();
         assertTrue(lines.stream().anyMatch(l -> l.startsWith("List.map(")), "List.map is listed:\n" + answer.out());
         assertTrue(lines.stream().anyMatch(l -> l.startsWith("String.length(")), "String.length is listed");
+    }
+
+    @Test
+    void withNoArgumentNamesFollowThePublishedModuleOrder() {
+        Answer answer = run();
+
+        assertEquals(0, answer.code());
+        List<String> listed = answer.out().lines()
+                .map(line -> line.substring(0, line.indexOf('(')))
+                .toList();
+
+        assertEquals(List.copyOf(Prelude.published()), listed,
+                "the listing is one module's vocabulary at a time, and the library is what says"
+                        + " which module a name reads as:\n" + answer.out());
+        assertTrue(listed.indexOf("List.fold") < listed.indexOf("Set.empty"),
+                "a name callable only through its sugar stays in the block of the module it is"
+                        + " called through:\n" + answer.out());
     }
 
     @Test
