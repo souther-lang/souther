@@ -591,7 +591,7 @@ final class CodecGen {
                                         Map<String, Type> fields, Src src) {
         ClassDesc cdDec = cd(data.name() + srcSuffix(src));
         decoderClass = cdDec;
-        Invariants invariants = invariantsOf(data, dec, fields);
+        Invariants invariants = invariantsOf(data, fields);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -667,7 +667,7 @@ final class CodecGen {
      * the boundary and an attempted construction would name different rules for the same value. A mapped
      * clause declared after an unmapped one therefore trades Raoh's code for its place in the order.
      */
-    private Invariants invariantsOf(Ast.Data data, Ast.DecoderDef dec, Map<String, Type> fields) {
+    private Invariants invariantsOf(Ast.Data data, Map<String, Type> fields) {
         if (!data.newtype()) {
             return Invariants.NONE;   // an object's invariant has no single value to constrain
         }
@@ -677,7 +677,7 @@ final class CodecGen {
         }
         Type base = fields.get("value");
         List<ClauseEmit> out = new ArrayList<>();
-        boolean refining = !leafStaysTyped(dec);
+        boolean refining = false;
         for (int i = 0; i < declared.size(); i++) {
             List<InvariantConstraints.Constraint> mapped = new ArrayList<>();
             boolean refine = true;
@@ -697,21 +697,6 @@ final class CodecGen {
             out.add(new ClauseEmit(i, declared.get(i).name(), List.copyOf(mapped), refine));
         }
         return new Invariants(out);
-    }
-
-    /**
-     * Whether the decoder this constrains is still one of Raoh's typed decoders, which is what a mapped
-     * constraint is a method on. A map whose keys are remapped into a key type is not: the remap is a
-     * {@code flatMapWithPath}, which answers the plain {@link Decoder}. Its clauses are refined instead.
-     */
-    private static boolean leafStaysTyped(Ast.DecoderDef dec) {
-        if (!(dec instanceof Ast.NewtypeDecoder)) {
-            return true;   // a prim leaf is typed; an object decoder maps nothing either way
-        }
-        // A newtype over a map keeps its typed leaf: the key remap is appended *after* the
-        // constraints rather than before them (see emitNewtypeDecode), so a size bound still becomes
-        // Raoh's own too_small / too_large rather than falling back to invariant_violation.
-        return true;
     }
 
     /**
