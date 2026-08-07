@@ -482,6 +482,7 @@ What crosses a decoder/encoder boundary is decided by representation, and five o
 * [[a-parameter-names-one-type]]a parameter MUST name a single type. An anonymous union is the shape of one behavior's answer and nobody names it (<<union-member>>), so it is written on an output and not taken as an input;
 * [[an-optional-does-not-stand-in-a-boundary]]an optional MUST NOT stand anywhere in a behavior's boundary shape — neither as a parameter nor as the output, and at any depth inside a collection either. A boundary carries the model's own vocabulary, and absence there is owned by the data that holds it, on a `+?+` field, or by a sum the model names (<<optional>>). The shape is read down to a named type and no further: a data carrying a `+?+` field crosses as that data;
 * [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, `+Date+`, `+DateTime+`, or an enumeration, a sum every one of whose cases is a unit data (<<collections>>). The boundary writes a key as text, and a key with no text is a key nothing can address;
+* [[a-boundary-carries-the-models-own-vocabulary]]a named type that crosses MUST be one a model declares. The language declares vocabulary of its own — the case a division by zero answers with, the rounding mode a `+Decimal+` operation takes, the reserved `+Raw+` — and those name what an operation can answer or take, not what a behavior publishes. A model that has such a case to report declares its own and names it (`+-> Int | Undivided+`), which is what keeps the behavior's protocol independent of how the language accounts for itself;
 * [[a-collection-member-supports-equality]]a `+Set+`'s element and a `+Map+`'s key MUST support equality. Both ask whether two of them are the same, and a function has no value to compare (<<equality>>).
 
 The external representation handled by Decoders and Encoders is not Souther's own types but the neutral value model of the boundary library Raoh (a tree of scalar / List / Map). Souther owns the domain's types, invariants, and behaviors; the external representation and its parsing and generation are delegated to the peripheral library Raoh (<<separate-representation>>, <<decoder>>).
@@ -4296,6 +4297,16 @@ Reported at the pattern (<<a-matches-pattern-is-a-literal-regular-expression>>).
 ----
 
 Reported at the operator (<<newtype-arithmetic-follows-the-units>>). Which rule was broken — same-newtype addition, a product's units, a quotient's, a scalar, a reciprocal — is what an author needs and is not readable from the operand types, so the refusal names its own rule rather than reporting a type mismatch.
+
+[#e1325]
+=== A type the language declares stands in a behavior's boundary
+
+[,text]
+----
+`divide` answers `DivisionByZero`, which the language declares rather than this model.
+----
+
+Reported at the parameter, or at the behavior for its output (<<a-boundary-carries-the-models-own-vocabulary>>). `+DivisionByZero+` and `+NotANumber+` say what `+Int.divide+` and `+String.toInt+` can answer, `+RoundingMode+` says what `+Decimal.round+` takes, and `+Raw+` is reserved; each is the language's account of one of its own operations. A behavior that has the same thing to report declares the case — `+data Undivided+`, answered as `+-> Int | Undivided+` — so that what the behavior publishes stays its own even when the language's account of itself changes. Reported wherever the name stands in what crosses, at any depth and as a member of an output union.
 
 [#e1401]
 === Arbitrary Java calls

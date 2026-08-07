@@ -1153,6 +1153,62 @@ public final class TypeOps {
         };
     }
 
+    /**
+     * The first named type in {@code t}'s boundary shape that a model did not declare, or null when
+     * every one of them did — what a behavior's parameter and its output are checked against.
+     *
+     * <p>The walk is the one {@link #optionalInBoundaryShape} takes, with an output union's members
+     * asked as well: a member is a name in what crosses, and the encoder writes it like any other.
+     *
+     * <p>A primitive names a scalar the boundary already writes and is nothing to a model to declare.
+     * {@code Raw} is written like one and is not one — it is reserved, no stage produces it — so it is
+     * asked for a declaration and has none.
+     */
+    public static TypeName foreignNameInBoundaryShape(Type t, Symbols symbols) {
+        return switch (t) {
+            // Asked of the type, not of the name a source spelling resolved to. `Raw` is the
+            // language's own — an encoder's output at a railway's edge, which no stage produces — and
+            // it answers the same whether it arrives as the primitive or as a name that denotes it.
+            case Type.Prim p -> p == Type.Prim.RAW ? TypeName.primitive("Raw") : null;
+            case Type.Ref r -> declaredByAModel(r.name(), symbols) ? null : r.name();
+            case Type.Union u -> u.members().stream()
+                    .filter(m -> !declaredByAModel(m, symbols)).findFirst().orElse(null);
+            case Type.ListOf l -> foreignNameInBoundaryShape(l.element(), symbols);
+            case Type.SetOf s -> foreignNameInBoundaryShape(s.element(), symbols);
+            case Type.OptionOf o -> foreignNameInBoundaryShape(o.element(), symbols);
+            case Type.MapOf m -> {
+                TypeName inKey = foreignNameInBoundaryShape(m.key(), symbols);
+                yield inKey != null ? inKey : foreignNameInBoundaryShape(m.value(), symbols);
+            }
+            case Type.TupleOf tu -> tu.elements().stream()
+                    .map(e -> foreignNameInBoundaryShape(e, symbols))
+                    .filter(n -> n != null).findFirst().orElse(null);
+            // Each of these is refused before this is asked, by the obligation that owns it: a
+            // function has no external form, and an open type, a bottom or an error type is not
+            // something a signature can be written with. Answering null for them is a decision about
+            // each, written here rather than left to a default arm that would also answer for a
+            // constructor added later.
+            case Type.FnOf _, Type.Var _, Type.MetaVar _,
+                 Type.Nothing _, Type.Never _, Type.Erroneous _ -> null;
+        };
+    }
+
+    /**
+     * Whether {@code name} is a type a model declares, as against one the language declares of its own
+     * operations. The two are already told apart where construction is governed — what a compilation
+     * declares answers to {@code constructs} and the language's vocabulary does not — and the same
+     * line decides what a boundary may carry.
+     *
+     * <p>A primitive is neither: it is a scalar the boundary writes, with no declaration anywhere.
+     * {@code Raw} is spelled as one and answers no, having no declaration to be found.
+     */
+    private static boolean declaredByAModel(TypeName name, Symbols symbols) {
+        if (name.isPrimitive()) {
+            return !"Raw".equals(name.name());
+        }
+        return symbols.declaredByCompilation(name);
+    }
+
     public static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();

@@ -266,6 +266,7 @@ public final class TypeChecker {
                 SpecChecker.rejectFunctionIO(spec, symbols);
                 SpecChecker.rejectOptionalIO(spec, symbols);
                 SpecChecker.rejectNonBoundaryMapKeyIO(spec, symbols);
+                SpecChecker.rejectForeignBoundaryName(spec, symbols);
                 List<String> outputCases = new ArrayList<>();
                 for (Ast.TypeTerm t : spec.ret().cases()) {
                     // a function output is refused as unrepresentable; it names no output case
