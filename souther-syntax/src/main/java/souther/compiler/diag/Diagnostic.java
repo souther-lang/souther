@@ -25,17 +25,84 @@ import java.util.List;
  * {@link #literal}, which is not a diagnostic a check raises: it wraps a message the compiler was
  * handed.
  */
-public record Diagnostic(Severity severity,
-                         String code,
-                         String titleKey,
-                         Region region,
-                         List<LabeledRegion> secondary,
-                         String messageKey,
-                         Object[] args,
-                         String literalMessage,
-                         TypeComparison diff,
-                         List<Note> notes,
-                         String suggestion) {
+public final class Diagnostic {
+
+    private final Severity severity;
+    private final DiagnosticCode code;
+    private final Region region;
+    private final List<LabeledRegion> secondary;
+    private final String messageKey;
+    private final Object[] args;
+    private final String literalMessage;
+    private final TypeComparison diff;
+    private final List<Note> notes;
+    private final String suggestion;
+
+    private Diagnostic(Severity severity, DiagnosticCode code, Region region,
+                       List<LabeledRegion> secondary, String messageKey, Object[] args,
+                       String literalMessage, TypeComparison diff, List<Note> notes,
+                       String suggestion) {
+        this.severity = severity;
+        this.code = code;
+        this.region = region;
+        this.secondary = secondary;
+        this.messageKey = messageKey;
+        this.args = args;
+        this.literalMessage = literalMessage;
+        this.diff = diff;
+        this.notes = notes;
+        this.suggestion = suggestion;
+    }
+
+    public Severity severity() {
+        return severity;
+    }
+
+    /** The public identity, as the string a tool and a reader see, or null for a {@link #literal}. */
+    public String code() {
+        return code == null ? null : code.name();
+    }
+
+    /**
+     * The category this is shown under, read off the code rather than held beside it — so two
+     * diagnostics reporting one rule cannot be shown under two titles, and there is no constructor
+     * that could put them there.
+     */
+    public String titleKey() {
+        return code == null ? null : code.titleKey();
+    }
+
+    public Region region() {
+        return region;
+    }
+
+    public List<LabeledRegion> secondary() {
+        return secondary;
+    }
+
+    public String messageKey() {
+        return messageKey;
+    }
+
+    public Object[] args() {
+        return args;
+    }
+
+    public String literalMessage() {
+        return literalMessage;
+    }
+
+    public TypeComparison diff() {
+        return diff;
+    }
+
+    public List<Note> notes() {
+        return notes;
+    }
+
+    public String suggestion() {
+        return suggestion;
+    }
 
     /** The primary source position (the region's start). */
     public SourcePos pos() {
@@ -64,7 +131,7 @@ public record Diagnostic(Severity severity,
         for (Note note : notes == null ? List.<Note>of() : notes) {
             hints.add(note.identity());
         }
-        return new Identity(severity, code, titleKey, region, labels, messageKey,
+        return new Identity(severity, code(), titleKey(), region, labels, messageKey,
                 args == null ? List.of() : java.util.Arrays.asList(args), literalMessage, diff,
                 hints, suggestion);
     }
@@ -73,7 +140,7 @@ public record Diagnostic(Severity severity,
      * has not yet been moved onto a catalog key. It carries no code and no title: a site with
      * either of those has a catalog key by now. {@code pos} may be null for a position-less error. */
     public static Diagnostic literal(SourcePos pos, String message) {
-        return new Diagnostic(Severity.ERROR, null, null, pos == null ? null : Region.point(pos),
+        return new Diagnostic(Severity.ERROR, null, pos == null ? null : Region.point(pos),
                 List.of(), null, null, message, null, List.of(), null);
     }
 
@@ -82,14 +149,13 @@ public record Diagnostic(Severity severity,
      * agree at every site reporting that rule and neither is given here.
      */
     public static Builder of(DiagnosticCode code, String messageKey) {
-        return new Builder(code.name(), messageKey, code.titleKey());
+        return new Builder(code, messageKey);
     }
 
 
     public static final class Builder {
-        private final String code;
+        private final DiagnosticCode code;
         private final String messageKey;
-        private final String titleKey;
         private Region region;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private Object[] args = new Object[0];
@@ -98,10 +164,9 @@ public record Diagnostic(Severity severity,
         private String suggestion;
         private Severity severity = Severity.ERROR;
 
-        private Builder(String code, String messageKey, String titleKey) {
+        private Builder(DiagnosticCode code, String messageKey) {
             this.code = code;
             this.messageKey = messageKey;
-            this.titleKey = titleKey;
         }
 
         /** Marks this a warning: it is reported but does not fail the build. */
@@ -160,7 +225,7 @@ public record Diagnostic(Severity severity,
         }
 
         public Diagnostic build() {
-            return new Diagnostic(severity, code, titleKey, region, List.copyOf(secondary),
+            return new Diagnostic(severity, code, region, List.copyOf(secondary),
                     messageKey, args, null, diff, List.copyOf(withMessageArgs(notes)), suggestion);
         }
 

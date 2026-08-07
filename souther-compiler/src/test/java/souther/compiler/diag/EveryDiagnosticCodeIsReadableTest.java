@@ -147,16 +147,50 @@ class EveryDiagnosticCodeIsReadableTest {
      */
     @Test
     void nothingRaisesADiagnosticWithoutACode() throws IOException {
-        Set<String> raising = new TreeSet<>();
+        List<String> raising = new ArrayList<>();
         for (java.nio.file.Path source : MessageCatalogFormatTest.mainSources()) {
             String text = java.nio.file.Files.readString(source, StandardCharsets.UTF_8);
-            if (text.contains("Diagnostic.literal(")) {
-                raising.add(source.getFileName().toString());
+            Matcher m = Pattern.compile("Diagnostic\\.literal\\(").matcher(text);
+            while (m.find()) {
+                raising.add(source.toString().replace('\\', '/')
+                        .replaceAll(".*/src/main/java/", ""));
             }
         }
-        assertEquals(Set.of("Report.java"), raising,
+        assertEquals(List.of("souther/compiler/query/Report.java"), raising,
                 "a diagnostic was raised with no code; a check reports a rule, so name the rule and"
-                        + " give it a DiagnosticCode");
+                        + " give it a DiagnosticCode. One site wraps a message the compiler was"
+                        + " handed, and one is all there is room for");
+    }
+
+    /**
+     * A code on the list is one a compile can print.
+     *
+     * <p>The other direction of the documentation checks: those hold that every code resolves, and
+     * would go on holding after the site that emits one is deleted, leaving an enum constant and a
+     * section for something no reader can ever meet. Retired codes are kept apart precisely so the
+     * live list means "can be printed", and this is what makes that true rather than intended.
+     */
+    @Test
+    void everyCodeIsEmittedBySomething() throws IOException {
+        Set<String> referenced = new TreeSet<>();
+        Pattern named = Pattern.compile("DiagnosticCode\\.(E[0-9]{4})");
+        for (java.nio.file.Path source : MessageCatalogFormatTest.mainSources()) {
+            if (source.getFileName().toString().equals("DiagnosticCode.java")) {
+                continue;   // the declaration is not a use
+            }
+            Matcher m = named.matcher(java.nio.file.Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                referenced.add(m.group(1));
+            }
+        }
+        Set<String> unemitted = new TreeSet<>();
+        for (DiagnosticCode code : DiagnosticCode.values()) {
+            if (!referenced.contains(code.name())) {
+                unemitted.add(code.name());
+            }
+        }
+        assertEquals(Set.of(), unemitted,
+                "these are on the live list and nothing emits them; retire them or emit them");
     }
 
     private static String spec() throws IOException {

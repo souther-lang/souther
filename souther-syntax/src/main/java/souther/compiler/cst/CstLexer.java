@@ -176,7 +176,7 @@ public final class CstLexer {
     private void typeVar(int start) {
         pos++;   // the apostrophe
         if (pos >= src.length() || !Character.isJavaIdentifierStart(src.charAt(pos))) {
-            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2305, "lex.typevar",
+            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2306, "lex.typevar",
                     "a type variable needs a name after `'`, e.g. `'a`"));
             emit(SyntaxKind.ERROR_TOKEN, start);
             return;
@@ -228,7 +228,7 @@ public final class CstLexer {
             default -> null;
         };
         if (kind == null) {
-            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2305, "lex.unexpected",
+            errors.add(CstError.of(start, pos - start, DiagnosticCode.E2306, "lex.unexpected",
                     "unexpected character '" + c + "'", String.valueOf(c)));
             emit(SyntaxKind.ERROR_TOKEN, start);
             return;

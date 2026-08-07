@@ -129,7 +129,7 @@ public enum DiagnosticCode {
     E1811("a-helper-parameter-states-its-type", "check.helper.title"),
     E1812("a-helper-answers-what-it-declares", "check.helper.title"),
     E1813("a-recursive-helper-declares-its-return-type", "check.helper.title"),
-    E1814("a-recursive-helper-is-a-pure-method", "check.helper.title"),
+    E1814("a-recursive-helper-does-not-reach-an-injected-behavior", "check.helper.title"),
     E1815("an-empty-collections-element-type-is-determined", "check.fold.seed.title"),
 
     // --- examples ---
@@ -185,7 +185,8 @@ public enum DiagnosticCode {
     E2302("expression-syntax", "parse.title"),
     E2303("pattern-syntax", "parse.title"),
     E2304("examples-syntax", "parse.title"),
-    E2305("literal-syntax", "parse.title");
+    E2305("literal-syntax", "parse.title"),
+    E2306("the-source-is-made-of-tokens", "parse.title");
 
     private final String ruleAnchor;
     private final String titleKey;

@@ -205,7 +205,7 @@ public final class CstParser {
     private void exposingClause() {
         start(SyntaxKind.EXPOSING_CLAUSE);
         bump();   // exposing
-        expect(SyntaxKind.LPAREN);
+        expect(SyntaxKind.LPAREN, DiagnosticCode.E2301);
         if (!at(SyntaxKind.RPAREN)) {
             exposedEntry();
             while (eat(SyntaxKind.COMMA)) {
@@ -215,7 +215,7 @@ public final class CstParser {
                 exposedEntry();
             }
         }
-        expect(SyntaxKind.RPAREN);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2301);
         finish();
     }
 
@@ -235,7 +235,7 @@ public final class CstParser {
         if (at(SyntaxKind.AS_KW)) {
             start(SyntaxKind.IMPORT_ALIAS);
             bump();   // as
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
             finish();
         }
         // The name list is what an import adds to the bare names in scope; an import that only
@@ -244,15 +244,15 @@ public final class CstParser {
             start(SyntaxKind.NAME_LIST);
             bump();   // (
             if (!at(SyntaxKind.RPAREN)) {
-                expect(SyntaxKind.IDENT);
+                expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
                 while (eat(SyntaxKind.COMMA)) {
                     if (at(SyntaxKind.RPAREN)) {
                         break;
                     }
-                    expect(SyntaxKind.IDENT);
+                    expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
                 }
             }
-            expect(SyntaxKind.RPAREN);
+            expect(SyntaxKind.RPAREN, DiagnosticCode.E2301);
             finish();   // NAME_LIST
         }
         finish();   // IMPORT_DECL
@@ -260,7 +260,7 @@ public final class CstParser {
 
     private void qualifiedName() {
         start(SyntaxKind.QUALIFIED_NAME);
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
         dottedTail();
         finish();
     }
@@ -270,7 +270,7 @@ public final class CstParser {
     private void dataDef() {
         start(SyntaxKind.DATA_DEF);
         bump();   // data
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
         if (eat(SyntaxKind.ASSIGN)) {
             if (at(SyntaxKind.LBRACE)) {
                 productBody();
@@ -286,7 +286,7 @@ public final class CstParser {
 
     private void productBody() {
         start(SyntaxKind.PRODUCT_BODY);
-        expect(SyntaxKind.LBRACE);
+        expect(SyntaxKind.LBRACE, DiagnosticCode.E2301);
         if (!at(SyntaxKind.RBRACE)) {
             productMember();
             while (eat(SyntaxKind.COMMA)) {
@@ -296,7 +296,7 @@ public final class CstParser {
                 productMember();
             }
         }
-        expect(SyntaxKind.RBRACE);
+        expect(SyntaxKind.RBRACE, DiagnosticCode.E2301);
         finish();
     }
 
@@ -304,7 +304,7 @@ public final class CstParser {
         if (at(SyntaxKind.SPREAD)) {
             start(SyntaxKind.SPREAD_MEMBER);
             bump();   // ...
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
             finish();
         } else {
             field();
@@ -313,8 +313,8 @@ public final class CstParser {
 
     private void field() {
         start(SyntaxKind.FIELD);
-        expect(SyntaxKind.IDENT);
-        expect(SyntaxKind.COLON);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
+        expect(SyntaxKind.COLON, DiagnosticCode.E2301);
         typeRef();
         eat(SyntaxKind.QUESTION);   // `T?` optional field (Option<T>), lowered later
         finish();
@@ -326,9 +326,9 @@ public final class CstParser {
         // exact test for a sum; anything else opens a newtype over a written type
         if (nth(1) == SyntaxKind.PIPE) {
             start(SyntaxKind.SUM_BODY);
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
             while (eat(SyntaxKind.PIPE)) {
-                expect(SyntaxKind.IDENT);
+                expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
             }
             finish();
         } else {
@@ -354,7 +354,7 @@ public final class CstParser {
         typeRef();
         eat(SyntaxKind.QUESTION);   // `Y?`, kept for the AST to read as Option<Y> and the checker to refuse
         if (at(SyntaxKind.PIPE)) {
-            error(DiagnosticCode.E1606, "parse.sum.case.generic",
+            error(DiagnosticCode.E1020, "parse.sum.case.generic",
                     "a sum case must be a declared named data, so it cannot be a generic type");
         }
     }
@@ -379,7 +379,7 @@ public final class CstParser {
     private void behaviorDef() {
         start(SyntaxKind.BEHAVIOR_DEF);
         bump();   // behavior
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
         if (eat(SyntaxKind.COLON)) {
             behaviorSig();
         } else if (eat(SyntaxKind.ASSIGN)) {
@@ -393,7 +393,7 @@ public final class CstParser {
     private void behaviorSig() {
         start(SyntaxKind.BEHAVIOR_SIG);
         paramList();
-        expect(SyntaxKind.ARROW);
+        expect(SyntaxKind.ARROW, DiagnosticCode.E2301);
         retType();
         boolean more = true;
         while (more) {
@@ -410,7 +410,7 @@ public final class CstParser {
 
     private void paramList() {
         start(SyntaxKind.PARAM_LIST);
-        expect(SyntaxKind.LPAREN);
+        expect(SyntaxKind.LPAREN, DiagnosticCode.E2301);
         if (!at(SyntaxKind.RPAREN)) {
             param();
             while (eat(SyntaxKind.COMMA)) {
@@ -420,14 +420,14 @@ public final class CstParser {
                 param();
             }
         }
-        expect(SyntaxKind.RPAREN);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2301);
         finish();
     }
 
     private void param() {
         start(SyntaxKind.PARAM);
-        expect(SyntaxKind.IDENT);
-        expect(SyntaxKind.COLON);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
+        expect(SyntaxKind.COLON, DiagnosticCode.E2301);
         retType();
         finish();
     }
@@ -459,7 +459,7 @@ public final class CstParser {
     }
 
     private void nameList() {
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
         dottedTail();
         while (eat(SyntaxKind.COMMA)) {
             if (!at(SyntaxKind.IDENT)) {
@@ -484,7 +484,7 @@ public final class CstParser {
 
     private void stage() {
         start(SyntaxKind.STAGE);
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
         dottedTail();
         finish();
     }
@@ -517,14 +517,14 @@ public final class CstParser {
         }
         bump();   // let
         String name = at(SyntaxKind.IDENT) ? tokenText(mi(0)) : "?";
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
         if (at(SyntaxKind.LPAREN)) {
             fnParamList(name);   // with none written the definition is a value, and there is no list
         }
         if (eat(SyntaxKind.COLON)) {
             retType();
         }
-        expect(SyntaxKind.ASSIGN);
+        expect(SyntaxKind.ASSIGN, DiagnosticCode.E2301);
         if (at(SyntaxKind.IDENT) && current() == SyntaxKind.IDENT
                 && tokenText(mi(0)).equals("intrinsic") && nth(1) == SyntaxKind.STRING_LIT) {
             start(SyntaxKind.INTRINSIC_BODY);
@@ -544,7 +544,7 @@ public final class CstParser {
      * refused rather than read as a definition taking nothing. */
     private void fnParamList(String name) {
         start(SyntaxKind.FN_PARAM_LIST);
-        expect(SyntaxKind.LPAREN);
+        expect(SyntaxKind.LPAREN, DiagnosticCode.E2301);
         if (at(SyntaxKind.RPAREN)) {
             error(DiagnosticCode.E2301, "parse.fn.emptyparams",
                     "`let " + name + "` takes no parameters, so it is written without `()`", name);
@@ -558,7 +558,7 @@ public final class CstParser {
                 fnParam();
             }
         }
-        expect(SyntaxKind.RPAREN);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2301);
         finish();
     }
 
@@ -570,7 +570,7 @@ public final class CstParser {
         if (at(SyntaxKind.LPAREN) || at(SyntaxKind.LBRACE) || atCtorPattern()) {
             pattern();
         } else {
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
         }
         if (eat(SyntaxKind.COLON)) {
             paramType();
@@ -588,7 +588,7 @@ public final class CstParser {
      * right-associative and {@code (A) -> B | C} keeps reading as {@code (A) -> (B | C)}. */
     private void fnType() {
         start(SyntaxKind.FN_TYPE);
-        expect(SyntaxKind.LPAREN);
+        expect(SyntaxKind.LPAREN, DiagnosticCode.E2301);
         if (!at(SyntaxKind.RPAREN)) {
             retType();
             while (eat(SyntaxKind.COMMA)) {
@@ -598,8 +598,8 @@ public final class CstParser {
                 retType();
             }
         }
-        expect(SyntaxKind.RPAREN);
-        expect(SyntaxKind.ARROW);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2301);
+        expect(SyntaxKind.ARROW, DiagnosticCode.E2301);
         retType();
         finish();
     }
@@ -626,7 +626,7 @@ public final class CstParser {
     private void exampleDef() {
         start(SyntaxKind.EXAMPLE_DEF);
         bump();   // example
-        expect(SyntaxKind.IDENT);   // target name
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2304);   // target name
         if (!at(SyntaxKind.PIPE)) {
             error(DiagnosticCode.E2304, "parse.example.row", "an example needs at least one `|` row");
         }
@@ -648,7 +648,7 @@ public final class CstParser {
         if (at(SyntaxKind.WITH_KW)) {
             withClause();   // supplies fakes for what the target depends on (value dependencies)
         }
-        expect(SyntaxKind.ARROW);
+        expect(SyntaxKind.ARROW, DiagnosticCode.E2304);
         expr();      // expected
         finish();
     }
@@ -666,8 +666,8 @@ public final class CstParser {
 
     private void withBinding() {
         start(SyntaxKind.WITH_BINDING);
-        expect(SyntaxKind.IDENT);   // the injected dependency name
-        expect(SyntaxKind.ASSIGN);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2304);   // the injected dependency name
+        expect(SyntaxKind.ASSIGN, DiagnosticCode.E2304);
         boolean saved = noLambda;
         noLambda = true;
         expr();                     // its faked value, which the row's `->` ends
@@ -680,7 +680,7 @@ public final class CstParser {
     private void fakeDef() {
         start(SyntaxKind.FAKE_DEF);
         bump();   // fake
-        expect(SyntaxKind.IDENT);   // target injected behavior
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2304);   // target injected behavior
         if (!at(SyntaxKind.PIPE)) {
             error(DiagnosticCode.E2304, "parse.fake.row", "a fake needs at least one `|` row");
         }
@@ -698,7 +698,7 @@ public final class CstParser {
         } else {
             argList();
         }
-        expect(SyntaxKind.ARROW);
+        expect(SyntaxKind.ARROW, DiagnosticCode.E2304);
         expr();
         finish();
     }
@@ -740,7 +740,7 @@ public final class CstParser {
                     typeRef();
                 }
             }
-            expect(SyntaxKind.RPAREN);
+            expect(SyntaxKind.RPAREN, DiagnosticCode.E2301);
             finish();
             return;
         }
@@ -748,7 +748,7 @@ public final class CstParser {
         if (at(SyntaxKind.TYPEVAR)) {
             bump();
         } else {
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2301);
             // a type may be named through its module (`example.billing.Amount`) or an import alias
             // (`B.Amount`), so the head is a dotted name like a module's own
             dottedTail();
@@ -761,7 +761,7 @@ public final class CstParser {
 
     private void typeArgs() {
         start(SyntaxKind.TYPE_ARGS);
-        expect(SyntaxKind.LT);
+        expect(SyntaxKind.LT, DiagnosticCode.E2301);
         typeRef();
         while (eat(SyntaxKind.COMMA)) {
             if (at(SyntaxKind.GT)) {
@@ -769,7 +769,7 @@ public final class CstParser {
             }
             typeRef();
         }
-        expect(SyntaxKind.GT);
+        expect(SyntaxKind.GT, DiagnosticCode.E2301);
         finish();
     }
 
@@ -778,9 +778,9 @@ public final class CstParser {
     /** A brace-delimited block: {@code let}/{@code guard} statements then a result expression. */
     private void blockExpr() {
         start(SyntaxKind.BLOCK_EXPR);
-        expect(SyntaxKind.LBRACE);
+        expect(SyntaxKind.LBRACE, DiagnosticCode.E2302);
         blockStatements();
-        expect(SyntaxKind.RBRACE);
+        expect(SyntaxKind.RBRACE, DiagnosticCode.E2302);
         finish();
     }
 
@@ -813,12 +813,12 @@ public final class CstParser {
     private void letStmt() {
         start(SyntaxKind.LET_STMT);
         bump();   // let
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2302);
         if (eat(SyntaxKind.COLON)) {
             // an ordinary type: a function type may be written only in a helper parameter (spec 13.1)
             retType();
         }
-        expect(SyntaxKind.ASSIGN);
+        expect(SyntaxKind.ASSIGN, DiagnosticCode.E2302);
         expr();
         finish();
     }
@@ -840,7 +840,7 @@ public final class CstParser {
         start(SyntaxKind.LET_DESTRUCTURE);
         bump();   // let
         pattern();
-        expect(SyntaxKind.ASSIGN);
+        expect(SyntaxKind.ASSIGN, DiagnosticCode.E2303);
         expr();
         finish();
     }
@@ -865,7 +865,7 @@ public final class CstParser {
                     pattern();
                 }
             }
-            expect(SyntaxKind.RPAREN);
+            expect(SyntaxKind.RPAREN, DiagnosticCode.E2303);
             finish();
             return;
         }
@@ -875,16 +875,16 @@ public final class CstParser {
         }
         if (atCtorPattern()) {
             start(SyntaxKind.PATTERN_CTOR);
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
             dottedTail();   // a newtype may be named through its module, as in a match arm
-            expect(SyntaxKind.LPAREN);
+            expect(SyntaxKind.LPAREN, DiagnosticCode.E2303);
             pattern();
-            expect(SyntaxKind.RPAREN);
+            expect(SyntaxKind.RPAREN, DiagnosticCode.E2303);
             finish();
             return;
         }
         start(SyntaxKind.PATTERN_NAME);
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
         finish();
     }
 
@@ -898,7 +898,7 @@ public final class CstParser {
 
     private void patternRecord() {
         start(SyntaxKind.PATTERN_RECORD);
-        expect(SyntaxKind.LBRACE);
+        expect(SyntaxKind.LBRACE, DiagnosticCode.E2303);
         if (!at(SyntaxKind.RBRACE)) {
             patternField();
             while (eat(SyntaxKind.COMMA)) {
@@ -908,16 +908,16 @@ public final class CstParser {
                 patternField();
             }
         }
-        expect(SyntaxKind.RBRACE);
+        expect(SyntaxKind.RBRACE, DiagnosticCode.E2303);
         finish();
     }
 
     /** {@code f} binds the field under its own name; {@code f = x} renames it. */
     private void patternField() {
         start(SyntaxKind.PATTERN_FIELD);
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
         if (eat(SyntaxKind.ASSIGN)) {
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
         }
         finish();
     }
@@ -927,7 +927,7 @@ public final class CstParser {
         bump();   // guard
         expr();
         attemptBinder();
-        expect(SyntaxKind.ELSE_KW);
+        expect(SyntaxKind.ELSE_KW, DiagnosticCode.E2302);
         elseBody();
         finish();
     }
@@ -959,8 +959,8 @@ public final class CstParser {
     private void elseArm() {
         start(SyntaxKind.ELSE_ARM);
         bump();   // |
-        expect(SyntaxKind.IDENT);
-        expect(SyntaxKind.ARROW);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2302);
+        expect(SyntaxKind.ARROW, DiagnosticCode.E2302);
         expr();
         finish();
     }
@@ -1156,7 +1156,7 @@ public final class CstParser {
      * Each parameter is a pattern, so a lambda opens what it receives where it names it. */
     private void parenLambda() {
         start(SyntaxKind.LAMBDA_EXPR);
-        expect(SyntaxKind.LPAREN);
+        expect(SyntaxKind.LPAREN, DiagnosticCode.E2302);
         if (!at(SyntaxKind.RPAREN)) {
             pattern();
             while (eat(SyntaxKind.COMMA)) {
@@ -1166,8 +1166,8 @@ public final class CstParser {
                 pattern();
             }
         }
-        expect(SyntaxKind.RPAREN);
-        expect(SyntaxKind.ARROW);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2302);
+        expect(SyntaxKind.ARROW, DiagnosticCode.E2302);
         expr();
         finish();
     }
@@ -1185,12 +1185,12 @@ public final class CstParser {
                 }
                 expr();
             }
-            expect(SyntaxKind.RPAREN);
+            expect(SyntaxKind.RPAREN, DiagnosticCode.E2302);
             retagTop(SyntaxKind.TUPLE_EXPR);
             finish();
             return;
         }
-        expect(SyntaxKind.RPAREN);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2302);
         finish();
     }
 
@@ -1212,7 +1212,7 @@ public final class CstParser {
                 }
                 expr();
             }
-            expect(SyntaxKind.RBRACKET);
+            expect(SyntaxKind.RBRACKET, DiagnosticCode.E2302);
             retagTop(SyntaxKind.LIST_COMP);
             finish();
             return;
@@ -1223,7 +1223,7 @@ public final class CstParser {
             }
             expr();
         }
-        expect(SyntaxKind.RBRACKET);
+        expect(SyntaxKind.RBRACKET, DiagnosticCode.E2302);
         finish();
     }
 
@@ -1232,9 +1232,9 @@ public final class CstParser {
         bump();   // if
         expr();
         attemptBinder();
-        expect(SyntaxKind.THEN_KW);
+        expect(SyntaxKind.THEN_KW, DiagnosticCode.E2302);
         expr();
-        expect(SyntaxKind.ELSE_KW);
+        expect(SyntaxKind.ELSE_KW, DiagnosticCode.E2302);
         elseBody();
         finish();
     }
@@ -1247,7 +1247,7 @@ public final class CstParser {
      */
     private void attemptBinder() {
         if (eat(SyntaxKind.AS_KW)) {
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2302);
         }
     }
 
@@ -1265,7 +1265,7 @@ public final class CstParser {
         noConstruct = true;
         expr();   // scrutinee
         noConstruct = saved;
-        expect(SyntaxKind.WITH_KW);
+        expect(SyntaxKind.WITH_KW, DiagnosticCode.E2302);
         int enclosing = matchArmColumns.isEmpty() ? -1 : matchArmColumns.peek();
         // this match's arm column: the leading `|` when written, else the first case's own column
         int armColumn = columnOf(mi(0));
@@ -1298,7 +1298,7 @@ public final class CstParser {
     /** {@code A [| B ...] [binding] [{ fields }] [as x] -> body} — kept structural for lowering. */
     private void matchCase() {
         start(SyntaxKind.MATCH_CASE);
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
         dottedTail();
         while (at(SyntaxKind.PIPE) && nth(1) == SyntaxKind.IDENT) {
             // an or-pattern alternative; a `|` that begins the next case is followed by the arrow
@@ -1320,27 +1320,27 @@ public final class CstParser {
         if (at(SyntaxKind.LBRACE)) {
             bump();   // {
             if (!at(SyntaxKind.RBRACE)) {
-                expect(SyntaxKind.IDENT);
+                expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
                 if (eat(SyntaxKind.ASSIGN)) {
-                    expect(SyntaxKind.IDENT);
+                    expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
                 }
                 while (eat(SyntaxKind.COMMA)) {
                     if (at(SyntaxKind.RBRACE)) {
                         break;
                     }
-                    expect(SyntaxKind.IDENT);
+                    expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
                     if (eat(SyntaxKind.ASSIGN)) {
-                        expect(SyntaxKind.IDENT);
+                        expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
                     }
                 }
             }
-            expect(SyntaxKind.RBRACE);
+            expect(SyntaxKind.RBRACE, DiagnosticCode.E2303);
         }
         // whole-value binding `as x`
         if (eat(SyntaxKind.AS_KW)) {
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
         }
-        expect(SyntaxKind.ARROW);
+        expect(SyntaxKind.ARROW, DiagnosticCode.E2303);
         expr();
         finish();
     }
@@ -1375,8 +1375,8 @@ public final class CstParser {
     /** {@code ( IDENT [casePattern] )} — a newtype-destructuring sub-pattern, nestable for a
      * newtype over a newtype. Kept structural (every token bumped) so the tree stays lossless. */
     private void casePattern() {
-        expect(SyntaxKind.LPAREN);
-        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.LPAREN, DiagnosticCode.E2303);
+        expect(SyntaxKind.IDENT, DiagnosticCode.E2303);
         dottedTail();   // the layer a pattern opens is named like any other type (issue #177)
         if (at(SyntaxKind.LBRACE)) {
             // `Some(Booking { member })`: the parens open a *newtype*, so a record named in them has
@@ -1390,7 +1390,7 @@ public final class CstParser {
         } else if (at(SyntaxKind.LPAREN)) {
             casePattern();
         }
-        expect(SyntaxKind.RPAREN);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2303);
     }
 
     /**
@@ -1417,7 +1417,7 @@ public final class CstParser {
     private void newDataExpr() {
         start(SyntaxKind.NEW_DATA_EXPR);
         bump();   // Type
-        expect(SyntaxKind.LBRACE);
+        expect(SyntaxKind.LBRACE, DiagnosticCode.E2302);
         if (!at(SyntaxKind.RBRACE)) {
             initElem();
             while (eat(SyntaxKind.COMMA)) {
@@ -1427,7 +1427,7 @@ public final class CstParser {
                 initElem();
             }
         }
-        expect(SyntaxKind.RBRACE);
+        expect(SyntaxKind.RBRACE, DiagnosticCode.E2302);
         finish();
     }
 
@@ -1435,7 +1435,7 @@ public final class CstParser {
         if (at(SyntaxKind.SPREAD)) {
             start(SyntaxKind.SPREAD_MEMBER);
             bump();   // ...
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2302);
             // a spread may name a field path (`...c.address`), not only a local
             while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
                 bump();   // .
@@ -1444,7 +1444,7 @@ public final class CstParser {
             finish();
         } else {
             start(SyntaxKind.FIELD_INIT);
-            expect(SyntaxKind.IDENT);
+            expect(SyntaxKind.IDENT, DiagnosticCode.E2302);
             if (eat(SyntaxKind.ASSIGN)) {
                 expr();
             }
@@ -1454,7 +1454,7 @@ public final class CstParser {
 
     private void argList() {
         start(SyntaxKind.ARG_LIST);
-        expect(SyntaxKind.LPAREN);
+        expect(SyntaxKind.LPAREN, DiagnosticCode.E2302);
         if (!at(SyntaxKind.RPAREN)) {
             arg();
             while (eat(SyntaxKind.COMMA)) {
@@ -1464,7 +1464,7 @@ public final class CstParser {
                 arg();
             }
         }
-        expect(SyntaxKind.RPAREN);
+        expect(SyntaxKind.RPAREN, DiagnosticCode.E2302);
         finish();
     }
 
@@ -1602,13 +1602,21 @@ public final class CstParser {
         return false;
     }
 
-    private void expect(SyntaxKind kind) {
+    /**
+     * Reads {@code kind}, or says it was wanted here.
+     *
+     * <p>The rule is given by the caller rather than fixed here, because which part of the language
+     * did not read is a property of what is being read and not of the token that was missing: the
+     * same missing {@code ->} is example syntax in a row and expression syntax in a lambda, and a
+     * reader looking one of them up is not asking about the other.
+     */
+    private void expect(SyntaxKind kind, DiagnosticCode rule) {
         if (at(kind)) {
             bump();
             return;
         }
         SyntaxKind found = current();
-        error(DiagnosticCode.E2302, "parse.expected", "expected " + kind + " but found " + found,
+        error(rule, "parse.expected", "expected " + kind + " but found " + found,
                 kind.display(), found.display());
     }
 

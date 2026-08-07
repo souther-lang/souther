@@ -669,7 +669,7 @@ public final class AstBuilder {
             case STRING_LIT -> new Ast.StringLit(stringValue(t.text()), pos);
             case TRUE_KW -> new Ast.BoolLit(true, pos);
             case FALSE_KW -> new Ast.BoolLit(false, pos);
-            default -> throw error(pos, DiagnosticCode.E2302, "parse.expr", "expected a literal");
+            default -> throw error(pos, DiagnosticCode.E2305, "parse.expr", "expected a literal");
         };
     }
 
@@ -1197,7 +1197,7 @@ public final class AstBuilder {
                 }
                 yield new Ast.LetIn(whole, value, body, pos);
             }
-            default -> throw error(pos, DiagnosticCode.E2302, "parse.expr", "unexpected pattern");
+            default -> throw error(pos, DiagnosticCode.E2303, "parse.expr", "unexpected pattern");
         };
     }
 

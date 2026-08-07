@@ -458,7 +458,8 @@ What a text MUST be for the compiler to read it is stated with each construct, a
 * [[expression-syntax]]an expression MUST be written in the form given for it, and a block MUST end in one;
 * [[pattern-syntax]]a pattern MUST be written in the form given for the thing it destructures (<<binding-patterns>>, <<match>>);
 * [[examples-syntax]]an `+example+`, a `+fake+` and an `+examples for+` file MUST be written in the form given for them (<<examples>>);
-* [[literal-syntax]]a literal MUST be written in the form given for its type (<<primitives>>, <<temporal-literal>>).
+* [[literal-syntax]]a literal MUST be written in the form given for its type (<<primitives>>, <<temporal-literal>>);
+* [[the-source-is-made-of-tokens]]the text MUST be made of tokens the language has. This one is answered before anything is parsed, so it says nothing about where in the language the text was — a character that begins nothing, and a `+'+` with no name after it, are the two ways to reach it.
 
 * Both `+data+` declaration fields and record-literal `+TypeName { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+name: type+`; a literal binds a value, so `+name = value+` (`+:+` = has this type, `+=+` = is defined as this). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>). A clause's name follows the same rule as everything else named with `+=+` — it is defined as that rule, so `+invariant nonEmpty = List.length(value) >= 1+` (<<invariant-clause-name>>).
 * Argument lists and the enumerations in `+constructs+` / `+depends on+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<depends-on>>).
@@ -480,7 +481,7 @@ What crosses a decoder/encoder boundary is decided by representation, and five o
 * [[what-crosses-the-boundary-has-an-external-representation]]a value that crosses MUST have an external representation. A tuple has none and neither does a function, so neither can be a behavior's parameter or output, a data's field, or anything a codec would be derived from;
 * [[a-parameter-names-one-type]]a parameter MUST name a single type. An anonymous union is the shape of one behavior's answer and nobody names it (<<union-member>>), so it is written on an output and not taken as an input;
 * [[a-behavior-does-not-output-an-optional]]a behavior MUST NOT answer with an optional. Absence a caller is handed is a case the model owns and names (<<optional>>), not a value that may not be there;
-* [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, `+Date+`, `+DateTime+`. The boundary writes a key as text, and a key with no text is a key nothing can address;
+* [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, `+Date+`, `+DateTime+`, or an enumeration, a sum every one of whose cases is a unit data (<<collections>>). The boundary writes a key as text, and a key with no text is a key nothing can address;
 * [[a-collection-member-supports-equality]]a `+Set+`'s element and a `+Map+`'s key MUST support equality. Both ask whether two of them are the same, and a function has no value to compare (<<equality>>).
 
 The external representation handled by Decoders and Encoders is not Souther's own types but the neutral value model of the boundary library Raoh (a tree of scalar / List / Map). Souther owns the domain's types, invariants, and behaviors; the external representation and its parsing and generation are delegated to the peripheral library Raoh (<<separate-representation>>, <<decoder>>).
@@ -2080,7 +2081,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 * [[a-helper-parameter-states-its-type]]a helper's parameter MUST have a type that is stated or determined. A parameter only read through a field, or used as a function, names no type by being used, so it is annotated;
 * [[a-helper-answers-what-it-declares]]a helper that declares a return type MUST answer with it;
 * [[a-recursive-helper-declares-its-return-type]]a recursive helper MUST declare its return type, its result not being readable from a body that names itself;
-* [[a-recursive-helper-is-a-pure-method]]a recursive helper is a pure static method: it takes no function parameter and reaches no injected behavior. The effect belongs to the behavior that calls it.
+* [[a-recursive-helper-does-not-reach-an-injected-behavior]]a recursive helper's own body MUST NOT call an injected behavior. It is emitted as a pure static method, and the effect belongs to the behavior that calls it. Applying a function argument that reaches one is unaffected — the effect is then the caller's, declared in the caller's `+depends on+` (<<fn-rules>>).
 
 * A `+let+` with a same-named behavior does not write argument types; the type comes from the behavior. A count mismatch is a compile error. A behavior whose type takes nothing (`+() -> T+`) is implemented by a value, which writes no parameter list.
 * A `+let+` written with a parameter list defines a function; one written without defines a value. An empty `+()+` is a compile error — a definition taking nothing is the value form. A helper therefore has at least one parameter.
@@ -4110,7 +4111,7 @@ Reported at the behavior (<<a-behavior-does-not-output-an-optional>>). Absence a
 [,text]
 ----
 `inventory` crosses the boundary, so the Map it holds must be keyed by String, a String-backed
-newtype (`data X = String`), Date, DateTime.
+newtype (`data X = String`), Date, DateTime, or an enumeration.
 ----
 
 Reported at the field, parameter or output holding the Map (<<a-map-that-crosses-is-keyed-by-a-text-key>>). The boundary writes a key as text and reads it back the same way, so a key with no text form is one nothing outside can address.
@@ -4678,7 +4679,7 @@ because its result cannot be inferred from a body that names itself.
 Reported at the helper (<<a-recursive-helper-declares-its-return-type>>).
 
 [#e1814]
-=== A recursive helper takes a function or reaches an effect
+=== A recursive helper reaches an injected behavior
 
 [,text]
 ----
@@ -4686,7 +4687,7 @@ Recursive helper `let depth` is pure and cannot call the injected behavior `now`
 the behavior that calls this helper.
 ----
 
-Reported at the helper (<<a-recursive-helper-is-a-pure-method>>). It is emitted as a pure static method (<<fn-rules>>), which is what lets its termination be proven and what keeps the effect where a reader of the behavior can see it.
+Reported at the call (<<a-recursive-helper-does-not-reach-an-injected-behavior>>). The helper is emitted as a pure static method (<<fn-rules>>), which is what lets its termination be proven and what keeps the effect where a reader of the behavior can see it. A function argument that reaches an effect is not this: the effect is the caller's and is declared there.
 
 [#e1815]
 === An empty collection's type cannot be read where it is written
@@ -5317,6 +5318,16 @@ floating-point type.
 ----
 
 Reported while reading the text into tokens, before anything is parsed (<<literal-syntax>>): a string not closed before the end of the line, a fractional literal with no `+m+`, a type variable with no name after `+'+`, a character that begins nothing.
+
+[#e2306]
+=== The text is not made of tokens
+
+[,text]
+----
+Unexpected character `@`.
+----
+
+Reported while reading the text into tokens (<<the-source-is-made-of-tokens>>), before anything is parsed. Unlike the five syntax codes it says nothing about where in the language the text was, nothing having been read yet: a character that begins nothing, and a `+'+` with no name after it, are the two ways to reach it.
 
 [#example]
 == Example: the business-trip application model
