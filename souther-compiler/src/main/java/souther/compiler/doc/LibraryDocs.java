@@ -44,10 +44,17 @@ public final class LibraryDocs {
     /**
      * One document, or one part of one that its doc set has named.
      *
-     * <p>{@code from} and {@code to} are where the text of it is in the file: the whole of it for a
-     * document, and for a named part, its heading through to the next heading that closes it. A
-     * part carries its subordinate parts the way a specification section carries its subsections,
-     * so asking for the larger thing is asking for all of it.
+     * <p>{@code from} and {@code to} are what is read: the whole file for a document, and for a
+     * named part, its heading through to the next heading that closes it. A part carries its
+     * subordinate parts the way a specification section carries its subsections, so asking for the
+     * larger thing is asking for all of it.
+     *
+     * <p>{@code ownTo} is what is searched, and it stops at the first part named inside this one.
+     * Reading and searching want opposite things from the same text: a reader asking for the larger
+     * thing wants all of it, and a search that ranked the larger thing over all of it would answer
+     * one occurrence twice — once as the part it is written in and once as everything containing
+     * that part. The specification separates the two the same way, and a document's own text is
+     * what comes before it names anything, which is the only text no part of it claims.
      *
      * <p>{@code depth} is 0 for a document and the heading's level for a part of one, which is what
      * a listing indents by. {@code listedFor} is null for a topic every caller is shown, which is
@@ -58,7 +65,7 @@ public final class LibraryDocs {
      * who asks.
      */
     public record Topic(String name, String title, int depth, String resource, int from, int to,
-            Caller listedFor) {
+            int ownTo, Caller listedFor) {
 
         /** Whether {@code caller}'s listing names this topic. */
         boolean listedFor(Caller caller) {
@@ -118,13 +125,22 @@ public final class LibraryDocs {
                         Caller listedFor = written.length < 2
                                 ? null : listedFor(written[1].strip(), topic);
                         String text = Affordance.materialize(text(loader, resource), caller);
-                        register(byName, new Topic(topic, titleOf(text, file), 0, resource,
-                                0, text.length(), listedFor));
-                        List<Topic> parts = named(topic, resource, text, listedFor);
-                        parts.forEach(part -> register(byName, part));
-                        // The parts where there are parts, and the file itself where there are not.
-                        ranked.addAll(parts.isEmpty()
-                                ? List.of(byName.get(DocName.canonical(topic))) : parts);
+                        List<Named> parts = named(topic, text);
+                        // A file's own text is what comes before it names anything: a preamble, and
+                        // for a file that names nothing, all of it. Every entry is searched over its
+                        // own text, so nothing here is unsearchable and nothing is counted twice.
+                        Topic whole = new Topic(topic, titleOf(text, file), 0, resource, 0,
+                                text.length(),
+                                parts.isEmpty() ? text.length() : parts.getFirst().declaredAt(),
+                                listedFor);
+                        register(byName, whole);
+                        ranked.add(whole);
+                        for (Named part : parts) {
+                            Topic held = new Topic(part.name(), part.title(), part.level(), resource,
+                                    part.from(), part.to(), part.ownTo(), listedFor);
+                            register(byName, held);
+                            ranked.add(held);
+                        }
                     }
                 }
             }
@@ -149,50 +165,73 @@ public final class LibraryDocs {
      * text: the name would be published, answered with whatever followed it, and moved the next
      * time the file was edited. It is refused where the set is read.
      */
-    private static List<Topic> named(String topic, String resource, String text, Caller listedFor) {
+    /** A part a file named: where its declaration is, what is read of it, and what is searched. */
+    private record Named(String name, String title, int level, int declaredAt, int from, int to,
+            int ownTo) {}
+
+    private static List<Named> named(String topic, String text) {
         // Every heading, whether the file names it or not: what closes a part is the next heading
         // that is not under it, and a heading the set chose not to name still is not under it.
-        record Head(String name, String title, int level, int from) {}
+        // What a block taken as it stands says is what it shows a reader — a `## Example input` in
+        // a fenced sample neither opens a section nor closes one, and a declaration written in one
+        // is what the sample looks like rather than a name to publish.
+        record Head(String name, String title, int level, int declaredAt, int from) {}
         List<Head> heads = new ArrayList<>();
         String[] lines = text.split("\n", -1);
+        boolean[] opaque = TakenAsItStands.lines(lines);
         int[] starts = new int[lines.length];
         for (int i = 0, at = 0; i < lines.length; i++) {
             starts[i] = at;
             at += lines[i].length() + 1;
         }
         for (int i = 0; i < lines.length; i++) {
+            if (opaque[i]) {
+                continue;
+            }
             Matcher declaration = DECLARED.matcher(lines[i]);
             if (declaration.matches()) {
-                Matcher heading = i + 1 < lines.length ? HEADING.matcher(lines[i + 1]) : null;
+                Matcher heading = i + 1 < lines.length && !opaque[i + 1]
+                        ? HEADING.matcher(lines[i + 1]) : null;
                 if (heading == null || !heading.matches()) {
                     throw new IllegalStateException("`" + topic + "` names a section `"
                             + declaration.group(1) + "` above something that is not a heading");
                 }
                 heads.add(new Head(topic + "/" + declaration.group(1), heading.group(2),
-                        heading.group(1).length(), starts[i]));
+                        heading.group(1).length(), starts[i], starts[i + 1]));
                 i++;
                 continue;
             }
             Matcher heading = HEADING.matcher(lines[i]);
             if (heading.matches()) {
-                heads.add(new Head(null, heading.group(2), heading.group(1).length(), starts[i]));
+                heads.add(new Head(null, heading.group(2), heading.group(1).length(),
+                        starts[i], starts[i]));
             }
         }
-        List<Topic> parts = new ArrayList<>();
+        List<Named> parts = new ArrayList<>();
         for (int h = 0; h < heads.size(); h++) {
             Head here = heads.get(h);
             if (here.name() == null) {
                 continue;
             }
             int to = text.length();
+            int ownTo = -1;
             for (int n = h + 1; n < heads.size(); n++) {
-                if (heads.get(n).level() <= here.level()) {
-                    to = heads.get(n).from();
+                Head next = heads.get(n);
+                if (next.level() <= here.level()) {
+                    to = next.declaredAt();
                     break;
                 }
+                // The first part named under this one is where this one's own text stops; a
+                // heading under it that the set did not name is text nothing else claims.
+                if (ownTo < 0 && next.name() != null) {
+                    ownTo = next.declaredAt();
+                }
             }
-            parts.add(new Topic(here.name(), here.title(), here.level(), resource,
-                    here.from(), to, listedFor));
+            // A part is read from its heading, not from the line naming it. That line is the
+            // heading's, the way an anchor above a specification heading is, so it ends the part
+            // before it rather than opening this one.
+            parts.add(new Named(here.name(), here.title(), here.level(), here.declaredAt(),
+                    here.from(), to, ownTo < 0 ? to : Math.min(ownTo, to)));
         }
         return parts;
     }
@@ -246,7 +285,7 @@ public final class LibraryDocs {
         String needle = term.toLowerCase();
         List<Hit> hits = new ArrayList<>();
         for (Topic topic : ranked) {
-            String body = text(topic);
+            String body = own(topic);
             boolean titled = topic.title().toLowerCase().contains(needle)
                     || topic.name().toLowerCase().contains(needle);
             int occurrences = count(body.toLowerCase(), needle);
@@ -271,7 +310,7 @@ public final class LibraryDocs {
     /** The line of {@code topic} that says {@code term}, cut to a readable width. */
     public String snippet(Topic topic, String term) {
         String needle = term.toLowerCase();
-        String line = text(topic).lines()
+        String line = own(topic).lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
                 .filter(l -> l.toLowerCase().contains(needle))
@@ -297,9 +336,18 @@ public final class LibraryDocs {
      * extent is measured against the same spelling, so it is taken after it and not before.
      */
     private String text(Topic topic) {
+        return within(topic, topic.to());
+    }
+
+    /** The text this topic is searched over: its own, with what it names inside it left to that. */
+    private String own(Topic topic) {
+        return within(topic, topic.ownTo());
+    }
+
+    private String within(Topic topic, int to) {
         String text = Affordance.materialize(text(loader, topic.resource()), caller);
-        return topic.from() == 0 && topic.to() >= text.length()
-                ? text : text.substring(topic.from(), Math.min(topic.to(), text.length()));
+        return topic.from() == 0 && to >= text.length()
+                ? text : text.substring(topic.from(), Math.min(to, text.length()));
     }
 
     private static String text(ClassLoader loader, String resource) {

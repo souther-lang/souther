@@ -52,10 +52,71 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     }
 
     @Test
-    void noPartIsLargerThanTheOneAnswerAnyOtherToolGivesWhole() {
-        for (String part : every(LONG)) {
-            assertTrue(part.length() <= 16_000, "a part of " + part.length() + " characters");
+    void whatIsCountedIsTheWholeAnswerAndNotOnlyItsText() {
+        // A search answers in lines, so nothing in it is a heading or a blank line and a part runs
+        // right up to the count. That is where the room set aside for the line carrying it on is
+        // either there or the answer is over.
+        int parts = counted("doc_search", "{\"term\":\"a\",\"limit\":0}");
+
+        assertTrue(parts > 1, "an answer of forty thousand characters does not arrive whole");
+        assertTrue(counted("doc_read", "{\"name\":\"" + LONG + "\"}") > 1);
+    }
+
+    /** Follows a call to the end, holding every answer against the count. Answers how many. */
+    private int counted(String tool, String arguments) {
+        int parts = 0;
+        while (true) {
+            String said = text(called(tool, arguments).get("result"));
+            parts++;
+            assertTrue(said.length() <= Continuation.MOST,
+                    tool + " answered with " + said.length() + " characters — the line that carries"
+                            + " a part on is part of the answer and comes out of the count");
+            Matcher carriesOn = Pattern.compile(
+                    "(?s)^.*\n… \\d+ more characters; `" + tool + " (\\{.*?})` for what follows\n$")
+                    .matcher(said);
+            if (!carriesOn.matches()) {
+                return parts;
+            }
+            arguments = carriesOn.group(1).replaceAll("(\\w+):", "\"$1\":");
+            assertTrue(parts < 100, "the walk is not advancing");
         }
+    }
+
+    @Test
+    void aLineLongerThanAnAnswerCarriesIsCutWhereTheCountRunsOut() {
+        String oneLine = "x".repeat(20_000) + "\n";
+
+        List<String> parts = everyPartOf(oneLine);
+
+        assertEquals(oneLine, String.join("", parts));
+        parts.forEach(part -> assertTrue(part.length() <= Continuation.MOST,
+                "a part of " + part.length() + " characters: a line nothing can be cut at is still"
+                        + " cut, or the count is not a count"));
+    }
+
+    @Test
+    void aBlockLongerThanAnAnswerCarriesIsCutRatherThanKeptWhole() {
+        String oneBlock = "# T\n\n```\n" + "y".repeat(20_000) + "\n```\nafter\n";
+
+        List<String> parts = everyPartOf(oneBlock);
+
+        assertEquals(oneBlock, String.join("", parts));
+        parts.forEach(part -> assertTrue(part.length() <= Continuation.MOST, part.length() + ""));
+        assertTrue(parts.size() <= 4, "and it is not handed over a few characters at a time: "
+                + parts.stream().map(String::length).toList());
+    }
+
+    /** Every part {@link Continuation} cuts {@code text} into, followed to the end. */
+    private List<String> everyPartOf(String text) {
+        List<String> parts = new ArrayList<>();
+        String cursor = null;
+        do {
+            Continuation.Part part = Continuation.of(text, cursor, Continuation.MOST);
+            parts.add(part.text());
+            cursor = part.cursor();
+            assertTrue(parts.size() < 100, "the walk is not advancing");
+        } while (cursor != null);
+        return parts;
     }
 
     @Test
@@ -91,17 +152,23 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
 
     @Test
     void aBlankLineInsideSuchABlockIsContentAndNotAPlaceToStop() {
-        String fenced = "= A section\n\n" + "x".repeat(200) + "\n\n```\n"
-                + ("a line inside the block\n\n".repeat(2_000)) + "```\nafter the block\n";
+        // A block that fits in one answer, with the last blank line before the count runs out
+        // inside it. Taking that one would cut a fence in half for no reason: there is a blank
+        // line outside the block that leaves the whole of it for the part after.
+        String prose = "a paragraph outside the block\n\n".repeat(330);
+        String block = "```\n" + "a line inside the block\n\n".repeat(190) + "```\n";
+        String fenced = prose + block + "z".repeat(6_000) + "\n";
 
-        Continuation.Part first = Continuation.of(fenced, null);
-        Continuation.Part second = Continuation.of(fenced, first.cursor());
+        Continuation.Part first = Continuation.of(fenced, null, Continuation.MOST);
 
-        assertTrue(first.text().endsWith("x\n"),
-                "cut before the blank line that is the last one outside the block");
-        assertFalse(first.text().contains("a line inside the block"),
-                "the blank lines inside it are content, and the count ran out well past them");
-        assertTrue(second.text().startsWith("\n```\n"), "and the block itself is still whole");
+        assertTrue(prose.length() > 9_000 && prose.length() + block.length() < 16_000,
+                "the block fits, and the last blank line in reach is inside it: "
+                        + prose.length() + " then " + block.length());
+        assertFalse(first.text().contains("```"),
+                "the part stopped at a blank line outside the block, leaving the block whole:\n"
+                        + first.text().substring(Math.max(0, first.text().length() - 120)));
+        assertTrue(Continuation.of(fenced, first.cursor(), Continuation.MOST).text().contains(block),
+                "and the block arrives in one piece");
     }
 
     @Test
@@ -180,9 +247,13 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     }
 
     private JsonNode called(String arguments) {
+        return called("doc_read", arguments);
+    }
+
+    private JsonNode called(String tool, String arguments) {
         ByteArrayInputStream in = new ByteArrayInputStream(
-                ("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":"
-                        + "\"doc_read\",\"arguments\":" + arguments + "}}\n")
+                ("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\""
+                        + tool + "\",\"arguments\":" + arguments + "}}\n")
                         .getBytes(StandardCharsets.UTF_8));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         McpServer.serve(in, out);

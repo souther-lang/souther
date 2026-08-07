@@ -99,14 +99,10 @@ public final class McpServer {
                             + " set has named (e.g. `cli/commands/japi`). A diagnostic code is a name"
                             + " too, in either case (e.g. `E2011`): every code the compiler prints is"
                             + " the anchor of the section explaining it, so a banner read no further"
-                            + " than its code is still enough to look up. A long answer arrives in"
-                            + " parts, each saying how to ask for what follows it.",
+                            + " than its code is still enough to look up.",
                     List.of(new Param("name", Kind.STRING, false,
-                                    "a section anchor, a diagnostic code, or a set/topic name;"
-                                            + " omit to list every one of them"),
-                            new Param("cursor", Kind.CURSOR, false,
-                                    "to read on from where a part left off: the `cursor` that part"
-                                            + " came back with, sent back with the same `name`"))),
+                            "a section anchor, a diagnostic code, or a set/topic name;"
+                                    + " omit to list every one of them"))),
             new Tool("stdlib_api",
                     "The Souther standard library's published surface with resolved signatures. No name"
                             + " lists everything; a module qualifier (`List`) or a qualified name"
@@ -222,10 +218,36 @@ public final class McpServer {
 
     private record Param(String name, Kind kind, boolean required, String description) {}
 
-    private record Tool(String name, String description, List<Param> params) {
+    /**
+     * What every tool takes and every tool says, because how much arrives at once is a question
+     * about this wire rather than about any one answer on it.
+     *
+     * <p>Declaring it per tool would leave the ones nobody expected to be long undeclared, and what
+     * is long is a property of the documents and the jars on the class path rather than of the
+     * table here. A tool whose answers all fit simply never issues one.
+     */
+    private static final Param CARRIES_ON = new Param("cursor", Kind.CURSOR, false,
+            "to read on from where a part left off: the `cursor` that part came back with,"
+                    + " sent back with the same arguments");
+
+    private static final String IN_PARTS =
+            " A long answer arrives in parts, each saying how to ask for what follows it.";
+
+    private record Tool(String name, String said, List<Param> declared) {
+
+        String description() {
+            return said + IN_PARTS;
+        }
+
+        /** What the tool declares, and after it the one argument they all take. */
+        List<Param> params() {
+            List<Param> all = new java.util.ArrayList<>(declared);
+            all.add(CARRIES_ON);
+            return List.copyOf(all);
+        }
 
         Param param(String name) {
-            return params.stream().filter(p -> p.name().equals(name)).findFirst().orElse(null);
+            return params().stream().filter(p -> p.name().equals(name)).findFirst().orElse(null);
         }
     }
 
@@ -429,7 +451,7 @@ public final class McpServer {
         };
         String said = captured.toString(StandardCharsets.UTF_8);
         Tool answering = TOOLS.stream().filter(t -> t.name().equals(tool)).findFirst().orElse(null);
-        if (code == 0 && answering != null && answering.param("cursor") != null) {
+        if (code == 0 && answering != null) {
             try {
                 said = part(answering, arguments, said);
             } catch (IllegalArgumentException e) {
@@ -455,12 +477,23 @@ public final class McpServer {
      */
     private static String part(Tool tool, JsonNode arguments, String said) {
         JsonNode cursor = arguments == null ? null : arguments.get("cursor");
-        Continuation.Part part = Continuation.of(said, cursor == null ? null : cursor.asString());
+        // The line that carries an answer on is part of that answer, so the room for it comes out
+        // of the count before the text is cut and not after. What it will say is not known until
+        // the cut is made, so what is set aside is the longest it could be: a cursor of the length
+        // this server issues, and a count of every character there could be.
+        int reserve = carriesOn(tool, arguments, "x".repeat(64), Integer.MAX_VALUE).length();
+        Continuation.Part part = Continuation.of(said, cursor == null ? null : cursor.asString(),
+                Math.max(1, Continuation.MOST - reserve));
         if (part.cursor() == null) {
             return part.text();
         }
-        return part.text() + "\n… " + part.remaining() + " more characters; `" + tool.name() + " "
-                + askedAgain(tool, arguments, part.cursor()) + "` for what follows\n";
+        return part.text() + carriesOn(tool, arguments, part.cursor(), part.remaining());
+    }
+
+    /** What a part that is not the last one ends with. */
+    private static String carriesOn(Tool tool, JsonNode arguments, String cursor, int remaining) {
+        return "\n… " + remaining + " more characters; `" + tool.name() + " "
+                + askedAgain(tool, arguments, cursor) + "` for what follows\n";
     }
 
     /** The arguments this call was made with, and the cursor that carries it on. */

@@ -125,11 +125,19 @@ do next is a command. A topic that documents an interface only one caller has is
 listing alone, and still read by name — `cli/run` is not on a client's map and answers when asked
 for.
 
-A long answer arrives in parts. `doc_read` hands back as much as one answer carries, ending with
-how much is left and the call that reaches it; carry that `cursor` back with the same `name`. The
-cursor is this server's to read, so it goes out as it came in: where it points is checked against
-the answer it is carried back to, and one measured against a different answer is refused rather
-than resumed at.
+A long answer arrives in parts. Every tool hands back as much as one answer carries — at most
+16,000 characters, the line saying how to carry on included — and ends with how much is left and
+the call that reaches it; send that `cursor` back with the same arguments. How much arrives at once
+is a question about this wire rather than about any one answer on it, so the argument is on every
+tool and not only the ones expected to be long.
+
+A part stops where the document says to: a heading, failing that a blank line, failing that the end
+of a line. A line or a code block longer than one answer carries has no such place in it, and is
+cut where the count runs out — a bound a document could talk this server out of would not be one.
+
+The cursor is this server's to read, so it goes out as it came in: where it points is checked
+against the answer it is carried back to, and one measured against a different answer is refused
+rather than resumed at.
 
 <!-- souther-section: shared-options -->
 ## Options every command shares

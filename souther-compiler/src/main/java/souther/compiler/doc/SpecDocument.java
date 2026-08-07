@@ -221,26 +221,12 @@ public final class SpecDocument {
      * where the sections are and not only about what they are called.
      *
      * <p>One walk answers for both what a heading is and what an anchor is, so the document has one
-     * account of where its structure is written and not two that can come apart.
+     * account of where its structure is written and not two that can come apart. That walk is
+     * {@link TakenAsItStands}, which every reader of a document's structure shares — a shipped
+     * markdown file and a part of one being cut off ask the same question about their own blocks.
      */
     private static boolean[] opaqueLines(String[] lines) {
-        boolean[] opaque = new boolean[lines.length];
-        String open = null;
-        for (int i = 0; i < lines.length; i++) {
-            String delimiter = lines[i].strip();
-            if (open != null) {
-                opaque[i] = true;
-                if (delimiter.equals(open)) {
-                    open = null;
-                }
-                continue;
-            }
-            if (OPAQUE_DELIMITER.matcher(delimiter).matches()) {
-                open = delimiter;
-                opaque[i] = true;
-            }
-        }
-        return opaque;
+        return TakenAsItStands.lines(lines);
     }
 
     /** Every section, in document order. */

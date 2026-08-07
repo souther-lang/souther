@@ -123,6 +123,85 @@ class WhatIsAddressableIsWhatTheDocSetNamedTest {
     }
 
     @Test
+    void aHeadingInsideABlockTakenAsItStandsNeitherOpensNorClosesAPart() {
+        LibraryDocs docs = shipping("""
+                # A guide
+
+                <!-- souther-section: example -->
+                ## Example
+
+                ```markdown
+                ## This is what the input looks like, not a section
+                ```
+
+                after the sample
+                """);
+
+        assertEquals(List.of("somelib/guide", "somelib/guide/example"),
+                docs.topics().stream().map(LibraryDocs.Topic::name).toList());
+        assertTrue(docs.read("somelib/guide/example").contains("after the sample"),
+                "a heading shown to a reader as the words of a heading did not close the part");
+    }
+
+    @Test
+    void aDeclarationWrittenInsideSuchABlockIsTheSampleAndNotAName() {
+        LibraryDocs docs = shipping("""
+                # A guide
+
+                <!-- souther-section: example -->
+                ## Example
+
+                How a doc set names a part of a file:
+
+                ```markdown
+                <!-- souther-section: whatever -->
+                ## Whatever
+                ```
+                """);
+
+        assertEquals(List.of("somelib/guide", "somelib/guide/example"),
+                docs.topics().stream().map(LibraryDocs.Topic::name).toList());
+        assertNull(docs.read("somelib/guide/whatever"),
+                "a sample showing how to name a part must not name one");
+    }
+
+    @Test
+    void aFilesOwnPreambleIsSearchedEvenWhenTheFileNamesParts() {
+        LibraryDocs docs = shipping("""
+                # A guide
+
+                Preamble prose about the command reference.
+
+                <!-- souther-section: primitives -->
+                ## Primitives
+
+                A decoder reads a bare value.
+                """);
+
+        assertEquals(List.of("somelib/guide"),
+                docs.search("command reference").stream().map(LibraryDocs.Topic::name).toList(),
+                "text before the first named part is nobody else's, so it is the file's own");
+    }
+
+    @Test
+    void aPartIsReadFromItsHeadingAndNotFromTheLineNamingIt() {
+        LibraryDocs docs = shipping("""
+                # A guide
+
+                <!-- souther-section: primitives -->
+                ## Primitives
+
+                A decoder reads a bare value.
+                """);
+
+        assertTrue(docs.read("somelib/guide/primitives").startsWith("## Primitives"),
+                "the line naming a part is that heading's, the way an anchor above a specification"
+                        + " heading is: " + docs.read("somelib/guide/primitives"));
+        assertTrue(docs.read("somelib/guide").contains("<!-- souther-section: primitives -->"),
+                "and read from the file it is in, it is where the file says it is");
+    }
+
+    @Test
     void aNameThatOpensNothingIsRefusedWhereTheSetIsRead() {
         IllegalStateException refused = assertThrows(IllegalStateException.class, () -> shipping("""
                 # A guide
@@ -169,6 +248,32 @@ class WhatIsAddressableIsWhatTheDocSetNamedTest {
 
         assertEquals(List.of("somelib/guide/primitives", "somelib/guide/records"), found,
                 "the smaller true answer, and the file it is in is not said again beside it");
+    }
+
+    @Test
+    void whatAPartNamesInsideItselfIsCountedThereAndNotAlsoAroundIt() {
+        LibraryDocs docs = shipping("""
+                # A guide
+
+                <!-- souther-section: constraints -->
+                ## Constraints
+
+                About constraints in general.
+
+                <!-- souther-section: strings -->
+                ### String constraints
+
+                A rule written once.
+                """);
+
+        assertEquals(List.of("somelib/guide/strings"),
+                docs.search("written once").stream().map(LibraryDocs.Topic::name).toList(),
+                "reading `constraints` gives all of it, and searching it does not answer for what"
+                        + " the part inside it already answers for");
+        assertTrue(docs.read("somelib/guide/constraints").contains("A rule written once."),
+                "which is a different range from the one that is read");
+        assertEquals(List.of("somelib/guide/constraints"),
+                docs.search("in general").stream().map(LibraryDocs.Topic::name).toList());
     }
 
     @Test

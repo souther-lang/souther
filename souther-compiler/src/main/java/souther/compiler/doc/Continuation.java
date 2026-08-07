@@ -1,7 +1,10 @@
 package souther.compiler.doc;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.regex.Pattern;
 
 /**
@@ -13,28 +16,33 @@ import java.util.regex.Pattern;
  * through its subsections. So how much a caller is handed at once is a question the transport
  * answers, separately from what the documents are named.
  *
- * <p>Where an answer is cut is chosen from the document rather than from the count: a heading if
- * there is one, failing that a blank line, failing that the end of a line. None of them is inside a
- * block the document says is taken as it stands, because half a code fence is not text a reader can
- * act on. The count is what makes the cut necessary, not what decides where it falls.
+ * <p>The count is the guarantee, and where the cut falls is the preference. A heading is preferred,
+ * failing that a blank line, failing that the end of a line, and failing that the count itself. The
+ * first two are only taken outside a block whose text is taken as it stands, since half a code
+ * fence is not text a reader can act on and a blank line inside one is content. But a single line
+ * or a single block may be longer than one answer carries, and then there is no boundary left to
+ * prefer: the answer is cut where the count runs out. Keeping the block whole instead would be a
+ * bound a document could talk this server out of by writing a long enough fence.
  *
- * <p>The cursor is the server's own to read. It carries where to resume and what it was measured
- * against, so a document that changed underneath — a jar bundling a different library's docs —
- * is a cursor refused rather than an answer resumed in the wrong place. A caller that reads a byte
- * position out of it and does arithmetic on it is writing against something that is not published;
- * what is published is that a cursor comes back and goes out again unread.
+ * <p>The cursor is the server's own to read. It carries where to resume and a digest of what it was
+ * measured against, so a document that changed underneath — a jar bundling a different library's
+ * docs — is a cursor refused rather than an answer resumed in the wrong place. A caller that reads
+ * a position out of it and does arithmetic on it is writing against something that is not
+ * published; what is published is that a cursor comes back and goes out again unread.
  */
 final class Continuation {
 
     /**
-     * How much of a document one answer carries.
+     * How much of a document one answer carries, the whole answer counted.
      *
      * <p>Above every answer the other tools give whole — a jar's largest class, the standard
      * library's longest module, the listing of every name there is — so an answer that is cut is
-     * never cut smaller than what this server already hands over in one piece. Of the names
-     * {@code doc_read} answers, fourteen of three hundred and six are over it.
+     * never cut smaller than what this server already hands over in one piece.
+     *
+     * <p>What a part says about carrying on is part of that answer and comes out of this, so the
+     * caller passes what is left once that line is written rather than this.
      */
-    private static final int MOST = 16_000;
+    static final int MOST = 16_000;
 
     /** A heading: a markdown one, or a specification one as the section listing writes them. */
     private static final Pattern HEADING = Pattern.compile("^(#{1,6}|={2,})\\s+\\S.*$");
@@ -42,16 +50,11 @@ final class Continuation {
     /** An AsciiDoc attribute line — the anchor a heading is asked for by, and its further names. */
     private static final Pattern ATTRIBUTE = Pattern.compile("^\\[[^]]*]\\s*$");
 
-    /**
-     * A delimiter opening or closing a block whose text is taken as it stands: a markdown fence, and
-     * the AsciiDoc listing, literal, passthrough and comment blocks. Inside one, a blank line is
-     * content and a {@code ####} is not a heading, so neither is a place to stop.
-     */
-    private static final Pattern OPAQUE_DELIMITER =
-            Pattern.compile("^(```|~~~).*$|^([-.+/])\\2{3,}$");
-
     /** What a cursor is written as, so a client cannot spend a call learning it by hand. */
     static final String SPELLED = "^[A-Za-z0-9_-]+$";
+
+    /** How many bytes of the digest travel, which is what two answers would have to collide on. */
+    private static final int DIGEST = 8;
 
     private Continuation() {}
 
@@ -59,63 +62,74 @@ final class Continuation {
     record Part(String text, String cursor, int remaining) {}
 
     /**
-     * The part of {@code text} that {@code cursor} asks for, or the first part when it is null.
+     * The part of {@code text} that {@code cursor} asks for, or the first part when it is null,
+     * carrying at most {@code budget} characters.
      *
      * @throws IllegalArgumentException when the cursor was not measured against this text
      */
-    static Part of(String text, String cursor) {
+    static Part of(String text, String cursor, int budget) {
         int from = cursor == null ? 0 : resume(text, cursor);
-        if (text.length() - from <= MOST) {
+        if (text.length() - from <= budget) {
             return new Part(text.substring(from), null, 0);
         }
-        int to = cut(text, from);
+        int to = cut(text, from, budget);
         return new Part(text.substring(from, to), cursorAt(text, to), text.length() - to);
     }
 
-    /** Where the answer starting at {@code from} ends: the last place the document offers. */
-    private static int cut(String text, int from) {
-        int at = from;
+    /**
+     * Where the answer starting at {@code from} ends.
+     *
+     * <p>Never past {@code from + budget}: every candidate is a position the walk reached while
+     * still inside the count, and what is answered when there is no candidate is the count itself.
+     */
+    private static int cut(String text, int from, int budget) {
+        int limit = Math.min(from + budget, text.length());
+        String[] lines = text.split("\n", -1);
+        boolean[] opaque = TakenAsItStands.lines(lines);
         int heading = -1;
         int blank = -1;
         int attributes = -1;
-        boolean opaque = false;
-        while (at < text.length() && at - from <= MOST) {
-            int end = text.indexOf('\n', at);
-            String line = end < 0 ? text.substring(at) : text.substring(at, end);
-            if (OPAQUE_DELIMITER.matcher(line).matches()) {
-                opaque = !opaque;
-                attributes = -1;
-            } else if (opaque) {
-                attributes = -1;
-            } else {
-                // The attribute lines above a heading are the heading's, so a part that stops at
-                // the heading stops before them. Left behind, they end one answer with the name of
-                // something that is not in it.
-                if (ATTRIBUTE.matcher(line).matches()) {
+        int line = -1;
+        int at = 0;
+        for (int i = 0; i < lines.length && at <= limit; i++) {
+            if (at > from) {
+                line = at;
+                if (opaque[i]) {
+                    attributes = -1;
+                } else if (ATTRIBUTE.matcher(lines[i]).matches()) {
+                    // The attribute lines above a heading are the heading's, so a part that stops
+                    // at the heading stops before them. Left behind, they end one answer with the
+                    // name of something that is not in it.
                     attributes = attributes < 0 ? at : attributes;
-                } else if (HEADING.matcher(line).matches()) {
+                } else if (HEADING.matcher(lines[i]).matches()) {
                     heading = Math.max(attributes < 0 ? at : attributes, heading);
                     attributes = -1;
                 } else {
                     attributes = -1;
-                    if (line.isBlank()) {
+                    if (lines[i].isBlank()) {
                         blank = at;
                     }
                 }
             }
-            if (end < 0) {
-                break;
-            }
-            at = end + 1;
+            at += lines[i].length() + 1;
         }
         if (heading > from) {
             return heading;
         }
-        if (blank > from) {
+        // A heading is where the document itself starts something new, and a part that stops there
+        // is worth a short part before it. A blank line and the end of a line are not that; they
+        // are only places nothing is being cut through. Taking one that carries almost none of the
+        // count spends a whole call on a few characters, which is what a document with a block or a
+        // line longer than an answer carries would otherwise make this server do repeatedly. Below
+        // half the count they lose to cutting where the count runs out.
+        int enough = from + budget / 2;
+        if (blank >= enough) {
             return blank;
         }
-        // One line longer than the count allows, and nowhere in it the document says to stop.
-        return at > from ? Math.min(at, text.length()) : Math.min(from + MOST, text.length());
+        if (line >= enough) {
+            return line;
+        }
+        return limit;
     }
 
     /**
@@ -126,8 +140,8 @@ final class Continuation {
      * offset taken from another.
      */
     private static String cursorAt(String text, int at) {
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(
-                (at + "." + text.length() + "." + text.hashCode()).getBytes(StandardCharsets.UTF_8));
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString((at + "." + digest(text)).getBytes(StandardCharsets.UTF_8));
     }
 
     private static int resume(String text, String cursor) {
@@ -138,14 +152,10 @@ final class Continuation {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(stale());
         }
-        if (written.length != 3) {
+        if (written.length != 2 || !written[1].equals(digest(text))) {
             throw new IllegalArgumentException(stale());
         }
         try {
-            if (Integer.parseInt(written[1]) != text.length()
-                    || Integer.parseInt(written[2]) != text.hashCode()) {
-                throw new IllegalArgumentException(stale());
-            }
             int at = Integer.parseInt(written[0]);
             if (at < 0 || at > text.length()) {
                 throw new IllegalArgumentException(stale());
@@ -153,6 +163,17 @@ final class Continuation {
             return at;
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(stale());
+        }
+    }
+
+    /** What identifies the answer a cursor was measured against. */
+    private static String digest(String text) {
+        try {
+            byte[] sum = MessageDigest.getInstance("SHA-256")
+                    .digest(text.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(sum, 0, DIGEST);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 
