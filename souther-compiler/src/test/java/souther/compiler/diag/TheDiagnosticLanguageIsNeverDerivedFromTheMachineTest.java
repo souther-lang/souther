@@ -30,10 +30,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * never goes through.
  *
  * <p>This is a tripwire and not a proof. It reads the sources for the ways the machine's language
- * is asked for, and a static import or a helper in between defeats it. What makes the property
- * structurally true is one owner for the choice, which the adapters do not have yet — each decides
- * for itself which language it renders in, and that is tracked on its own. Until then, the reading
- * that would have to be added first is the one this fails on.
+ * is asked for, and a static import or a helper in between defeats it. The reading that would have
+ * to be added first is the one this fails on. Which surfaces pick a language at all, and where each
+ * of them writes its policy, is held next door by
+ * {@link EverySurfaceThatAnswersAReaderNamesItsLanguageTest}.
  */
 class TheDiagnosticLanguageIsNeverDerivedFromTheMachineTest {
 
@@ -67,6 +67,6 @@ class TheDiagnosticLanguageIsNeverDerivedFromTheMachineTest {
         assertEquals(Set.of(), reading,
                 "the machine's language is being read; a diagnostic is answered in a language that"
                         + " was named — through `--lang`, `SOUTHER_LANG` or an adapter's own"
-                        + " option — or in Messages.defaultLocale()");
+                        + " option — or in the language Souther defaults to");
     }
 }

@@ -40,6 +40,20 @@ public interface DiagnosticRenderer {
         return List.copyOf(rendered);
     }
 
+    /**
+     * The one-line text a {@code CompileException} carries for {@code getMessage()}.
+     *
+     * <p>There is no language to pass. An adapter prints that text only for an exception carrying no
+     * diagnostic, and the two sites that build this always supply one, so nothing rendering for a
+     * reader ever reads it; what reads it is {@code getMessage()} itself, in a test or an embedding
+     * caller. What it has to do is not change when the language a reader is answered in is decided
+     * again — a different requirement from being English, and the reason the caller does not get to
+     * choose one. English is what this text is.
+     */
+    static String legacyBody(Diagnostic d) {
+        return body(d, Locale.ENGLISH);
+    }
+
     /** The message body, from the catalog key or the compatibility literal. */
     static String body(Diagnostic d, Locale locale) {
         if (d.literalMessage() != null) {

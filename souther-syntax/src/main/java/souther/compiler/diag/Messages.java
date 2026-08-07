@@ -56,8 +56,16 @@ public final class Messages {
         return defaultLocale();
     }
 
-    /** The locale when none is chosen: English, the one the shipped documents are written in. */
-    public static Locale defaultLocale() {
+    /**
+     * The locale when none is chosen: English, the one the shipped documents are written in.
+     *
+     * <p>Not callable from outside. It is the tail of the resolution above and nothing else: it
+     * answers the reader who named no language. Offered as a way to get a locale it reads as one,
+     * and a caller that needs a value but has no reader to resolve for takes it — after which that
+     * caller's text changes language the next time the default is decided, which is a decision
+     * about readers who named nothing and not about that caller.
+     */
+    private static Locale defaultLocale() {
         return Locale.ENGLISH;
     }
 
