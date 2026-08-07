@@ -25,10 +25,18 @@ public final class DocCommand {
     private DocCommand() {}
 
     public static int run(String[] args, PrintStream out, PrintStream err) {
-        return run(args, out, err, DocCommand.class.getClassLoader());
+        return run(args, out, err, Caller.CLI);
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
+        return run(args, out, err, caller, DocCommand.class.getClassLoader());
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, ClassLoader loader) {
+        return run(args, out, err, Caller.CLI, loader);
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller, ClassLoader loader) {
         SpecDocument spec = SpecDocument.bundled();
         LibraryDocs shipped = LibraryDocs.on(loader);
         if (args.length == 0) {
@@ -73,13 +81,13 @@ public final class DocCommand {
             }
             if (lines.isEmpty()) {
                 err.println("nothing says `" + term + "`");
-                err.println("`souther doc` lists every section and topic");
+                err.println(caller.everySectionAndTopic());
                 return 0;
             }
             int shown = limit <= 0 ? lines.size() : Math.min(limit, lines.size());
             lines.subList(0, shown).forEach(out::println);
             if (shown < lines.size()) {
-                out.println("… " + (lines.size() - shown) + " more; `--limit 0` for all of them");
+                out.println("… " + (lines.size() - shown) + " more; " + caller.everyHit());
             }
             return 0;
         }
@@ -92,7 +100,7 @@ public final class DocCommand {
             String text = shipped.read(anchor);
             if (text == null) {
                 err.println("no doc topic `" + anchor + "`");
-                err.println("`souther doc` lists every section and topic");
+                err.println(caller.everySectionAndTopic());
                 return 2;
             }
             out.print(text);
@@ -105,7 +113,7 @@ public final class DocCommand {
             if (!near.isEmpty()) {
                 err.println("did you mean: " + String.join(", ", near));
             }
-            err.println("`souther doc` lists every section");
+            err.println(caller.everySection());
             return 2;
         }
         if (!DocName.canonical(section.anchor()).equals(DocName.canonical(anchor))) {

@@ -25,6 +25,10 @@ public final class ApiCommand {
     private ApiCommand() {}
 
     public static int run(String[] args, PrintStream out, PrintStream err) {
+        return run(args, out, err, Caller.CLI);
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
         if (args.length == 0) {
             listPublished(out, null);
             return 0;
@@ -64,8 +68,7 @@ public final class ApiCommand {
             out.println(line(asked, signature));
             // A signature says what to pass, not what it means — whether a span counts both ends,
             // whether a division aborts or answers a case. That is in the module's own source.
-            err.println("`souther api --source " + asked.substring(0, asked.indexOf('.'))
-                    + "` for what it means");
+            err.println(caller.stdlibSource(asked.substring(0, asked.indexOf('.'))));
             return 0;
         }
         if (!Prelude.isQualifier(asked)) {
