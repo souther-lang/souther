@@ -16,13 +16,18 @@ public final class UnifiedDiff {
     private static final int CONTEXT = 3;
 
     /**
-     * The largest table {@link #script} will build, in cells of one {@code int} — about sixteen
-     * megabytes.
+     * The largest table {@link #script} will build, in cells of one {@code int} — sixteen megabytes,
+     * and all of what the comparison allocates.
      *
-     * <p>Which lines two texts share is answered by filling a table the size of one length times the
-     * other, so a pair of texts large enough is a pair answered by exhausting the heap. Past this
-     * size the differing part is shown whole: still the difference, and still one hunk of a unified
-     * diff, but without saying which lines inside it the two had in common.
+     * <p>Which lines two texts share is answered by filling a table with a row per line of one and a
+     * column per line of the other, so a pair of texts large enough is a pair answered by exhausting
+     * the heap. Past this size the differing part is shown whole: still the difference, and still one
+     * hunk of a unified diff, but without saying which lines inside it the two had in common.
+     *
+     * <p>The count is of the whole table and not of the two lengths multiplied. A pair long on one
+     * side and a line or two on the other multiplies out to nothing while its table still has a row
+     * for every line of the long side, so measured that way the bound would let through the shape it
+     * exists to stop.
      */
     private static final long MAX_CELLS = 4_000_000L;
 
@@ -97,7 +102,7 @@ public final class UnifiedDiff {
         for (int k = 0; k < prefix; k++) {
             ops.add(new Op(' ', a.get(k)));
         }
-        ops.addAll((long) midA.size() * midB.size() > MAX_CELLS
+        ops.addAll(cells(midA.size(), midB.size()) > MAX_CELLS
                 ? whole(midA, midB)
                 : script(midA, midB));
         for (int k = a.size() - suffix; k < a.size(); k++) {
@@ -119,15 +124,25 @@ public final class UnifiedDiff {
         return ops;
     }
 
+    /** Cells in the table {@link #script} fills for two texts of these lengths — one row and one
+     * column more than they have lines, since the last of each is the empty tail past their end. */
+    private static long cells(int n, int m) {
+        return (long) (n + 1) * (m + 1);
+    }
+
     private static List<Op> script(List<Line> a, List<Line> b) {
         int n = a.size();
         int m = b.size();
-        int[][] common = new int[n + 1][m + 1];
+        // One array rather than one per row: a row is an object of its own, so a table of a million
+        // rows costs a million headers and a million references on top of the cells, and a bound
+        // that counted only the cells would not be a bound on what a lopsided pair allocates.
+        int stride = m + 1;
+        int[] common = new int[Math.toIntExact(cells(n, m))];
         for (int i = n - 1; i >= 0; i--) {
             for (int j = m - 1; j >= 0; j--) {
-                common[i][j] = a.get(i).equals(b.get(j))
-                        ? common[i + 1][j + 1] + 1
-                        : Math.max(common[i + 1][j], common[i][j + 1]);
+                common[i * stride + j] = a.get(i).equals(b.get(j))
+                        ? common[(i + 1) * stride + j + 1] + 1
+                        : Math.max(common[(i + 1) * stride + j], common[i * stride + j + 1]);
             }
         }
         List<Op> ops = new ArrayList<>();
@@ -138,7 +153,7 @@ public final class UnifiedDiff {
                 ops.add(new Op(' ', a.get(i)));
                 i++;
                 j++;
-            } else if (common[i + 1][j] >= common[i][j + 1]) {
+            } else if (common[(i + 1) * stride + j] >= common[i * stride + j + 1]) {
                 ops.add(new Op('-', a.get(i)));
                 i++;
             } else {

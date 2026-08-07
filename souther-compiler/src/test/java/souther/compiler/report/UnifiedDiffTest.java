@@ -97,12 +97,57 @@ class UnifiedDiffTest {
     }
 
     /**
+     * The bound counts the table that would be filled, which has a row and a column more than the
+     * texts have lines. Measured as the product of the two lengths instead, a pair sits under the
+     * bound while the table for it is over.
+     */
+    @Test
+    void theBoundCountsTheTableAndNotTheLines() {
+        StringBuilder from = new StringBuilder();
+        StringBuilder to = new StringBuilder();
+        for (int line = 0; line < 2000; line++) {
+            from.append("line ").append(line).append('\n');
+            // Both ends differ, so nothing is taken off before the bound is measured.
+            to.append(line % 2 == 1 && line != 1999 ? "line " + line : "changed " + line)
+                    .append('\n');
+        }
+
+        String diff = UnifiedDiff.of("m.sou", "m.sou (formatted)", from.toString(), to.toString());
+
+        assertEquals(List.of("@@ -1,2000 +1,2000 @@"),
+                diff.lines().filter(line -> line.startsWith("@@")).toList());
+        assertEquals(List.of(), diff.lines().filter(line -> line.startsWith(" ")).toList());
+    }
+
+    /**
+     * A pair one line wide on one side reaches the bound too. The lengths multiplied out say such a
+     * pair is small, while the table it needs has a row per line of the long side.
+     */
+    @Test
+    void aPairLongOnOneSideOnlyReachesTheBoundAsWell() {
+        StringBuilder from = new StringBuilder();
+        StringBuilder to = new StringBuilder();
+        for (int line = 0; line < 250_000; line++) {
+            from.append("line ").append(line).append('\n');
+        }
+        for (int line = 0; line < 15; line++) {
+            to.append(line % 2 == 0 ? "changed " + line : "line " + (line * 1000)).append('\n');
+        }
+
+        String diff = UnifiedDiff.of("m.sou", "m.sou (formatted)", from.toString(), to.toString());
+
+        assertEquals(List.of("@@ -1,250000 +1,15 @@"),
+                diff.lines().filter(line -> line.startsWith("@@")).toList());
+        assertEquals(List.of(), diff.lines().filter(line -> line.startsWith(" ")).toList());
+    }
+
+    /**
      * The size that decides is the size of what differs, not the size of the file. A file far past
      * the bound that is already canonical everywhere but one line is the ordinary case — a file kept
      * formatted, edited in one place — and it is shown one line at a time like any other.
      */
     @Test
-    void alargeFileThatDiffersInOnePlaceIsShownAtThatPlace() {
+    void aLargeFileThatDiffersInOnePlaceIsShownAtThatPlace() {
         StringBuilder from = new StringBuilder();
         StringBuilder to = new StringBuilder();
         for (int line = 0; line < 5000; line++) {
