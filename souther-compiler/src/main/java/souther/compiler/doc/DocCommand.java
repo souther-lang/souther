@@ -100,8 +100,7 @@ public final class DocCommand {
             // Through the same fold the lookup itself went through: a reader who typed the case the
             // compiler prints would otherwise be told there is nothing near what they asked for.
             String asked = DocName.canonical(anchor);
-            List<String> near = spec.sections().stream()
-                    .map(SpecDocument.Section::anchor)
+            List<String> near = spec.names().stream()
                     .filter(a -> DocName.canonical(a).contains(asked)
                             || asked.contains(DocName.canonical(a)))
                     .toList();

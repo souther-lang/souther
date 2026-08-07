@@ -3924,7 +3924,7 @@ What to do about it is therefore a choice and not a repair. Guarding the constru
 An attempted construction raises no warning. What this reports is a possible abort, and an attempt takes its `+else+` value instead of aborting (<<attempted-construction>>).
 
 [#e2012]
-[#e2013]
+[also-named="e2013"]
 === An attempted construction that cannot be read
 
 Two codes, for the two ways the form does not read at all (<<attempted-construction>>). E2012 is `+as+` naming something that does not build a value:
@@ -3946,11 +3946,7 @@ Hint: Construct `Amount` directly, or give it the invariant that decides the bra
 ----
 
 [#e2014]
-[#e2015]
-[#e2016]
-[#e2017]
-[#e2018]
-[#e2019]
+[also-named="e2015,e2016,e2017,e2018,e2019"]
 === A per-clause departure and the clauses it answers for
 
 Six codes, for the ways a departure answering one invariant clause at a time does not line up with the clauses the type declares (<<attempt-departures>>, <<invariant-clause-name>>). E2014 answers a clause by a name the type does not declare:

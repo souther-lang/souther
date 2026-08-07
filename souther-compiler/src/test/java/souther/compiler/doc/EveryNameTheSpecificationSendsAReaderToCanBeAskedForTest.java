@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -34,14 +35,17 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
     /** An AsciiDoc cross-reference: {@code <<anchor>>} or {@code <<anchor,the words shown>>}. */
     private static final Pattern XREF = Pattern.compile("<<([^,>]+)[^>]*>>");
 
+    /** The delimiters of the blocks AsciiDoc takes verbatim: listing, literal, passthrough, and the
+     *  comment block. A macro is not expanded inside any of them, so nothing there is a reference. */
+    private static final Set<String> VERBATIM = Set.of("----", "....", "++++", "////");
+
     @Test
     void everyCrossReferenceInTheSpecificationResolvesToASection() {
         SpecDocument spec = SpecDocument.bundled();
         Set<String> unresolved = new TreeSet<>();
-        Matcher m = XREF.matcher(text());
-        while (m.find()) {
-            if (spec.section(m.group(1)) == null) {
-                unresolved.add(m.group(1));
+        for (String reference : referencesIn(text())) {
+            if (spec.section(reference) == null) {
+                unresolved.add(reference);
             }
         }
 
@@ -51,20 +55,65 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
 
     @Test
     void aReferenceIsFoundAtAllSoTheScanIsNotLookingAtAnEmptyDocument() {
-        assertFalse(XREF.matcher(text()).results().findAny().isEmpty(),
+        assertFalse(referencesIn(text()).isEmpty(),
                 "found no cross-reference at all — the scan missed the document");
     }
 
     @Test
-    void aHeadingCarryingSeveralAnchorsIsAskedForByEachOfThem() {
+    void whatAListingOrACommentWritesIsNotAReference() {
+        assertEquals(Set.of("real"), referencesIn("""
+                A paragraph pointing at <<real>>.
+
+                [,text]
+                ----
+                A listing writing <<listed>>, which AsciiDoc leaves as it stands.
+                ----
+
+                // A line comment writing <<commented>>.
+
+                ////
+                A comment block writing <<blocked>>.
+                ////
+                """));
+    }
+
+    /** The names the document sends a reader to, where AsciiDoc expands a macro at all. */
+    private static Set<String> referencesIn(String adoc) {
+        Set<String> found = new TreeSet<>();
+        String verbatim = null;
+        for (String line : adoc.split("\n", -1)) {
+            String delimiter = line.strip();
+            if (verbatim != null) {
+                if (delimiter.equals(verbatim)) {
+                    verbatim = null;
+                }
+                continue;
+            }
+            if (VERBATIM.contains(delimiter)) {
+                verbatim = delimiter;
+                continue;
+            }
+            if (line.startsWith("//")) {
+                continue;
+            }
+            Matcher m = XREF.matcher(line);
+            while (m.find()) {
+                found.add(m.group(1));
+            }
+        }
+        return found;
+    }
+
+    @Test
+    void aHeadingIsAlsoAskedForByTheNamesWrittenBesideItsAnchor() {
         SpecDocument spec = SpecDocument.of("""
                 = A specification
 
                 [#first]
-                [#second]
-                == One heading, two names
+                [also-named="second,third"]
+                == One heading, three names
 
-                What both names answer with.
+                What all three names answer with.
 
                 [#other]
                 == Another
@@ -75,11 +124,35 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
         SpecDocument.Section section = spec.section("first");
 
         assertNotNull(section);
-        assertSame(section, spec.section("second"), "the second name answers with the same section");
-        assertEquals("first", section.anchor(), "and the section is listed under the first written");
+        assertSame(section, spec.section("second"), "a further name answers with the same section");
+        assertSame(section, spec.section("third"));
+        assertEquals("first", section.anchor(), "and the section is listed under its anchor");
         assertEquals(2, spec.sections().size(), "a further name is not a section of its own");
-        assertEquals("What both names answer with.", section.body(),
-                "the body starts after the heading, not inside the anchors");
+        assertEquals("What all three names answer with.", section.body(),
+                "the body starts after the heading, not inside the attributes");
+    }
+
+    /**
+     * AsciiDoc gives a heading exactly one ID: written twice, the last is the heading's ID and no
+     * target is registered for the first. Reading the first here would be this document knowing a
+     * heading by a name no renderer — and no deep link into the published specification — knows it
+     * by, which is the divergence a name added for `souther doc` has to stay out of.
+     */
+    @Test
+    void aHeadingWrittenWithTwoAnchorsIsRefusedRatherThanReadOneWayHereAndAnotherByAsciiDoc() {
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> SpecDocument.of("""
+                        = A specification
+
+                        [#first]
+                        [#second]
+                        == One heading under two identities
+
+                        Something.
+                        """));
+
+        assertTrue(refused.getMessage().contains("first") && refused.getMessage().contains("second"),
+                "the refusal names both of them: " + refused.getMessage());
     }
 
     @Test
@@ -109,7 +182,7 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
     }
 
     @Test
-    void theBodyOfASectionStopsBeforeTheAnchorsOfTheNextOne() {
+    void theBodyOfASectionStopsBeforeTheAttributesOfTheNextOne() {
         SpecDocument spec = SpecDocument.of("""
                 = A specification
 
@@ -118,8 +191,8 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
 
                 The body of one.
 
-                [#two-first]
-                [#two-second]
+                [#two]
+                [also-named="two-again"]
                 == Two
 
                 The body of two.
@@ -142,6 +215,33 @@ class EveryNameTheSpecificationSendsAReaderToCanBeAskedForTest {
         assertTrue(said.contains("`union-member` is written in"),
                 "the reader is told which section answered: " + said);
         assertFalse(out.toString(StandardCharsets.UTF_8).isBlank(), "and the section itself is printed");
+    }
+
+    /**
+     * A near miss is suggested from what a reader could have asked for, which is every name that
+     * resolves. Suggesting from the sections alone would answer `no section` to a typo on a name
+     * that does resolve, and say nothing about the name itself — the same shape of gap as answering
+     * nothing for the name in the first place, one keystroke further out.
+     */
+    @Test
+    void aNearMissOnANameThatIsNotASectionOfItsOwnIsSuggestedToo() {
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        PrintStream discard = new PrintStream(ByteArrayOutputStream.nullOutputStream(), true,
+                StandardCharsets.UTF_8);
+
+        DocCommand.run(new String[]{"e2015x"}, discard,
+                new PrintStream(err, true, StandardCharsets.UTF_8));
+        String forAName = err.toString(StandardCharsets.UTF_8);
+
+        err.reset();
+        DocCommand.run(new String[]{"union-membe"}, discard,
+                new PrintStream(err, true, StandardCharsets.UTF_8));
+        String forAnAnchor = err.toString(StandardCharsets.UTF_8);
+
+        assertTrue(forAName.contains("did you mean: e2015"),
+                "a name a section answers to is a name to suggest: " + forAName);
+        assertTrue(forAnAnchor.contains("did you mean: union-member"),
+                "and so is an anchor written on a paragraph: " + forAnAnchor);
     }
 
     private static String text() {

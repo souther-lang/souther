@@ -18,16 +18,24 @@ import java.util.regex.Pattern;
  * it; the anchor is the name a section is asked for by, the same name cross-references inside the
  * document use.
  *
- * <p>Every other name the document writes resolves too, to the section it stands in. A heading may
- * carry more than one anchor, which is how several diagnostics explained together are each asked
- * for by their own code; and an anchor may sit on a paragraph, which is how the document points at
- * a rule finer than a section. Neither is a section of its own — what comes back is the section the
- * name is written in — but a name the document sends a reader to is a name a reader can ask for.
+ * <p>Every other name the document writes resolves too, to the section it stands in. An anchor may
+ * sit on a paragraph, which is how the document points at a rule finer than a section; it is a
+ * cross-reference target to AsciiDoc as much as a heading's is, and what comes back for it is the
+ * section it stands in, that being the text there is to answer with.
+ *
+ * <p>A heading may also be asked for by names that are not anchors at all, written
+ * {@code [also-named="e2015,e2016"]} beside its anchor. That is how several diagnostics explained
+ * in one section are each asked for by their own code. It is a named attribute rather than a second
+ * {@code [#...]} line because a heading has exactly one AsciiDoc ID: stacking anchors would leave
+ * AsciiDoc reading the last one as the heading's ID and registering no target for the rest, while
+ * this document read the first — the same heading under two identities, one of them invisible to
+ * every renderer. A name Souther adds for its own lookup is therefore kept out of the ID.
  */
 public final class SpecDocument {
 
     private static final String RESOURCE = "/META-INF/souther/specification.adoc";
     private static final Pattern ANCHOR = Pattern.compile("^\\[#([^\\]]+)]\\s*$");
+    private static final Pattern ALSO_NAMED = Pattern.compile("^\\[also-named=\"([^\"]*)\"]\\s*$");
     private static final Pattern HEADING = Pattern.compile("^(={2,})\\s+(.*\\S)\\s*$");
     private static final String LISTING_DELIMITER = "----";
 
@@ -40,11 +48,14 @@ public final class SpecDocument {
     private final Map<String, Section> byAnchor;
     private final List<Section> inOrder;
     private final List<String> ownTexts;
+    private final List<String> names;
 
-    private SpecDocument(List<Section> sections, List<String> ownTexts, Map<String, Section> byAnchor) {
+    private SpecDocument(List<Section> sections, List<String> ownTexts,
+            Map<String, Section> byAnchor, List<String> names) {
         this.inOrder = List.copyOf(sections);
         this.ownTexts = List.copyOf(ownTexts);
         this.byAnchor = Map.copyOf(byAnchor);
+        this.names = List.copyOf(names);
     }
 
     /** Registers {@code anchor} as a name for {@code section}, refusing a name already taken. Two
@@ -89,22 +100,41 @@ public final class SpecDocument {
             if (!heading.matches() || i == 0) {
                 continue;
             }
-            if (!ANCHOR.matcher(lines[i - 1]).matches()) {
-                continue;
-            }
-            // Every anchor written above the heading names it. The first one written is the
-            // section's own name — the one it is listed and printed under — and the rest are
-            // further names for the same section.
-            int anchorFrom = i - 1;
-            while (anchorFrom > 0 && ANCHOR.matcher(lines[anchorFrom - 1]).matches()) {
+            // The attribute lines written above the heading belong to it: its anchor, which is the
+            // name it is listed and printed under, and any further names it answers to.
+            int anchorFrom = i;
+            while (anchorFrom > 0 && (ANCHOR.matcher(lines[anchorFrom - 1]).matches()
+                    || ALSO_NAMED.matcher(lines[anchorFrom - 1]).matches())) {
                 anchorFrom--;
             }
+            String own = null;
             List<String> anchors = new ArrayList<>();
             for (int a = anchorFrom; a < i; a++) {
                 Matcher anchor = ANCHOR.matcher(lines[a]);
-                anchor.matches();
-                anchors.add(anchor.group(1));
+                if (anchor.matches()) {
+                    if (own != null) {
+                        // AsciiDoc would read the last of them as the heading's ID and register no
+                        // target for the rest, leaving this document reading a name no renderer
+                        // knows the heading by. A further name goes in `also-named`.
+                        throw new IllegalStateException("a heading has one anchor, and `"
+                                + heading.group(2) + "` is written with two: `" + own + "` and `"
+                                + anchor.group(1) + "`");
+                    }
+                    own = anchor.group(1);
+                    continue;
+                }
+                Matcher alsoNamed = ALSO_NAMED.matcher(lines[a]);
+                alsoNamed.matches();
+                for (String name : alsoNamed.group(1).split(",")) {
+                    if (!name.isBlank()) {
+                        anchors.add(name.strip());
+                    }
+                }
             }
+            if (own == null) {
+                continue;
+            }
+            anchors.addFirst(own);
             headings.add(new Heading(List.copyOf(anchors), heading.group(2), heading.group(1).length(),
                     anchorFrom, i + 1));
         }
@@ -159,7 +189,7 @@ public final class SpecDocument {
                 register(byAnchor, writtenAs, anchor.group(1), standingIn);
             }
         }
-        return new SpecDocument(sections, ownTexts, byAnchor);
+        return new SpecDocument(sections, ownTexts, byAnchor, List.copyOf(writtenAs.values()));
     }
 
     /** Every section, in document order. */
@@ -171,6 +201,17 @@ public final class SpecDocument {
      *  section has that anchor. */
     public Section section(String anchor) {
         return byAnchor.get(DocName.canonical(anchor));
+    }
+
+    /**
+     * Every name that resolves, as the document spells it, in the order the document writes them.
+     *
+     * <p>The same names {@link #section} answers for, so a caller suggesting what a reader might
+     * have meant suggests from what they could have asked for. Suggesting from the sections alone
+     * would leave a name that resolves out of reach of a near miss on it.
+     */
+    public List<String> names() {
+        return names;
     }
 
     /**
