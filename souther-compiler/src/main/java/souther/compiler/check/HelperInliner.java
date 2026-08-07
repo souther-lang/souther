@@ -1278,7 +1278,9 @@ public final class HelperInliner {
             return v;
         }
         Ast.FnDef value = table.reached(v.reaches());
-        if (value == null || value.body() == null || graph.recurses(v.name())) {
+        // Asked with the name the table was asked with. The graph is keyed as the table is, and a
+        // spelling agrees with that key only where a pass has already written it out qualified.
+        if (value == null || value.body() == null || graph.recurses(v.reaches())) {
             return v;
         }
         return substituted(v.reaches(), value.writtenBody());
@@ -1676,7 +1678,7 @@ public final class HelperInliner {
             return null;
         }
         // by the name it is reached by here, which for another module's value is the qualified one
-        String reached = spread.name();
+        String reached = spread.reaches();
         Ast.FnDef value = table.fns().get(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
                 || graph.recurses(reached) ? null : value;
