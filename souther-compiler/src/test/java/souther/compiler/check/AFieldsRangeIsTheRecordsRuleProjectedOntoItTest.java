@@ -199,6 +199,38 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertNull(domains.at("count"), "an Int the model draws no line through is unbounded");
     }
 
+    /**
+     * A newtype over a newtype is bounded by neither reading.
+     *
+     * <p>The range a boundary is derived from and the range this projects are read by two different
+     * walks, and what matters is that they agree: a bound only one of them found would narrow one end
+     * of a position and leave the other where its type left it, which is not a range of anything.
+     * They agree here on nothing — `data StartMinute = Minute` carries no bound to either, and the
+     * position is reported as not derivable — so there is nothing to take in. That the inner rule is
+     * lost is older than this and is a limit of what a bound is read off, not of the projection.
+     */
+    @Test
+    void aNewtypeOverANewtypeIsBoundedByNeitherReading() {
+        FieldDomains domains = domainsIn("""
+                module example.nested
+
+                data Minute = Int
+                    invariant withinDay = value >= 0 && value <= 1440
+
+                data StartMinute = Minute
+                data EndMinute = Minute
+
+                data Span =
+                    { from: StartMinute
+                    , to: EndMinute
+                    }
+                    invariant ordered = from.value < to.value
+                """, "Span");
+
+        assertNull(domains.at("from"));
+        assertNull(domains.at("to"));
+    }
+
     /** A newtype has no siblings, so there is nothing here to project. */
     @Test
     void aNewtypeHasNothingToProjectOnto() {

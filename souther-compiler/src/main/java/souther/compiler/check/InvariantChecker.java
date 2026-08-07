@@ -311,8 +311,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(numbers, atoms,
-                read && everyRuleIsDerivable(named, data, symbols, 0, new HashSet<>()));
+        return new Seeded(numbers, atoms, read);
     }
 
     /**
@@ -325,6 +324,10 @@ public final class InvariantChecker {
      *
      * <p>The same reach the seeding has, so what this classifies is what that took in.
      */
+    static boolean everyRuleIsDerivable(TypeName named, Ast.Data data, Symbols symbols) {
+        return everyRuleIsDerivable(named, data, symbols, 0, new HashSet<>());
+    }
+
     private static boolean everyRuleIsDerivable(TypeName named, Ast.Data data, Symbols symbols,
                                                 int depth, Set<TypeName> seen) {
         if (depth > FIELDS_SEEDED || !seen.add(named)) {

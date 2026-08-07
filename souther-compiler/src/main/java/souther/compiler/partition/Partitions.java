@@ -553,11 +553,19 @@ public final class Partitions {
                 : new ObservedValue.Integer(value.longValueExact());
     }
 
+    /** The higher of two bounds, where a null is no bound at all and so never the higher. */
     private static BigDecimal highest(BigDecimal had, BigDecimal one) {
+        if (one == null) {
+            return had;
+        }
         return had == null || one.compareTo(had) > 0 ? one : had;
     }
 
+    /** The lower of two, the same way. */
     private static BigDecimal lowest(BigDecimal had, BigDecimal one) {
+        if (one == null) {
+            return had;
+        }
         return had == null || one.compareTo(had) < 0 ? one : had;
     }
 

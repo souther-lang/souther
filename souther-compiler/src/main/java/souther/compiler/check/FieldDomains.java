@@ -7,6 +7,7 @@ import souther.compiler.types.TypeName;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -27,14 +28,15 @@ import java.util.Map;
 public final class FieldDomains {
 
     /** Nothing known of any field. */
-    public static final FieldDomains NONE = new FieldDomains(Map.of(), true);
+    public static final FieldDomains NONE = new FieldDomains(Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
-    private final boolean exact;
+    private final BooleanSupplier deriving;
+    private Boolean exact;
 
-    private FieldDomains(Map<String, NumericDomain.Bounds> byField, boolean exact) {
+    private FieldDomains(Map<String, NumericDomain.Bounds> byField, BooleanSupplier deriving) {
         this.byField = byField;
-        this.exact = exact;
+        this.deriving = deriving;
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
@@ -63,8 +65,11 @@ public final class FieldDomains {
                 out.put(field, bounds);
             }
         });
+        // Classifying the rules is a second reading of every one of them, and the bounds are the
+        // whole of what a caller filling a row needs. Asked when the answer is, and not before.
         return new FieldDomains(Map.copyOf(out),
-                seeded.everyClauseRead() && seeded.numbers().everythingIsProjectable());
+                () -> seeded.everyClauseRead() && seeded.numbers().everythingIsProjectable()
+                        && InvariantChecker.everyRuleIsDerivable(named, data, symbols));
     }
 
     /** What {@code field} can hold, or {@code null} where nothing bounds it either way. */
@@ -79,6 +84,9 @@ public final class FieldDomains {
      * excluded, and a value they admit may still be one nothing can build.
      */
     public boolean exact() {
+        if (exact == null) {
+            exact = deriving.getAsBoolean();
+        }
         return exact;
     }
 }
