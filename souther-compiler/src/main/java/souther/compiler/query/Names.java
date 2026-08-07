@@ -855,13 +855,19 @@ public final class Names {
 
     /**
      * One name written in a module and the declaration it turned out to mean: the spelling, and the
-     * module and name that spelling resolved to.
+     * qualifier and name a reference would have reached that declaration by written out in full.
+     *
+     * <p>The qualifier and not the declaring module, because that is what an import line writes and
+     * an import line is what these are compared against. For a user module the two are the same
+     * name; for the standard library they are not — {@code souther.list} declares {@code foldFrom}
+     * and a line writes {@code import List ( foldFrom )} — and it is the alias every side of this
+     * comparison holds.
      *
      * <p>The spelling is half of it because an import list entry is a claim about a spelling. Two
      * uses of one declaration — {@code Sku} and {@code Stock.Sku} — are the same declaration and
      * different claims, and only the first is what an import list entry buys.
      */
-    private record Use(String written, String module, String name) {}
+    private record Use(String written, String qualifier, String name) {}
 
     /** Every name {@code module} writes, paired with what it denotes, or null when the module could
      * not be read. */
@@ -885,14 +891,11 @@ public final class Names {
                 case ValueName.Helper h ->
                         used.add(new Use(v.written().canonical(), h.module(), h.name()));
                 // `List.map` and a bare `map` an import brought in both denote the same library
-                // function, and the qualified name it is known by carries the module.
-                case ValueName.Stdlib s -> {
-                    int dot = s.qualified().lastIndexOf('.');
-                    if (dot > 0) {
-                        used.add(new Use(v.written().canonical(), s.qualified().substring(0, dot),
-                                s.qualified().substring(dot + 1)));
-                    }
-                }
+                // function. Its qualifier is the alias the library publishes it under, asked of the
+                // name — which holds it — rather than taken back out of the two rendered together.
+                // A namespace applied is not a member of anything and no list entry names one.
+                case ValueName.Stdlib s when !s.isNamespace() ->
+                        used.add(new Use(v.written().canonical(), s.alias(), s.operation()));
                 default -> { }   // a local, a builtin, a type used as a value (recorded as a type)
             }
         }
