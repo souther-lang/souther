@@ -1801,8 +1801,8 @@ A block is an anonymous `+let+`. It is the same as a `+let+` (<<fn>>), only unna
 ----
 let isValid (r: PreApprovalReason) = ...
 
-List.all(reasons, r -> isValid(r))   // wrap in an anonymous block
-List.all(reasons, isValid)           // pass by name directly. Same thing
+List.all(r -> isValid(r), reasons)   // wrap in an anonymous block
+List.all(isValid, reasons)           // pass by name directly. Same thing
 ----
 
 A name that names a function *is* that function where a value goes, whoever declared it: a `+let+` of this module, a `+let+` another module published, and a standard-library function alike. `+String.trim+` written where a value goes is a `+(String) -> String+`, and `+String.trim(s)+` is that function applied to `+s+`. So the two lines above are one rule rather than two, and a function reaches every position a block reaches — an argument, a binding, a branch of an `+if+`, an element of a list a `+fold+` walks.
