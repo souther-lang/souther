@@ -33,6 +33,12 @@ import static souther.compiler.fmt.Doc.text;
 public final class Formatter {
 
     private static final int INDENT = 4;
+
+    /** The canonical width. It applies to every breakable construct, a declaration's as much as an
+     * expression's: a module header that lists more names than fit breaks the same way a call with
+     * more arguments than fit does. A line wider than this is one whose content has no separator to
+     * break at — a long pattern, a single long token, or a nesting deep enough that the indent alone
+     * takes the width. */
     private static final int WIDTH = 100;
 
     /** The comments already written, keyed by where they are in the source. A comment is reachable
@@ -87,6 +93,58 @@ public final class Formatter {
                 Diagnostic.of(DiagnosticCode.E2104, "parse.toodeep").build(),
                 "this source nests too deeply to format;"
                         + " break the nesting into named parts to flatten it");
+    }
+
+    // --- layout ---
+    //
+    // Every repeated or joined construct is written through one of these two, so the separator of a
+    // construct is a place the layout may break rather than a literal the construct spelled itself.
+    // A construct that spells its own separators is one the width cannot reach: the break has to
+    // exist in the document before the renderer can choose it, and the renderer breaks the outermost
+    // group that does not fit, so a member is split only when the structure around it had nothing to
+    // give.
+
+    /** Members with a comma between them, one to a line where they do not fit. The comma stays on
+     * the line its member ends. */
+    private static Doc separated(List<Doc> members) {
+        return Doc.join(concat(text(","), LINE), members);
+    }
+
+    /**
+     * Members between brackets. {@code boundary} is what sits just inside them — {@link Doc#LINE}
+     * where the flat form has a space there ({@code exposing ( a, b )}, {@code T { a, b }}),
+     * {@link Doc#SOFTLINE} where it does not ({@code f(a, b)}, {@code [a, b]}).
+     */
+    private static Doc delimited(String open, Doc boundary, List<Doc> members, String close) {
+        return group(concat(text(open),
+                nest(INDENT, concat(boundary, separated(members))),
+                boundary, text(close)));
+    }
+
+    /** One part of a chain, written after the connector that joins it to what came before. */
+    private record Segment(String connector, Doc doc) {}
+
+    /**
+     * A head and the parts written after it, each opening with its connector — a union's {@code |},
+     * an operator chain's operator, a pipeline's {@code |>}, an example row's {@code :} and
+     * {@code ->}. Broken, each part starts a line one indent in and the connector leads it, so what
+     * joins two parts is visible at the front of the second.
+     */
+    private static Doc chained(Doc head, List<Segment> segments) {
+        List<Doc> parts = new ArrayList<>();
+        for (Segment s : segments) {
+            parts.add(concat(LINE, text(s.connector()), s.doc()));
+        }
+        return group(concat(head, nest(INDENT, concat(parts))));
+    }
+
+    /** {@code docs} as segments sharing one connector — a run of the same operator. */
+    private static List<Segment> segments(String connector, List<Doc> docs) {
+        List<Segment> out = new ArrayList<>();
+        for (Doc d : docs) {
+            out.add(new Segment(connector, d));
+        }
+        return out;
     }
 
     // --- top level ---
@@ -172,31 +230,39 @@ public final class Formatter {
         return concat(text("example "), text(target), nest(INDENT, concat(rows)));
     }
 
+    /**
+     * A row of an example: its description, its input and what it is expected to give. The three are
+     * the row's own parts, so the row is what breaks when it does not fit — a row that broke inside
+     * its input instead left {@code ), Amount(100)) -> Accepted} opening a line, and stopped showing
+     * which part was which.
+     */
     private Doc exampleRow(SyntaxNode n) {
-        List<Doc> parts = new ArrayList<>();
-        parts.add(text("| "));
-        n.token(SyntaxKind.STRING_LIT).ifPresent(desc -> {
-            parts.add(text(desc.text()));
-            parts.add(text(" : "));
-        });
         List<Doc> args = new ArrayList<>();
         for (SyntaxNode a : n.child(SyntaxKind.ARG_LIST).map(this::exprChildren).orElse(List.of())) {
             args.add(expr(a));
         }
-        parts.add(concat(text("("), Doc.join(text(", "), args), text(")")));
-        n.child(SyntaxKind.WITH_CLAUSE).ifPresent(clause -> {
+        Doc input = delimited("(", SOFTLINE, args, ")");
+        var with = n.child(SyntaxKind.WITH_CLAUSE);
+        if (with.isPresent()) {
             List<Doc> binds = new ArrayList<>();
-            for (SyntaxNode b : childNodes(clause, SyntaxKind.WITH_BINDING)) {
+            for (SyntaxNode b : childNodes(with.get(), SyntaxKind.WITH_BINDING)) {
                 binds.add(concat(text(firstIdent(b)), text(" = "), expr(firstExprChildOpt(b).orElseThrow())));
             }
-            parts.add(concat(text(" with "), Doc.join(text(", "), binds)));
-        });
-        parts.add(text(" -> "));
-        List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
-        if (!expected.isEmpty()) {
-            parts.add(expr(expected.get(0)));
+            input = concat(input, text(" with "), group(nest(INDENT, separated(binds))));
         }
-        return concat(parts);
+
+        List<Segment> segs = new ArrayList<>();
+        var desc = n.token(SyntaxKind.STRING_LIT);
+        Doc head;
+        if (desc.isPresent()) {
+            head = concat(text("| "), text(desc.get().text()));
+            segs.add(new Segment(": ", input));
+        } else {
+            head = concat(text("| "), input);
+        }
+        List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
+        segs.add(new Segment("-> ", expected.isEmpty() ? Doc.NIL : expr(expected.get(0))));
+        return chained(head, segs);
     }
 
     private Doc fakeDef(SyntaxNode n) {
@@ -210,24 +276,20 @@ public final class Formatter {
     }
 
     private Doc fakeRow(SyntaxNode n) {
-        List<Doc> parts = new ArrayList<>();
-        parts.add(text("| "));
         var args = n.child(SyntaxKind.ARG_LIST);
+        Doc input;
         if (args.isPresent()) {
             List<Doc> as = new ArrayList<>();
             for (SyntaxNode a : exprChildren(args.get())) {
                 as.add(expr(a));
             }
-            parts.add(concat(text("("), Doc.join(text(", "), as), text(")")));
+            input = delimited("(", SOFTLINE, as, ")");
         } else {
-            parts.add(text("_"));   // the default row
+            input = text("_");   // the default row
         }
-        parts.add(text(" -> "));
         List<SyntaxNode> outs = exprChildren(n);
-        if (!outs.isEmpty()) {
-            parts.add(expr(outs.get(0)));
-        }
-        return concat(parts);
+        return chained(concat(text("| "), input),
+                List.of(new Segment("-> ", outs.isEmpty() ? Doc.NIL : expr(outs.get(0)))));
     }
 
     private Doc moduleHeader(SyntaxNode n) {
@@ -245,7 +307,7 @@ public final class Formatter {
                     .map(rt -> concat(name, text(" : "), retType(rt)))
                     .orElse(name)));
         }
-        return concat(text("exposing ( "), Doc.join(text(", "), entries), text(" )"));
+        return delimited("exposing (", LINE, entries, ")");
     }
 
     private Doc importDecl(SyntaxNode n) {
@@ -262,7 +324,7 @@ public final class Formatter {
         for (SyntaxToken t : idents(list.get())) {
             names.add(text(t.text()));
         }
-        return concat(d, text(" ( "), Doc.join(text(", "), names), text(" )"));
+        return concat(d, text(" "), delimited("(", LINE, names, ")"));
     }
 
     // --- data ---
@@ -303,7 +365,8 @@ public final class Formatter {
                     cases.add(c);
                 }
             }
-            return concat(text("data "), text(name), text(" = "), Doc.join(text(" | "), cases));
+            return concat(text("data "), text(name), text(" = "),
+                    chained(cases.get(0), segments("| ", cases.subList(1, cases.size()))));
         }
         var newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
@@ -374,7 +437,7 @@ public final class Formatter {
             params.add(withComments(n, p, concat(text(firstIdent(p)), text(": "),
                     retType(p.child(SyntaxKind.RET_TYPE).orElseThrow()))));
         }
-        return concat(text("("), Doc.join(text(", "), params), text(")"));
+        return delimited("(", SOFTLINE, params, ")");
     }
 
     private Doc stage(SyntaxNode n) {
@@ -418,7 +481,7 @@ public final class Formatter {
         if (current.length() > 0) {
             names.add(text(current.toString()));
         }
-        return Doc.join(text(", "), names);
+        return group(nest(INDENT, separated(names)));
     }
 
     /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
@@ -446,7 +509,8 @@ public final class Formatter {
         var intrinsic = n.child(SyntaxKind.INTRINSIC_BODY);
         if (intrinsic.isPresent()) {
             String raw = intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow().text();
-            return concat(head, text(" = intrinsic "), text(raw));
+            return concat(head, text(" ="),
+                    group(nest(INDENT, concat(LINE, text("intrinsic "), text(raw)))));
         }
         var block = n.child(SyntaxKind.BLOCK_EXPR);
         if (block.isPresent()) {
@@ -475,7 +539,7 @@ public final class Formatter {
                 params.add(pattern(c));
             }
         }
-        return concat(text("("), Doc.join(text(", "), params), text(")"));
+        return delimited("(", SOFTLINE, params, ")");
     }
 
     private Doc fnParamList(SyntaxNode n) {
@@ -489,7 +553,7 @@ public final class Formatter {
             }
             params.add(d);
         }
-        return concat(text("("), Doc.join(text(", "), params), text(")"));
+        return delimited("(", SOFTLINE, params, ")");
     }
 
     // --- types ---
@@ -509,7 +573,7 @@ public final class Formatter {
                 }
             }
         }
-        return concat(text("("), Doc.join(text(", "), params), text(") -> "), result);
+        return concat(delimited("(", SOFTLINE, params, ")"), text(" -> "), result);
     }
 
     private Doc retType(SyntaxNode n) {
@@ -519,7 +583,8 @@ public final class Formatter {
                 cases.add(typeTerm(c));
             }
         }
-        Doc d = Doc.join(text(" | "), cases);
+        Doc d = cases.isEmpty() ? Doc.NIL
+                : chained(cases.get(0), segments("| ", cases.subList(1, cases.size())));
         // `T?` in a core signature, the same mark a field carries
         return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, text("?")) : d;
     }
@@ -532,7 +597,7 @@ public final class Formatter {
                     elems.add(typeTerm(c));
                 }
             }
-            return concat(text("("), Doc.join(text(", "), elems), text(")"));
+            return delimited("(", SOFTLINE, elems, ")");
         }
         var typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
@@ -549,7 +614,7 @@ public final class Formatter {
                 typeArgs.add(typeTerm(c));
             }
         }
-        return concat(name, text("<"), Doc.join(text(", "), typeArgs), text(">"));
+        return concat(name, delimited("<", SOFTLINE, typeArgs, ">"));
     }
 
     private static boolean isTypeNode(SyntaxKind k) {
@@ -574,7 +639,7 @@ public final class Formatter {
             case UNARY_EXPR -> concat(text("-"), expr(onlyExpr(n)));
             case PIPE_EXPR -> pipe(n);
             case PAREN_EXPR -> concat(text("("), expr(onlyExpr(n)), text(")"));
-            case TUPLE_EXPR -> concat(text("("), Doc.join(text(", "), exprDocs(n)), text(")"));
+            case TUPLE_EXPR -> delimited("(", SOFTLINE, exprDocs(n), ")");
             case LIST_EXPR -> list(n);
             case LIST_COMP -> listComp(n);
             case IF_EXPR -> ifExpr(n);
@@ -610,25 +675,58 @@ public final class Formatter {
         for (SyntaxNode a : args) {
             argDocs.add(withComments(argList, a, expr(a)));
         }
-        return group(concat(text("("),
-                nest(INDENT, concat(SOFTLINE, Doc.join(concat(text(","), LINE), argDocs))),
-                SOFTLINE, text(")")));
+        return delimited("(", SOFTLINE, argDocs, ")");
     }
 
     private Doc binary(SyntaxNode n) {
+        List<Segment> segs = new ArrayList<>();
+        Doc head = collectChain(n, ladderLevel(operatorKind(n)), segs);
+        return chained(head, segs);
+    }
+
+    /**
+     * Flattens a run of operators the parser reads at one level of its precedence ladder, so that
+     * what the source wrote as one run is laid out as one run: {@code a + b * c + d} breaks into
+     * {@code a}, {@code + b * c} and {@code + d}, the three parts the {@code +} level has.
+     *
+     * <p>Only the left spine, and only within the level. The right operand of a left-associative
+     * level is never that level's own operator unless the source parenthesised it, and a
+     * parenthesised operand is a structure its author wrote — descending into either would show a
+     * run the tree does not have.
+     */
+    private Doc collectChain(SyntaxNode n, int level, List<Segment> segs) {
         List<SyntaxNode> ops = exprChildren(n);
-        String op = operatorText(n);
-        return concat(expr(ops.get(0)), text(" " + op + " "), expr(ops.get(1)));
+        SyntaxNode left = ops.get(0);
+        Doc head;
+        if (left.kind() == SyntaxKind.BINARY_EXPR && ladderLevel(operatorKind(left)) == level) {
+            head = collectChain(left, level, segs);
+        } else {
+            head = expr(left);
+        }
+        segs.add(new Segment(operatorText(n) + " ", expr(ops.get(1))));
+        return head;
+    }
+
+    /**
+     * Which rung of {@link CstParser}'s precedence ladder an operator is read on. Operators on one
+     * rung are read by one loop and chain; the comparisons are read by a single test and never
+     * chain, so their runs are one operator long and flattening them is a no-op.
+     */
+    private static int ladderLevel(SyntaxKind k) {
+        return switch (k) {
+            case OR -> 1;
+            case AND -> 2;
+            case EQ, NE, LT, LE, GT, GE -> 3;
+            case PLUS, MINUS, PLUSPLUS -> 4;
+            case STAR, SLASH -> 5;
+            default -> 0;
+        };
     }
 
     private Doc pipe(SyntaxNode n) {
         List<Doc> stages = new ArrayList<>();
         Doc head = collectPipe(n, stages);
-        List<Doc> tail = new ArrayList<>();
-        for (Doc s : stages) {
-            tail.add(concat(LINE, text("|> "), s));
-        }
-        return group(concat(head, nest(INDENT, concat(tail))));
+        return chained(head, segments("|> ", stages));
     }
 
     /** Flattens a left-nested {@code |>} chain: returns the head doc and fills {@code stages} with each
@@ -652,15 +750,14 @@ public final class Formatter {
         if (elems.isEmpty()) {
             return text("[]");
         }
-        return group(concat(text("["),
-                nest(INDENT, concat(SOFTLINE, Doc.join(concat(text(","), LINE), elems))),
-                SOFTLINE, text("]")));
+        return delimited("[", SOFTLINE, elems, "]");
     }
 
     private Doc listComp(SyntaxNode n) {
         List<Doc> exprs = exprDocs(n);
         List<Doc> guards = exprs.subList(1, exprs.size());
-        return concat(text("["), exprs.get(0), text(" | "), Doc.join(text(", "), guards), text("]"));
+        return concat(text("["), exprs.get(0), text(" | "),
+                group(nest(INDENT, separated(guards))), text("]"));
     }
 
     private Doc ifExpr(SyntaxNode n) {
@@ -735,7 +832,8 @@ public final class Formatter {
                 pattern.append(t.text());
             }
         }
-        return concat(text("| "), text(pattern.toString()), text(" -> "), expr(body));
+        return chained(concat(text("| "), text(pattern.toString())),
+                List.of(new Segment("-> ", expr(body))));
     }
 
     private Doc lambda(SyntaxNode n) {
@@ -774,9 +872,7 @@ public final class Formatter {
         if (members.isEmpty()) {
             return concat(text(typeName), text(" {}"));
         }
-        return concat(text(typeName), group(concat(text(" {"),
-                nest(INDENT, concat(LINE, Doc.join(concat(text(","), LINE), members))),
-                LINE, text("}"))));
+        return concat(text(typeName), text(" "), delimited("{", LINE, members, "}"));
     }
 
     private Doc block(SyntaxNode n) {
@@ -822,7 +918,7 @@ public final class Formatter {
                         elems.add(pattern(c));
                     }
                 }
-                return concat(text("("), Doc.join(text(", "), elems), text(")"));
+                return delimited("(", SOFTLINE, elems, ")");
             }
             case PATTERN_CTOR -> {
                 return concat(qualifiedName(n), text("("), pattern(patternChild(n)), text(")"));
@@ -838,7 +934,7 @@ public final class Formatter {
                             ? concat(text(names.get(0).text()), text(" = "), text(names.get(1).text()))
                             : text(names.get(0).text()));
                 }
-                return concat(text("{ "), Doc.join(text(", "), fields), text(" }"));
+                return delimited("{", LINE, fields, "}");
             }
             default -> {
                 return text(firstIdent(n));
@@ -1094,9 +1190,17 @@ public final class Formatter {
     }
 
     private String operatorText(SyntaxNode n) {
+        return operatorToken(n).text();
+    }
+
+    private SyntaxKind operatorKind(SyntaxNode n) {
+        return operatorToken(n).kind();
+    }
+
+    private SyntaxToken operatorToken(SyntaxNode n) {
         for (SyntaxElement e : n.children()) {
             if (e instanceof SyntaxToken t && !t.isTrivia() && isBinaryOperator(t.kind())) {
-                return t.text();
+                return t;
             }
         }
         throw new IllegalStateException("no operator in " + n.kind());
