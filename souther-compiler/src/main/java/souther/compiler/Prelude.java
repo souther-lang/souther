@@ -7,6 +7,7 @@ import souther.compiler.check.TypeChecker;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.frontend.CstFrontend;
 
@@ -71,6 +72,16 @@ public final class Prelude {
     private static final Set<String> PRIVATE = new LinkedHashSet<>();
 
     /**
+     * Every library name as what a name reaching it denotes, keyed by the qualified spelling.
+     *
+     * <p>Written where the qualified spelling is made, out of the two values it is made of. A caller
+     * holding a qualified name asks here rather than splitting it: the alias and the operation are
+     * what the library knew when it loaded, and a name that has been joined and split again is a name
+     * that agrees with the original only as long as nobody writes one with a dot in it.
+     */
+    private static final Map<String, ValueName.Stdlib> OPERATIONS = new LinkedHashMap<>();
+
+    /**
      * The data declarations whose JVM implementation souther-runtime provides by hand rather than
      * the backend generating. The classification is made once, here: it anchors the declared names
      * to the runtime namespace ({@code souther.runtime.RoundingMode} is the class shipped there),
@@ -127,7 +138,7 @@ public final class Prelude {
      *  stand where they stood. A sugar supplies constants and nothing else, which is why they are
      *  numbers here; one that had to supply anything else could not be written down as this and
      *  would say so. */
-    public record Rewrite(String target, List<Integer> supplied) {
+    public record Rewrite(ValueName.Stdlib target, List<Integer> supplied) {
         public Rewrite {
             supplied = List.copyOf(supplied);
         }
@@ -135,15 +146,25 @@ public final class Prelude {
         /** How many of the arguments the sugar is written with stand where they stood — the target's
          *  own count, less what the rewrite adds. */
         public int keptArgs() {
-            PreludeEntry entry = ENTRIES.get(target);
+            PreludeEntry entry = ENTRIES.get(target.qualified());
             return entry == null ? 0 : entry.signature().params().size() - supplied.size();
         }
     }
 
     /** Names that are sugar for another standard-library call, recognised as library functions but
-     *  rewritten before inlining. */
-    private static final Map<String, Rewrite> SUGARED =
-            Map.of("List.fold", new Rewrite("List.foldFrom", List.of(0)));
+     *  rewritten before inlining. Written as the two values a library name is made of, so that the
+     *  sugar and what it becomes are named here the way every other library name is. */
+    private static final ValueName.Stdlib FOLD = new ValueName.Stdlib("List", "fold");
+
+    private static final Map<String, Rewrite> SUGARED = Map.of(FOLD.qualified(),
+            new Rewrite(new ValueName.Stdlib("List", "foldFrom"), List.of(0)));
+
+    /** A sugar has no declaration, so nothing above put it among the operations; it is a name a
+     * reader may write, so it belongs there. Placed after {@link #SUGARED} because a static
+     * initializer reads what the ones above it have already written. */
+    static {
+        OPERATIONS.put(FOLD.qualified(), FOLD);
+    }
 
     /** Bare name → every published name it could be, in {@link Reserved#MODULES} order:
      *  {@code insert} is {@code Map.insert} or {@code Set.insert}. Derived from the published
@@ -204,6 +225,18 @@ public final class Prelude {
         return Collections.unmodifiableMap(ENTRIES);
     }
 
+    /**
+     * What a name reaching {@code qualifiedName} denotes, or null where the library has no such name.
+     *
+     * <p>The alias and the operation as the library wrote them, so a caller holding a qualified
+     * spelling gets them back rather than splitting it. The library is the only thing that knows
+     * which part is which: {@code souther.list} declares {@code foldFrom} and publishes it under
+     * {@code List}, and the spelling says nothing about either.
+     */
+    public static ValueName.Stdlib operation(String qualifiedName) {
+        return OPERATIONS.get(qualifiedName);
+    }
+
     /** Whether {@code qualifiedName} names a declaration the library keeps to itself. Such a name
      *  may be written inside the reserved namespace and nowhere else, so everything outside it is
      *  told the library has no such member. */
@@ -227,7 +260,7 @@ public final class Prelude {
         Set<String> byModule = new LinkedHashSet<>();
         for (String qualifier : QUALIFIERS) {
             for (String name : names) {
-                if (name.startsWith(qualifier + ".")) {
+                if (OPERATIONS.get(name).alias().equals(qualifier)) {
                     byModule.add(name);
                 }
             }
@@ -290,7 +323,8 @@ public final class Prelude {
                 RUNTIME_DEFS.put(def.name(), def);
             }
             for (Ast.FnDef fn : module.fns()) {
-                String qualified = alias + "." + fn.name();
+                ValueName.Stdlib operation = new ValueName.Stdlib(alias, fn.name());
+                String qualified = operation.qualified();
                 // One qualified name, one declaration. The library has no overloading: a name that
                 // reads two ways would have to be chosen between, and nothing at a value position
                 // could do the choosing. Put into a map, a second one would replace the first in
@@ -301,6 +335,7 @@ public final class Prelude {
                 }
                 Signature signature = signatureOf(fn, qualified, symbols);
                 ENTRIES.put(qualified, new PreludeEntry(fn, signature));
+                OPERATIONS.put(qualified, operation);
                 if (fn.body() instanceof Ast.FnBody.Intrinsic intrinsic) {
                     KERNELS.put(intrinsic.key(), signature);
                 }

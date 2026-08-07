@@ -8,6 +8,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -608,8 +609,8 @@ final class Terms {
                     }
                     args.add(written);
                 }
-                yield new Ast.Apply(call.operation().name(), call.operation(), args,
-                        ConstructionOrigin.own(), call.pos());
+                yield new Ast.Apply(call.operation().name(), call.operation(),
+                        reachOf(call.operation()), args, ConstructionOrigin.own(), call.pos());
             }
             case null, default -> null;
         };
@@ -682,4 +683,10 @@ final class Terms {
     static boolean isArith(Ast.BinOp op) {
         return op == Ast.BinOp.ADD || op == Ast.BinOp.SUB || op == Ast.BinOp.MUL || op == Ast.BinOp.DIV;
     }
+    /** How a preserved call's operation is reached: it is the library's, named under the alias the
+     * library publishes it under. */
+    private static ReachName reachOf(ValueName operation) {
+        return new ReachName.OfLibrary((ValueName.Stdlib) operation);
+    }
+
 }

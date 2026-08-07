@@ -258,7 +258,7 @@ class InvariantCombinatorRulesTest {
                 continue;
             }
             assertFalse(Preserved.byTheLanguagesOwnOperations().operations()
-                            .containsKey(new ValueName.Stdlib(fn)),
+                            .containsKey(Prelude.operation(fn)),
                     fn + " is sugar and is kept standing, so a tree this check reads could hold it");
         }
     }

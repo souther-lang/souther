@@ -1,6 +1,7 @@
 package souther.compiler.core;
 
 import souther.compiler.types.BindingId;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -62,10 +63,100 @@ public sealed interface Core {
 
     record Binary(Ast.BinOp op, Core left, Core right, Type type, SourcePos pos) implements Core {}
 
-    /** A call to a builtin, an injected behavior, an intrinsic, or a recursive helper emitted as a
-     * method — each reached by the name it is declared under, none of them bound by this body. A
-     * non-recursive helper is already inlined. */
-    record Call(String fn, List<Core> args, Type type, SourcePos pos) implements Core {}
+    /**
+     * What a call applies.
+     *
+     * <p>Two things reach this far and they are not the same kind of thing. One is a callee some
+     * module named, which resolution answered and the tree carried here. The other is an operation
+     * this compiler emits and no source can write: a Core-to-Core pass mints it after everything has
+     * been resolved and type-checked, and it stands for a shape the backend knows how to lower.
+     *
+     * <p>They are held apart because a {@link ReachName} is the name a module reaches a definition
+     * by, and an operation nothing declares is not that. Written as one, the type would say a name
+     * had been resolved where nothing resolved it — which is the confusion the reach name was
+     * separated out to end.
+     */
+    sealed interface CallTarget {
+
+        /** What a report quotes and, for a call the backend emits as a method, what the method is
+         * named after. */
+        String rendered();
+    }
+
+    /** A callee some module named, under the name that module reaches it by. */
+    record Reached(ReachName name) implements CallTarget {
+
+        @Override
+        public String rendered() {
+            return name.rendered();
+        }
+
+        @Override
+        public String toString() {
+            return rendered();
+        }
+    }
+
+    /**
+     * An operation this compiler emits, which no source names and no module declares.
+     *
+     * <p>Each is minted by a Core-to-Core pass ({@link GrowingFold}) for a shape the backend lowers
+     * as a whole. The backend matches on the operation rather than on a spelling of it; what it
+     * renders as is for a report to quote.
+     */
+    enum Emitted implements CallTarget {
+
+        /** {@code $build(step, xs, from)} — the walk that grows a list into a builder and seals it. */
+        BUILD_LIST("List.$build"),
+        /** The {@code acc ++ …} inside a rewritten step, adding to the builder the walk carries. */
+        GROW_LIST("List.$grow"),
+        /** The same walk for a fold accumulating a map. */
+        BUILD_MAP("Map.$build"),
+        /** The step's write into the map builder. */
+        PUT_MAP("Map.$put");
+
+        private final String rendered;
+
+        Emitted(String rendered) {
+            this.rendered = rendered;
+        }
+
+        @Override
+        public String rendered() {
+            return rendered;
+        }
+
+        @Override
+        public String toString() {
+            return rendered;
+        }
+    }
+
+    /**
+     * A call to a builtin, an injected behavior, an intrinsic, or a recursive helper emitted as a
+     * method — none of them bound by this body. A non-recursive helper is already inlined.
+     *
+     * <p>{@code fn} says what is applied ({@link CallTarget}). Where that is a name, it is the one
+     * the module being emitted reaches the callee by, carried from where resolution settled it, and
+     * held as what it is rather than as the spelling of it: the backend needs both the whole name, to
+     * emit the method it calls, and the operation inside it, to reach the runtime method a library
+     * call becomes — and taking the second out of the first meant splitting a name this compiler had
+     * joined a moment earlier.
+     */
+    record Call(CallTarget fn, List<Core> args, Type type, SourcePos pos) implements Core {
+
+        /** A call to a name, as the name it reaches. */
+        public Call(ReachName fn, List<Core> args, Type type, SourcePos pos) {
+            this(new Reached(fn), args, type, pos);
+        }
+
+        /** The callee as it renders — the reach name for a call to one, the operation's own
+         * spelling for one this compiler emits. What a method name is built from and what a report
+         * quotes; never what a source wrote. */
+        public String name() {
+            return fn.rendered();
+        }
+    }
 
     /**
      * A call a representation kept standing on purpose: resolved to the declaration it names, typed

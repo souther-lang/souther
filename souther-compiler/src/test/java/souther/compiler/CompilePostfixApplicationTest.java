@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -331,7 +332,7 @@ class CompilePostfixApplicationTest {
         SourcePos at = new SourcePos(1, 1);
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
         Ast.Apply lowered = new Ast.Apply(
-                new Ast.Var("$fn0", new ValueName.Local("$fn0", id), at),
+                new Ast.Var("$fn0", new ValueName.Local("$fn0", id), new ReachName.Bare("$fn0"), at),
                 java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at);
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");

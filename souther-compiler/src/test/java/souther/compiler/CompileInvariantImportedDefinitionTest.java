@@ -94,6 +94,47 @@ class CompileInvariantImportedDefinitionTest {
         assertEquals("Err", Codecs.decode(loader, "ids.V", "abcd").getClass().getSimpleName());
     }
 
+    /**
+     * An invariant may name a helper of this module, and that helper's body may call an imported one.
+     *
+     * <p>The invariant is expanded before the bodies are written qualified, so a call reached through
+     * this module's own helper is met while the tree still spells the imported name bare. What it
+     * reaches is settled at resolution and does not depend on which passes have run since: a table
+     * keyed by the name a call reaches is looked up with the same key on either side of any of them.
+     */
+    @Test
+    void anInvariantNamesAnOwnHelperThatCallsAnImportedOne() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(LIMITS, """
+                module ids exposing ( V )
+
+                import limits ( fits )
+
+                let ok (s: String) : Bool = fits(s)
+
+                data V = String
+                    invariant ok(value)
+                """)));
+    }
+
+    /** And the rule that reaches it runs: the imported helper is what decides the construction, as
+     * it does when the invariant calls it directly. */
+    @Test
+    void theImportedHelperReachedThroughAnOwnHelperIsWhatTheRuleIsCheckedAgainst() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of(LIMITS, """
+                module ids exposing ( V )
+
+                import limits ( fits )
+
+                let ok (s: String) : Bool = fits(s)
+
+                data V = String
+                    invariant ok(value)
+                """)), getClass().getClassLoader());
+
+        assertEquals("abc", Codecs.encode(loader, "ids.V", Codecs.decoded(loader, "ids.V", "abc")));
+        assertEquals("Err", Codecs.decode(loader, "ids.V", "abcd").getClass().getSimpleName());
+    }
+
     /** An unexposed value has no name here, in an invariant as anywhere else. */
     @Test
     void anUnpublishedValueCannotBeNamedInAnInvariant() {

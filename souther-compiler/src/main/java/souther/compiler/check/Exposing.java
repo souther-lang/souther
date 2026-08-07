@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,7 +46,7 @@ public final class Exposing {
      * reading this file" for the whole workspace while the author was part-way through writing a
      * {@code let}.
      */
-    public record Validated(Map<String, String> exposed, List<Ast.Import> kept,
+    public record Validated(Map<String, ValueName.Stdlib> exposed, List<Ast.Import> kept,
                             List<Diagnostic> conflicts) {}
 
     /** Both answers at once, for a reader that wants them both and should ask once. */
@@ -78,7 +79,7 @@ public final class Exposing {
             declaredData.add(def.name());
         }
 
-        Map<String, String> exposed = new HashMap<>();
+        Map<String, ValueName.Stdlib> exposed = new HashMap<>();
         List<Ast.Import> kept = new ArrayList<>();
         List<Diagnostic> conflicts = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
@@ -87,7 +88,11 @@ public final class Exposing {
                 continue;
             }
             for (String name : imp.names()) {
-                String qualified = imp.module() + "." + name;
+                // The import line writes both halves of a library name: the module it names is the
+                // alias, and each name in its list is the operation. What is brought in is that pair,
+                // so nothing downstream has to take a spelling apart to get at either.
+                ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
+                String qualified = operation.qualified();
                 if (!Prelude.isLibraryFunction(qualified)) {
                     throw CompileException.of(
                             Diagnostic.of(DiagnosticCode.E1506, "check.import.notstdfn")
@@ -100,12 +105,13 @@ public final class Exposing {
                             .hint("check.import.conflict.hint").build());
                     continue;   // the name is refused; what it means until then is the declaration
                 }
-                String prior = exposed.putIfAbsent(name, qualified);
-                if (prior != null && !prior.equals(qualified)) {
+                ValueName.Stdlib prior = exposed.putIfAbsent(name, operation);
+                if (prior != null && !prior.equals(operation)) {
                     throw CompileException.of(
                             Diagnostic.of(DiagnosticCode.E1508, "check.import.ambiguous")
-                                    .at(imp.pos()).args(name, prior, qualified).build(),
-                            "`" + name + "` is exposed from both `" + prior + "` and `" + qualified
+                                    .at(imp.pos()).args(name, prior.qualified(), qualified).build(),
+                            "`" + name + "` is exposed from both `" + prior.qualified() + "` and `"
+                                    + qualified
                                     + "` — call it qualified instead of importing both (spec §stdlib).");
                 }
             }

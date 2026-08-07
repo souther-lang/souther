@@ -62,7 +62,7 @@ public record Preserved(Map<ValueName, CompleteSignature> operations) {
     private static Preserved readTheLibrary() {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
         Prelude.entries().forEach((qualified, entry) -> {
-            ValueName.Stdlib operation = new ValueName.Stdlib(qualified);
+            ValueName.Stdlib operation = Prelude.operation(qualified);
             operations.put(operation, CompleteSignature.of(
                     operation, entry.signature().params(), entry.signature().result()));
         });

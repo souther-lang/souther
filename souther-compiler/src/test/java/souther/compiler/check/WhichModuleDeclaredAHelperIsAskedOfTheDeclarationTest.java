@@ -180,7 +180,11 @@ class WhichModuleDeclaredAHelperIsAskedOfTheDeclarationTest {
         Map<String, Ast.FnDef> declared = HelperInliner.helpersOf(maths);
         HelperInliner from = HelperInliner.forHelpers("maths", declared);
         Ast.FnDef spin = from.closeAcross(declared.get("spin"), "maths");
-        Ast.FnDef hands = declared.get("hands").reachedAs("maths.hands");
+        Ast.FnDef written = declared.get("hands");
+        // Taken on by `order` under the name it reaches it by, and its body read against `order`'s
+        // names: a body a reader holds names what the reader reaches, whoever declared it.
+        Ast.FnDef hands = written.reachedAs("maths.hands").withBody(new Ast.FnBody.Written(
+                HelperNames.qualifyHelpersOf(written.writtenBody(), "maths")));
 
         Ast.Module order = resolved("""
                 module order

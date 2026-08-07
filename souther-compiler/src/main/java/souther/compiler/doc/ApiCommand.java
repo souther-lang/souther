@@ -105,7 +105,7 @@ public final class ApiCommand {
             }
         }
         for (Map.Entry<String, Prelude.Rewrite> e : Prelude.rewrites().entrySet()) {
-            Prelude.PreludeEntry target = Prelude.entry(e.getValue().target());
+            Prelude.PreludeEntry target = Prelude.entry(e.getValue().target().qualified());
             if (target != null) {
                 surface.put(e.getKey(), declared(target, e.getValue().keptArgs()));
             }

@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -92,13 +93,15 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     /** The absent optional, which the language names rather than any module. */
     public static FixtureTemplate none() {
         return new FixtureTemplate("None",
-                new Ast.Var("None", new ValueName.Builtin("None"), NOWHERE));
+                new Ast.Var("None", new ValueName.Builtin("None"), new ReachName.Bare("None"),
+                        NOWHERE));
     }
 
     /** A case that carries nothing: naming it is constructing it. */
     public static FixtureTemplate unitCase(TypeName type) {
         return new FixtureTemplate(type.name(), new Ast.Var(type.name(),
-                new ValueName.OfType(type.name(), type, ConstructionOrigin.own()), NOWHERE));
+                new ValueName.OfType(type.name(), type, ConstructionOrigin.own()),
+                new ReachName.Bare(type.name()), NOWHERE));
     }
 
     /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */
