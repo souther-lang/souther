@@ -113,7 +113,7 @@ one no tool declares is refused rather than dropped.
 | Option | Meaning |
 | --- | --- |
 | `--format human\|json` | how to render a compile error (default `human`) |
-| `--lang <tag>` | message locale, e.g. `ja` or `en`, or `SOUTHER_LANG` (default `en`, which is what the shipped documents are written in) |
+| `--lang <tag>` | message locale, e.g. `ja` or `en`. Overrides `SOUTHER_LANG`; with neither, `en`, which is what the shipped documents are written in |
 | `--color auto\|always\|never` | color the human output (default `auto`) |
 
 These apply to `compile`, `run` and `examples`. Passing them to another command is an error.

@@ -29,10 +29,20 @@ public final class Messages {
 
     /** Resolves the locale from an explicit language tag (from {@code --lang}); null means "not set". */
     public static Locale resolveLocale(String explicit) {
-        String tag = explicit;
-        if (tag == null || tag.isBlank()) {
-            tag = System.getenv("SOUTHER_LANG");
-        }
+        return resolveLocale(explicit, System.getenv("SOUTHER_LANG"));
+    }
+
+    /**
+     * The precedence itself, over values rather than over where they came from: {@code explicit}
+     * wins, then {@code fromEnvironment}, then the default. Either may be null or blank for "not
+     * set".
+     *
+     * <p>Separate from {@link #resolveLocale(String)} so the rule can be asked about without the
+     * environment the process happens to be running in answering half of it. The environment is
+     * read in one place, and what is done with what it said is a function.
+     */
+    public static Locale resolveLocale(String explicit, String fromEnvironment) {
+        String tag = explicit == null || explicit.isBlank() ? fromEnvironment : explicit;
         if (tag != null && !tag.isBlank()) {
             return Locale.forLanguageTag(tag.replace('_', '-'));
         }

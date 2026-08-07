@@ -31,6 +31,10 @@ import java.util.regex.Pattern;
  * guessing. Where the two do differ — {@code stdlib_api_search} takes no count because the stdlib
  * surface is answered whole — the tool's own description says so.
  *
+ * <p>For the same reason a description names these tools and never a command line. A client reading
+ * one has no way to tell a command it cannot run from an answer it failed to find, so the whole of
+ * what a capability is reached by has to be written in the table it is published from.
+ *
  * <p>Stdout carries protocol lines only; everything a command would say lands inside a response.
  */
 public final class McpServer {

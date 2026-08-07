@@ -17,11 +17,15 @@ which language the machine's interface is in, which for a toolchain documented i
 cannot be evidence about the reader, because most values of it select an answer with nothing behind
 it to read.
 
-The rule this leaves is that a diagnostic is answered in a language the toolchain documents itself
-in, which binds what may be added and not only what is resolved: a message catalog is publishable
-once the documents a reader of it would be sent to exist in that language. Changing the terminal
-fallback alone would not have held — a `messages_fr.properties` dropped in beside English-only
-documents would put the disagreement back.
+The rule this leaves is about the default and only the default: when nothing names a language, a
+diagnostic is answered in the language the shipped documentation is written in. It is not the
+stronger rule that every answer is in a documented language, and the code does not hold that one.
+`resolveLocale` takes whatever language tag it is handed, `--lang ja` answers out of a catalog with
+no Japanese documents behind it, and nothing checks a catalog's language against the documents.
+So a `messages_fr.properties` added beside English-only documents, reached by `SOUTHER_LANG=fr`,
+would put French diagnostics and English documents back in the same session. Constraining which
+catalogs may exist is a separate mechanism — a build-time check that the languages the catalogs
+offer are ones the documentation is written in — and is not part of this revision.
 
 `messages_ja.properties` stays and `--lang ja` still answers out of it. A reader who names a
 language has said which one they read, which is a different claim from a machine having a locale;

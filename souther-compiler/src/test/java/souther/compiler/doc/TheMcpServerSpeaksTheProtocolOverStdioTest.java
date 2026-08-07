@@ -177,12 +177,14 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
     }
 
     /**
-     * A description is read by a client that has this server and nothing else. Sending it to a
-     * command line for the rest of the answer names something it cannot reach, and it cannot tell
-     * that from an answer it merely failed to find.
+     * The server's own rule, held as written: a description names these tools and never a command
+     * line. It is broader than "do not send the client somewhere it cannot go" — a description
+     * mentioning the equivalent CLI call as a mere aside would fail this too — and deliberately so,
+     * because a client reading one has no way to tell a command it cannot run from an answer it
+     * failed to find, and the line between naming and merely mentioning is not one a test can hold.
      */
     @Test
-    void noToolSendsTheClientToAnAnswerThisServerDoesNotServe() {
+    void noToolDescriptionWritesACommandLineInvocation() {
         List<JsonNode> answers = serve("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
 
         for (JsonNode tool : answers.getFirst().get("result").get("tools").valueStream().toList()) {

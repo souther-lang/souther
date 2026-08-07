@@ -71,7 +71,8 @@ public final class Main {
 
             options (compile/run/examples):
               --format human|json      how to render a compile error (default: human)
-              --lang <tag>             message locale, e.g. ja or en, or SOUTHER_LANG (default: en)
+              --lang <tag>             message locale, e.g. ja or en
+                                       (overrides SOUTHER_LANG; with neither, en)
               --color auto|always|never  color the human output (default: auto)""";
 
     /**
