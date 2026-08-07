@@ -101,7 +101,8 @@ public final class Runner {
             Object[] resolved = args;
             if (issues != null) {
                 // the issue text is the last argument of `run.decode.failed`, the one key that carries
-                // issues; rewriting it here is what resolves the decoder's own wording per locale
+                // issues; rewriting it here is what puts the decoder's own wording into the reader's
+                // language
                 resolved = args.clone();
                 resolved[resolved.length - 1] = detail(issues.resolve(DECODE_MESSAGES, locale));
             }
@@ -110,7 +111,13 @@ public final class Runner {
         }
     }
 
-    /** The decoder's own message catalog, which its issues are written against. */
+    /**
+     * The decoder's own message catalog, which its issues are written against. It answers per issue
+     * rather than per code: an issue names the constraint that rejected the value, so a code covering
+     * several of them — {@code out_of_range} states a lower bound, an upper bound, or both — is
+     * described as the one it is. An entry whose placeholders the issue cannot fill is skipped rather
+     * than half-filled, and where no entry applies the message the decoder already wrote stands.
+     */
     private static final ResourceBundleMessageResolver DECODE_MESSAGES =
             new ResourceBundleMessageResolver("net.unit8.raoh.messages");
 
