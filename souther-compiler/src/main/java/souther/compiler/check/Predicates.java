@@ -430,8 +430,8 @@ final class Predicates {
     /** How the size of a container relates to the size of what it was built from, down the chain.
      * Which way it is stated is what the construction's {@link Cardinality} says. */
     void bounds(ValueName sizeCall, Core container, Denotations at, List<Constraint> out) {
-        // A construction that only adds is no smaller than each container it read. It names more than
-        // one of them, so this is a loop where the building below is a single answer — and it is
+        // A construction's result is never smaller than each source named for it. A rule may name
+        // more than one, so this is a loop where the building below is a single answer — and it is
         // asked of the expression rather than of a call, since `a ++ b` is one of these and is
         // written as an operator.
         for (Core added : DischargeRules.noSmallerThan(container)) {

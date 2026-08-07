@@ -130,9 +130,12 @@ class ABuildThatWarnsCanBeRefusedTest {
     }
 
     /**
-     * A refused build leaves nothing behind. The exit code says the build was not accepted, and a
-     * directory of classes from a build in that state is what a later step would pick up as the
-     * output of one that was.
+     * A refused build writes no classes. The exit code says the build was not accepted, and classes
+     * this run had written are what a later step would pick up as the output of one that was.
+     *
+     * <p>What it does not say is that the output directory is empty afterwards: classes an earlier
+     * run left there stay, as they do when a compile fails. Removing those is a separate question
+     * about who owns that directory, and the same one for both.
      */
     @Test
     void aRefusedCompileWritesNoClasses() throws Exception {

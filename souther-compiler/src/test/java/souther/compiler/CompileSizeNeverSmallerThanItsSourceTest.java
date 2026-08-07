@@ -8,20 +8,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A construction that adds to a container answers something no smaller than what it added to, and a
- * lower-bound invariant is discharged by that alone.
+ * A construction's result is no smaller than a source it reads, and a lower-bound invariant is
+ * discharged by that alone.
  *
  * <p>What the check could say about a size was how much of it a construction dropped: the same count
- * or fewer. An operation that puts elements in was left saying nothing, because saying it meant
- * saying something about the elements too — and of {@code List.append(a, b)} there is nothing to say
- * there, the result holding neither {@code a}'s elements alone nor {@code b}'s. The count survived
- * that and was discarded with the rest.
+ * or fewer. An operation given two containers, or given one and an element to put in it, was left
+ * saying nothing, because saying anything meant saying it about the elements — and there is no
+ * element relation to a single source to state, {@code List.append(a, b)} holding neither
+ * {@code a}'s elements alone nor {@code b}'s, and an insert or a union answering one entry for a key
+ * that was already there. The bound on the count is not that statement and survived it, and was
+ * discarded with it anyway.
  *
  * <p>So a non-empty list appended to a non-empty list was possibly empty, and the warning could not
  * be cleared: there is no relation between the two operands to reify, and guarding would ask the
  * author for a departure case for a failure that cannot happen.
  */
-class CompileSizeThatOnlyGrowsTest {
+class CompileSizeNeverSmallerThanItsSourceTest {
 
     private static long warnings(Compiler.Compiled c) {
         return c.warnings().stream().filter(d -> d.severity() == Severity.WARNING).count();

@@ -196,11 +196,13 @@ final class DischargeRules {
     /**
      * The containers a construction's result is never smaller than.
      *
-     * <p>Written on its own and not as a {@link Shape}, because these keep nothing of the elements:
-     * {@code List.append(a, b)} holds neither {@code a}'s elements alone nor {@code b}'s, and an
-     * insert puts in one that was in neither. How many there are survives that, and a rule that had
-     * to be spelled as a rule about the elements could not say so — which is why these sat among the
-     * constructions nothing is known of, their count discarded along with the rest.
+     * <p>Written on its own and not as a {@link Shape}, because none of these establishes an element
+     * relation to a single source that a shape states. It is not that they keep nothing:
+     * {@code List.append(a, b)} keeps every element of both, and holds neither {@code a}'s alone nor
+     * {@code b}'s; an insert or a union answers one entry for a key that was already there, so what
+     * the result holds may have been in neither. The cardinality is a separate fact and survives
+     * either way — which is why these sat among the constructions nothing is known of, their bound
+     * discarded with an element rule that was never the same statement.
      *
      * <p>No more than the bound. A union makes one entry of a key both sides have and an insert of
      * something already there adds nothing, so neither answers the sum of what it read; appending
@@ -226,7 +228,8 @@ final class DischargeRules {
      *
      * <p>They put in what the container they read did not hold. Nothing that held of every element
      * still does, which is what a shape would have had to say. How many there are is said instead by
-     * {@link #NO_SMALLER_THAN}, which those of them that only add are in.
+     * {@link #NO_SMALLER_THAN}, which those of them whose result is never smaller than a source it
+     * names are in.
      *
      * <p>They answer the same elements in a container of another kind. That is true and unsayable:
      * every statement the check makes names the kind it is about — {@code List.length} and

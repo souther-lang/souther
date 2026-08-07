@@ -1133,9 +1133,9 @@ let build (rows) = {
 
 An operation not in the table keeps nothing that can be relied on, and a clause over what it built is left to the run-time check.
 
-===== A construction that only adds
+===== A construction whose result is no smaller than what it read
 
-An operation given two containers, or given a container and an element to put in it, answers one holding what it read and possibly more. None of the four shapes describes it: what is in the result was in one of the containers read and not the other, so neither "the same elements" nor "some of the same elements" is true of it, and a property of every element does not survive. How many there are does.
+An operation given two containers, or given a container and an element to put in it, establishes no element relation to a single source that any of the four shapes states. `+List.append(a, b)+` holds `+a+`'s elements and `+b+`'s and neither of them alone; an insert or a union answers one entry for a key that was already there, so what the result holds may have been in neither. A property of every element does not survive either way. How many there are is bounded from below all the same, and that bound is a fact of its own.
 
 [cols="2,3"]
 |===
@@ -1147,7 +1147,7 @@ An operation given two containers, or given a container and an element to put in
 
 `+List.append+` is written `+a ++ b+`, and a `+String+` is joined with the same operator and read the same way: `+String.length(a ++ b)+` is no less than `+String.length(a)+` and no less than `+String.length(b)+`.
 
-So a lower bound on either part is a lower bound on the result, and a non-empty list appended to any list is non-empty.
+So a lower bound on any source named above is a lower bound on the result, and a non-empty list appended to any list is non-empty.
 
 [,text]
 ----
@@ -1157,7 +1157,7 @@ behavior joined : (a: Lines, b: List<Line>) -> Lines
 let joined (a, b) = Lines(a.value ++ b)   // discharged: no shorter than `a`
 ----
 
-Nothing is said the other way. A union answers one entry for a key both sides hold and an insert of an element already there adds none, so the result is not the sum of what was read; an upper bound on the parts does not bound it.
+Nothing is said the other way. A union answers one entry for a key both sides hold and an insert of an element already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
 
 [#invariant-discharge-projection]
 ===== A projection the closure copied
