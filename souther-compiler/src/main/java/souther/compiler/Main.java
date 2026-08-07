@@ -73,6 +73,56 @@ public final class Main {
               --lang <tag>             message locale, e.g. ja or en (default: system, then ja)
               --color auto|always|never  color the human output (default: auto)""";
 
+    /**
+     * Which commands each option belongs to, read off {@link #USAGE}: the heading {@code options
+     * (compile/run/examples)} already says both that an option exists and whose it is, so a command
+     * that has to name someone else's option reads it from there rather than keeping a second list
+     * that would drift from the one the author is shown.
+     */
+    private static final Map<String, String> OPTION_OWNERS = optionOwners();
+
+    private static Map<String, String> optionOwners() {
+        Map<String, String> owners = new java.util.LinkedHashMap<>();
+        String commands = null;
+        for (String line : USAGE.lines().toList()) {
+            String said = line.strip();
+            if (said.startsWith("options (") && said.endsWith("):")) {
+                commands = said.substring("options (".length(), said.length() - 2);
+            } else if (commands != null && said.startsWith("-")) {
+                // The option and its aliases lead the line; the first word that is not one of them
+                // begins the placeholder or the prose.
+                for (String word : said.split("\\s+")) {
+                    String option = word.endsWith(",") ? word.substring(0, word.length() - 1) : word;
+                    if (!option.startsWith("-")) {
+                        break;
+                    }
+                    owners.put(option, commands);
+                }
+            }
+        }
+        return java.util.Collections.unmodifiableMap(owners);
+    }
+
+    /**
+     * Whether the token reads as an option rather than as a path.
+     *
+     * <p>What {@code run} has always asked, now asked by the commands that were not asking it. A
+     * short option a command does not know still reads as a path, which is where {@code run} draws
+     * the line too; so does {@code --}, which no command reads as the end of its options yet.
+     */
+    private static boolean looksLikeOption(String arg) {
+        return arg.startsWith("--");
+    }
+
+    /** The usage error a command answers with when a token reads as an option it has no case for. */
+    private static int unknownOption(String command, String option) {
+        String owners = OPTION_OWNERS.get(option);
+        System.err.println("unknown option `" + option + "` for `" + command + "`"
+                + (owners == null ? "" : " — it is an option of " + owners));
+        System.err.println(USAGE);
+        return 2;
+    }
+
     public static void main(String[] args) {
         int code = guarded(() -> dispatch(args));
         if (code != 0) {
@@ -192,7 +242,12 @@ public final class Main {
                         }
                     }
                 }
-                default -> sources.add(Path.of(args[i]));
+                default -> {
+                    if (looksLikeOption(args[i])) {
+                        return unknownOption("compile", args[i]);
+                    }
+                    sources.add(Path.of(args[i]));
+                }
             }
         }
         if (sources.isEmpty()) {
@@ -277,7 +332,12 @@ public final class Main {
                 case "--generate" -> generate = true;
                 case "--boundaries" -> boundaries = true;
                 case "--strict" -> strict = true;
-                default -> sources.add(Path.of(args[i]));
+                default -> {
+                    if (looksLikeOption(args[i])) {
+                        return unknownOption("examples", args[i]);
+                    }
+                    sources.add(Path.of(args[i]));
+                }
             }
         }
         if (sources.isEmpty()) {
@@ -346,7 +406,12 @@ public final class Main {
             switch (a) {
                 case "-w", "--write" -> write = true;
                 case "--check" -> check = true;
-                default -> files.add(Path.of(a));
+                default -> {
+                    if (looksLikeOption(a)) {
+                        return unknownOption("fmt", a);
+                    }
+                    files.add(Path.of(a));
+                }
             }
         }
         if (files.isEmpty()) {
