@@ -44,7 +44,19 @@ who were being served Japanese by default keep it with `SOUTHER_LANG=ja` in a sh
 What does bind is each catalog on its own: every catalog that ships defines the base's complete key
 set, and is valid on its own terms — no duplicate key, every message a well-formed `MessageFormat`
 pattern, every standard-library name it quotes one the library publishes. The build discovers the
-catalogs from the tree rather than naming them, so a catalog added tomorrow is under all of it.
+catalogs from the tree rather than naming them, so a catalog added tomorrow is under all of it, and
+one language has one catalog: two files naming it are two answers to one lookup, settled by class
+path order.
+
+Every message is a pattern, and is rendered as one whether or not the site passed anything to put
+in it. `Messages.get` used to return a message that took no arguments as written, which left the
+catalog's own text meaning two things: a message that quoted a brace so it would survive formatting
+was shown to the reader with the quotes still in it, and a message that did not quote one was a
+pattern nobody could format — the second of which throws the moment somebody gives that diagnostic
+an argument. Neither is visible in the message. So a literal brace is written `'{'` and a literal
+apostrophe `''`, in every message, and the build refuses a catalog the formatter cannot read. The
+formatter refusing at run time is answered with the text as written, for the same reason a missing
+key renders as itself: a compiler reporting an error is the worst place to raise another one.
 
 That narrows what the fallback is for. It was the migration mechanism — a message became Japanese as
 it was migrated and read English until then, and a catalog was allowed to ship half-written. It is
@@ -94,7 +106,7 @@ code, a primary `Region`, optional secondary `Region`s each with a label, a mess
 plus arguments, or a compatibility literal), an optional found-vs-expected type pair, hints, and a
 suggestion. A `DiagnosticRenderer` turns it into text — `HumanRenderer` (Elm-style, with color when
 stderr is a TTY) or `JsonRenderer`. Prose comes from a `ResourceBundle` catalog: `messages_ja`
-(default) over an English base (`messages.properties`); a key missing from Japanese falls back to
+(the original default; revised above) over an English base (`messages.properties`); a key missing from Japanese falls back to
 English, a key missing from both renders as itself, so the compiler never crashes on an unmigrated
 site — the standing of that fallback is narrowed by the *Revision* above, which keeps it as a
 fail-safe and forbids a shipped catalog from depending on it. Locale is resolved once: `--lang` > `SOUTHER_LANG` > the JVM default > Japanese — the last two steps

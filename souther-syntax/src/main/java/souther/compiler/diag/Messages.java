@@ -61,20 +61,35 @@ public final class Messages {
         return Locale.ENGLISH;
     }
 
-    /** Looks up {@code key} for {@code locale} and fills {@code args}. Missing key → the key itself. */
+    /**
+     * Looks up {@code key} for {@code locale} and fills {@code args}. Missing key → the key itself.
+     *
+     * <p>Every message is rendered as a {@link MessageFormat} pattern, whether or not the site
+     * passed anything to put in it. Skipping the rendering for a message that takes no arguments
+     * made the catalog's own text mean two different things depending on who read it: a message
+     * that quoted a brace so it would survive formatting was shown to the reader with the quotes
+     * in it, and a message that did not quote one was a pattern nobody could format. Which of the
+     * two a message was is not visible in the message.
+     *
+     * <p>A pattern the formatter refuses is answered with the text as written. The catalogs are
+     * held to being formattable by the build, so this is the fail-safe for one that got through
+     * rather than a second way of writing a message: a compiler reporting an error is the worst
+     * place to raise another one.
+     */
     public static String get(String key, Locale locale, Object... args) {
         String template = lookup(key, locale);
         if (template == null) {
             return key;
         }
-        if (args == null || args.length == 0) {
-            return template;
-        }
-        Object[] resolved = new Object[args.length];
-        for (int i = 0; i < args.length; i++) {
+        Object[] resolved = new Object[args == null ? 0 : args.length];
+        for (int i = 0; i < resolved.length; i++) {
             resolved[i] = args[i] instanceof Localizable l ? get(l.key(), locale, l.args()) : args[i];
         }
-        return new MessageFormat(template, locale).format(resolved);
+        try {
+            return new MessageFormat(template, locale).format(resolved);
+        } catch (IllegalArgumentException _) {
+            return template;
+        }
     }
 
     /** Whether the catalog defines {@code key} for {@code locale} (or its English base). */

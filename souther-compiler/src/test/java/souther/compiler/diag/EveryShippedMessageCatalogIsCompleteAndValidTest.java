@@ -14,9 +14,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.ResourceBundle;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,6 +45,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * <p>The fallback stays: a key missing from both catalogs still renders as itself rather than
  * stopping a compile, and a bundle half-migrated on a branch still runs. What it no longer is, is
  * how a shipped catalog is allowed to be incomplete.
+ *
+ * <p>Validity is checked over every message rather than over the ones that name an argument, since
+ * {@code Messages.get} renders them all as patterns. It is also checked over the file's physical
+ * shape, because the checks that read a catalog line by line are only as good as the format they
+ * assume {@link Properties} was given.
  */
 class EveryShippedMessageCatalogIsCompleteAndValidTest {
 
@@ -59,7 +66,19 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
     private static final ResourceBundle.Control CONTROL =
             ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES);
 
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\d)}");
+    /** An argument reference: {@code {0}}, and {@code {10}} too — a single digit is not the rule. */
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{(\\d+)}");
+
+    /**
+     * A line of a catalog: a key of the shape the catalog uses, {@code =}, and the message.
+     *
+     * <p>Narrower than what {@link Properties} would accept, which is the point. It also takes
+     * {@code :} and bare whitespace as separators and joins a line ending in a backslash to the
+     * next, so {@code foo=first} followed by {@code foo:second} is one key defined twice, and a
+     * scan looking for {@code =} sees one definition and nothing wrong. Holding the files to one
+     * spelling is what lets the duplicate check below read a line as a definition.
+     */
+    private static final Pattern DEFINITION = Pattern.compile("[A-Za-z0-9._-]+=.*");
 
     /**
      * A catalog that ships: the file, and the language its messages are written in.
@@ -91,6 +110,34 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         assertEquals(1, bases.size(),
                 "the base catalog is what every other one is compared against, and what a key"
                         + " missing everywhere else falls back to: " + bases);
+    }
+
+    /**
+     * One catalog per language, across every module.
+     *
+     * <p>The modules ship onto one class path — the compiler depends on the syntax module — so two
+     * files named for one language are two answers to the same lookup, and which one a reader gets
+     * is decided by class-path order rather than by anything here. Each would pass every check on
+     * its own, being complete and valid separately, and the other would simply never be read.
+     *
+     * <p>The base is under this too, its language being the English the base is written in: a
+     * {@code messages_en.properties} added beside it is the same collision, and the one
+     * {@link ResourceBundle} would prefer is not the one the rest of this file calls the base.
+     */
+    @Test
+    void noTwoCatalogsAreWrittenForTheSameLanguage() throws IOException {
+        Map<String, List<String>> byLanguage = new TreeMap<>();
+        for (Catalog catalog : catalogs()) {
+            byLanguage.computeIfAbsent(catalog.locale().toLanguageTag(), _ -> new ArrayList<>())
+                    .add(catalog.path().toString());
+        }
+        List<String> shared = new ArrayList<>();
+        byLanguage.forEach((language, files) -> {
+            if (files.size() > 1) {
+                shared.add(language + ": " + files);
+            }
+        });
+        assertEquals(List.of(), shared, "two catalogs answer for one language");
     }
 
     /**
@@ -141,10 +188,40 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
     }
 
     /**
-     * Every message is a {@link MessageFormat} pattern, where a lone {@code '} opens a quoted run
-     * and {@code ''} is the apostrophe itself. A message that writes {@code a data's} therefore
-     * quotes the whole rest of itself: the apostrophe disappears and every {@code {n}} after it
-     * renders literally, as the placeholder rather than the value.
+     * Every message parses as a {@link MessageFormat} pattern, whether or not it names an argument.
+     *
+     * <p>{@code Messages.get} renders every message as one, so a template the formatter refuses is
+     * a message that cannot be shown — {@code `| Some { field }`} reads as an argument called
+     * {@code " field "} and throws where the reader was going to be told what to write. Checking
+     * only the messages that name a {@code {n}} left that outside: the pattern is refused at
+     * construction, before any argument is substituted, and a message with a stray brace and no
+     * placeholder names none.
+     *
+     * <p>What the message says survives that: a literal brace is written {@code '{'} and a literal
+     * apostrophe {@code ''}, and the check below renders each pattern to see what comes out.
+     */
+    @Test
+    void everyMessageIsAPatternTheFormatterAccepts() throws IOException {
+        List<String> refused = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties messages = load(catalog.path());
+            for (String key : messages.stringPropertyNames()) {
+                try {
+                    new MessageFormat(messages.getProperty(key), catalog.locale());
+                } catch (IllegalArgumentException e) {
+                    refused.add(catalog.name() + ": " + key + " -> " + e.getMessage());
+                }
+            }
+        }
+        refused.sort(String::compareTo);
+        assertEquals(List.of(), refused,
+                "the formatter cannot read these; quote a literal brace as `'{'`");
+    }
+
+    /**
+     * A lone {@code '} opens a quoted run and {@code ''} is the apostrophe itself. A message that
+     * writes {@code a data's} therefore quotes the whole rest of itself: the apostrophe disappears
+     * and every {@code {n}} after it renders literally, as the placeholder rather than the value.
      *
      * <p>Nothing caught that, because a message is only read when its diagnostic fires and the
      * result is prose nobody diffs. This renders each one with stand-in arguments and fails on any
@@ -162,14 +239,17 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
             for (String key : messages.stringPropertyNames()) {
                 String template = messages.getProperty(key);
                 int arity = arityOf(template);
-                if (arity == 0) {
-                    continue;
-                }
                 Object[] args = new Object[arity];
                 for (int i = 0; i < arity; i++) {
                     args[i] = "<arg" + i + ">";
                 }
-                String rendered = new MessageFormat(template, catalog.locale()).format(args);
+                MessageFormat pattern;
+                try {
+                    pattern = new MessageFormat(template, catalog.locale());
+                } catch (IllegalArgumentException _) {
+                    continue;   // named above, and this one has nothing to add about it
+                }
+                String rendered = pattern.format(args);
                 if (PLACEHOLDER.matcher(rendered).find()) {
                     broken.add(catalog.name() + ": " + key + " -> " + rendered);
                 }
@@ -177,6 +257,39 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         }
         broken.sort(String::compareTo);
         assertEquals(List.of(), broken);
+    }
+
+    /**
+     * Every definition is spelled {@code key=value} on one line.
+     *
+     * <p>The check below reads a catalog line by line to see a key defined twice, which
+     * {@link Properties} cannot be asked because it keeps only the last value. That reading is only
+     * as good as the file format it assumes, and the format {@code Properties} actually accepts is
+     * wider than the one the catalogs use: {@code :} and bare whitespace separate a key from its
+     * value too, and a line ending in a backslash continues into the next. Under that, a second
+     * definition written {@code foo:second} is invisible to the duplicate check and still wins at
+     * run time.
+     *
+     * <p>So the format is required rather than observed. The catalogs are edited by hand, and
+     * one spelling is no loss.
+     */
+    @Test
+    void everyCatalogLineIsOneKeyAndOneValue() throws IOException {
+        List<String> off = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            int number = 0;
+            for (String line : Files.readAllLines(catalog.path(), StandardCharsets.UTF_8)) {
+                number++;
+                if (line.isBlank() || line.startsWith("#")) {
+                    continue;
+                }
+                if (!DEFINITION.matcher(line).matches() || line.endsWith("\\")) {
+                    off.add(catalog.name() + ":" + number + ": " + line);
+                }
+            }
+        }
+        assertEquals(List.of(), off,
+                "a catalog line is `key=value`, on one line, or blank, or a `#` comment");
     }
 
     @Test
@@ -330,12 +443,19 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         throw new IllegalStateException("no base catalog was found; the scan missed the tree");
     }
 
-    /** The language a catalog file's name says it is in. The base names none and is English. */
+    /**
+     * The language a catalog file's name says it is in. The base names none and is English.
+     *
+     * <p>English as a fact about the file, not as {@link Messages#defaultLocale()}. The two agree
+     * and are different things: one is the language the base catalog is written in, the other is
+     * which language is chosen when nobody names one. Reading the second here would make the base's
+     * text get checked against whatever the default becomes.
+     */
     private static Locale localeOf(String name) {
         String stem = name.substring(0, name.length() - SUFFIX.length());
         String tag = stem.substring(BUNDLE.length());
         return tag.isEmpty()
-                ? Messages.defaultLocale()
+                ? Locale.ENGLISH
                 : Locale.forLanguageTag(tag.substring(1).replace('_', '-'));
     }
 
@@ -432,8 +552,9 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * defect as the one above, and just as invisible for the same reason.
      *
      * <p>Read line by line rather than through {@link Properties}, which keeps only the last value
-     * and so cannot see the collision at all. The catalog uses no line continuations, so a line
-     * carrying an {@code =} outside a comment is a definition.
+     * and so cannot see the collision at all. What a line means is settled by the check above,
+     * which holds every catalog to one definition per line spelled with {@code =} — without it a
+     * second definition written another way would be read here as prose.
      */
     private static List<String> duplicateKeys(Path catalog) throws IOException {
         Set<String> seen = new LinkedHashSet<>();
