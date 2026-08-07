@@ -132,8 +132,10 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      *
      * <p>A construction whose first field aborts never evaluates the second, so a second
      * {@code unreachable} below it is text that never runs rather than a reason the value did not
-     * arrive. Paths a fork keeps apart are another matter: each of them is a way this arm answers
-     * nothing, so each is named.
+     * arrive. Which one is first is the order the fields are declared and not the order the
+     * initializers are written — the emitter walks the declaration and picks each field's
+     * initializer out — so the two are written against each other here. Paths a fork keeps apart are
+     * another matter: each of them is a way this arm answers nothing, so each is named.
      */
     @Test
     void theReasonsAreTheOnesEvaluationReaches() {
@@ -151,15 +153,15 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
 
                 let pick (f) = match f with
                     | On  -> Answer(1)
-                    | Off -> Boxed { a = unreachable "the first is never built"
-                                   , b = unreachable "and this one is never reached"
+                    | Off -> Boxed { b = unreachable "written first and evaluated second"
+                                   , a = unreachable "declared first, so this is where it stops"
                                    }.a
 
                 example pick
                     | "on" : (On) -> Answer(1)
                 """;
 
-        assertEquals(List.of("the first is never built"),
+        assertEquals(List.of("declared first, so this is where it stops"),
                 axis(sequential).excluded().get(0).reasons());
 
         String forked = """

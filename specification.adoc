@@ -2640,7 +2640,8 @@ A rule that drew a line is kept per line. The same value can be a boundary of an
 
 Only what the body states without anything having to be decided is read:
 
-* the body is followed to the first fork through what a `+let+` binds and what a block answers;
+* the body is followed to the first fork through what a `+let+` binds;
+* a function written where a call takes one is not entered. Evaluating that position makes the function, and what it matches on when the call applies it is about its own parameters rather than about this behavior's inputs;
 * where that fork is a `+match+` on an input position, each case whose arm answers nothing (<<an-arm-that-answers-nothing-is-not-an-arm>>) is excluded at that position;
 * nothing below a fork is read. An arm of one `+match+` holding a `+match+` on a second input says what that input cannot be *given the first one*, which is not a fact about the second input and is not something a class of it can carry;
 * nothing is read off a condition. Which values satisfy `+somePredicate(f)+` is a question with a solver behind it, and an answer taken on faith here removes a case the author should have been asked for.

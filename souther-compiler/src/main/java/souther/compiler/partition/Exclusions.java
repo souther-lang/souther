@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.NormalReturn;
-import souther.compiler.coverage.UnreachableReasons;
 import souther.compiler.types.TypeName;
 
 import java.util.LinkedHashMap;
@@ -19,8 +18,10 @@ import java.util.Map;
  * reporting a coverage it can never reach.
  *
  * <p><b>Only what can be read off the body without deciding anything.</b> The body is followed down
- * its spine — what a {@code let} binds and what a block answers — to the first fork. Where that fork
- * is a {@code match} on an input position, the cases whose arms answer nothing are excluded. Nothing
+ * its spine — what a {@code let} binds — to the first fork. Where that fork is a {@code match} on an
+ * input position, the cases whose arms answer nothing are excluded. A function written where a call
+ * takes one is not entered: evaluating that position makes the function, and what it matches on when
+ * the call applies it is about its own parameters. Nothing
  * below a fork is read: an arm of one {@code match} holding a {@code match} on another parameter says
  * what that parameter cannot be <em>given the first one</em>, which is not a fact about the parameter
  * and not something a class of it can carry. Nothing is read off a condition either: telling which
@@ -64,7 +65,7 @@ public final class Exclusions {
             if (NormalReturn.of(arm.body())) {
                 continue;
             }
-            List<String> why = UnreachableReasons.of(arm.body());
+            List<String> why = UnreachableReasons.of(arm.body(), symbols);
             // Cases written together on one arm are one run of code, and it answers nothing for every
             // one of them.
             arm.caseTypes().forEach(each -> excluded.put(each, why));
