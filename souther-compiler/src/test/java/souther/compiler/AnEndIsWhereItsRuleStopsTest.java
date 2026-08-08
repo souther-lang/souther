@@ -208,6 +208,42 @@ class AnEndIsWhereItsRuleStopsTest {
                 () -> "a low above zero is a row that builds:\n" + rows);
     }
 
+    /**
+     * A guard on a position open at its end leaves ranges that are open there too.
+     *
+     * <p>The ranges a comparison leaves are cut out of what the position holds, and one of their ends
+     * is that position's own. Rebuilt as closed, the first of them holds the value the invariant
+     * refuses and offers it as the value standing for the whole class.
+     */
+    @Test
+    void aRangeCutOutOfAnOpenEndIsOpenThere() throws Exception {
+        String report = reportOn("""
+                module example.probe
+
+                data AboveFive = Decimal
+                    invariant above = value > 5m
+
+                data Ok
+                data No
+
+                behavior pick : (r: AboveFive) -> Ok | No
+                    constructs Ok, No
+
+                let pick (r) = {
+                    guard r.value < 10m else No
+                    Ok
+                }
+
+                example pick
+                    | "over" : (AboveFive(20m)) -> No
+                """, "--generate");
+
+        assertFalse(report.contains("5 <= x"),
+                () -> "nothing of `value > 5m` is five:\n" + report);
+        assertFalse(report.contains("AboveFive(5m)"),
+                () -> "so five stands for no class of it:\n" + report);
+    }
+
     private static String reportOn(String model, String... extra) throws Exception {
         Path file = Files.createTempDirectory("souther-ends").resolve("model.sou");
         Files.writeString(file, model);

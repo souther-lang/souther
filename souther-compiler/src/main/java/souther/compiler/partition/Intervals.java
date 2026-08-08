@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
@@ -68,18 +70,21 @@ final class Intervals {
     private record Split(BigDecimal value, boolean valueBelongsBelow) {}
 
     /**
-     * The ranges {@code thresholds} leave, inside the domain {@code min}..{@code max} the type allows.
-     * Thresholds outside that domain are dropped: they cut a range no row can reach.
+     * The ranges {@code thresholds} leave, inside what the position holds.
+     *
+     * <p>The outer ends are the position's own, and they are taken as they are: an end the position
+     * stops short of is an end of the first range too, and rebuilding it as one the range holds puts
+     * the value back that the rules had taken away. Thresholds outside what the position holds are
+     * dropped — they cut a range no row can reach — and the end itself is outside it as much as
+     * anything past it is.
      */
-    static List<Interval> of(List<Threshold> thresholds, BigDecimal min, BigDecimal max) {
+    static List<Interval> of(List<Threshold> thresholds, Endpoint min, Endpoint max) {
         // Keyed by the number and not by the BigDecimal: `0.00` and `0` are one line, and
         // BigDecimal's own equality says they are two, which would leave two ranges holding zero.
         Map<String, Split> distinct = new LinkedHashMap<>();
         for (Threshold each : thresholds) {
-            if (min != null && each.value().compareTo(min) < 0) {
-                continue;
-            }
-            if (max != null && each.value().compareTo(max) > 0) {
+            if (!Endpoint.someValueLiesBetween(min, Endpoint.inclusive(each.value()))
+                    || !Endpoint.someValueLiesBetween(Endpoint.inclusive(each.value()), max)) {
                 continue;
             }
             distinct.putIfAbsent(each.value().stripTrailingZeros().toPlainString(),
@@ -89,8 +94,8 @@ final class Intervals {
         splits.sort(Comparator.comparing(Split::value));
 
         List<Interval> out = new ArrayList<>();
-        BigDecimal lo = min;
-        boolean loInclusive = true;
+        BigDecimal lo = min == null ? null : min.value();
+        boolean loInclusive = min == null || min.inclusive();
         for (Split split : splits) {
             Interval range = new Interval(lo, loInclusive, split.value(), split.valueBelongsBelow());
             if (range.inhabited()) {
@@ -99,7 +104,8 @@ final class Intervals {
             lo = split.value();
             loInclusive = !split.valueBelongsBelow();
         }
-        Interval last = new Interval(lo, loInclusive, max, true);
+        Interval last = new Interval(lo, loInclusive, max == null ? null : max.value(),
+                max == null || max.inclusive());
         if (last.inhabited()) {
             out.add(last);
         }
@@ -129,32 +135,13 @@ final class Intervals {
         return List.copyOf(classes);
     }
 
-    /** A value inside a range, or null where the type cannot name one — a decimal range open at the
-     * end it would have to step away from. */
+    /** A value inside a range, or null where it holds none. Asked of the ends, which is where whether
+     * the range holds the value it stops at is written down. */
     private static BigDecimal representative(Interval range, boolean decimal) {
-        BoundaryDomain domain = decimal ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
-        if (range.lo() != null && range.hi() != null) {
-            BigDecimal lo = range.loInclusive() ? range.lo() : step(range.lo(), domain, decimal, true);
-            if (lo == null) {
-                return null;
-            }
-            return range.holds(lo) ? lo : null;
-        }
-        if (range.lo() != null) {
-            return range.loInclusive() ? range.lo() : step(range.lo(), domain, decimal, true);
-        }
-        if (range.hi() != null) {
-            return range.hiInclusive() ? range.hi() : step(range.hi(), domain, decimal, false);
-        }
-        return BigDecimal.ZERO;
-    }
-
-    private static BigDecimal step(BigDecimal from, BoundaryDomain domain, boolean decimal,
-                                   boolean up) {
-        ObservedValue at = decimal ? new ObservedValue.Decimal(from)
-                : new ObservedValue.Integer(from.longValueExact());
-        return (up ? domain.successor(at) : domain.predecessor(at))
-                .map(Intervals::numberOf).orElse(null);
+        return Endpoint.valueBetween(
+                range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
+                range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
+                decimal ? Granularity.DENSE : Granularity.DISCRETE);
     }
 
     static BigDecimal numberOf(ObservedValue v) {

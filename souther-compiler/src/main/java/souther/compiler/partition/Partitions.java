@@ -151,8 +151,6 @@ public final class Partitions {
             // the record it sits in says about it. Reading the type again here would put a threshold
             // back inside a range the record has no values in.
             NumericDomain.Bounds domain = base.domains().get(axis.path().toString());
-            BigDecimal min = domain == null || domain.min() == null ? null : domain.min().value();
-            BigDecimal max = domain == null || domain.max() == null ? null : domain.max().value();
             // Filtered once, and both answers read the filtered list. A line outside what the
             // position holds divides nothing, and it is not a boundary either: leaving it in the
             // cuts while the intervals dropped it asks for a row at a value the record refuses,
@@ -162,7 +160,9 @@ public final class Partitions {
                     .filter(t -> domain == null || domain.admits(t.value()))
                     .toList();
             List<PartitionClass> classes = Intervals.classesOf(
-                    Intervals.of(reachable, min, max), axis.path(), axis.type(), symbols);
+                    Intervals.of(reachable, domain == null ? null : domain.min(),
+                            domain == null ? null : domain.max()),
+                    axis.path(), axis.type(), symbols);
             // What the position is, not what an invariant said about it. There is a bound to read
             // only where the type is a newtype carrying one, and a plain `Decimal` has none — read
             // off the bound, every such position would be called an integer and a threshold of
@@ -562,7 +562,10 @@ public final class Partitions {
         if (end == null) {
             return;
         }
-        boolean moved = own != null && own.value().compareTo(end.value()) != 0;
+        // Taken in, which a record can do by moving the end or by taking away the value it stops
+        // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
+        // that is the record's doing as much as a smaller number would have been.
+        boolean moved = own != null && !own.at().equals(end.at());
         for (TypeName from : end.from()) {
             put(into, numeric(end.value(), decimal), from, clause, moved ? within : null);
         }
