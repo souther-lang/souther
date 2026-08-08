@@ -101,7 +101,7 @@ class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
     void everyEnumeratedFieldSpellsTheEnumItComesFrom() {
         JsonNode schema = schema();
         for (Vocabulary each : VOCABULARIES) {
-            assertEquals(constantsOf(each.source()), allowedAt(schema, each.at()),
+            assertEquals(wordsOf(each.source()), allowedAt(schema, each.at()),
                     each.label() + ": the schema and " + each.source().getSimpleName()
                             + " name different words");
         }
@@ -117,7 +117,8 @@ class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
      */
     @Test
     void theFieldWithNoEnumBehindItIsTheOneThatIsWrittenFromABoolean() {
-        assertEquals(Set.of("implemented", "injected"),
+        assertEquals(Set.of(AdequacyReport.implementationWord(false),
+                        AdequacyReport.implementationWord(true)),
                 allowedAt(schema(), List.of("$defs", "behavior", "properties", "implementation")));
     }
 
@@ -178,16 +179,26 @@ class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
                 written.add(gap.get("code").asString());
             }
         }
-        assertFalse(written.isEmpty(), "the row did not come back, so the report says so");
-        for (String code : written) {
-            assertTrue(allowed.contains(code),
-                    "`" + code + "` is written and the schema allows " + allowed);
-        }
+        // The word itself, and not merely a word the schema happens to allow. This is here to keep
+        // one reproduction alive: a fixture that stopped producing an undecided row and produced
+        // some other legitimate gap instead would go on passing while covering nothing.
+        assertEquals(List.of("row_undecided"), written,
+                "the row did not come back, and this is what the report says about it");
+        assertTrue(allowed.containsAll(written),
+                "the schema allows " + allowed + " and the report writes " + written);
     }
 
-    private static Set<String> constantsOf(Class<? extends Enum<?>> source) {
+    /**
+     * The words the report writes for one enum, put through the writer's own encoder.
+     *
+     * <p>{@link AdequacyReport#word} rather than a second spelling rule written here. A rule written
+     * here would agree with the schema while the report wrote something else entirely: what a
+     * consumer reads is what the encoder produces, so that is the side a contract has to be held
+     * against.
+     */
+    private static Set<String> wordsOf(Class<? extends Enum<?>> source) {
         return Arrays.stream(source.getEnumConstants())
-                .map(each -> each.name().toLowerCase(Locale.ROOT))
+                .map(AdequacyReport::word)
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
