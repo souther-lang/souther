@@ -140,6 +140,66 @@ class WhatGoesBetweenTwoTokensOnALineTest {
 
             behavior b = alpha >-> beta -> Int
             """,
+            // every bracketed construct with nothing between its brackets, with one member, and with
+            // more than one — see AllOfABracketedConstructsCardinalitiesAreSweptTest
+            """
+            module m exposing ()
+
+            import other.mod ()
+            """,
+            """
+            module m exposing ( f )
+
+            import other.mod ( a )
+
+            data Empty = {}
+
+            data Held =
+                { a: Int
+                }
+
+            let f (a: Int): Int = g()
+
+            let one (a: Int): Int = g(a)
+
+            let held (r: R): Int = {
+                let {} = r
+                let { a } = r
+                let (b) = r
+                b
+            }
+
+            let made (a: Int): R = R {}
+
+            let filled (a: Int): R = R { a = 1 }
+
+            let listed (a: Int): List<Int> = []
+
+            let single (a: Int): List<Int> = [a]
+
+            let takes (t: () -> Int, u: (Int) -> Int): Int = 1
+
+            behavior none : () -> R
+
+            let parened (a: Int): Int = (a)
+
+            let manyNames (a: Int): Int = 1
+            """,
+            """
+            module m
+
+            import other.mod ( a, b )
+
+            behavior one : (a: A) -> R
+
+            let comp (a: Int): List<Int> = [x | x > 0, x < 9]
+
+            let lambdaOne (a: Int): Int = call((x) -> x)
+
+            let listMany (a: Int): List<Int> = [a, a]
+
+            let tupleType (t: (Int)): Int = 1
+            """,
             """
             examples for m
 
@@ -302,8 +362,8 @@ class WhatGoesBetweenTwoTokensOnALineTest {
         out.put("IDENT RPAREN", row(
                 "EXPOSING_CLAUSE", " ", "NAME_LIST", " ",
                 "ARG_LIST", "", "PARAM_LIST", "", "FN_PARAM_LIST", "", "FN_TYPE", "",
-                "LAMBDA_EXPR", "", "MATCH_CASE", "", "PATTERN_CTOR", "", "PATTERN_TUPLE", "",
-                "TUPLE_EXPR", "", "TUPLE_TYPE", ""));
+                "LAMBDA_EXPR", "", "MATCH_CASE", "", "PAREN_EXPR", "", "PATTERN_CTOR", "",
+                "PATTERN_TUPLE", "", "TUPLE_EXPR", "", "TUPLE_TYPE", ""));
         // A declaration's name is spaced from what follows it; what is applied or opened is not.
         out.put("IDENT LPAREN", row(
                 "FN_DEF", " ", "IMPORT_DECL", " ",
@@ -320,6 +380,224 @@ class WhatGoesBetweenTwoTokensOnALineTest {
         // `-` negates or subtracts.
         out.put("MINUS IDENT", row("UNARY_EXPR", "", "BINARY_EXPR", " "));
         return out;
+    }
+
+    /**
+     * The pairs written with nothing between them wherever they occur, and the pairs written with a
+     * space. Together with the nine above this is the whole function, and it is transcribed because
+     * it does not compress: token classes do not decide it either. Grouping the kinds into words,
+     * brackets, commas, dots and operators leaves eight of the twenty-four class pairs taking both
+     * answers — `):` against `) ->`, `-n` against `+ 1`, `Amount(` against `P (` — so a rule written
+     * over classes would need so many exceptions that the pair is the smaller statement.
+     *
+     * <p>A pair reaching the corpus that is in neither list fails, which is the point: a new
+     * adjacency is a decision, and it should be made here rather than by whichever construct wrote
+     * it first.
+     */
+    private static final String TIGHT = """
+            DOT IDENT
+            FALSE_KW COMMA
+            GT COMMA
+            GT GT
+            GT RPAREN
+            IDENT COMMA
+            IDENT DOT
+            IDENT QUESTION
+            IDENT RBRACKET
+            INT_LIT COMMA
+            INT_LIT RBRACKET
+            INT_LIT RPAREN
+            LBRACE RBRACE
+            LBRACKET IDENT
+            LBRACKET LPAREN
+            LBRACKET RBRACKET
+            LPAREN INT_LIT
+            LPAREN LBRACKET
+            LPAREN LPAREN
+            LPAREN RPAREN
+            LPAREN TYPEVAR
+            LT LPAREN
+            LT TYPEVAR
+            MINUS LPAREN
+            QUESTION COMMA
+            QUESTION RPAREN
+            RBRACE COMMA
+            RBRACKET COMMA
+            RBRACKET RPAREN
+            RPAREN COLON
+            RPAREN COMMA
+            RPAREN RBRACKET
+            RPAREN RPAREN
+            SPREAD IDENT
+            TRUE_KW COMMA
+            TYPEVAR COMMA
+            TYPEVAR GT
+            TYPEVAR QUESTION
+            TYPEVAR RPAREN
+            """;
+
+    private static final String SPACED = """
+            AND IDENT
+            ARROW IDENT
+            ARROW IF_KW
+            ARROW INT_LIT
+            ARROW LBRACE
+            ARROW LBRACKET
+            ARROW LPAREN
+            ARROW MATCH_KW
+            ARROW TYPEVAR
+            ARROW UNREACHABLE_KW
+            ASSIGN DOT
+            ASSIGN IDENT
+            ASSIGN IF_KW
+            ASSIGN INT_LIT
+            ASSIGN LBRACE
+            ASSIGN LBRACKET
+            ASSIGN LPAREN
+            ASSIGN MINUS
+            AS_KW IDENT
+            BEHAVIOR_KW IDENT
+            COLON IDENT
+            COLON LPAREN
+            COLON TYPEVAR
+            COMMA FALSE_KW
+            COMMA IDENT
+            COMMA INT_LIT
+            COMMA LBRACKET
+            COMMA TRUE_KW
+            COMMA TYPEVAR
+            CONSTRUCTS_KW IDENT
+            DATA_KW IDENT
+            DECIMAL_LIT MINUS
+            DECIMAL_LIT THEN_KW
+            DEPENDS_KW IDENT
+            ELSE_KW IDENT
+            ELSE_KW IF_KW
+            ELSE_KW INT_LIT
+            ELSE_KW LPAREN
+            ELSE_KW TRUE_KW
+            EQ IDENT
+            EQ INT_LIT
+            EXPOSING_KW LPAREN
+            FALSE_KW ELSE_KW
+            GE IDENT
+            GE INT_LIT
+            GT ASSIGN
+            GT IDENT
+            GT INT_LIT
+            GUARD_KW IDENT
+            IDENT AND
+            IDENT ARROW
+            IDENT ASSIGN
+            IDENT AS_KW
+            IDENT ELSE_KW
+            IDENT EQ
+            IDENT EXPOSING_KW
+            IDENT GE
+            IDENT IDENT
+            IDENT LBRACE
+            IDENT LET_KW
+            IDENT OR
+            IDENT PIPE
+            IDENT PIPEFWD
+            IDENT PLUS
+            IDENT PLUSPLUS
+            IDENT RBRACE
+            IDENT STRING_LIT
+            IDENT THEN_KW
+            IDENT VPIPE
+            IDENT WITH_KW
+            IF_KW IDENT
+            IMPORT_KW IDENT
+            INT_LIT ELSE_KW
+            INT_LIT MINUS
+            INT_LIT RBRACE
+            INT_LIT THEN_KW
+            INVARIANT_KW IDENT
+            LBRACE IDENT
+            LBRACE SPREAD
+            LET_KW IDENT
+            LET_KW LBRACE
+            LET_KW LPAREN
+            LT DECIMAL_LIT
+            LT INT_LIT
+            MATCH_KW IDENT
+            MODULE_KW IDENT
+            OR IDENT
+            PIPE IDENT
+            PIPE LPAREN
+            PIPE STRING_LIT
+            PIPEFWD IDENT
+            PLUS INT_LIT
+            PLUSPLUS IDENT
+            PLUSPLUS LBRACKET
+            RBRACE ASSIGN
+            RBRACE AS_KW
+            RBRACKET ELSE_KW
+            RPAREN ARROW
+            RPAREN ASSIGN
+            RPAREN AS_KW
+            RPAREN ELSE_KW
+            RPAREN EQ
+            RPAREN STAR
+            RPAREN THEN_KW
+            RPAREN WITH_KW
+            STAR IDENT
+            STRING_LIT COLON
+            THEN_KW DECIMAL_LIT
+            THEN_KW FALSE_KW
+            THEN_KW IDENT
+            THEN_KW INT_LIT
+            THEN_KW LPAREN
+            TYPEVAR ASSIGN
+            UNREACHABLE_KW STRING_LIT
+            VPIPE IDENT
+            WITH_KW IDENT
+            """;
+
+    private static Set<String> pairsIn(String block) {
+        Set<String> out = new TreeSet<>();
+        for (String line : block.split("\n")) {
+            if (!line.isBlank()) {
+                out.add(line.strip());
+            }
+        }
+        return out;
+    }
+
+    /** Every pair the corpus writes is one of the three lists, and each is written as its list says. */
+    @Test
+    void everyPairIsWrittenAsItsRowSays() {
+        Set<String> tight = pairsIn(TIGHT);
+        Set<String> spaced = pairsIn(SPACED);
+        Set<String> decided = POSITION_DECIDES.keySet();
+        Set<String> unlisted = new TreeSet<>();
+        Set<String> wrong = new TreeSet<>();
+        Set<String> reached = new TreeSet<>();
+        for (Adjacency a : adjacencies()) {
+            reached.add(a.pair());
+            if (decided.contains(a.pair())) {
+                continue;
+            }
+            if (tight.contains(a.pair())) {
+                if (!a.separator().isEmpty()) {
+                    wrong.add(a.pair() + " is listed tight and was written spaced");
+                }
+            } else if (spaced.contains(a.pair())) {
+                if (!a.separator().equals(" ")) {
+                    wrong.add(a.pair() + " is listed spaced and was written tight");
+                }
+            } else {
+                unlisted.add(a.pair());
+            }
+        }
+        assertEquals(new TreeSet<String>(), unlisted, "pairs the corpus writes that no list holds");
+        assertEquals(new TreeSet<String>(), wrong, "pairs written against their row");
+        Set<String> unreached = new TreeSet<>(tight);
+        unreached.addAll(spaced);
+        unreached.addAll(decided);
+        unreached.removeAll(reached);
+        assertEquals(new TreeSet<String>(), unreached, "rows no source in the corpus reaches");
     }
 
     /** These pairs, and no others, are written both ways somewhere in the corpus. */

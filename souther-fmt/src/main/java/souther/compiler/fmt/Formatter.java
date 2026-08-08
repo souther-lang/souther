@@ -166,6 +166,14 @@ public final class Formatter {
      * {@link Doc#SOFTLINE} where it does not ({@code f(a, b)}, {@code [a, b]}).
      */
     private static Doc delimited(String open, Doc boundary, List<Member> members, String close) {
+        if (members.isEmpty()) {
+            // Brackets with nothing between them are written with nothing between them. Written here
+            // rather than left to the boundary: laid out flat, the two boundaries are what would go
+            // between the brackets, so a construct written open would put two spaces there and no
+            // rule would have said so. A construct holding only comments is not empty — the comments
+            // stand where a member would, and `withEndComments` hands them over as one.
+            return text(open + close);
+        }
         return group(concat(text(open),
                 nest(INDENT, concat(boundary, separated(members))),
                 boundary, text(close)));
@@ -437,6 +445,11 @@ public final class Formatter {
 
         var product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
+            if (isEmptyProduct(product.get())) {
+                return concat(text("data "), text(name), text(" = {}"),
+                        afterToken(n.token(SyntaxKind.ASSIGN)),
+                        nest(INDENT, concat(invariants)));
+            }
             return concat(text("data "), text(name), text(" ="),
                     afterToken(n.token(SyntaxKind.ASSIGN)),
                     nest(INDENT, concat(concat(HARDLINE, productBody(product.get())), concat(invariants))));
@@ -480,7 +493,9 @@ public final class Formatter {
         return concat(text("data "), text(name));   // unit
     }
 
-    /** The leading-comma product block: {@code { f1: T1\n, f2: T2\n}}. Always multi-line. */
+    /** The leading-comma product block: {@code { f1: T1\n, f2: T2\n}}. Multi-line wherever it holds
+     * anything: the block writes its opening brace on the first member's line, so a body with no
+     * members has no line to write one on, and it is written as the empty brackets it is. */
     private Doc productBody(SyntaxNode body) {
         List<Doc> lines = new ArrayList<>();
         for (SyntaxNode m : body.childNodes()) {
@@ -500,9 +515,31 @@ public final class Formatter {
                     afterOf(m));
             lines.add(first ? line : concat(HARDLINE, line));
         }
+        if (lines.isEmpty()) {
+            // No member wrote the opening brace, so the block writes it on a line of its own. This
+            // is the body that holds only comments: `dataDef` writes a body holding nothing at all
+            // as `{}` and never reaches here.
+            lines.add(text("{"));
+        }
         lines.add(endOf(body));
         lines.add(concat(HARDLINE, text("}")));
         return concat(lines);
+    }
+
+    /**
+     * Whether {@code body} has nothing for the block to write a line for. A body holding only
+     * comments is not empty: they are written where a member would be, so the block keeps its lines.
+     *
+     * <p>Asked of the attachments rather than through {@link #endLines}, which takes the comments it
+     * reports. A question about what is there has to leave it there for whoever writes it.
+     */
+    private boolean isEmptyProduct(SyntaxNode body) {
+        for (SyntaxNode m : body.childNodes()) {
+            if (m.kind() == SyntaxKind.FIELD || m.kind() == SyntaxKind.SPREAD_MEMBER) {
+                return false;
+            }
+        }
+        return comments.atEnd().getOrDefault(body, List.of()).isEmpty();
     }
 
     private Doc field(SyntaxNode n) {
@@ -1035,11 +1072,6 @@ public final class Formatter {
             // the enclosing group to break, which is what a literal with a comment in it wants
             // anyway: a `//` on a line the group had collapsed would swallow the rest of it.
             members.add(member(c, member));
-        }
-        if (members.isEmpty()) {
-            List<Member> only = withEndComments(n, List.of());
-            return only.isEmpty() ? concat(text(typeName), text(" {}"))
-                    : concat(text(typeName), text(" "), delimited("{", LINE, only, "}"));
         }
         return concat(text(typeName), text(" "),
                 delimited("{", LINE, withEndComments(n, members), "}"));

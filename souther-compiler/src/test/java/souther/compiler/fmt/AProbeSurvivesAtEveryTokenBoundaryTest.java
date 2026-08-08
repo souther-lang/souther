@@ -99,7 +99,7 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
     /** The forms the whole module has no room for: an attempt's departures, a pipeline's stages, an
      * example's bindings, a comprehension, and the empty forms of the bracketed constructs. */
     private static final String THE_OTHER_FORMS = """
-            module m exposing (  )
+            module m exposing ()
             import other.mod
 
             data Amount = Int
