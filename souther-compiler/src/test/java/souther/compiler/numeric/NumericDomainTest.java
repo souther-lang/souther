@@ -232,16 +232,15 @@ class NumericDomainTest {
         assertTrue(d.projectionIsLossless(), () -> "lost " + d.lossyAtoms());
     }
 
-    /** A loss is about the atoms the rule named and not about the domain. A bound on some other atom
-     * is as good as it ever was. */
+    /** A loss names the atoms the rule was written about, which is what a reader of it is told. */
     @Test
-    void aLossIsAboutTheAtomsTheRuleNamed() {
+    void aLossNamesTheAtomsTheRuleWasWrittenAbout() {
         NumericDomain d = NumericDomain.top()
                 .assume(atom(A), Rel.NE, whole(A))
                 .assume(atom(B).minus(num(10)), Rel.LE, whole(B));
 
-        assertFalse(d.projectionIsLosslessAt(A));
-        assertTrue(d.projectionIsLosslessAt(B), "nothing was lost about b");
+        assertEquals(Set.of(A), d.lossyAtoms());
+        assertFalse(d.projectionIsLossless(), "and the domain is not all of what it was told");
     }
 
     /** A strict bound over decimals is recorded as the non-strict one, so the edge it names is a
@@ -253,7 +252,7 @@ class NumericDomainTest {
         NumericDomain difference = NumericDomain.top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, dense(A, B));
 
-        assertFalse(interval.projectionIsLosslessAt(A));
+        assertFalse(interval.projectionIsLossless());
         assertEquals(Set.of(NumericDomain.Loss.WEAKENED_STRICT), interval.lossesAt(A));
         assertEquals(Set.of(A, B), difference.lossyAtoms(),
                 "a difference is a rule about both of its ends");

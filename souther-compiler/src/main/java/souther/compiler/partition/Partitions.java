@@ -251,8 +251,10 @@ public final class Partitions {
         }
         List<Cut> cuts = nothingExists ? List.of()
                 : cutsOf(type, here, own, placed == null ? null : placed.value());
-        if (!cuts.isEmpty() && placed != null
-                && !placed.domains().exact(String.join(".", path.fields()))) {
+        // Whether a row can be written at an edge is a question about the whole value the position
+        // sits in, so it is answered once for the parameter. A rule this could not read is a way that
+        // value can be refused, wherever in it the rule is written.
+        if (!cuts.isEmpty() && placed != null && !placed.domains().allRulesRead()) {
             uncertain.add(path.toString());
         }
         if (!classes.isEmpty() || !cuts.isEmpty()) {

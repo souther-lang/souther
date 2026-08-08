@@ -64,8 +64,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("startsAt"), 0, 1439);
         assertBounds(domains.at("endsAt"), 1, 1440);
-        assertTrue(domains.exact("startsAt"), "both rules were read");
-        assertTrue(domains.exact("endsAt"));
+        assertTrue(domains.allRulesRead(), "both rules were read");
     }
 
     /** Without the sibling rule the field's own type is the whole answer, so nothing moves. Held so
@@ -127,10 +126,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("low"), 0, 1);
         assertBounds(domains.at("high"), 0, 1);
-        assertFalse(domains.exact("low"),
-                "the true range is open at one end, which these bounds cannot hold, so 1 is not"
-                        + " promised to be writable");
-        assertFalse(domains.exact("high"));
+        assertFalse(domains.allRulesRead(),
+                "the true ranges are open at one end, which these bounds cannot hold, so neither 1"
+                        + " nor 0 is promised to be writable");
     }
 
     /** A rule that skips a value is a hole in a range, and a range is all the domain holds. The bound
@@ -150,7 +148,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "R");
 
         assertBounds(domains.at("a"), 0, 10);
-        assertFalse(domains.exact("a"), "0 is in these bounds and no row can write it");
+        assertFalse(domains.allRulesRead(), "0 is in these bounds and no row can write it");
     }
 
     /** A length is a whole number like any other, so a rule relating one to a field is in the
@@ -177,14 +175,19 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 2, 1439);
-        assertTrue(domains.exact("startsAt"), "both rules are comparisons of whole numbers");
+        assertTrue(domains.allRulesRead(), "both rules are comparisons of whole numbers");
     }
 
-    /** A rule that is not a comparison holds no bound to derive through. It narrows nothing, it is
-     * still a way the record refuses a value, and so the bounds stop being all of what the
-     * declaration says. */
+    /**
+     * A rule that is not a comparison narrows no number and still leaves nothing promised.
+     *
+     * <p>The pattern says nothing about how many minutes a day has, and the minutes keep their
+     * bounds. What it does say is that not every interval can be built, and an edge of the minutes is
+     * a whole interval with that edge in it — so whether one can be written is a question the pattern
+     * takes part in however plainly the numbers were read.
+     */
     @Test
-    void aRuleThatIsNotAComparisonLeavesTheAnswerInexact() {
+    void aRuleThatIsNotAComparisonLeavesNoEdgePromised() {
         FieldDomains domains = domainsIn("""
                 module example.timesheet
 
@@ -203,9 +206,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 0, 1439);
-        assertTrue(domains.exact("startsAt"),
-                "the pattern is a rule about the label and says nothing about the minutes");
-        assertFalse(domains.exact("label"), "and it is the whole of what is known about the label");
+        assertFalse(domains.allRulesRead(),
+                "the pattern narrows no minute, and whether a minute of 1439 can be written is a"
+                        + " question about a whole interval, which has a label in it");
     }
 
     /** A field nothing says anything about has no bounds rather than empty ones. */
@@ -292,7 +295,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         TypeName named = new TypeName("example.report", "Forecast");
         FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
 
-        assertTrue(domains.exact("total"),
+        assertTrue(domains.allRulesRead(),
                 "the rule is `value >= 0.0m` wherever it is declared");
         assertNull(domains.at("total"),
                 "the seeding reads an imported type in the settled form and takes no bound from it,"
@@ -325,8 +328,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "R");
 
         assertBounds(domains.at("a"), 0, 10);
-        assertFalse(domains.exact("b"), "the hole is written about b");
-        assertFalse(domains.exact("a"), "and a's edge is b's edge, carried by the equality");
+        assertFalse(domains.allRulesRead(),
+                "a's edge is b's edge, carried by the equality, and b holds a hole this cannot keep");
     }
 
     /**
@@ -360,9 +363,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         TypeName named = new TypeName("example.pair", "Pair");
         FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
 
-        assertFalse(domains.exact("a"),
-                "the ordering is here and the range it would have narrowed is not");
-        assertFalse(domains.exact("b"));
+        assertBounds(domains.at("a"), 0, 9);
+        assertBounds(domains.at("b"), 1, 10);
+        assertTrue(domains.allRulesRead());
     }
 
     /** A newtype has no siblings, so there is nothing here to project. */

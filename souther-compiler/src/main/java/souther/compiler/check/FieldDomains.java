@@ -110,14 +110,23 @@ public final class FieldDomains {
     }
 
     /**
-     * Whether every rule the declaration states was taken into these bounds.
+     * Whether every rule of this value was taken into these bounds.
      *
-     * <p>Where this is false the bounds are an over-approximation: every value they exclude is truly
-     * excluded, and a value they admit may still be one nothing can build.
+     * <p>Asked of the value and not of one position in it, because what it licenses is existential: a
+     * row at an edge is a whole value with that edge in it, and a rule about some other position can
+     * refuse to be part of any such value. Two labels on one record that cannot both be written leave
+     * every number beside them with edges nothing can reach, however plainly the numbers themselves
+     * were read.
+     *
+     * <p>The narrower question — whether the bound at one position was derived losslessly — is a
+     * different one and has no caller. It would say that a bound is approximate; this says whether
+     * anything can be written at it, and only the second decides whether a row is owed.
+     *
+     * <p>Where this is false the bounds still hold: every value they exclude is truly excluded, and a
+     * value they admit may be one nothing can build. What settles such an edge is a witness.
      */
-    public boolean exact(String path) {
-        String atom = atoms.get(path);
-        if (atom != null && !numbers.projectionIsLosslessAt(atom)) {
+    public boolean allRulesRead() {
+        if (!numbers.projectionIsLossless()) {
             return false;
         }
         // A relation is only a projection where both ends brought their ranges. A type declared in
@@ -133,6 +142,6 @@ public final class FieldDomains {
             positions = unread.get();
             unreadPositions = positions;
         }
-        return !positions.contains(path);
+        return positions.isEmpty();
     }
 }

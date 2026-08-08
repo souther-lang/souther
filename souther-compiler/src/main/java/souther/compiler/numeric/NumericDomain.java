@@ -449,61 +449,6 @@ public final class NumericDomain {
      * positions it names, and a bound on some other atom is as good as it ever was — a pattern on a
      * name says nothing about how many minutes a day has.
      */
-    public boolean projectionIsLosslessAt(String atom) {
-        if (losses.isEmpty()) {
-            return true;
-        }
-        for (String each : reachedThrough(atom)) {
-            if (losses.containsKey(each)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * The atoms a bound on {@code atom} can have come through.
-     *
-     * <p>{@link #boundsOf} reads a bound off the atom's own record or off another atom's, carried by
-     * a difference between them — that is the whole point of closing the differences. So a bound
-     * arrives by a path through the graph, and what was lost anywhere on that path was lost about
-     * this bound: {@code a == b} with {@code b} holding a rule the domain could not keep leaves
-     * {@code a}'s edge resting on a range that is not all of what {@code b} is allowed.
-     *
-     * <p>The whole component the atom sits in, and not the one hop {@link #bestHi} happens to take.
-     * A difference is closed transitively, so any atom reachable through one is an atom a bound can
-     * be derived through.
-     */
-    public Set<String> reachedThrough(String atom) {
-        Set<String> found = new java.util.LinkedHashSet<>();
-        java.util.Deque<String> todo = new java.util.ArrayDeque<>();
-        todo.add(atom);
-        Map<String, Map<String, BigDecimal>> edges = closed();
-        while (!todo.isEmpty()) {
-            String at = todo.removeFirst();
-            if (!found.add(at)) {
-                continue;
-            }
-            Map<String, BigDecimal> from = edges.get(at);
-            if (from != null) {
-                todo.addAll(from.keySet());
-            }
-            edges.forEach((to, row) -> {
-                if (row.containsKey(at)) {
-                    todo.add(to);
-                }
-            });
-        }
-        return found;
-    }
-
-    /** Whether anything relates this atom to another. A position nothing is compared with takes its
-     * bounds from its own rules and from nowhere else. */
-    public boolean isRelated(String atom) {
-        Map<String, Map<String, BigDecimal>> edges = closed();
-        return edges.containsKey(atom) || edges.values().stream().anyMatch(r -> r.containsKey(atom));
-    }
-
     /** What was asserted about one atom and not recorded. */
     public Set<Loss> lossesAt(String atom) {
         return losses.getOrDefault(atom, Set.of());
