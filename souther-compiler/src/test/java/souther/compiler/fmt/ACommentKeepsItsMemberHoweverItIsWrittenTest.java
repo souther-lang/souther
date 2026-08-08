@@ -373,6 +373,50 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
+    /**
+     * Written about one part of a row, which the layout writes as a chain of segments the way it
+     * writes a pipeline. A row's input and its expected value are segments, and so is a match arm's
+     * body; none of the three was asked what was written about it, so all three answered with the
+     * row or the arm.
+     */
+    @Test
+    void aPartOfARowWrittenAsAChain() {
+        assertEquals("""
+                module m
+
+                let helper (n: Int) = n
+
+                example helper
+                    | (2)
+                        // expected result
+                        -> 2
+                """, Formatter.format("""
+                module m
+                let helper (n: Int) = n
+
+                example helper
+                    | (2) ->
+                        // expected result
+                        2
+                """));
+        assertEquals("""
+                module m
+
+                let helper (n: Int) = n
+
+                example helper
+                    | (2) // input
+                        -> 2
+                """, Formatter.format("""
+                module m
+                let helper (n: Int) = n
+
+                example helper
+                    | (2)   // input
+                        -> 2
+                """));
+    }
+
     /** No member to be about: the comment was written above the construct, and stays above it rather
      * than moving inside where the construct's own end comments go. */
     @Test

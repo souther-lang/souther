@@ -177,11 +177,18 @@ public final class Formatter {
      * part of that line, so the two are written in this order and not the other: a comment placed
      * after the connector leaves the part itself starting a line the connector never opened.
      */
-    private record Segment(String connector, Doc doc, Doc leading) {
+    private record Segment(String connector, Doc doc, Doc leading) {}
 
-        Segment(String connector, Doc doc) {
-            this(connector, doc, Doc.NIL);
-        }
+    /**
+     * A part of a chain that something in the source stands for. Every segment of every chain is
+     * built here: a chain is written from what the source holds, and one built without asking what
+     * was written above and beside it is one whose comments have nowhere to go. {@code owner} is
+     * null only where the source has nothing there — an example row with no expected value.
+     */
+    private Segment segment(String connector, SyntaxNode owner, Doc doc) {
+        return owner == null
+                ? new Segment(connector, doc, Doc.NIL)
+                : new Segment(connector, concat(doc, afterOf(owner)), aboveOf(owner));
     }
 
     /**
@@ -196,15 +203,6 @@ public final class Formatter {
             parts.add(concat(LINE, s.leading(), text(s.connector()), s.doc()));
         }
         return group(concat(head, nest(INDENT, concat(parts))));
-    }
-
-    /** {@code docs} as segments sharing one connector — a run of the same operator. */
-    private static List<Segment> segments(String connector, List<Doc> docs) {
-        List<Segment> out = new ArrayList<>();
-        for (Doc d : docs) {
-            out.add(new Segment(connector, d));
-        }
-        return out;
     }
 
     // --- top level ---
@@ -311,12 +309,16 @@ public final class Formatter {
         Doc head;
         if (desc.isPresent()) {
             head = concat(text("| "), text(desc.get().text()));
-            segs.add(new Segment(": ", input));
+            segs.add(segment(": ", n.child(SyntaxKind.ARG_LIST).orElse(null), input));
         } else {
-            head = concat(text("| "), input);
+            // with no description the input opens the row, so the row's head carries its comments
+            SyntaxNode args = n.child(SyntaxKind.ARG_LIST).orElse(null);
+            head = args == null ? concat(text("| "), input)
+                    : concat(aboveOf(args), text("| "), input, afterOf(args));
         }
         List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
-        segs.add(new Segment("-> ", expected.isEmpty() ? Doc.NIL : expr(expected.get(0))));
+        segs.add(segment("-> ", expected.isEmpty() ? null : expected.get(0),
+                expected.isEmpty() ? Doc.NIL : expr(expected.get(0))));
         return chained(head, segs);
     }
 
@@ -341,8 +343,12 @@ public final class Formatter {
             input = text("_");   // the default row
         }
         List<SyntaxNode> outs = exprChildren(n);
-        return chained(concat(text("| "), input),
-                List.of(new Segment("-> ", outs.isEmpty() ? Doc.NIL : expr(outs.get(0)))));
+        // the input opens the row, so the head carries what was written above and beside it
+        Doc head = args.map(a -> concat(aboveOf(a), text("| "), input, afterOf(a)))
+                .orElse(concat(text("| "), input));
+        return chained(head,
+                List.of(segment("-> ", outs.isEmpty() ? null : outs.get(0),
+                        outs.isEmpty() ? Doc.NIL : expr(outs.get(0)))));
     }
 
     private Doc moduleHeader(SyntaxNode n) {
@@ -424,7 +430,7 @@ public final class Formatter {
                     for (Doc c : aboveCase(t)) {
                         lead.add(concat(c, HARDLINE));
                     }
-                    cases.add(new Segment("| ", body, concat(lead)));
+                    cases.add(new Segment("| ", body, concat(lead)));   // a case is a token
                 }
             }
             Doc chain = chained(head, cases);
@@ -683,7 +689,7 @@ public final class Formatter {
             if (cases.isEmpty()) {
                 cases.add(concat(aboveOf(c), body));
             } else {
-                rest.add(new Segment("| ", body, aboveOf(c)));
+                rest.add(segment("| ", c, typeTerm(c)));
             }
         }
         Doc d = cases.isEmpty() ? Doc.NIL : chained(cases.get(0), rest);
@@ -807,8 +813,7 @@ public final class Formatter {
             head = concat(aboveOf(left), expr(left), afterOf(left));
         }
         SyntaxNode right = ops.get(1);
-        segs.add(new Segment(operatorText(n) + " ", concat(expr(right), afterOf(right)),
-                aboveOf(right)));
+        segs.add(segment(operatorText(n) + " ", right, expr(right)));
         return head;
     }
 
@@ -850,7 +855,7 @@ public final class Formatter {
         } else {
             head = concat(aboveOf(left), expr(left), afterOf(left));
         }
-        stages.add(new Segment("|> ", concat(expr(right), afterOf(right)), aboveOf(right)));
+        stages.add(segment("|> ", right, expr(right)));
         return head;
     }
 
@@ -950,7 +955,7 @@ public final class Formatter {
             }
         }
         return chained(concat(text("| "), text(pattern.toString())),
-                List.of(new Segment("-> ", expr(body))));
+                List.of(segment("-> ", body, expr(body))));
     }
 
     private Doc lambda(SyntaxNode n) {
@@ -1159,7 +1164,7 @@ public final class Formatter {
      */
     private static boolean separates(SyntaxToken t) {
         return switch (t.kind()) {
-            case COMMA, PIPE, PIPEFWD, VPIPE -> true;
+            case COMMA, PIPE, PIPEFWD, VPIPE, ARROW, COLON -> true;
             default -> isBinaryOperator(t.kind());
         };
     }
@@ -1542,6 +1547,8 @@ public final class Formatter {
                     k -> k == SyntaxKind.FIELD || k == SyntaxKind.FIELD_INIT
                             || k == SyntaxKind.SPREAD_MEMBER;
             case MATCH_EXPR -> k -> k == SyntaxKind.MATCH_CASE;
+            case MATCH_CASE -> Formatter::isExprKind;
+            case EXAMPLE_ROW, FAKE_ROW -> k -> k == SyntaxKind.ARG_LIST || isExprKind(k);
             case EXAMPLE_DEF -> k -> k == SyntaxKind.EXAMPLE_ROW;
             case FAKE_DEF -> k -> k == SyntaxKind.FAKE_ROW;
             case EXPOSING_CLAUSE -> k -> k == SyntaxKind.EXPOSED_ENTRY;
