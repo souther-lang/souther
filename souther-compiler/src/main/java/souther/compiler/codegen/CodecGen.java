@@ -308,17 +308,16 @@ final class CodecGen {
                     pushInt(code, i);
                     code.loadConstant(v.tag());
                     // The mirror of what the encoder wrote: a case that wears the envelope is handed
-                    // what is under `"value"`, and reads it as the standalone value it is, while a
-                    // product and a unit read the discriminated object they are part of.
-                    boolean wrapped = TypeOps.caseShape(v.caseType().denotes(), symbols)
-                            == CaseShape.WRAPPED;
-                    if (wrapped) {
+                    // what is under `"value"` and reads it as the standalone value it is, while a
+                    // product and a unit read the discriminated object they are part of. So a wrapped
+                    // case is read from under a key, which is not always this source's own decoder.
+                    if (TypeOps.caseShape(v.caseType().denotes(), symbols) == CaseShape.WRAPPED) {
                         code.loadConstant(CaseShape.ENVELOPE_KEY);
-                    }
-                    invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
-                    if (wrapped) {
+                        emitUnderAKeyDecoder(code, v.caseType(), src);
                         code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
                         code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
+                    } else {
+                        invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
                     }
                     code.invokestatic(CD_RDecoders, "variant", MTD_Rvariant);
                     code.aastore();
@@ -1191,25 +1190,36 @@ final class CodecGen {
         };
     }
 
+    /**
+     * The decoder for a named type read from under a key of {@code src} — a data's field, or the
+     * envelope key a sum's wrapped case sits under.
+     *
+     * <p>Taking a value out from under a key leaves the source behind, and by how much depends on the
+     * source. A jOOQ row is flat, so what is under a key is a column and not a row: only the type's
+     * own {@code Object} decoder can read it, and a type that is not a whole row has no
+     * {@code recordDecoder()} to reach for anyway. A neutral object's value is a bare {@code Object},
+     * so a type that reads a {@code Map} is bridged to one — which is also where a value of the wrong
+     * shape is told so at that key. A JSON object's value is a {@code JsonNode} like the object
+     * holding it, so that source alone carries through.
+     */
+    private void emitUnderAKeyDecoder(CodeBuilder code, Ast.Name typeName, Src src) {
+        switch (src) {
+            case NEUTRAL -> {
+                invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
+                if (isMapInput(typeName)) {
+                    code.invokestatic(CD_MapDecoders, "nested", MTD_nested);   // Decoder<Map> -> Decoder<Object>
+                }
+            }
+            case JSON -> invokeCodec(code, typeName, "jsonDecoder", MTD_Rdecoder);
+            case JOOQ -> invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
+        }
+    }
+
     /** Pushes a {@code Decoder} for the given field-value reference, for the given source. */
     private void emitDecoderObject(CodeBuilder code, Ast.DecRef ref, Src src) {
         switch (ref) {
             case Ast.PrimDecRef p -> emitLeafDecoder(code, p.kind(), src);
-            case Ast.DataDecRef d -> {
-                switch (src) {
-                    case NEUTRAL -> {
-                        invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
-                        if (isMapInput(d.typeName())) {
-                            code.invokestatic(CD_MapDecoders, "nested", MTD_nested);   // Decoder<Map> -> Decoder<Object>
-                        }
-                    }
-                    // JSON field value is a JsonNode: the nested type's json decoder reads it directly.
-                    case JSON -> invokeCodec(code, d.typeName(), "jsonDecoder", MTD_Rdecoder);
-                    // jOOQ rows are flat: only a newtype (a bare column) is nestable; objects/sums are
-                    // gated out of record generation, so this only ever pushes a newtype's Object decoder.
-                    case JOOQ -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
-                }
-            }
+            case Ast.DataDecRef d -> emitUnderAKeyDecoder(code, d.typeName(), src);
             case Ast.ListDecRef l -> {
                 emitDecoderObject(code, l.element(), src);
                 code.invokestatic(srcListOwner(src), "list", MTD_listDec);

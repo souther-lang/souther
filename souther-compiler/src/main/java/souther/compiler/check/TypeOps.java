@@ -353,10 +353,15 @@ public final class TypeOps {
      * discriminator, a data with no contents is the discriminator alone, and a newtype or a primitive
      * puts its standalone representation under {@code "value"}.
      *
-     * <p>The one place the question is answered. The encoder of a named sum, the encoder of a
-     * behavior's anonymous answer, the decoder that hands a case what it wrote, the fixture form and
-     * the jOOQ row all ask it, and each of them asking the declaration a different way is how the
+     * <p>The one place code generation classifies a case's representation. The encoder of a named
+     * sum, the encoder of a behavior's anonymous answer, the decoder that hands a case what it wrote
+     * and the jOOQ row all ask it, and each of them working it out a different way is how the
      * envelope came to have two owners.
+     *
+     * <p>A fixture asks something else. Its question is which form a value takes at the position it
+     * is written in, which the shape alone does not answer — the same newtype is bare at its own type
+     * and wrapped inside a sum — so {@code NeutralForm} reads the position and this stays about the
+     * declaration.
      */
     public static CaseShape caseShape(TypeName name, Symbols symbols) {
         if (name.isPrimitive()) {
