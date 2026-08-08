@@ -46,8 +46,8 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
 
     @Test
     void anOutputUnionMemberIsAskedToo() {
-        // Before, this reached `CodecGen.flatMember`, which had no arm for a name no module declares
-        // and raised `IllegalStateException: not a union member`.
+        // Before, this reached the backend's question of how a member is discriminated, which had no
+        // arm for a name no module declares and raised an `IllegalStateException`.
         refuses("behavior f : (n: Int) -> Int | DivisionByZero", "let f (n) = Int.divide(10, n)",
                 "DivisionByZero");
     }

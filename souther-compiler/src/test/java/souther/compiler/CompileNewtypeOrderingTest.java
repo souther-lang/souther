@@ -198,14 +198,11 @@ class CompileNewtypeOrderingTest {
         assertTrue(loader.loadClass("demo.Charge").isAssignableFrom(settled),
                 "it is still a case of its sum");
 
-        // a newtype case of a sum is adjacently tagged, so its fixture carries `type` and `value`
-        Object in = Codecs.decoded(loader, "demo.In", Map.of("amounts", List.of(
-                Map.of("type", "Settled", "value", 30L),
-                Map.of("type", "Settled", "value", 10L),
-                Map.of("type", "Settled", "value", 20L))));
+        // the field is declared at the case, not the sum, so `Settled` is read and written as the
+        // newtype it is — the adjacent tag is what `Charge` adds where a value stands as a `Charge`
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("amounts", List.of(30L, 10L, 20L)));
         Object out = Codecs.apply(loader.loadClass("demo.Run$Impl").getConstructor().newInstance(), in);
-        // the field is declared at the case, not the sum, so the tag is not written back out
-        assertEquals(List.of(Map.of("value", 10L), Map.of("value", 20L), Map.of("value", 30L)),
+        assertEquals(List.of(10L, 20L, 30L),
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("sorted"));
     }
 

@@ -4,6 +4,7 @@ import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -253,24 +254,20 @@ final class CodecGen {
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
-            // Dispatch on the runtime case type, encode that case to a Map, then inject the
-            // discriminator key = case tag (spec 11.2).
+            // Dispatch on the runtime case type, encode that case as it writes itself, then add what
+            // membership in this sum requires of it (spec 11.2).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 for (Ast.EncVariant v : enc.variants()) {
-                    ClassDesc caseCd = cd(v.caseType().denotes());
+                    TypeName caseName = v.caseType().denotes();
                     code.aload(1);
-                    code.instanceOf(caseCd);
+                    code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
                     code.ifeq(next);
-                    invokeCodec(code, v.caseType(), "encoder", MTD_Rencoder);
-                    code.aload(1);
-                    code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-                    code.checkcast(CD_Map);
-                    code.dup();
-                    code.loadConstant(enc.key());
-                    code.loadConstant(v.tag());
-                    code.invokeinterface(CD_Map, "put", MTD_Map_put);
-                    code.pop();
+                    emitTagged(code, TypeOps.caseShape(caseName, symbols), enc.key(), v.tag(), () -> {
+                        invokeCodec(code, v.caseType(), "encoder", MTD_Rencoder);
+                        code.aload(1);
+                        code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+                    });
                     code.areturn();
                     code.labelBinding(next);
                 }
@@ -310,7 +307,19 @@ final class CodecGen {
                     code.dup();
                     pushInt(code, i);
                     code.loadConstant(v.tag());
+                    // The mirror of what the encoder wrote: a case that wears the envelope is handed
+                    // what is under `"value"`, and reads it as the standalone value it is, while a
+                    // product and a unit read the discriminated object they are part of.
+                    boolean wrapped = TypeOps.caseShape(v.caseType().denotes(), symbols)
+                            == CaseShape.WRAPPED;
+                    if (wrapped) {
+                        code.loadConstant(CaseShape.ENVELOPE_KEY);
+                    }
                     invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
+                    if (wrapped) {
+                        code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
+                        code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
+                    }
                     code.invokestatic(CD_RDecoders, "variant", MTD_Rvariant);
                     code.aastore();
                     i++;
@@ -563,10 +572,17 @@ final class CodecGen {
             if (TypeOps.isUnitOnlySum(sum, symbols)) {
                 return false;   // an enumeration is a bare column, not a whole row (issue #161)
             }
-            for (Ast.Name caseName : sum.cases()) {
-                Ast.Def caseDef = symbols.get(caseName.denotes());
-                if (caseDef instanceof Ast.UnitData) continue;
-                if (!(caseDef instanceof Ast.Data d) || !isFlatObject(d)) return false;
+            for (Ast.Name written : sum.cases()) {
+                TypeName caseName = written.denotes();
+                Ast.Def caseDef = symbols.get(caseName);
+                if (caseDef instanceof Ast.UnitData) continue;   // the discriminator alone, no column
+                if (!(caseDef instanceof Ast.Data d)) return false;   // a nested sum is not a row
+                // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
+                // row when what it wraps is a column.
+                boolean ok = TypeOps.caseShape(caseName, symbols) == CaseShape.WRAPPED
+                        ? flatColumn(TypeOps.newtypeInner(caseName, symbols))
+                        : isFlatObject(d);
+                if (!ok) return false;
             }
             return true;
         }
@@ -1811,35 +1827,50 @@ final class CodecGen {
 
     /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
     private void emitMemberEncode(CodeBuilder code, TypeName member) {
-        if (flatMember(member)) {
+        emitTagged(code, TypeOps.caseShape(member, symbols), "type", member.name(), () -> {
             pushMemberEncoder(code, member);
             pushMemberValue(code, member);
             code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-            code.checkcast(CD_Map);
-            code.dup();
-            code.loadConstant("type");
-            code.loadConstant(member.name());
-            code.invokeinterface(CD_Map, "put", MTD_Map_put);
-            code.pop();
-            return;
+        });
+    }
+
+    /**
+     * Leaves a discriminated case on the stack: what the case writes on its own, plus what standing
+     * in this sum — or in a behavior's answer, which is the same rule — adds to it (spec 11.2). A
+     * product lays its fields beside the discriminator and a unit is the discriminator alone, so both
+     * carry it in the object they already are; a newtype and a primitive have no key of their own to
+     * put it on, so their representation goes under {@code "value"} beside it.
+     *
+     * @param encoded leaves the case's own encoded form on the stack
+     */
+    private void emitTagged(CodeBuilder code, CaseShape shape, String key, String tag,
+                            Runnable encoded) {
+        switch (shape) {
+            case PRODUCT, UNIT -> {
+                encoded.run();
+                code.checkcast(CD_Map);
+                code.dup();
+                code.loadConstant(key);
+                code.loadConstant(tag);
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+            }
+            case WRAPPED -> {
+                code.new_(CD_LinkedHashMap);
+                code.dup();
+                code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
+                code.dup();
+                code.loadConstant(key);
+                code.loadConstant(tag);
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+                code.dup();
+                code.loadConstant(CaseShape.ENVELOPE_KEY);
+                encoded.run();
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+            }
         }
-        // A member whose own representation is not an object cannot carry `"type"` on itself, so it
-        // goes under `"value"` beside it — where a newtype case of a named sum goes (spec 11.2).
-        code.new_(CD_LinkedHashMap);
-        code.dup();
-        code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
-        code.dup();
-        code.loadConstant("type");
-        code.loadConstant(member.name());
-        code.invokeinterface(CD_Map, "put", MTD_Map_put);
-        code.pop();
-        code.dup();
-        code.loadConstant("value");
-        pushMemberEncoder(code, member);
-        pushMemberValue(code, member);
-        code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-        code.invokeinterface(CD_Map, "put", MTD_Map_put);
-        code.pop();
     }
 
     /** Pushes the encoder a member writes itself with: its own derived one, or the Raoh leaf encoder
@@ -1868,18 +1899,6 @@ final class CodecGen {
         code.checkcast(bridge);
         code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
         JvmTypes.box(code, held);
-    }
-
-    /** Whether a member's own encoder writes an object, which the discriminator can be put into. */
-    private boolean flatMember(TypeName member) {
-        if (member.isPrimitive()) {
-            return false;   // a primitive writes a bare scalar, which carries no key
-        }
-        return switch (symbols.get(member)) {
-            case Ast.Data data -> encoderOutput(data).equals(CD_Map);
-            case Ast.UnitData _ -> true;   // an empty object, which the tag alone then fills
-            case null, default -> throw new IllegalStateException("not a union member: " + member);
-        };
     }
 
     /** Whether every member is a unit, so the union carries nothing but which member it is and

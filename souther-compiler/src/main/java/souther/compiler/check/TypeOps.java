@@ -10,6 +10,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.CaseShape;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -344,6 +345,30 @@ public final class TypeOps {
             names.add(c.denotes());
         }
         return names;
+    }
+
+    /**
+     * What a sum's encoding adds to this case, or a behavior's answer to this member — read from the
+     * declaration the name denotes (spec 11.2). A braced data lays its fields beside the
+     * discriminator, a data with no contents is the discriminator alone, and a newtype or a primitive
+     * puts its standalone representation under {@code "value"}.
+     *
+     * <p>The one place the question is answered. The encoder of a named sum, the encoder of a
+     * behavior's anonymous answer, the decoder that hands a case what it wrote, the fixture form and
+     * the jOOQ row all ask it, and each of them asking the declaration a different way is how the
+     * envelope came to have two owners.
+     */
+    public static CaseShape caseShape(TypeName name, Symbols symbols) {
+        if (name.isPrimitive()) {
+            return CaseShape.WRAPPED;   // a bare scalar carries no key the discriminator could go on
+        }
+        return switch (symbols.get(name)) {
+            case Ast.Data d when d.newtype() -> CaseShape.WRAPPED;
+            case Ast.Data _ -> CaseShape.PRODUCT;
+            case Ast.UnitData _ -> CaseShape.UNIT;
+            case null, default -> throw new IllegalStateException(
+                    "`" + name + "` stands as a case but denotes no data");
+        };
     }
 
     /**
