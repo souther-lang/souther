@@ -29,6 +29,11 @@ import static souther.compiler.cst.SyntaxKind.*;
  * begin and end with. It is an over-approximation on purpose — a pair it holds that the grammar
  * cannot build costs an unused answer, and one it misses costs a source that cannot be formatted.
  * The corpus keeps it honest from below: every boundary the corpus reaches has to be in it.
+ *
+ * <p>Written out, the domain says one more thing than that every boundary has an answer: it says
+ * which boundaries two of the rule's lists both cover, and there the two have to agree. A list read
+ * before another does not tie with it — it wins — so a disagreement is one list answering for a
+ * construct that writes the boundary the other way, and nothing downstream can see that it did.
  */
 class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
 
@@ -274,6 +279,37 @@ class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
         }
         assertEquals(new TreeSet<String>(), outside,
                 "boundaries the formatter writes that the domain above does not hold");
+    }
+
+    /**
+     * And where a pair's own row and a construct's face both cover a boundary, they say the same.
+     * The row is read first, so the face never answers where they differ: {@code MINUS LPAREN} was
+     * a row, tight from a negation, and a subtraction spaced from its operands wrote {@code a -(b)}
+     * anyway. A pair two constructs write differently is one the joining construct decides, and it
+     * is moved to the list that is asked for the construct.
+     */
+    @Test
+    void andWhereARowAndAFaceBothAnswerTheySayTheSame() {
+        Set<String> disagreeing = new TreeSet<>();
+        for (Face f : DOMAIN) {
+            for (SyntaxKind l : f.left()) {
+                for (SyntaxKind r : f.right()) {
+                    String row = Spacing.pairAnswer(l, r);
+                    String face = Spacing.faceAnswer(f.construct(), l, r);
+                    if (row != null && face != null && !row.equals(face)) {
+                        disagreeing.add(l + " " + r + " is written " + written(row)
+                                + " wherever it occurs, but " + f.construct() + " writes it "
+                                + written(face));
+                    }
+                }
+            }
+        }
+        assertEquals(new TreeSet<String>(), disagreeing,
+                "pairs whose row answers for a construct that writes them the other way");
+    }
+
+    private static String written(String answer) {
+        return answer.equals(Spacing.TIGHT) ? "tight" : "spaced";
     }
 
     private static boolean held(SyntaxKind construct, SyntaxKind left, SyntaxKind right) {

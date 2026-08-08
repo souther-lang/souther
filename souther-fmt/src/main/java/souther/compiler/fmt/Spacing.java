@@ -74,6 +74,25 @@ final class Spacing {
                         + "; a new adjacency is a decision and it is made in Spacing");
     }
 
+    /**
+     * What the pair alone says, wherever it occurs, or null where no such row holds it. Read by
+     * {@code TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest} to hold it against the answer below
+     * it: a row read before a construct's face is a row that has to agree with every face it
+     * outranks, and it is the only way to see where it does not.
+     */
+    static String pairAnswer(SyntaxKind left, SyntaxKind right) {
+        Pair pair = new Pair(asWritten(left), asWritten(right));
+        if (TIGHT_PAIRS.contains(pair)) {
+            return TIGHT;
+        }
+        return SPACED_PAIRS.contains(pair) ? SPACED : null;
+    }
+
+    /** What {@code joining}'s own faces say about this pair, or null where none of them covers it. */
+    static String faceAnswer(SyntaxKind joining, SyntaxKind left, SyntaxKind right) {
+        return faceFor(FACES, joining, asWritten(left), asWritten(right));
+    }
+
     private record Pair(SyntaxKind left, SyntaxKind right) {
     }
 
@@ -175,9 +194,9 @@ final class Spacing {
     /**
      * The pairs written with nothing between them wherever they occur. Transcribed rather than
      * grouped, because it does not compress: sorting the kinds into words, brackets, commas, dots
-     * and operators leaves eight of the twenty-four class pairs taking both answers — {@code ):}
-     * against {@code ) ->}, {@code -n} against {@code + 1}, {@code Amount(} against {@code P (} —
-     * so the pair is the smaller statement.
+     * and operators leaves eight of the eighteen class pairs the rows reach taking both answers —
+     * {@code ):} against {@code ) ->}, {@code <'a} against {@code + 1}, {@code 1)} against
+     * {@code then [} — so the pair is the smaller statement.
      */
     private static final String TIGHT_ROWS = """
             DECIMAL_LIT COMMA
@@ -186,7 +205,6 @@ final class Spacing {
             FALSE_KW COMMA
             GT COMMA
             GT GT
-            GT RPAREN
             IDENT COMMA
             IDENT DOT
             IDENT QUESTION
@@ -213,7 +231,6 @@ final class Spacing {
             LPAREN TYPEVAR
             LT TYPEVAR
             QUESTION COMMA
-            QUESTION RPAREN
             RBRACE COMMA
             RBRACE RBRACKET
             RBRACE RPAREN
@@ -224,7 +241,6 @@ final class Spacing {
             RPAREN DOT
             RPAREN LPAREN
             RPAREN RBRACKET
-            RPAREN RPAREN
             SPREAD IDENT
             STRING_LIT COMMA
             STRING_LIT RBRACKET
@@ -234,7 +250,6 @@ final class Spacing {
             TYPEVAR COMMA
             TYPEVAR GT
             TYPEVAR QUESTION
-            TYPEVAR RPAREN
             """;
 
     /** The pairs written with one space between them wherever they occur. */
