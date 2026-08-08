@@ -8,15 +8,18 @@ import souther.compiler.partition.Generator;
 import java.math.BigDecimal;
 
 /**
- * Everything known about one boundary a rule drew: whether a row sits at it, and whether a row can be
- * written there at all.
+ * Everything known about one boundary a rule drew.
  *
- * <p>Two answers rather than one word. They are established by different means and fail to be
- * established for different reasons: a row at the value is read off what this compilation ran, and
- * whether such a row can exist is settled by putting a value through the decoder. Writing the pair out
- * as a single state means writing the product of the two by hand, and the product has combinations
- * nothing rules out — a value nothing has been written at that something has built, and a value a row
- * sits on whose position nothing could promise.
+ * <p>Three answers rather than one state, because they are about three things and are established by
+ * three different means. What the rows showed is read off what this compilation ran. What is proven
+ * about a value existing there comes from the rules, or from a value that went through the decoder.
+ * What the search did is what the search did — and it is kept even where it changed neither of the
+ * others, because an edge the rules already prove is still one a search can fail to produce a row
+ * for, and the person who wanted that row is owed the reason.
+ *
+ * <p>Writing them as a single word means writing the product of three by hand, and the product has
+ * combinations nothing rules out: a value nothing has been written at that something built, a value a
+ * row sits on whose position nothing could promise, a value the rules prove and no search reached.
  *
  * <p>One of these per obligation, made in one place. What a report prints, what a build is warned
  * about and what the generator offers are three readings of this and not three measurements.
@@ -114,9 +117,16 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
         /** A value with the edge in it, built and accepted by the module's own decoders. */
         record Built(Generator.GeneratedRow row) implements Attempt {}
 
-        /** Candidates were built and none survived, or none could be chosen. What the search met,
-         * in its own words, so that what is printed about it says what happened. */
-        record Refused(Generator.UnresolvedCombination why) implements Attempt {}
+        /**
+         * The search ran and no row came of it.
+         *
+         * <p>Named for what happened and not for one of the ways it happens. Every candidate being
+         * refused is one of them; a position with no value to write at all, and a search that stopped
+         * before it got here, are the others, and only the first is the decoder saying anything. A
+         * name that said "refused" would invite a reader to take the other two for a decision the
+         * decoder made — which is the mistake this type exists to prevent, one size down.
+         */
+        record Unresolved(Generator.UnresolvedCombination why) implements Attempt {}
 
         /** Nothing was tried, and why not. Separate from a refusal because they license different
          * sentences: one is a fact about values, the other is a fact about this run. */

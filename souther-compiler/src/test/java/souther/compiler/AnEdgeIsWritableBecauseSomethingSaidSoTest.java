@@ -63,11 +63,11 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
         assertInstanceOf(BoundaryAssessment.Writability.Unknown.class, at.writability(),
                 "nothing proved it and nothing built it");
-        BoundaryAssessment.Attempt.Refused refused = assertInstanceOf(
-                BoundaryAssessment.Attempt.Refused.class, at.attempt(),
+        BoundaryAssessment.Attempt.Unresolved unresolved = assertInstanceOf(
+                BoundaryAssessment.Attempt.Unresolved.class, at.attempt(),
                 "and refused is not impossible: nothing here says no row can be written");
         assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
-                refused.why().reason());
+                unresolved.why().reason());
     }
 
     @Test
@@ -120,7 +120,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
         assertInstanceOf(BoundaryAssessment.Coverage.Missed.class, at.coverage());
         assertInstanceOf(BoundaryAssessment.Writability.ProvenByProjection.class, at.writability(),
                 "every rule of `Amount` was read, so 0 is a value it holds");
-        assertInstanceOf(BoundaryAssessment.Attempt.Refused.class, at.attempt(),
+        assertInstanceOf(BoundaryAssessment.Attempt.Unresolved.class, at.attempt(),
                 "and the search still came back with nothing, which takes nothing away from that");
     }
 

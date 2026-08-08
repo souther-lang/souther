@@ -317,7 +317,7 @@ final class Coverages {
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
                     new BoundaryAssessment.Attempt.Built(built.row());
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
-                    new BoundaryAssessment.Attempt.Refused(left.why());
+                    new BoundaryAssessment.Attempt.Unresolved(left.why());
         };
     }
 

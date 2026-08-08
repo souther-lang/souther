@@ -815,10 +815,13 @@ public final class Adequacy {
             for (BoundaryAssessment each : boundaries) {
                 switch (each.attempt()) {
                     case BoundaryAssessment.Attempt.Built built -> rows.add(built.row());
-                    case BoundaryAssessment.Attempt.Refused why -> unresolved.add(why.why());
-                    // Nothing was tried. Only one of the reasons is news: the decoders could not be
-                    // reached, so this block is short of rows it would otherwise have offered. The
-                    // others are boundaries nobody is owed a row at, and saying so would be noise.
+                    case BoundaryAssessment.Attempt.Unresolved why -> unresolved.add(why.why());
+                    // Nothing was tried. Two of the reasons are news — the decoders could not be
+                    // reached, so this block is short of rows it would otherwise have offered — and
+                    // the other two are boundaries nobody is owed a row at, where saying so would be
+                    // noise. The two that are said arrive under one code, which is as fine a
+                    // distinction as the report has: a module that failed to generate and a runtime
+                    // that is not on the classpath are different, and nothing downstream can say so.
                     case BoundaryAssessment.Attempt.NotAttempted absent -> {
                         if (absent.reason() == BoundaryAssessment.Attempt.Reason.RUNTIME_ABSENT
                                 || absent.reason()
