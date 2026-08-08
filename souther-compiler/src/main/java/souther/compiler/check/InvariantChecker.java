@@ -347,57 +347,46 @@ public final class InvariantChecker {
      *
      * <p>The same reach the seeding has, so what this classifies is what that took in.
      */
-    static Set<String> positionsWithARuleUnread(TypeName named, Ast.Data data, Symbols symbols) {
-        Set<String> out = new java.util.LinkedHashSet<>();
-        unread(named, data, symbols, "", 0, out);
-        return out;
+    /**
+     * Whether every rule that can refuse a value of {@code data} was read as a bound.
+     *
+     * <p>Asked over the values a construction has to produce, which is not the depth a report takes a
+     * value apart to. {@code FIELDS_SEEDED} and {@code MAX_DEPTH} are limits on how far a measurement
+     * is worth carrying; a rule four records down refuses the outermost construction exactly as one
+     * on its own fields does, so a bound at the top is promised by nothing while that rule is unread.
+     *
+     * <p>Down the required chain only. A field that is optional or a collection can be absent or
+     * empty, so a rule inside it is a rule about a value the construction need not make. A type
+     * already met is not entered again, which is what stops a record that holds itself.
+     */
+    static boolean everyRuleRead(TypeName named, Ast.Data data, Symbols symbols) {
+        return everyRuleRead(named, data, symbols, new HashSet<>());
     }
 
-    /**
-     * The positions a rule reaches that the domain could not hold as a bound.
-     *
-     * <p>Asked per position and not per value. A rule that is only nameable — a pattern, a membership
-     * — narrows nothing, and what it narrows nothing about is the positions it names: a pattern on a
-     * label says nothing about how many minutes a day has, and an edge of the minutes is as good as
-     * it ever was. A rule naming nothing this can name is attributed to the position it is declared
-     * on, which is the whole of what it could be about.
-     */
-    private static void unread(TypeName named, Ast.Data data, Symbols symbols, String prefix,
-                               int depth, Set<String> out) {
-        if (depth > FIELDS_SEEDED) {
-            return;
+    private static boolean everyRuleRead(TypeName named, Ast.Data data, Symbols symbols,
+                                         Set<TypeName> seen) {
+        if (!seen.add(named)) {
+            return true;
         }
-        InvariantChecker c = new InvariantChecker(symbols, Map.of());
-        Map<String, BindingId> bindings = c.clauses.bindingsOf(data);
         if (data.newtype()) {
-            // A newtype's value is the same position the newtype is, so its rules are about that
-            // position and about nothing under it — and they are classified by the reader that gave
-            // the position its bounds rather than by a second one. That reader works off the
-            // declaration as written, so a type from another module answers the same as one from
-            // this one; the discharge reading of such a type has already been settled into folds and
-            // would call every imported bound a rule it could not read.
-            if (!prefix.isEmpty() && !everyRuleBecameABound(data, symbols)) {
-                out.add(prefix);
+            if (!everyRuleBecameABound(data, symbols)) {
+                return false;
             }
         } else {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
                 if (capabilityOf(clause.expr(), clause.pos(), data, symbols).kind()
-                        == ClauseDischarge.Kind.DERIVABLE) {
-                    continue;
-                }
-                for (String field : namedBy(clause.expr(), bindings.keySet(), c, data)) {
-                    out.add(prefix.isEmpty() ? field : prefix + "." + field);
+                        != ClauseDischarge.Kind.DERIVABLE) {
+                    return false;
                 }
             }
         }
-        for (Map.Entry<String, Type> field : TypeOps.fieldTypes(data, symbols).entrySet()) {
-            if (field.getValue() instanceof Type.Ref ref
-                    && symbols.get(ref.name()) instanceof Ast.Data inner) {
-                unread(ref.name(), inner, symbols,
-                        prefix.isEmpty() ? field.getKey() : prefix + "." + field.getKey(),
-                        depth + 1, out);
+        for (Type type : TypeOps.fieldTypes(data, symbols).values()) {
+            if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data inner
+                    && !everyRuleRead(ref.name(), inner, symbols, seen)) {
+                return false;
             }
         }
+        return true;
     }
 
     /**
@@ -421,44 +410,6 @@ public final class InvariantChecker {
             }
         }
         return true;
-    }
-
-    /**
-     * Which of {@code fields} a clause is about.
-     *
-     * <p>Off the typed reading where there is one, and off what the clause is written with where
-     * there is not. A clause outside the fragment often cannot be typed at all — a call to
-     * {@code Date.daysBetween} is one — and it is still plainly a rule about the two dates it names.
-     * Taking a clause nothing could be read from as a rule about every field of its record would
-     * make one date comparison unpromise every number beside it.
-     *
-     * <p>A name is matched against the declaration's own fields, which is the whole scope a clause is
-     * written in. A binder inside it that shadows a field's name is read as that field, which names
-     * one position too many and is the direction to be wrong in.
-     */
-    private static Set<String> namedBy(Ast.Expr clause, Set<String> fields, InvariantChecker c,
-                                       Ast.Data data) {
-        Core typed = c.clauses.typed(clause, data);
-        if (typed != null) {
-            Set<BindingId> reads = c.clauses.fieldsRead(typed, data);
-            Set<String> out = new java.util.LinkedHashSet<>();
-            c.clauses.bindingsOf(data).forEach((field, binding) -> {
-                if (reads.contains(binding)) {
-                    out.add(field);
-                }
-            });
-            return out;
-        }
-        Set<String> written = new java.util.LinkedHashSet<>();
-        namesIn(clause, fields, written);
-        return written;
-    }
-
-    private static void namesIn(Ast.Expr e, Set<String> fields, Set<String> out) {
-        if (e instanceof Ast.Var v && fields.contains(v.written().canonical())) {
-            out.add(v.written().canonical());
-        }
-        Ast.forEachChild(e, child -> namesIn(child, fields, out));
     }
 
     /** A position read from no source, for the reads this makes to stand at. */

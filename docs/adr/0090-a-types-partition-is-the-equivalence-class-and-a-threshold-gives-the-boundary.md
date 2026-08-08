@@ -55,10 +55,17 @@ the denominator, and refuses no build — which is what ADR-0091 already does wi
 has settled, for the same reason. What settles it is a witness rather than an argument: a row at the
 value went through the decoder, and from then on the edge is counted like any other.
 
-Whether the rules were all read is asked of the position and of the bound's own derivation. A rule the
-domain could not hold is a rule about the atoms it names, so a pattern on a label leaves the minutes
-beside it exactly as they were; and a bound reached through a difference carries the doubt of every
-atom on that path, because that is the path the bound itself came along.
+Whether the rules were all read is asked of the value and not of the position. A bound is about one
+position; a row at its edge is a whole value with that edge in it, and a rule about any other position
+can refuse to be part of one. A pattern on a label narrows no minute and still leaves every minute
+beside it with edges nothing has shown reachable — the two labels a record cannot both carry are as
+good a reason for that as a rule about the minutes themselves.
+
+That question reaches as far as the construction it can refuse and no further. Down the fields a value
+must have, at any depth, since a rule four records down refuses the outermost construction exactly as
+one on the top does; and not into what a construction need not make, because a rule inside an optional
+or a collection is a rule about a value that can be left out. The depth a report takes an input apart
+to is a limit on what is worth measuring and cannot stand in for this.
 
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both

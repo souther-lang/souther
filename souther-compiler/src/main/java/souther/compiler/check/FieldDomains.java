@@ -7,8 +7,6 @@ import souther.compiler.types.TypeName;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Supplier;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -30,23 +28,26 @@ public final class FieldDomains {
 
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), false, Map.of(), NumericDomain.top(), () -> Set.of());
+            new FieldDomains(Map.of(), false, true, NumericDomain.top(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     private final boolean infeasible;
-    private final Map<String, String> atoms;
+    /** Whether the reading that produced these bounds ran to the end. Kept because it is what that
+     * reading knows about itself: a walk that fell over produces the same empty domain as a value
+     * with no rules, and a second reading asked afterwards does not take the same path. */
+    private final boolean seeded;
     private final NumericDomain numbers;
-    private final Supplier<Set<String>> unread;
-    private volatile Set<String> unreadPositions;
+    private final java.util.function.BooleanSupplier reading;
+    private volatile Boolean everyRuleRead;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField, boolean infeasible,
-                         Map<String, String> atoms, NumericDomain numbers,
-                         Supplier<Set<String>> unread) {
+                         boolean seeded, NumericDomain numbers,
+                         java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.infeasible = infeasible;
-        this.atoms = atoms;
+        this.seeded = seeded;
         this.numbers = numbers;
-        this.unread = unread;
+        this.reading = reading;
     }
 
     /**
@@ -90,11 +91,11 @@ public final class FieldDomains {
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
         return new FieldDomains(Map.copyOf(out), seeded.numbers().isBottom(),
-                seeded.atoms(), seeded.numbers(),
+                seeded.everyClauseRead(), seeded.numbers(),
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
-                () -> InvariantChecker.positionsWithARuleUnread(named, data, symbols));
+                () -> InvariantChecker.everyRuleRead(named, data, symbols));
     }
 
     /**
@@ -126,22 +127,17 @@ public final class FieldDomains {
      * value they admit may be one nothing can build. What settles such an edge is a witness.
      */
     public boolean allRulesRead() {
-        if (!numbers.projectionIsLossless()) {
+        // What the reading that made these bounds knows about itself comes first. A second reading
+        // asked afterwards walks the declarations and not the same path, so it can come back clean
+        // about a projection that was never computed.
+        if (!seeded || !numbers.projectionIsLossless()) {
             return false;
         }
-        // A relation is only a projection where both ends brought their ranges. A type declared in
-        // another module is read here in the form its operations have already been settled into, so
-        // its bound never arrives — and a rule relating such a position to another narrows nothing
-        // while the derivation puts the type's own edges back, which is an edge nobody can write
-        // rather than a narrowing missed.
-        if (atom != null && numbers.isRelated(atom) && numbers.boundsOf(atom).isEmpty()) {
-            return false;
+        Boolean read = everyRuleRead;
+        if (read == null) {
+            read = reading.getAsBoolean();
+            everyRuleRead = read;
         }
-        Set<String> positions = unreadPositions;
-        if (positions == null) {
-            positions = unread.get();
-            unreadPositions = positions;
-        }
-        return positions.isEmpty();
+        return read;
     }
 }

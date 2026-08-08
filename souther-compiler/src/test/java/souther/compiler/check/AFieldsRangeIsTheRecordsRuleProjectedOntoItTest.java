@@ -368,6 +368,69 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertTrue(domains.allRulesRead());
     }
 
+    /**
+     * A rule reaches as far as the construction it can refuse, which is further than a report looks.
+     *
+     * <p>The walk that takes a value apart for measuring stops two levels down, because past that a
+     * report is no longer about anything the author recognises as one input. A rule four records down
+     * refuses the outermost construction exactly as one on its own fields does, so the question of
+     * whether a row can be written at all cannot borrow that limit.
+     */
+    @Test
+    void aRuleBelowTheDepthAReportLooksAtStillRefusesTheValue() {
+        FieldDomains domains = domainsIn("""
+                module example.deep
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+
+                data Leaf =
+                    { x: N
+                    , tag: String
+                    }
+                    invariant tagged = String.matches("[a-z]+", tag)
+
+                data L2 = { leaf: Leaf }
+                data L1 = { l2: L2 }
+
+                data Root =
+                    { n: N
+                    , l1: L1
+                    }
+                """, "Root");
+
+        assertBounds(domains.at("n"), 0, 10);
+        assertFalse(domains.allRulesRead(),
+                "the pattern is three records down and a Root cannot be built without going through"
+                        + " it");
+    }
+
+    /** And not through what a construction need not make. A rule inside an optional is a rule about a
+     * value that can be left out, so it refuses nothing here. */
+    @Test
+    void aRuleInsideSomethingOptionalRefusesNothing() {
+        FieldDomains domains = domainsIn("""
+                module example.optional
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+
+                data Note =
+                    { tag: String }
+                    invariant tagged = String.matches("[a-z]+", tag)
+
+                data Root =
+                    { n: N
+                    , note: Note?
+                    , others: List<Note>
+                    }
+                """, "Root");
+
+        assertBounds(domains.at("n"), 0, 10);
+        assertTrue(domains.allRulesRead(),
+                "a Root with no note and no others is a Root, and the pattern never runs");
+    }
+
     /** A newtype has no siblings, so there is nothing here to project. */
     @Test
     void aNewtypeHasNothingToProjectOnto() {
