@@ -7,7 +7,9 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.BoundaryInput;
+import souther.compiler.types.BoundaryOutput;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -19,7 +21,6 @@ import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
-import net.unit8.raoh.decode.builtin.StringDecoder;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
@@ -94,7 +95,7 @@ public final class FixtureReader {
 
         /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
          * the runtime is absent, which is not a fact about the value. */
-        java.util.Optional<String> refuse(Type type, Ast.Expr fixture);
+        java.util.Optional<String> refuse(BoundaryInput at, Ast.Expr fixture);
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
@@ -111,8 +112,8 @@ public final class FixtureReader {
         // the loader that is shared, and has to be — it caches the classes it has defined and loaded,
         // and a fake's subclass is generated once.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        return (type, fixture) -> new FixtureReader(module, symbols, values, loader)
-                .refuse(type, fixture);
+        return (at, fixture) -> new FixtureReader(module, symbols, values, loader)
+                .refuse(at, fixture);
     }
 
     /** The helper this reading is inside, for a budget to name when the reading does not finish. */
@@ -122,7 +123,19 @@ public final class FixtureReader {
 
     /** One written fixture, decoded against the type of the position it is written in. */
     Object built(Ast.Expr written, Type type) {
-        return decode(type, raw(written, type));
+        return built(written, FixtureShape.of(type, symbols));
+    }
+
+    /** The same at a position a behavior's boundary established, which carries its own admitted
+     *  answer: it is read rather than the type it was admitted from being put through the walk
+     *  again. */
+    Object built(Ast.Expr written, BoundaryInput in) {
+        return built(written, FixtureShape.of(in));
+    }
+
+    /** The same, where the position's shape has already been settled. */
+    Object built(Ast.Expr written, FixtureShape shape) {
+        return decode(shape, raw(written, shape.type()));
     }
 
     /**
@@ -136,12 +149,13 @@ public final class FixtureReader {
      * The whole value {@code written} states. Throws where it does not build or does not finish —
      * a fixture is one or the other, and what to make of that is the caller's.
      */
-    BuiltFixture buildFixture(Ast.Expr written, Type outType) {
+    BuiltFixture buildFixture(Ast.Expr written, BoundaryOutput out) {
+        Type outType = out.type();
         // The one builder a written value goes through, whichever side wrote it: it knows a
         // construction from a literal, a collection, and a value a helper answered with — which the
         // decoder route does not, and a stand-in built the other way stated nothing for a fake whose
         // row applies a helper (the shape of issue #214, on the other side).
-        Object value = builtExpected(written, outType);
+        Object value = builtExpected(written, out);
         TypeName was = caseOfValue(value, outType);
         return new BuiltFixture(was != null ? was : constructedCase(written), value);
     }
@@ -204,20 +218,25 @@ public final class FixtureReader {
      * through that case's decoder; a literal is its raw value. Throws {@link FixtureException} when the
      * row's expectation cannot be built — the caller reports that as the fixture error it is, rather
      * than comparing against nothing. */
-    Object builtExpected(Ast.Expr expected, Type outType) {
+    Object builtExpected(Ast.Expr expected, BoundaryOutput out) {
         TypeName asserted = constructedCase(expected);
         if (asserted != null) {
-            return built(expected, Type.ref(asserted));
+            // The case is what the row wrote rather than what the position admitted — a row may name
+            // a case the behavior does not answer with, which is a disagreement to report and not a
+            // shape to read off the answer — so this name goes through the walk.
+            return built(expected, FixtureShape.of(Type.ref(asserted), symbols));
         }
         Object answer = helperAnswer(expected, new LinkedHashSet<>());
         if (answer != null) {
             return answer;
         }
-        // A collection output has no case name to decode against, so the behavior's declared
-        // output type is what says which of `List`/`Set`/`Map` the written list means and what
-        // its elements are — the same decision a collection argument's declared type makes.
-        if (isCollection(outType)) {
-            return built(expected, outType);
+        // A collection output has no case name to decode against, so the behavior's answer is what
+        // says which of `List`/`Set`/`Map` the written list means and what its elements are — the
+        // same decision a collection argument's position makes. An answer of several types is not
+        // one shape, and nothing here writes a collection of them.
+        FixtureShape whole = FixtureShape.ofWholeAnswer(out);
+        if (whole != null && isCollection(whole)) {
+            return built(expected, whole);
         }
         return raw(expected);   // a literal expected value
     }
@@ -254,16 +273,17 @@ public final class FixtureReader {
 
     /** As above, for the rendering of a failure, where a value that cannot be built is shown as
      * written rather than reported a second time. */
-    private Object builtExpectedOrNull(Ast.Expr expected, Type outType) {
+    private Object builtExpectedOrNull(Ast.Expr expected, BoundaryOutput out) {
         try {
-            return builtExpected(expected, outType);
+            return builtExpected(expected, out);
         } catch (FixtureException _) {
             return null;
         }
     }
 
-    private static boolean isCollection(Type t) {
-        return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
+    private static boolean isCollection(FixtureShape shape) {
+        return shape instanceof FixtureShape.ListOf || shape instanceof FixtureShape.SetOf
+                || shape instanceof FixtureShape.MapOf;
     }
 
     /** The arm an expected names, as it was written — what a row that names no case of the target is
@@ -334,13 +354,13 @@ public final class FixtureReader {
     /** The expectation, rendered as the value it stands for: a bare case stays the case name, anything
      * else is its neutral form under the case it constructs ({@code Out { n = 7 }}) — which is what a
      * row naming a value asserts, so that is what the failure shows. */
-    String describeExpected(Ast.Expr expected, Type outType) {
+    String describeExpected(Ast.Expr expected, BoundaryOutput out) {
         String only = caseOnly(expected);
         if (only != null) {
             return only;   // a bare case asserts only that, so there is no value to show
         }
         TypeName asserted = constructedCase(expected);
-        Object built = builtExpectedOrNull(expected, outType);
+        Object built = builtExpectedOrNull(expected, out);
         if (asserted == null) {
             // Nothing here names a case: a literal, a collection, or a value a helper answered with.
             // What was built is a value, so it is shown the way the result is — which is what puts the
@@ -955,9 +975,10 @@ public final class FixtureReader {
 
     // --- decode a raw value into the parameter/expected type ----------------------------------
 
-    private Object decode(Type type, Object rawValue) {
+    private Object decode(FixtureShape shape, Object rawValue) {
+        Type type = shape.type();
         Object raw = neutral.shaped(rawValue, type);
-        Decoder<Object, ?> decoder = decoderFor(type);
+        Decoder<Object, ?> decoder = decoderFor(shape);
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
@@ -1002,102 +1023,94 @@ public final class FixtureReader {
     }
 
     @SuppressWarnings("unchecked")
-    private Decoder<Object, ?> decoderFor(Type type) {
-        if (type instanceof Type.Prim prim) {
-            return switch (prim) {
-                case STRING -> ObjectDecoders.string();
-                case INT -> ObjectDecoders.long_();
-                case BOOL -> ObjectDecoders.bool();
-                case DECIMAL -> ObjectDecoders.decimal();
-                case DATE -> ObjectDecoders.date();
-                case DATETIME -> ObjectDecoders.dateTime();
-                case RAW -> throw new FixtureException("the Raw type cannot be an example input");
-            };
-        }
-        if (type instanceof Type.Ref ref) {
+    private Decoder<Object, ?> decoderFor(FixtureShape shape) {
+        return switch (shape) {
+            case FixtureShape.Scalar s -> leafDecoder(s.scalar());
             // An imported type's decoder lives in its declaring module's package, not this one's.
-            try {
-                Class<?> c = loader.loadClass(ref.name().qualified());
-                return (Decoder<Object, ?>) staticCodec(c, "decoder");
-            } catch (ReflectiveOperationException _) {
-                throw new FixtureException("no decoder for `" + ref.name().name() + "`");
-            }
-        }
-        // A collection is decoded the way a data's collection field is, built from the same pieces the
-        // derived decoder is (spec 10.2): a list over its element decoder, a set as a list
-        // deduplicated, a map over its value decoder with the keys remapped through the key type.
-        // Without this a collection could only reach an example inside a data, so a behavior taking
-        // one had to be given a wrapper that exists for no other reason (issue #97).
-        if (type instanceof Type.ListOf list) {
-            return ObjectDecoders.list(decoderFor(list.element()));
-        }
-        if (type instanceof Type.SetOf set) {
-            return ObjectDecoders.list(decoderFor(set.element()))
-                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
-        }
-        if (type instanceof Type.MapOf map) {
-            return rekeyed(ObjectDecoders.map(decoderFor(map.value())), map.key());
-        }
-        throw new FixtureException("`" + Type.show(type) + "` is not supported as an example value yet");
-    }
-
-    /**
-     * A map's keys, built through the key type after the values decode — so the key's invariant runs
-     * and a fixture that breaks it is reported instead of reaching the behavior as a bare string.
-     * Every key is tried and its failures merged, as the derived decoder's rekey helper does, so a
-     * fixture with two bad keys names both rather than stopping at the first, and two keys that are
-     * one key once built are refused rather than collapsed.
-     *
-     * <p>Every key kind is rekeyed, not the named ones alone. A map that crosses may also be keyed by
-     * a temporal or by a plain {@code String}, and a key left as the text the decoded map carried is
-     * a key the behavior cannot look up by the type it was declared with.
-     */
-    private Decoder<Object, ?> rekeyed(Decoder<Object, ?> values, Type key) {
-        Decoder<Object, ?> keyDecoder = keyDecoderFor(key);
-        return values.flatMapWithPath((decoded, path) -> {
-            Map<Object, Object> out = new LinkedHashMap<>();
-            Issues issues = Issues.EMPTY;
-            for (Map.Entry<?, ?> entry : ((Map<?, ?>) decoded).entrySet()) {
-                net.unit8.raoh.Path at = path.append(String.valueOf(entry.getKey()));
-                Result<?> k = keyDecoder.decode(entry.getKey(), at);
-                switch (k) {
-                    case Ok<?>(var decodedKey) -> {
-                        if (out.containsKey(decodedKey)) {
-                            issues = issues.merge(((Err<?>) Result.fail(at, "duplicate_key",
-                                    "two keys are the same key once decoded")).issues());
-                        } else {
-                            out.put(decodedKey, entry.getValue());
-                        }
-                    }
-                    case Err<?>(var found) -> issues = issues.merge(found);
+            //
+            // A shape that got here was admitted, and admitting a name is the compiler saying a
+            // codec was derived for it. So the class not being there, or having no `decoder()`, is
+            // this compiler disagreeing with itself and not a fixture that cannot be read — which is
+            // what reporting it as one used to make of it, in the reader's own words, about a
+            // program the author would find nothing wrong with.
+            case FixtureShape.Nominal n -> {
+                try {
+                    Class<?> c = loader.loadClass(n.name().qualified());
+                    yield (Decoder<Object, ?>) staticCodec(c, "decoder");
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("`" + n.name().qualified() + "` was admitted as a"
+                            + " type a fixture builds through its derived decoder, and it has none", e);
                 }
             }
-            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
-        });
-    }
-
-    /** The decoder for one boundary map key, over the text the decoded map carried. Which key it is
-     *  is the checker's rule to say, asked here rather than written out again — a fixture is read
-     *  from a written expression, not from the codec IR the witness travels in. This is not
-     *  {@link #decoderFor}: there a {@code Date} is handed over already parsed, and in key position
-     *  it is the text that arrives. */
-    private Decoder<Object, ?> keyDecoderFor(Type key) {
-        BoundaryMapKey classified = TypeOps.classifyConcreteMapKey(key, symbols);
-        if (classified == null) {
-            throw new FixtureException("`" + Type.show(key) + "` cannot key a Map that crosses");
-        }
-        return switch (classified) {
-            case BoundaryMapKey.StringNewtype n -> decoderFor(Type.ref(n.name()));
-            case BoundaryMapKey.UnitEnum e -> decoderFor(Type.ref(e.name()));
-            case BoundaryMapKey.Text _ -> keyText();
-            case BoundaryMapKey.Date _ -> keyText().date();
-            case BoundaryMapKey.DateTime _ -> keyText().dateTime();
+            // A collection is decoded the way a data's collection field is, built from the same
+            // pieces the derived decoder is (spec 10.2): a list over its element decoder, a set as a
+            // list deduplicated, a map over its value decoder with the keys read by their own.
+            case FixtureShape.ListOf l -> ObjectDecoders.list(decoderFor(l.element()));
+            case FixtureShape.SetOf s -> ObjectDecoders.list(decoderFor(s.element()))
+                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
+            case FixtureShape.MapOf m -> mapDecoder(m.key(), m.value());
         };
     }
 
-    /** The string leaf a key's text is read through, canonicalizing as every arriving text is. */
-    private static StringDecoder<Object> keyText() {
-        return ObjectDecoders.string().normalize();
+    /** The leaf decoder for a scalar. A fixture hands over the value it wrote — a temporal arrives
+     *  parsed, since that is what the checker read — so these are the neutral-source decoders and
+     *  not the ones that parse text. */
+    private static Decoder<Object, ?> leafDecoder(LeafScalar scalar) {
+        return switch (scalar) {
+            case STRING -> ObjectDecoders.string();
+            case INT -> ObjectDecoders.long_();
+            case BOOL -> ObjectDecoders.bool();
+            case DECIMAL -> ObjectDecoders.decimal();
+            case DATE -> ObjectDecoders.date();
+            case DATETIME -> ObjectDecoders.dateTime();
+        };
+    }
+
+    /**
+     * The decoder for a map a fixture writes.
+     *
+     * <p>Its own rather than the neutral-source map decoder wrapped in a rekey. That one reads an
+     * object of strings, which is the form a map crosses a boundary as; a fixture writes a list of
+     * pairs and what it hands over is a map of the keys themselves. Reading it through the string
+     * form was what made a {@code Map<Int, Int>} unbuildable — the last of the boundary's
+     * assumptions standing in a position that crosses nothing.
+     *
+     * <p>Both sides go through their own decoder, so a key's invariant runs where a key is written
+     * and a value's where a value is. Every entry is tried and the failures merged, so a fixture
+     * with two bad entries names both rather than stopping at the first, and two keys that are one
+     * key once decoded are refused rather than collapsed.
+     */
+    private Decoder<Object, ?> mapDecoder(FixtureShape key, FixtureShape value) {
+        Decoder<Object, ?> keys = decoderFor(key);
+        Decoder<Object, ?> values = decoderFor(value);
+        return (raw, path) -> {
+            if (!(raw instanceof Map<?, ?> entries)) {
+                return Result.fail(path, "not_a_map",
+                        "a `Map` fixture is a list of (key, value) pairs, e.g. [ (\"apple\", 3) ]");
+            }
+            Map<Object, Object> out = new LinkedHashMap<>();
+            Issues issues = Issues.EMPTY;
+            for (Map.Entry<?, ?> entry : entries.entrySet()) {
+                net.unit8.raoh.Path at = path.append(String.valueOf(entry.getKey()));
+                Result<?> k = keys.decode(entry.getKey(), at);
+                Result<?> v = values.decode(entry.getValue(), at);
+                if (k instanceof Err<?>(var badKey)) {
+                    issues = issues.merge(badKey);
+                }
+                if (v instanceof Err<?>(var badValue)) {
+                    issues = issues.merge(badValue);
+                }
+                if (k instanceof Ok<?>(var decodedKey) && v instanceof Ok<?>(var decodedValue)) {
+                    if (out.containsKey(decodedKey)) {
+                        issues = issues.merge(((Err<?>) Result.fail(at, "duplicate_key",
+                                "two keys are the same key once decoded")).issues());
+                    } else {
+                        out.put(decodedKey, decodedValue);
+                    }
+                }
+            }
+            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
+        };
     }
 
     /** One decoded input, in the form the compiler owns. Never throws: a value that cannot be read is
@@ -1113,9 +1126,9 @@ public final class FixtureReader {
         }
     }
 
-    java.util.Optional<String> refuse(Type type, Ast.Expr fixture) {
+    java.util.Optional<String> refuse(BoundaryInput at, Ast.Expr fixture) {
         try {
-            built(fixture, type);
+            built(fixture, at);
             return java.util.Optional.empty();
         } catch (FixtureException e) {
             return java.util.Optional.of(e.getMessage());

@@ -719,7 +719,7 @@ public final class Adequacy {
             Generator.Subject subject = new Generator.Subject(parameters, sig.inputTypes(),
                     partitioning.axes(), symbols);
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
-                    : (at, candidate) -> building.refuse(sig.inputTypes().get(at), candidate.value());
+                    : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
 
             List<Map<AxisId, Classification>> existing = rows.stream()
                     .map(row -> RowClasses.of(row, parameters, partitioning.axes())).toList();

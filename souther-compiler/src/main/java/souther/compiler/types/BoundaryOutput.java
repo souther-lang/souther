@@ -16,7 +16,7 @@ public sealed interface BoundaryOutput {
     Type type();
 
     /** A scalar the boundary writes as itself. */
-    record Scalar(BoundaryScalar scalar) implements BoundaryOutput {
+    record Scalar(LeafScalar scalar) implements BoundaryOutput {
         @Override
         public Type type() {
             return scalar.type();

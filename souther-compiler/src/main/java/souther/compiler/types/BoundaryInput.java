@@ -23,7 +23,7 @@ public sealed interface BoundaryInput {
     Type type();
 
     /** A scalar the boundary writes as itself. */
-    record Scalar(BoundaryScalar scalar) implements BoundaryInput {
+    record Scalar(LeafScalar scalar) implements BoundaryInput {
         @Override
         public Type type() {
             return scalar.type();
