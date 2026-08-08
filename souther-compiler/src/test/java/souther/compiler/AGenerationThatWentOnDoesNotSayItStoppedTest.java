@@ -101,9 +101,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
                 Generator.fill(subject, List.of(row), Generator.CandidateCheck.ANY);
 
         assertFalse(filled.rows().isEmpty(), "the positions it could read were filled");
-        GenerationReason why = assertInstanceOf(GenerationReason.PositionWithheld.class,
-                filled.reasons().get(0));
-        assertFalse(why.stopped(), "it went on without that position");
+        assertInstanceOf(GenerationReason.PositionWithheld.class, filled.reasons().get(0));
 
         String written = written(filled);
         assertTrue(written.contains("example submit"), written);

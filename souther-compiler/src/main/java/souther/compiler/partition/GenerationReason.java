@@ -15,9 +15,6 @@ package souther.compiler.partition;
  */
 public sealed interface GenerationReason {
 
-    /** Whether the generation ended here, as against carrying on with less. */
-    boolean stopped();
-
     /**
      * A position no work was offered at, because some row's value there could not be read.
      *
@@ -25,13 +22,7 @@ public sealed interface GenerationReason {
      * about may be a row that is already there, and telling an author to write one is worse than
      * saying nothing: it is a specific piece of work that is already done.
      */
-    record PositionWithheld(AxisId axis) implements GenerationReason {
-
-        @Override
-        public boolean stopped() {
-            return false;
-        }
-    }
+    record PositionWithheld(AxisId axis) implements GenerationReason {}
 
     /**
      * Rows exist that nothing read, so nothing was offered at all.
@@ -50,21 +41,10 @@ public sealed interface GenerationReason {
         public RowsNotRead {
             because = java.util.List.copyOf(because);
         }
-
-        @Override
-        public boolean stopped() {
-            return true;
-        }
     }
 
     /** The search ended before it had covered everything, with this many combinations left. */
-    record SearchLimit(String behavior, int combinations) implements GenerationReason {
-
-        @Override
-        public boolean stopped() {
-            return true;
-        }
-    }
+    record SearchLimit(String behavior, int combinations) implements GenerationReason {}
 
     /**
      * Nothing could be built to try, so the generation never began.
@@ -73,11 +53,5 @@ public sealed interface GenerationReason {
      * candidates through would not link, and which of the things that raise a {@code LinkageError}
      * happened is not something anything here can tell.
      */
-    record ClassesWouldNotLink(String behavior) implements GenerationReason {
-
-        @Override
-        public boolean stopped() {
-            return true;
-        }
-    }
+    record ClassesWouldNotLink(String behavior) implements GenerationReason {}
 }
