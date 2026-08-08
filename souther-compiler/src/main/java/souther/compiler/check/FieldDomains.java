@@ -76,18 +76,16 @@ public final class FieldDomains {
      */
     public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
                                   Map<String, BigDecimal> settled) {
-        if (data.newtype()) {
-            // A newtype's value is the same position it is, so there are no siblings and no bounds
-            // to hand out per field. Whether a row can be written at an edge is still a question: its
-            // own rules can hold a hole no range keeps, and the edge of the range is then a value
-            // nothing builds. Answering it `true` here is what made that depend on whether the
-            // newtype was a parameter or a field of one.
-            return new FieldDomains(Map.of(), false, true, NumericDomain.top(),
-                    () -> InvariantChecker.everyRuleRead(named, data, symbols));
-        }
+        // A newtype is read the same way, and only its bounds are not worth handing back: its value
+        // is the same position it is, so there are no siblings to relate. Everything else is the same
+        // question — its own rules can hold a hole no range keeps, and they can contradict, and both
+        // answers were being given away by treating it as a value with nothing to say.
         InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, settled);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
+            if (data.newtype()) {
+                return;
+            }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
             if (!bounds.isEmpty()) {
                 out.put(field, bounds);

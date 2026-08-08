@@ -369,6 +369,40 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         assertTrue(report.contains("not known to be writable: f/n = 0"), () -> report);
     }
 
+    /**
+     * A type whose own rules contradict has no edges to reach.
+     *
+     * <p>Nothing is a value of it, so both ends of the range its rules describe are values nobody
+     * writes. What settles that is the domain those rules were read into, and a newtype taken
+     * straight as a parameter was not being read into one at all — its bounds were taken from the
+     * type and its feasibility from nowhere.
+     *
+     * <p>Asserted on the count and not on the findings: with no value of the type there can be no
+     * row either, so nothing was ever reported at these edges. What was wrong is that they were
+     * counted as measurements waiting for a row.
+     */
+    @Test
+    void aTypeWhoseRulesContradictHasNoEdgesToReach() throws Exception {
+        String report = reportOn("""
+                module example.impossible
+
+                data Impossible = Int
+                    invariant low = value >= 10
+                    invariant high = value <= 0
+
+                data Ok
+
+                behavior f : (n: Impossible) -> Ok
+                    constructs Ok
+
+                let f (n) = Ok
+                """);
+
+        assertTrue(report.contains("boundary    0/0"), () -> report);
+        assertFalse(report.contains("not measured"),
+                () -> "10 and 0 are not measurements waiting for a row:\n" + report);
+    }
+
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test
