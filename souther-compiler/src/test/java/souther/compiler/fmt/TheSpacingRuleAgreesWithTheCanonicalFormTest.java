@@ -10,9 +10,9 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * {@link Spacing#between} writes what the canonical form writes. The function is new and the
- * formatter does not call it yet — the constructs still spell their own separators, which is what
- * issue #476 is about — so this is what says the function is right before anything is moved onto it.
+ * {@link Spacing#between} writes what the canonical form writes. Every separator in the output is
+ * now this function's, so what this says is not that a new function agrees with the constructs that
+ * used to spell them — it is that the one place they were moved to still writes what they wrote.
  *
  * <p>What it is held against is the rendered text: the corpus is formatted, the output is parsed
  * again, and the interval between two tokens the output left on one line is read off the output.

@@ -13,9 +13,9 @@ import java.util.Set;
  * answer: nothing, or one space.
  *
  * <p>Which of the two is read from the kind on each side and the construct joining them, and from
- * nothing else. For all but ten pairs of kinds the pair alone decides; those ten are held with
- * each construct's answer, and a construct whose answer is not a fact about the kinds at all holds
- * a face below. A pair no list holds is refused rather than given a default, because a
+ * nothing else. For all but twelve pairs of kinds the pair alone decides; those twelve are held
+ * with each construct's answer, and a construct whose answer is not a fact about the kinds at all
+ * holds a face below. A pair no list holds is refused rather than given a default, because a
  * new adjacency is a decision and this is where it is made — the alternative is that it is made by
  * whichever construct happens to write it first, which is the arrangement issue #476 describes.
  *
@@ -124,8 +124,8 @@ final class Spacing {
 
     /**
      * The pairs the joining construct decides, and what each construct answers. These are the pairs
-     * written both ways somewhere in the corpus; every other pair takes one answer wherever it
-     * occurs.
+     * either the corpus or the grammar domain showed both answers for; every other pair takes one
+     * answer wherever it occurs.
      */
     private static final String DECIDED_ROWS = """
             # A list of names is written open — `exposing ( a, b )`, `import m ( a, b )` — and every
