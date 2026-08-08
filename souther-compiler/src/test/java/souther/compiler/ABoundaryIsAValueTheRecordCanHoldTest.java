@@ -168,6 +168,54 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     }
 
     /**
+     * An end only the record imposes rules out a line beyond it as much as one the type repeats.
+     *
+     * <p>Above, both fields carry an end of their own and the record moves one of them. Here
+     * {@code Count} bounds its value below and nothing above, and the cap on {@code b} is written on
+     * the record alone. What a position can hold is the whole of what its rules leave it, whichever
+     * of them said so — read off the type's own ends, the cap is invisible, and a guard at 50 is left
+     * dividing a range that stops at 10.
+     */
+    @Test
+    void anEndOnlyTheRecordImposesRulesOutALineBeyondIt() throws Exception {
+        String report = reportOn("""
+                module example.capped
+
+                data Count = Int
+                    invariant lower = value >= 0
+
+                data Pair =
+                    { a: Count
+                    , b: Count
+                    }
+                    invariant cap = b <= 10
+                    invariant ordered = a < b
+
+                data Small
+                data Big
+
+                behavior classify : (pair: Pair) -> Small | Big
+                    constructs Small, Big
+
+                let classify (pair) =
+                    if pair.b.value >= 50
+                        then Big
+                        else Small
+                """, "--generate", "--boundaries");
+
+        assertFalse(report.contains("pair.b = 50"),
+                () -> "no pair holds a `b` of 50, so the guard draws no line there:\n" + report);
+        assertFalse(report.contains("pair.b = 49"),
+                () -> "and none holds the value below it either:\n" + report);
+        assertFalse(report.contains("pair.b=50 <= x"),
+                () -> "a class nothing can be in is not a class:\n" + report);
+        assertTrue(report.contains("pair.b = 1"),
+                () -> "the end the record moved is still asked for:\n" + report);
+        assertFalse(report.contains("every value tried was refused"),
+                () -> "and everything left is writable:\n" + report);
+    }
+
+    /**
      * A row filling a class picks the rest of the record beside the value it settled on.
      *
      * <p>The boundary filler and the class filler are two searches over one record, and only one of

@@ -233,6 +233,7 @@ public final class Partitions {
         return List.copyOf(out);
     }
 
+
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
@@ -245,14 +246,17 @@ public final class Partitions {
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed != null && placed.domains().infeasible();
-        Bounds here = nothingExists ? null : narrowed(own, placed == null ? null : placed.at(path));
-        if (here != null && !here.isEmpty()) {
-            domains.put(path.toString(), new NumericDomain.Bounds(
-                    here.min() == null ? null : here.min().value(),
-                    here.max() == null ? null : here.max().value()));
+        NumericDomain.Bounds projected = placed == null ? null : placed.at(path);
+        // Two questions of one pair of readings, and they do not have one answer. What the position
+        // can hold is every rule about it intersected; where it is divided is only where its own type
+        // draws a line, because a clause relating two fields is not a partition of one of them.
+        NumericDomain.Bounds admissible = nothingExists ? null : admissibleBounds(own, projected);
+        if (admissible != null && !admissible.isEmpty()) {
+            domains.put(path.toString(), admissible);
         }
+        Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
-                : cutsOf(type, here, own, placed == null ? null : placed.value());
+                : cutsOf(type, axis, own, placed == null ? null : placed.value());
         // Whether a row can be written at an edge is a question about the whole value the position
         // sits in, so it is answered once for the parameter. A rule this could not read is a way that
         // value can be refused, wherever in it the rule is written.
@@ -296,14 +300,18 @@ public final class Partitions {
     }
 
     /**
-     * The type's own bound, taken in to where the record it sits in stops.
+     * Where the position is divided: the type's own bound, taken in to where the record it sits in
+     * stops.
      *
      * <p>Only taken in. A record's rule moves an edge the type already has; it does not put one on a
      * position the type left open. An {@code Int} nobody bounded stays a position the model draws no
      * line through, which is what a report says of it (ADR-0090) — giving it an edge here would make
      * a rule relating two fields into a partition of one of them.
+     *
+     * <p>So this is not what the position can hold, and reading it as that is how a cap written on
+     * the record alone became invisible: see {@link #admissibleBounds}.
      */
-    private static Bounds narrowed(Bounds own, NumericDomain.Bounds projected) {
+    private static Bounds axisBounds(Bounds own, NumericDomain.Bounds projected) {
         if (own == null || projected == null) {
             return own;
         }
@@ -315,6 +323,29 @@ public final class Partitions {
                 own.max() == null ? null
                         : new End(lowest(own.max().value(), projected.max()), own.max().from()),
                 own.decimal());
+    }
+
+    /**
+     * What the position can hold: every rule reaching it, intersected.
+     *
+     * <p>An end survives from whichever side has one, because a value outside it is refused whether
+     * the type said so or the record did. That is the difference from {@link #axisBounds}: a cap the
+     * record alone imposes is not a line dividing this position, and it is still where its values
+     * stop — so a guard beyond it divides nothing and is no edge either.
+     *
+     * <p>Numbers and no names. An end here says where the values stop; which rule put it there is a
+     * cut's question, and answering it from a projection would name a rule that never mentioned this
+     * position on its own.
+     */
+    private static NumericDomain.Bounds admissibleBounds(Bounds own, NumericDomain.Bounds projected) {
+        if (own == null) {
+            return null;   // not a number, so nothing bounds it either way
+        }
+        BigDecimal min = own.min() == null ? null : own.min().value();
+        BigDecimal max = own.max() == null ? null : own.max().value();
+        return projected == null ? new NumericDomain.Bounds(min, max)
+                : new NumericDomain.Bounds(highest(min, projected.min()),
+                        lowest(max, projected.max()));
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -618,9 +649,10 @@ public final class Partitions {
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
-        Bounds bounds = narrowed(boundsOf(new Type.Ref(newtype), symbols), within);
+        Bounds own = boundsOf(new Type.Ref(newtype), symbols);
+        NumericDomain.Bounds bounds = admissibleBounds(own, within);
         if (bounds != null && !bounds.isEmpty()) {
-            candidates.add(bounds.decimal()
+            candidates.add(own.decimal()
                     ? FixtureTemplate.decimal(inside(bounds))
                     : FixtureTemplate.integer(inside(bounds).longValueExact()));
         }
@@ -646,9 +678,9 @@ public final class Partitions {
 
     /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
      * there is, and it is the value a boundary wants written anyway. */
-    private static BigDecimal inside(Bounds bounds) {
-        return bounds.min() != null ? bounds.min().value()
-                : bounds.max() != null ? bounds.max().value() : BigDecimal.ZERO;
+    private static BigDecimal inside(NumericDomain.Bounds bounds) {
+        return bounds.min() != null ? bounds.min()
+                : bounds.max() != null ? bounds.max() : BigDecimal.ZERO;
     }
 
     /**
