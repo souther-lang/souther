@@ -666,15 +666,23 @@ public final class Partitions {
      */
     static List<FixtureTemplate> displacedRepresentativesOf(Type type, Symbols symbols,
                                                             NumericDomain.Bounds within) {
-        List<FixtureTemplate> base = representativesOf(type, symbols, within);
+        List<FixtureTemplate> base = new ArrayList<>(representativesOf(type, symbols, within));
+        // What a position holds back for the product search's second pass is on offer here from the
+        // start. This pass runs only where both of those have already failed, and a position keeping
+        // a value from the last search there is a value nothing will ever be tried at.
+        for (FixtureTemplate held : inReserve(type, symbols, within)) {
+            if (base.stream().noneMatch(each -> each.text().equals(held.text()))) {
+                base.add(held);
+            }
+        }
         Type numeric = TypeOps.numericBase(type, symbols);
         if (numeric == null) {
-            return base;
+            return List.copyOf(base);
         }
         NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), within);
         BigDecimal step = displaced(range, numeric == Type.INT);
         if (step == null) {
-            return base;
+            return List.copyOf(base);
         }
         FixtureTemplate bare = numeric == Type.DECIMAL ? FixtureTemplate.decimal(step)
                 : FixtureTemplate.integer(step.longValueExact());
@@ -682,11 +690,10 @@ public final class Partitions {
                 && symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()
                 ? FixtureTemplate.newtype(ref.name(), bare) : bare;
         if (base.stream().anyMatch(each -> each.text().equals(value.text()))) {
-            return base;
+            return List.copyOf(base);
         }
-        List<FixtureTemplate> out = new ArrayList<>(base);
-        out.add(value);
-        return List.copyOf(out);
+        base.add(value);
+        return List.copyOf(base);
     }
 
     /** A second number of a range, or null where the type has none to give. */
@@ -810,13 +817,14 @@ public final class Partitions {
                 || !data.newtype()) {
             return List.of();
         }
-        Bounds bounds = narrowed(boundsOf(type, symbols), within);
+        Bounds own = boundsOf(type, symbols);
+        NumericDomain.Bounds bounds = admissibleBounds(own, within);
         if (bounds == null || bounds.min() == null || bounds.max() == null
-                || bounds.max().value().compareTo(bounds.min().value()) == 0) {
+                || bounds.max().compareTo(bounds.min()) == 0) {
             return List.of();
         }
-        BigDecimal far = bounds.max().value();
-        FixtureTemplate held = FixtureTemplate.newtype(ref.name(), bounds.decimal()
+        BigDecimal far = bounds.max();
+        FixtureTemplate held = FixtureTemplate.newtype(ref.name(), own.decimal()
                 ? FixtureTemplate.decimal(far) : FixtureTemplate.integer(far.longValueExact()));
         // Nothing already on offer: a range whose far edge is the number the base type stands for
         // would otherwise hold the same value twice, once in each tier.

@@ -90,6 +90,49 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
     }
 
     /**
+     * A bare decimal between two ends is offered the one between them.
+     *
+     * <p>A newtype holds its far end back for the search that runs before this one; a bare number has
+     * no such reserve, and the end it is offered first is the one a weakened strict bound puts it at.
+     * The midpoint is an ordinary decimal the range names.
+     */
+    @Test
+    void aBareDecimalIsOfferedTheValueBetweenItsEnds() throws Exception {
+        String model = """
+                module example.bare
+
+                data R =
+                    { a: Decimal
+                    , b: Decimal
+                    }
+                    invariant aRange = a >= 0.0m && a <= 1.0m
+                    invariant bRange = b >= 0.0m && b <= 1.0m
+                    invariant ordered = a < b
+
+                data Ok
+
+                behavior f : (r: R, flag: Bool) -> Ok
+                    constructs Ok
+
+                let f (r, flag) = Ok
+                """;
+        Path file = Files.createTempDirectory("souther-bare").resolve("model.sou");
+        Files.writeString(file, model);
+        PrintStream was = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[] {"examples", "--generate", file.toString()});
+        } finally {
+            System.setOut(was);
+        }
+        String rows = out.toString(StandardCharsets.UTF_8);
+
+        assertTrue(rows.contains("R { a = 0m, b = 0.5m }"),
+                () -> "half way between the ends `b` has:\n" + rows);
+    }
+
+    /**
      * A decimal gets a second value only between two ends.
      *
      * <p>A whole number has a next one. A decimal does not, and an epsilon is a value the type does

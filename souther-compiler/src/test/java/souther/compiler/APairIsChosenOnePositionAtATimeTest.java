@@ -92,7 +92,7 @@ class APairIsChosenOnePositionAtATimeTest {
      *
      * <p>Choosing {@code low} first leaves {@code high} at zero and above, because {@code low < high}
      * over the decimals is recorded as {@code low - high <= 0} — so the end the projection offers is
-     * the one value the rule refuses. What gets past it is a second value inside the range, and the
+     * the one value the rule refuses. What gets past it is a second value from the range, and the
      * ends themselves stay where they were: the report still cannot say that a {@code high} of zero
      * is impossible rather than untried, because the bound it would have to read that off is the
      * weakened one (#483).
@@ -130,9 +130,8 @@ class APairIsChosenOnePositionAtATimeTest {
         }
         String rows = out.toString(StandardCharsets.UTF_8);
 
-        assertTrue(rows.contains("high = Ratio(0.5m)"),
-                () -> "a value between the ends, which the range names and an epsilon would not:\n"
-                        + rows);
+        assertTrue(rows.contains("high = Ratio(1m)"),
+                () -> "the far end of what `high` can hold, which the range names:\n" + rows);
         assertTrue(rows.contains("no row for `band.high = 0`"),
                 () -> "and the end itself is still where nothing can be written:\n" + rows);
     }
