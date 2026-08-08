@@ -68,7 +68,7 @@ public final class FieldDomains {
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
         return new FieldDomains(Map.copyOf(out),
-                () -> seeded.everyClauseRead() && seeded.numbers().everythingIsProjectable()
+                () -> seeded.everyClauseRead() && seeded.numbers().projectionIsLossless()
                         && InvariantChecker.everyRuleIsDerivable(named, data, symbols));
     }
 

@@ -125,6 +125,29 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("low"), 0, 1);
         assertBounds(domains.at("high"), 0, 1);
+        assertFalse(domains.exact(),
+                "the true range is open at one end, which these bounds cannot hold, so neither 1 nor"
+                        + " 0 is promised to be writable");
+    }
+
+    /** A rule that skips a value is a hole in a range, and a range is all the domain holds. The bound
+     * stays where the type left it and says it is not the whole story. */
+    @Test
+    void aRuleThatSkipsAValueLeavesTheAnswerInexact() {
+        FieldDomains domains = domainsIn("""
+                module example.skip
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+
+                data R =
+                    { a: N
+                    }
+                    invariant nonzero = a.value /= 0
+                """, "R");
+
+        assertBounds(domains.at("a"), 0, 10);
+        assertFalse(domains.exact(), "0 is in these bounds and no row can write it");
     }
 
     /** A length is a whole number like any other, so a rule relating one to a field is in the

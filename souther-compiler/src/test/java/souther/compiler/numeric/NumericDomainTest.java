@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -217,6 +218,58 @@ class NumericDomainTest {
                 .assume(atom(A), Rel.LE, whole(A));
 
         assertTrue(d.isBottom(), "a >= 1 and a <= 0 cannot both hold");
+    }
+
+    // --- what an assertion arrived with and the domain did not keep --------------------------------
+
+    @Test
+    void anIntervalAndADifferenceOverWholeNumbersLoseNothing() {
+        NumericDomain d = NumericDomain.top()
+                .assume(atom(A).minus(atom(B)), Rel.LT, whole(A, B))
+                .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
+                .assume(atom(A).negate(), Rel.LE, whole(A));
+
+        assertTrue(d.projectionIsLossless(), () -> "lost " + d.losses());
+    }
+
+    /** A strict bound over decimals is recorded as the non-strict one, so the edge it names is a
+     * value the rule refuses. Sound as a bound, and not an edge anybody can write. */
+    @Test
+    void aStrictBoundOnADenseAtomIsRecordedAsALoss() {
+        NumericDomain interval = NumericDomain.top()
+                .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
+        NumericDomain difference = NumericDomain.top()
+                .assume(atom(A).minus(atom(B)), Rel.LT, dense(A, B));
+
+        assertFalse(interval.projectionIsLossless());
+        assertEquals(Set.of(NumericDomain.Loss.WEAKENED_STRICT), interval.losses());
+        assertEquals(Set.of(NumericDomain.Loss.WEAKENED_STRICT), difference.losses());
+    }
+
+    /** The same over whole numbers keeps everything: there the strictness became a step. */
+    @Test
+    void aStrictBoundOnAWholeNumberIsNoLoss() {
+        assertTrue(NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, whole(A))
+                .projectionIsLossless());
+    }
+
+    /** A disequality is a hole in a range, and a range is all this holds. */
+    @Test
+    void aDisequalityIsRecordedAsALoss() {
+        NumericDomain d = NumericDomain.top().assume(atom(A), Rel.NE, whole(A));
+
+        assertEquals(Set.of(NumericDomain.Loss.DROPPED_DISEQUALITY), d.losses());
+    }
+
+    /** A form of neither shape proves things and no bound is derived through it. */
+    @Test
+    void aFormOfNeitherShapeIsRecordedAsALoss() {
+        NumericDomain d = NumericDomain.top()
+                .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
+
+        assertEquals(Set.of(NumericDomain.Loss.KEPT_UNPROJECTABLE), d.losses());
+        assertTrue(d.entails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
+                "still proves what it was told, and holds no bound from it");
     }
 
     // --- what the domain refuses to be told -------------------------------------------------------

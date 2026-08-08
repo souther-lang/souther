@@ -77,21 +77,46 @@ public final class NumericDomain {
     private final Map<String, Map<String, BigDecimal>> diff;   // diff[a][b] = tightest known (a - b)
     private final List<Asserted> kept;                         // forms outside both shapes, as written
     private final Map<String, Granularity> kinds;              // atom -> how its values are spaced
+    private final Set<Loss> losses;                            // what was asserted and not recorded
     private Map<String, Map<String, BigDecimal>> closed;       // diff closed transitively, on first ask
 
     private NumericDomain(boolean bottom, Map<String, BigDecimal> lo, Map<String, BigDecimal> hi,
                           Map<String, Map<String, BigDecimal>> diff, List<Asserted> kept,
-                          Map<String, Granularity> kinds) {
+                          Map<String, Granularity> kinds, Set<Loss> losses) {
         this.bottom = bottom;
         this.lo = lo;
         this.hi = hi;
         this.diff = diff;
         this.kept = kept;
         this.kinds = kinds;
+        this.losses = losses;
     }
 
     public static NumericDomain top() {
-        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of());
+        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Set.of());
+    }
+
+    /**
+     * A way an assertion arrived holding more than the domain kept of it.
+     *
+     * <p>Recorded where it happens rather than read back afterwards. What the bounds say is sound
+     * either way — everything dropped here was a narrowing, and a wider bound proves less — but a
+     * caller turning a bound into a value somebody has to write needs to know the edge is where the
+     * rules stop and not merely where this stopped reading them.
+     */
+    public enum Loss {
+
+        /** A strict bound on an atom with no smallest step. {@code x < 1} over the decimals admits
+         * everything under 1 and no largest of them, so the bound recorded is {@code x <= 1} and the
+         * edge it names is a value the rule refuses. */
+        WEAKENED_STRICT,
+
+        /** A disequality. {@code x /= 0} is a hole in a range, and a range is all this holds. */
+        DROPPED_DISEQUALITY,
+
+        /** A form that is neither an interval nor a difference, kept as written. It proves things
+         * ({@link #entails} reads it) and no bound is derived through it. */
+        KEPT_UNPROJECTABLE
     }
 
     public boolean isBottom() {
@@ -110,10 +135,13 @@ public final class NumericDomain {
      */
     public NumericDomain assume(LinearForm f, Rel rel, Map<String, Granularity> atomKinds) {
         NumericDomain d = knowing(f.coefs().keySet(), atomKinds);
-        if (d.bottom || rel == Rel.NE) {
+        if (d.bottom) {
+            return d;
+        }
+        if (rel == Rel.NE) {
             // `f != 0` is a disjunction, and the domain holds conjunctions of bounds. Nothing to
             // record; what settles such a guard is the fact keyed on the comparison itself.
-            return d;
+            return f.coefs().isEmpty() ? d : d.losing(Loss.DROPPED_DISEQUALITY);
         }
         if (rel == Rel.EQ) {
             return d.addLe(f, false).addLe(f.negate(), false);
@@ -151,7 +179,7 @@ public final class NumericDomain {
             next.put(atom, given);
         }
         return next == null ? this
-                : new NumericDomain(bottom, lo, hi, diff, kept, Map.copyOf(next));
+                : new NumericDomain(bottom, lo, hi, diff, kept, Map.copyOf(next), losses);
     }
 
     /**
@@ -182,10 +210,13 @@ public final class NumericDomain {
             java.math.MathContext mc = new java.math.MathContext(
                     34, upper ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
             BigDecimal bound = g.constant().negate().divide(k, mc);
+            NumericDomain into = this;
             if (kinds.get(a) == Granularity.DISCRETE) {
                 bound = whole(bound, upper, strict);
+            } else if (strict) {
+                into = losing(Loss.WEAKENED_STRICT);
             }
-            return upper ? withHi(a, bound) : withLo(a, bound);
+            return upper ? into.withHi(a, bound) : into.withLo(a, bound);
         }
         String[] ab = unitDiffAtoms(c);
         if (ab != null) {
@@ -193,17 +224,21 @@ public final class NumericDomain {
             // one dense atom on either side leaves the difference with no smallest step, so the
             // bound stays where the constant put it.
             BigDecimal bound = g.constant().negate();
+            NumericDomain into = this;
             if (kinds.get(ab[0]) == Granularity.DISCRETE
                     && kinds.get(ab[1]) == Granularity.DISCRETE) {
                 bound = whole(bound, true, strict);
+            } else if (strict) {
+                into = losing(Loss.WEAKENED_STRICT);
             }
-            return withDiff(ab[0], ab[1], bound);
+            return into.withDiff(ab[0], ab[1], bound);
         }
         // Neither shape holds it — a sum of two lengths, say. Keeping the form as written is what lets
         // a guard restating an invariant discharge it, which is the promise the flagging rests on.
         List<Asserted> next = new ArrayList<>(kept);
         next.add(new Asserted(g, strict));
-        return new NumericDomain(false, lo, hi, diff, List.copyOf(next), kinds);
+        return new NumericDomain(false, lo, hi, diff, List.copyOf(next), kinds,
+                with(Loss.KEPT_UNPROJECTABLE));
     }
 
     /**
@@ -398,13 +433,29 @@ public final class NumericDomain {
     /**
      * Whether everything this holds is held in a shape {@link #boundsOf} reads.
      *
-     * <p>False where a form outside both shapes was kept as written. Such a form still proves things
-     * — {@link #entails} reads it — but no bound is derived through it, so a projection taken from a
-     * domain holding one is weaker than what the constraints actually say. A caller turning a
-     * projection into an obligation has to know which of the two it has.
+     * <p>False where anything asserted into it narrowed more than a bound could hold: see
+     * {@link Loss}. A caller turning a projection into a value somebody has to write has to know
+     * which of the two it has.
      */
-    public boolean everythingIsProjectable() {
-        return kept.isEmpty();
+    public boolean projectionIsLossless() {
+        return losses.isEmpty();
+    }
+
+    /** What was asserted and not recorded, where anything was. */
+    public Set<Loss> losses() {
+        return losses;
+    }
+
+    private NumericDomain losing(Loss loss) {
+        return losses.contains(loss) ? this
+                : new NumericDomain(bottom, lo, hi, diff, kept, kinds, with(loss));
+    }
+
+    private Set<Loss> with(Loss loss) {
+        Set<Loss> next = java.util.EnumSet.noneOf(Loss.class);
+        next.addAll(losses);
+        next.add(loss);
+        return java.util.Collections.unmodifiableSet(next);
     }
 
     // --- assignment ----------------------------------------------------------------------------
@@ -457,26 +508,26 @@ public final class NumericDomain {
         });
         List<Asserted> nk = new ArrayList<>(kept);
         nk.removeIf(a -> a.f().coefs().containsKey(atom));
-        return new NumericDomain(false, nlo, nhi, nd, List.copyOf(nk), kinds);
+        return new NumericDomain(false, nlo, nhi, nd, List.copyOf(nk), kinds, losses);
     }
 
     // --- immutable updates ---------------------------------------------------------------------
 
     private NumericDomain bottom() {
-        return new NumericDomain(true, Map.of(), Map.of(), Map.of(), List.of(), kinds);
+        return new NumericDomain(true, Map.of(), Map.of(), Map.of(), List.of(), kinds, losses);
     }
 
     private NumericDomain withHi(String a, BigDecimal bound) {
         Map<String, BigDecimal> nhi = new HashMap<>(hi);
         nhi.merge(a, bound, NumericDomain::min);
-        NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept, kinds);
+        NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
     private NumericDomain withLo(String a, BigDecimal bound) {
         Map<String, BigDecimal> nlo = new HashMap<>(lo);
         nlo.merge(a, bound, NumericDomain::max);
-        NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept, kinds);
+        NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
@@ -484,7 +535,7 @@ public final class NumericDomain {
         Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
         diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
         nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, NumericDomain::min);
-        NumericDomain d = new NumericDomain(false, lo, hi, nd, kept, kinds);
+        NumericDomain d = new NumericDomain(false, lo, hi, nd, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
