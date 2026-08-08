@@ -50,12 +50,12 @@ class TheSpacingRuleAgreesWithTheCanonicalFormTest {
     }
 
     /**
-     * And the corpus reaches every pair the function holds a row for. Without this the check above
-     * passes on a table of any size, including one whose rows are never asked about — the same
-     * reason {@link WhatGoesBetweenTwoTokensOnALineTest} asserts that no row goes unreached.
+     * And it is not passing on an empty hand: this many distinct pairs are reached. It does not say
+     * the rule holds no row the corpus never asks about — it holds several, and what says those are
+     * right is that every {@code .sou} in the repository formats as it did.
      */
     @Test
-    void andTheCorpusReachesEveryPairTheRuleHoldsARowFor() {
+    void andTheCorpusReachesThisManyPairs() {
         Set<String> reached = new LinkedHashSet<>();
         for (WhatGoesBetweenTwoTokensOnALineTest.Adjacency a
                 : WhatGoesBetweenTwoTokensOnALineTest.adjacencies()) {

@@ -10,7 +10,6 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -24,9 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * running the formatter a second time into a scratch file. Both texts are in hand at the moment the
  * verdict is taken, so the difference goes out then, and the canonical form is never carried past
  * the file it was computed for.
- *
- * <p>Under the difference, the rule each spacing departure breaks. The difference says what the
- * canonical form would write and that says which rule says so, which is what the reader asks next.
  */
 class AFormatCheckShowsTheDifferenceItDecidedOnTest {
 
@@ -71,22 +67,9 @@ class AFormatCheckShowsTheDifferenceItDecidedOnTest {
         Said said = run("fmt", file.toString(), "--check");
 
         assertEquals(1, said.code());
-        assertTrue(said.out().startsWith(
-                UnifiedDiff.of(file.toString(), file + " (formatted)", UNFORMATTED, canonical)),
+        assertEquals(UnifiedDiff.of(file.toString(), file + " (formatted)", UNFORMATTED, canonical),
                 said.out());
         assertTrue(said.out().contains("@@"), said.out());
-    }
-
-    /** And under it, the rule the file departs from, where the departure is a spacing one. */
-    @Test
-    void andTheRuleEachSpacingDepartureBreaks() throws Exception {
-        Path file = source("m.sou", UNFORMATTED);
-
-        Said said = run("fmt", file.toString(), "--check");
-
-        assertEquals(List.of(file + ":3:14: LBRACE IDENT under PRODUCT_BODY:"
-                        + " this writes [   ] and the canonical form writes [ ]"),
-                said.out().lines().filter(line -> line.startsWith(file.toString())).toList());
     }
 
     /** The name the verdict used to be is in the header the difference already carries. Said twice,

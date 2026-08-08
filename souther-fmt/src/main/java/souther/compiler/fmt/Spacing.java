@@ -13,8 +13,9 @@ import java.util.Set;
  * answer: nothing, or one space.
  *
  * <p>Which of the two is read from the kind on each side and the construct joining them, and from
- * nothing else. For all but nine pairs of kinds the pair alone decides; those nine are held with
- * each construct's answer. A pair no list holds is refused rather than given a default, because a
+ * nothing else. For all but ten pairs of kinds the pair alone decides; those ten are held with
+ * each construct's answer, and a construct whose answer is not a fact about the kinds at all holds
+ * a face below. A pair no list holds is refused rather than given a default, because a
  * new adjacency is a decision and this is where it is made — the alternative is that it is made by
  * whichever construct happens to write it first, which is the arrangement issue #476 describes.
  *
@@ -64,12 +65,23 @@ final class Spacing {
         if (SPACED_PAIRS.contains(pair)) {
             return SPACED;
         }
+        String face = faceFor(FACES, joining, pair.left(), pair.right());
+        if (face != null) {
+            return face;
+        }
         throw new IllegalStateException(
                 "no rule for " + left + " " + right + " (under " + joining + ")"
                         + "; a new adjacency is a decision and it is made in Spacing");
     }
 
     private record Pair(SyntaxKind left, SyntaxKind right) {
+    }
+
+    /**
+     * One side of a construct, and what it writes against whatever stands on the other. A null side
+     * is the whatever.
+     */
+    private record Face(SyntaxKind construct, SyntaxKind left, SyntaxKind right) {
     }
 
     /**
@@ -390,6 +402,255 @@ final class Spacing {
             WITH_KW IDENT
             """;
 
+
+    /**
+     * What a construct writes at one of its own sides, whatever stands on the other. A {@code *} is
+     * that whatever.
+     *
+     * <p>These are the constructs whose answer is not a fact about the two kinds. What a field read
+     * writes around its dot is the same whether the value before it is a name, a call or a record
+     * literal — there is no pair of kinds to consult, because the left side is whatever an
+     * expression can end with, and that is not a list this rule should be keeping. Written pair by
+     * pair the rows would be the product of the kinds and would still be short of the next kind an
+     * expression learns to end with.
+     *
+     * <p>Read after the pairs, so a pair the corpus reached says what it says and these answer only
+     * where it did not. The narrowest face that covers a boundary wins, which is how a construct
+     * written open still writes its empty brackets tight. That the two together answer every
+     * boundary the grammar can build is what
+     * {@code TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest} says.
+     */
+    private static final String FACE_ROWS = """
+            # A name written through what holds it is one name.
+            QUALIFIED_NAME  *       DOT     tight
+            QUALIFIED_NAME  DOT     *       tight
+            FIELD_ACCESS    *       DOT     tight
+            FIELD_ACCESS    DOT     *       tight
+            FIELD_GETTER    DOT     *       tight
+            SPREAD_MEMBER   SPREAD  *       tight
+            SPREAD_MEMBER   *       DOT     tight
+            SPREAD_MEMBER   DOT     *       tight
+            STAGE           *       DOT     tight
+            STAGE           DOT     *       tight
+            CONSTRUCTS_CLAUSE  *    DOT     tight
+            CONSTRUCTS_CLAUSE  DOT  *       tight
+            DEPENDS_CLAUSE  *       DOT     tight
+            DEPENDS_CLAUSE  DOT     *       tight
+            # What is applied, opened or negated is written against it.
+            APPLY_EXPR      *       LPAREN  tight
+            UNARY_EXPR      MINUS   *       tight
+            PAREN_EXPR      LPAREN  *       tight
+            PAREN_EXPR      *       RPAREN  tight
+            # An operator is spaced from both of its operands.
+            BINARY_EXPR     *       *       spaced
+            PIPE_EXPR       *       *       spaced
+            # A bracketed construct written tight, and its commas.
+            ARG_LIST        LPAREN  *       tight
+            ARG_LIST        *       RPAREN  tight
+            ARG_LIST        *       COMMA   tight
+            ARG_LIST        COMMA   *       spaced
+            LIST_EXPR       LBRACKET *      tight
+            LIST_EXPR       *       RBRACKET tight
+            LIST_EXPR       *       COMMA   tight
+            LIST_EXPR       COMMA   *       spaced
+            TUPLE_EXPR      LPAREN  *       tight
+            TUPLE_EXPR      *       RPAREN  tight
+            TUPLE_EXPR      *       COMMA   tight
+            TUPLE_EXPR      COMMA   *       spaced
+            TUPLE_TYPE      LPAREN  *       tight
+            TUPLE_TYPE      *       RPAREN  tight
+            TUPLE_TYPE      *       COMMA   tight
+            TUPLE_TYPE      COMMA   *       spaced
+            TYPE_ARGS       LT      *       tight
+            TYPE_ARGS       *       GT      tight
+            TYPE_ARGS       *       COMMA   tight
+            TYPE_ARGS       COMMA   *       spaced
+            PARAM_LIST      LPAREN  *       tight
+            PARAM_LIST      *       RPAREN  tight
+            PARAM_LIST      *       COMMA   tight
+            PARAM_LIST      COMMA   *       spaced
+            FN_PARAM_LIST   LPAREN  *       tight
+            FN_PARAM_LIST   *       RPAREN  tight
+            FN_PARAM_LIST   *       COMMA   tight
+            FN_PARAM_LIST   COMMA   *       spaced
+            FN_TYPE         LPAREN  *       tight
+            FN_TYPE         *       RPAREN  tight
+            FN_TYPE         *       COMMA   tight
+            FN_TYPE         COMMA   *       spaced
+            FN_TYPE         *       ARROW   spaced
+            FN_TYPE         ARROW   *       spaced
+            LAMBDA_EXPR     LPAREN  *       tight
+            LAMBDA_EXPR     *       RPAREN  tight
+            LAMBDA_EXPR     *       COMMA   tight
+            LAMBDA_EXPR     COMMA   *       spaced
+            LAMBDA_EXPR     *       ARROW   spaced
+            LAMBDA_EXPR     ARROW   *       spaced
+            PATTERN_TUPLE   LPAREN  *       tight
+            PATTERN_TUPLE   *       RPAREN  tight
+            PATTERN_TUPLE   *       COMMA   tight
+            PATTERN_TUPLE   COMMA   *       spaced
+            PATTERN_CTOR    LPAREN  *       tight
+            PATTERN_CTOR    *       RPAREN  tight
+            LIST_COMP       LBRACKET *      tight
+            LIST_COMP       *       RBRACKET tight
+            LIST_COMP       *       COMMA   tight
+            LIST_COMP       COMMA   *       spaced
+            LIST_COMP       *       PIPE    spaced
+            LIST_COMP       PIPE    *       spaced
+            # A bracketed construct written open.
+            EXPOSING_CLAUSE LPAREN  RPAREN  tight
+            EXPOSING_CLAUSE LPAREN  *       spaced
+            EXPOSING_CLAUSE *       RPAREN  spaced
+            EXPOSING_CLAUSE *       COMMA   tight
+            EXPOSING_CLAUSE COMMA   *       spaced
+            NAME_LIST       LPAREN  RPAREN  tight
+            NAME_LIST       LPAREN  *       spaced
+            NAME_LIST       *       RPAREN  spaced
+            NAME_LIST       *       COMMA   tight
+            NAME_LIST       COMMA   *       spaced
+            NEW_DATA_EXPR   LBRACE  RBRACE  tight
+            NEW_DATA_EXPR   LBRACE  *       spaced
+            NEW_DATA_EXPR   *       RBRACE  spaced
+            NEW_DATA_EXPR   *       COMMA   tight
+            NEW_DATA_EXPR   COMMA   *       spaced
+            PATTERN_RECORD  LBRACE  RBRACE  tight
+            PATTERN_RECORD  LBRACE  *       spaced
+            PATTERN_RECORD  *       RBRACE  spaced
+            PATTERN_RECORD  *       COMMA   tight
+            PATTERN_RECORD  COMMA   *       spaced
+            PATTERN_RECORD  *       ASSIGN  spaced
+            PATTERN_RECORD  ASSIGN  *       spaced
+            PRODUCT_BODY    LBRACE  RBRACE  tight
+            PRODUCT_BODY    LBRACE  *       spaced
+            PRODUCT_BODY    COMMA   *       spaced
+            # What a declaration writes around its own words.
+            DATA_DEF        DATA_KW *       spaced
+            DATA_DEF        *       ASSIGN  spaced
+            DATA_DEF        ASSIGN  *       spaced
+            FN_DEF          LET_KW  *       spaced
+            FN_DEF          *       COLON   tight
+            FN_DEF          COLON   *       spaced
+            FN_DEF          *       ASSIGN  spaced
+            FN_DEF          ASSIGN  *       spaced
+            LET_STMT        LET_KW  *       spaced
+            LET_STMT        *       COLON   tight
+            LET_STMT        COLON   *       spaced
+            LET_STMT        *       ASSIGN  spaced
+            LET_STMT        ASSIGN  *       spaced
+            LET_DESTRUCTURE LET_KW  *       spaced
+            LET_DESTRUCTURE *       ASSIGN  spaced
+            LET_DESTRUCTURE ASSIGN  *       spaced
+            GUARD_STMT      GUARD_KW *      spaced
+            GUARD_STMT      *       ELSE_KW spaced
+            GUARD_STMT      ELSE_KW *       spaced
+            GUARD_STMT      *       AS_KW   spaced
+            GUARD_STMT      AS_KW   *       spaced
+            IF_EXPR         IF_KW   *       spaced
+            IF_EXPR         *       THEN_KW spaced
+            IF_EXPR         THEN_KW *       spaced
+            IF_EXPR         *       ELSE_KW spaced
+            IF_EXPR         ELSE_KW *       spaced
+            IF_EXPR         *       AS_KW   spaced
+            IF_EXPR         AS_KW   *       spaced
+            MATCH_EXPR      MATCH_KW *      spaced
+            MATCH_EXPR      *       WITH_KW spaced
+            MATCH_CASE      LPAREN  RPAREN  tight
+            MATCH_CASE      LBRACE  RBRACE  tight
+            MATCH_CASE      *       DOT     tight
+            MATCH_CASE      DOT     *       tight
+            MATCH_CASE      *       LPAREN  tight
+            MATCH_CASE      LPAREN  *       tight
+            MATCH_CASE      *       RPAREN  tight
+            MATCH_CASE      *       COMMA   tight
+            MATCH_CASE      COMMA   *       spaced
+            MATCH_CASE      *       LBRACE  spaced
+            MATCH_CASE      LBRACE  *       spaced
+            MATCH_CASE      *       RBRACE  spaced
+            MATCH_CASE      *       PIPE    spaced
+            MATCH_CASE      PIPE    *       spaced
+            MATCH_CASE      *       AS_KW   spaced
+            MATCH_CASE      AS_KW   *       spaced
+            MATCH_CASE      *       ASSIGN  spaced
+            MATCH_CASE      ASSIGN  *       spaced
+            MATCH_CASE      RBRACE  IDENT   spaced
+            MATCH_CASE      RPAREN  IDENT   spaced
+            MATCH_CASE      *       ARROW   spaced
+            MATCH_CASE      ARROW   *       spaced
+            ELSE_ARM        PIPE    *       spaced
+            ELSE_ARM        *       ARROW   spaced
+            ELSE_ARM        ARROW   *       spaced
+            UNREACHABLE_EXPR UNREACHABLE_KW * spaced
+            FIELD_INIT      *       ASSIGN  spaced
+            FIELD_INIT      ASSIGN  *       spaced
+            WITH_BINDING    *       ASSIGN  spaced
+            WITH_BINDING    ASSIGN  *       spaced
+            FIELD           *       COLON   tight
+            FIELD           COLON   *       spaced
+            FIELD           *       QUESTION tight
+            PARAM           *       COLON   tight
+            PARAM           COLON   *       spaced
+            FN_PARAM        *       COLON   tight
+            FN_PARAM        COLON   *       spaced
+            EXPOSED_ENTRY   *       COLON   spaced
+            EXPOSED_ENTRY   COLON   *       spaced
+            RET_TYPE        *       PIPE    spaced
+            RET_TYPE        PIPE    *       spaced
+            RET_TYPE        *       QUESTION tight
+            SUM_BODY        *       PIPE    spaced
+            SUM_BODY        PIPE    *       spaced
+            INVARIANT_CLAUSE INVARIANT_KW * spaced
+            INVARIANT_CLAUSE *      ASSIGN  spaced
+            INVARIANT_CLAUSE ASSIGN *       spaced
+            EXAMPLE_ROW     *       COLON   spaced
+            EXAMPLE_ROW     COLON   *       spaced
+            EXAMPLE_ROW     *       ARROW   spaced
+            EXAMPLE_ROW     ARROW   *       spaced
+            EXAMPLE_ROW     *       WITH_KW spaced
+            FAKE_ROW        *       ARROW   spaced
+            FAKE_ROW        ARROW   *       spaced
+            EXAMPLE_DEF     PIPE    *       spaced
+            FAKE_DEF        PIPE    *       spaced
+            MATCH_EXPR      PIPE    *       spaced
+            BEHAVIOR_SIG    *       ARROW   spaced
+            BEHAVIOR_SIG    ARROW   *       spaced
+            PIPE_BEHAVIOR   *       PIPEFWD spaced
+            PIPE_BEHAVIOR   PIPEFWD *       spaced
+            PIPE_BEHAVIOR   *       ARROW   spaced
+            PIPE_BEHAVIOR   ARROW   *       spaced
+            """;
+
+    private static Map<Face, String> faces() {
+        Map<Face, String> out = new HashMap<>();
+        for (String line : FACE_ROWS.split("\n")) {
+            if (line.isBlank() || line.strip().startsWith("#")) {
+                continue;
+            }
+            String[] parts = line.strip().split("\\s+");
+            SyntaxKind construct = SyntaxKind.valueOf(parts[0]);
+            SyntaxKind left = parts[1].equals("*") ? null : asWritten(SyntaxKind.valueOf(parts[1]));
+            SyntaxKind right = parts[2].equals("*") ? null : asWritten(SyntaxKind.valueOf(parts[2]));
+            out.put(new Face(construct, left, right), parts[3].equals("spaced") ? SPACED : TIGHT);
+        }
+        return out;
+    }
+
+
+    /** What {@code construct}'s faces say about this pair: the narrowest that covers it, so that a
+     * construct written open can still write its empty brackets tight. */
+    private static String faceFor(Map<Face, String> faces, SyntaxKind construct, SyntaxKind left,
+            SyntaxKind right) {
+        String exact = faces.get(new Face(construct, left, right));
+        if (exact != null) {
+            return exact;
+        }
+        String byLeft = faces.get(new Face(construct, left, null));
+        if (byLeft != null) {
+            return byLeft;
+        }
+        String byRight = faces.get(new Face(construct, null, right));
+        return byRight != null ? byRight : faces.get(new Face(construct, null, null));
+    }
+
     private static final Set<Pair> TIGHT_PAIRS = pairs(TIGHT_ROWS);
     private static final Set<Pair> SPACED_PAIRS = disjointFrom(TIGHT_PAIRS, pairs(SPACED_ROWS));
 
@@ -404,6 +665,7 @@ final class Spacing {
         return spaced;
     }
     private static final Map<Pair, Map<SyntaxKind, String>> DECIDED = decided();
+    private static final Map<Face, String> FACES = faces();
 
     private static Set<Pair> pairs(String rows) {
         Set<Pair> out = new HashSet<>();
