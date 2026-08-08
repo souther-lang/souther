@@ -642,22 +642,46 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /**
+     * How this report spells an enumerated value on the wire.
+     *
+     * <p>Here rather than at each field, so that the words a consumer reads have one origin. The
+     * shipped schema names the same words in its own file and is held against this — against what is
+     * written, not against a second reading of the enum, because those are different things and only
+     * one of them is what a consumer sees. A spelling rule applied at ten call sites is ten places for
+     * the schema to stop describing the output while every one of them still agrees with the enum.
+     */
+    public static String word(Enum<?> value) {
+        return value.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * The same, for the one field with no enum behind it.
+     *
+     * <p>Whether a behavior has a {@code let} is a boolean, and these are the two words it is written
+     * as. Having no enum is why it needs this more than the others rather than less: nothing else in
+     * the compiler says what these words are.
+     */
+    public static String implementationWord(boolean injected) {
+        return injected ? "injected" : "implemented";
+    }
+
     public String json() {
         ObjectNode root = JSON.createObjectNode();
         root.put("schemaVersion", schemaVersion);
         root.put("compilerVersion", compilerVersion);
-        root.put("status", status.name().toLowerCase(java.util.Locale.ROOT));
-        root.put("adequacy", adequacy().name().toLowerCase(java.util.Locale.ROOT));
+        root.put("status", word(status));
+        root.put("adequacy", word(adequacy()));
         ArrayNode modulesOut = root.putArray("modules");
         for (ModuleReport module : modules) {
             ObjectNode m = modulesOut.addObject();
             m.put("module", module.module());
-            m.put("status", module.status().name().toLowerCase(java.util.Locale.ROOT));
+            m.put("status", word(module.status()));
             ArrayNode gaps = m.putArray("incompleteness");
             for (Incompleteness gap : module.incompleteness()) {
                 ObjectNode g = gaps.addObject();
-                g.put("code", gap.code().name().toLowerCase(java.util.Locale.ROOT));
-                g.put("scope", gap.scope().name().toLowerCase(java.util.Locale.ROOT));
+                g.put("code", word(gap.code()));
+                g.put("scope", word(gap.scope()));
                 g.put("subject", gap.subject());
                 gap.at().ifPresent(where -> {
                     ObjectNode at = g.putObject("at");
@@ -670,10 +694,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             for (BehaviorReport behavior : module.behaviors()) {
                 ObjectNode b = behaviors.addObject();
                 b.put("name", behavior.name());
-                b.put("implementation", behavior.injected() ? "injected" : "implemented");
+                b.put("implementation", implementationWord(behavior.injected()));
                 b.put("rows", behavior.rows());
                 b.put("pending", behavior.pending());
-                b.put("status", behavior.status().name().toLowerCase(java.util.Locale.ROOT));
+                b.put("status", word(behavior.status()));
                 signature(b, behavior.signature());
                 partition(b, behavior.partition());
                 branch(b, behavior.branch());
@@ -732,7 +756,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
             b.put("origin", boundary.origin());
-            b.put("side", boundary.side().name().toLowerCase(java.util.Locale.ROOT));
+            b.put("side", word(boundary.side()));
             b.put("value", boundary.value());
             // The shape a published schema promises, read off the assessment rather than stored
             // beside it. What each of these says is unchanged; where it comes from is one answer now
@@ -772,7 +796,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (souther.compiler.coverage.CoverageSites.Site arm : named) {
             ObjectNode a = unreached.addObject();
             a.put("label", arm.label());
-            a.put("kind", arm.kind().name().toLowerCase(java.util.Locale.ROOT));
+            a.put("kind", word(arm.kind()));
             ObjectNode at = a.putObject("at");
             at.put("sourceId", arm.at().sourceId());
             at.put("line", arm.at().pos().line());
@@ -789,9 +813,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * measure that failed no longer has to work it out from the numbers beside it.
      */
     private static void measured(ObjectNode of, MeasurementStatus status, Enum<?> reason) {
-        of.put("status", status.name().toLowerCase(java.util.Locale.ROOT));
+        of.put("status", word(status));
         if (reason != null) {
-            of.put("reason", reason.name().toLowerCase(java.util.Locale.ROOT));
+            of.put("reason", word(reason));
         }
     }
 

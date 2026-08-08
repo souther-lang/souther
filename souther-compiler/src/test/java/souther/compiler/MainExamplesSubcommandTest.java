@@ -171,12 +171,16 @@ class MainExamplesSubcommandTest {
     }
 
     /**
-     * The shipped schema and what is actually emitted have to agree. Not a full validation — that
-     * would want a library — but every key the schema requires is present and no key is emitted that
-     * the schema does not declare, which is what drifts.
+     * The shape: every key the schema requires is present, and no key is emitted that the schema does
+     * not declare.
+     *
+     * <p>Named for what it does. It is not a validation — that would want a library — and the words a
+     * field is allowed to take are not checked here at all; a name promising more than that is how a
+     * schema came to allow a word the compiler had stopped writing while this went on passing.
+     * {@link EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest} holds the vocabularies.
      */
     @Test
-    void theEmittedJsonMatchesTheShippedSchema() throws Exception {
+    void theEmittedJsonHasTheShippedSchemaShape() throws Exception {
         JsonNode schema;
         try (var in = Main.class.getResourceAsStream("/souther/adequacy-schema-1.json")) {
             assertNotNull(in, "adequacy-schema-1.json ships beside the compiler");
