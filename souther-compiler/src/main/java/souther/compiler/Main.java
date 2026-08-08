@@ -2,6 +2,8 @@ package souther.compiler;
 
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
+import souther.compiler.cst.LineIndex;
+import souther.compiler.cst.SyntaxNode;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
@@ -16,6 +18,7 @@ import souther.compiler.doc.DocCommand;
 import souther.compiler.doc.JapiCommand;
 import souther.compiler.doc.McpServer;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.fmt.SpacingDeviation;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -483,6 +486,28 @@ public final class Main {
      * write the file over with {@code -w} against a copy, or run the formatter again into a scratch
      * file, to be told what the gate already knew.
      */
+    /**
+     * The rule each spacing difference departs from, under the difference itself. The diff says
+     * what the canonical form would write; this says which rule says so, which is the question a
+     * reader asks next and the one the formatter can answer in one call now that what goes between
+     * two tokens is a function of them and of the construct joining them (issue #476).
+     *
+     * <p>Only spacing. A line the source broke where the canonical form would not is a departure
+     * from a different rule, and the diff is still what says so.
+     */
+    private static void reportSpacing(Path file, SyntaxNode root, String source) {
+        List<SpacingDeviation.Deviation> deviations = SpacingDeviation.of(root, source);
+        if (deviations.isEmpty()) {
+            return;
+        }
+        LineIndex lines = new LineIndex(source);
+        for (SpacingDeviation.Deviation d : deviations) {
+            System.out.println(file + ":" + lines.lineOf(d.offset()) + ":"
+                    + lines.columnOf(d.offset()) + ": " + d.rule() + ": this writes ["
+                    + d.written() + "] and the canonical form writes [" + d.canonical() + "]");
+        }
+    }
+
     private static int fmtSubcommand(String[] args) {
         boolean write = false;
         boolean check = false;
@@ -525,6 +550,7 @@ public final class Main {
                 continue;
             }
             String formatted;
+            SyntaxNode root;
             try {
                 CstParser.Result parsed = CstParser.parse(source);
                 if (!parsed.errors().isEmpty()) {
@@ -533,7 +559,8 @@ public final class Main {
                     failed = true;
                     continue;   // the formatter assumes a clean parse; leave a broken file untouched
                 }
-                formatted = Formatter.format(parsed.root());
+                root = parsed.root();
+                formatted = Formatter.format(root);
             } catch (CompileException e) {
                 // One file this command cannot read must cost that file, not the run and not the
                 // author's screen. Reading is a walk down the source and a walk down the tree it
@@ -554,6 +581,7 @@ public final class Main {
                     // run has to remember about a file it has judged is that one of them differed.
                     System.out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
                             source, formatted));
+                    reportSpacing(file, root, source);
                 }
             } else if (write) {
                 if (!formatted.equals(source)) {
