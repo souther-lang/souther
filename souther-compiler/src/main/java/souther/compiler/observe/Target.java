@@ -28,19 +28,18 @@ public sealed interface Target {
     Incompleteness.Scope scope();
 
     /**
-     * The behavior this is about, where it is about exactly one. Empty for anything larger, which
-     * is about every behavior inside it.
+     * The behavior this is about, where the thing it names is inside one. Empty otherwise.
      *
-     * <p>One answer to that question and not two. It was asked three ways — a scope test beside a
-     * subject comparison, twice, and {@link #countsAgainst} — and a scope that answered the first
-     * two differently from the third is how a position came to count against a module.
+     * <p>One answer to that question and not three. It was asked as a scope test beside a subject
+     * comparison, twice, and as a containment question a third time, and a scope that answered the
+     * first two differently from the third is how a position came to count against a module.
+     *
+     * <p>This much and no more. Whether a behavior is inside a <em>source</em> is not something a
+     * source id says — it is a fact about the compilation that wrote the rows — so nothing here
+     * answers it. What a reason counts against is {@link Incompleteness#countsAgainst}'s, where the
+     * reading that settles it can be stated.
      */
     java.util.Optional<String> onlyBehavior();
-
-    /** Whether {@code behavior} is inside what this names, and so whether its measures are affected. */
-    default boolean countsAgainst(String behavior) {
-        return onlyBehavior().map(behavior::equals).orElse(true);
-    }
 
     /** One behavior. Only that behavior's measures are affected. */
     record OfBehavior(String behavior) implements Target {
@@ -61,7 +60,10 @@ public sealed interface Target {
         }
     }
 
-    /** One source: whatever it holds, which is exactly what could not be read. */
+    /**
+     * One source, named. What it holds is not part of it: a source id is a file, and which
+     * behaviors wrote rows in it is the compilation's answer rather than the name's.
+     */
     record OfSource(String sourceId) implements Target {
 
         @Override

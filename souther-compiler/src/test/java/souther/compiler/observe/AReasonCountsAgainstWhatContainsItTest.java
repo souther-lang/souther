@@ -31,17 +31,50 @@ class AReasonCountsAgainstWhatContainsItTest {
         assertFalse(gap.countsAgainst("cancel"));
     }
 
+    /** A module holds every behavior in it, by what a module is. */
     @Test
-    void aReasonAboutSomethingLargerCountsAgainstEverythingInside() {
-        Incompleteness source = Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                Incompleteness.Scope.SOURCE, "trip.sou");
+    void aModuleReasonCountsAgainstEveryBehaviorInIt() {
         Incompleteness module = Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
                 Incompleteness.Scope.MODULE, "example.trip");
 
-        assertTrue(source.countsAgainst("submit"));
-        assertTrue(source.countsAgainst("cancel"));
         assertTrue(module.countsAgainst("submit"));
         assertTrue(module.countsAgainst("cancel"));
+    }
+
+    /**
+     * A source counts against every behavior because of what is written there, not because a source
+     * is larger than a behavior.
+     *
+     * <p>Both places that write a {@code SOURCE} write it for a source that was not evaluated at
+     * all, and which behaviors wrote rows in it is exactly what could not be read. So every one of
+     * them is missing rows the source may have held. A source whose contents were known would need
+     * the compilation to say which behaviors those were, and nothing writes one — this is the claim
+     * to read again if something does.
+     */
+    @Test
+    void aSourceThatWasNotEvaluatedCountsAgainstEveryBehavior() {
+        Incompleteness source = Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
+                Incompleteness.Scope.SOURCE, "trip.sou");
+
+        assertTrue(source.countsAgainst("submit"));
+        assertTrue(source.countsAgainst("cancel"));
+    }
+
+    /**
+     * And neither of them claims to know which behavior it is about.
+     *
+     * <p>What a target names is one thing and what holds a behavior is another. A source id is a
+     * file; it does not carry which behaviors wrote rows in it, so nothing on the target answers
+     * that and the reading above is stated where it is made.
+     */
+    @Test
+    void nothingLargerThanABehaviorNamesOne() {
+        assertEquals(java.util.Optional.empty(),
+                Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
+                        Incompleteness.Scope.SOURCE, "trip.sou").behavior());
+        assertEquals(java.util.Optional.empty(),
+                Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
+                        Incompleteness.Scope.MODULE, "example.trip").behavior());
     }
 
     /** A position is inside one behavior, and it says which one it is. */

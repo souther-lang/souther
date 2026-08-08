@@ -109,10 +109,22 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
         return target.onlyBehavior();
     }
 
-    /** Whether this counts against {@code behavior} — either by naming it, or by being about
-     * something larger that holds it. */
+    /**
+     * Whether this counts against {@code behavior}, and so whether its measures stop being answers.
+     *
+     * <p>A reason that names one behavior answers for itself. The rest are answered here and not by
+     * the target, because what a target names and what holds a behavior are two things: a module
+     * holds every behavior in it by what a module is, and whether a source holds one is a fact
+     * about the compilation that a source id does not carry.
+     *
+     * <p>A source answers yes, and that is a reading of the two places that write one. Both are a
+     * source that was not evaluated at all, where which behaviors it wrote rows for is exactly what
+     * could not be read — so every one of them is missing rows it may have held. A {@code SOURCE}
+     * whose contents were known would need the compilation to answer and would not belong here.
+     * Nothing writes one, and this is the claim to re-read if something does.
+     */
     public boolean countsAgainst(String behavior) {
-        return target.countsAgainst(behavior);
+        return behavior().map(behavior::equals).orElse(true);
     }
 
     /** What makes two of these the same reason. A module's classes failing to be instrumented is one
