@@ -612,10 +612,143 @@ public final class Generator {
                                    CandidateCheck check) {
         Choices choices = choicesOf(subject.types().get(p),
                 TermPath.of(subject.parameters().get(p)), subject.symbols(), decided, settled);
-        return choices.missingAt() != null
-                ? new Outcome(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
-                        choices.missingAt())
-                : walk(subject, p, choices, check);
+        if (choices.missingAt() != null) {
+            return new Outcome(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
+                    choices.missingAt());
+        }
+        Outcome product = walk(subject, p, choices, check);
+        if (product.value() != null) {
+            return product;
+        }
+        // Every position took its value knowing only what the caller had settled, so a rule relating
+        // two of them was satisfied only where the lists happened to already hold a pair that does.
+        // Asked again choosing one position at a time, each from what is left once the ones before it
+        // are asserted, which is the only way `a < b` is met in general.
+        Outcome conditioned = conditioned(subject, p, decided, settled, check);
+        return conditioned.value() != null ? conditioned : product;
+    }
+
+    /**
+     * One parameter's value, chosen a position at a time.
+     *
+     * <p>Depth first, so that a position is chosen against a projection that already has the ones
+     * before it in it. The projection is the same one the whole search started from — what the
+     * record's rules leave each of its fields — asked again with the assignment so far settled into
+     * it, which is what {@link FieldDomains#of(TypeName, Ast.Data, Symbols, Map)} is for.
+     *
+     * <p>Second, and not instead. What it costs is a reading of the record's rules per position per
+     * branch, and the search in front of it answers most rows without any of that; running this one
+     * first would spend it on every row to change none of them.
+     */
+    private static Outcome conditioned(Subject subject, int p,
+                                       Map<String, List<FixtureTemplate>> decided,
+                                       Map<String, BigDecimal> settled, CandidateCheck check) {
+        Type type = subject.types().get(p);
+        TermPath at = TermPath.of(subject.parameters().get(p));
+        List<Position> found = new ArrayList<>();
+        if (positionsUnder(type, at, subject.symbols(), 0, found, decided.keySet()) != null) {
+            return new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+        }
+        // What the caller fixed goes first, so that everything chosen after it is chosen beside it.
+        // A class stands for one value and a boundary is one value, and neither is worth deciding
+        // after the positions whose range it settles.
+        List<Position> positions = new ArrayList<>(
+                found.stream().filter(each -> decided.containsKey(each.path())).toList());
+        positions.addAll(found.stream().filter(each -> !decided.containsKey(each.path())).toList());
+        FixtureTemplate built = descend(subject, p, positions, 0, new LinkedHashMap<>(),
+                new LinkedHashMap<>(settled), decided, check, new int[] {MAX_TUPLES});
+        return built != null ? new Outcome(built, null, null)
+                : new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+    }
+
+    /** One position of a row: where it is, and what it holds. */
+    private record Position(String path, Type type) {}
+
+    /**
+     * The assignment this branch leads to, or null where none of them builds.
+     *
+     * @param chosen  what the positions before this one took
+     * @param settled the numbers among them, which is what a projection can be asked about
+     * @param budget  assignments left to compose, shared down the whole search
+     */
+    private static FixtureTemplate descend(Subject subject, int p, List<Position> positions, int index,
+                                           Map<String, FixtureTemplate> chosen,
+                                           Map<String, BigDecimal> settled,
+                                           Map<String, List<FixtureTemplate>> decided,
+                                           CandidateCheck check, int[] budget) {
+        if (index == positions.size()) {
+            if (budget[0]-- <= 0) {
+                return null;
+            }
+            FixtureTemplate whole = compose(subject.types().get(p),
+                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0);
+            return whole != null && check.refuse(p, whole).isEmpty() ? whole : null;
+        }
+        Position position = positions.get(index);
+        for (FixtureTemplate candidate : candidatesAt(subject, p, position, settled, decided)) {
+            chosen.put(position.path(), candidate);
+            BigDecimal number = writtenNumber(candidate.value());
+            if (number != null) {
+                settled.put(position.path(), number);
+            }
+            FixtureTemplate found = descend(subject, p, positions, index + 1, chosen, settled,
+                    decided, check, budget);
+            if (found != null) {
+                return found;
+            }
+            chosen.remove(position.path());
+            settled.remove(position.path());
+            if (budget[0] <= 0) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** What one position can take, given what the positions before it took. */
+    private static List<FixtureTemplate> candidatesAt(Subject subject, int p, Position position,
+                                                      Map<String, BigDecimal> settled,
+                                                      Map<String, List<FixtureTemplate>> decided) {
+        List<FixtureTemplate> fixed = decided.get(position.path());
+        if (fixed != null) {
+            return fixed;
+        }
+        TermPath at = TermPath.of(subject.parameters().get(p));
+        Type parameter = subject.types().get(p);
+        FieldDomains left = parameter instanceof Type.Ref ref
+                && subject.symbols().get(ref.name()) instanceof Ast.Data data && !data.newtype()
+                ? FieldDomains.of(ref.name(), data, subject.symbols(), under(at, settled))
+                : FieldDomains.NONE;
+        String under = position.path().equals(at.toString()) ? null
+                : position.path().substring(at.toString().length() + 1);
+        return Partitions.representativesOf(position.type(), subject.symbols(),
+                under == null ? null : left.at(under));
+    }
+
+    /** The positions under one parameter, in the order they are composed. The same rule
+     * {@link #choicesUnder} walks, so that the two agree about where a row chooses anything. */
+    private static String positionsUnder(Type type, TermPath at, Symbols symbols, int depth,
+                                         List<Position> out, java.util.Set<String> decided) {
+        if (decided.contains(at.toString())) {
+            out.add(new Position(at.toString(), type));
+            return null;
+        }
+        if (depth < MAX_DEPTH && type instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
+            Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+            if (!fields.isEmpty()) {
+                for (Map.Entry<String, Type> field : fields.entrySet()) {
+                    String missing = positionsUnder(field.getValue(), at.then(field.getKey()), symbols,
+                            depth + 1, out, decided);
+                    if (missing != null) {
+                        return missing;
+                    }
+                }
+                return null;
+            }
+        }
+        out.add(new Position(at.toString(), type));
+        return null;
     }
 
     /**

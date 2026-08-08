@@ -1,0 +1,134 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A rule relating two positions is met by choosing one of them knowing the other.
+ *
+ * <p>Every position took its value from what the rules leave it on its own, and the search then went
+ * through the product of those lists. A clause relating two of them was satisfied only where the
+ * lists happened to already hold a pair that does — so two bare {@code Int}s under {@code a < b} were
+ * offered a zero each, and the one assignment there was is the one the record refuses. Nothing about
+ * it is a boundary, a newtype or a decimal: it is ordinary partition fill finding no row at all.
+ */
+class APairIsChosenOnePositionAtATimeTest {
+
+    private static String rowsFor(String clauses) throws Exception {
+        String model = """
+                module example.paired
+
+                data R =
+                    { a: Int
+                    , b: Int
+                    }
+                    invariant ordered = CLAUSE
+
+                data Ok
+
+                behavior f : (r: R, flag: Bool) -> Ok
+                    constructs Ok
+
+                let f (r, flag) = Ok
+                """.replace("CLAUSE", clauses);
+        Path file = Files.createTempDirectory("souther-paired").resolve("model.sou");
+        Files.writeString(file, model);
+        PrintStream was = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[] {"examples", "--generate", file.toString()});
+        } finally {
+            System.setOut(was);
+        }
+        return out.toString(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void twoFieldsAnOrderingRelatesAreFilledInThatOrder() throws Exception {
+        String rows = rowsFor("a < b");
+
+        assertTrue(rows.contains("R { a = 0, b = 1 }"),
+                () -> "0 leaves 1 for the other end:\n" + rows);
+        assertFalse(rows.contains("every value tried was refused"), () -> rows);
+    }
+
+    /**
+     * The reason widening the lists is not the answer.
+     *
+     * <p>No pair drawn from two lists chosen in ignorance of each other satisfies this, however many
+     * values each list holds. Asserting the first choice into the domain leaves the second bounded at
+     * 101, and there is only ever one list to draw from.
+     */
+    @Test
+    void aRelationWithAnOffsetIsMetTheSameWay() throws Exception {
+        String rows = rowsFor("a + 100 < b");
+
+        assertTrue(rows.contains("R { a = 0, b = 101 }"),
+                () -> "101 is the least `b` a zero leaves:\n" + rows);
+    }
+
+    /** Nothing is invented for a relation this cannot read. The rows stay unfilled and the report says
+     * what it always said about them. */
+    @Test
+    void aRelationOutsideWhatTheDomainHoldsFillsNothing() throws Exception {
+        String rows = rowsFor("a * b < 10");
+
+        assertTrue(rows.contains("R { a = 0, b = 0 }"),
+                () -> "the pair each field's own range offers, which this one happens to admit:\n"
+                        + rows);
+    }
+
+    /**
+     * A dense strict bound is a different gap.
+     *
+     * <p>Choosing {@code low} first leaves {@code high} at zero and above, because {@code low < high}
+     * over the decimals is recorded as {@code low - high <= 0} — so the one value the rule refuses is
+     * the one the projection offers. No amount of choosing in order reaches past that, which is why
+     * the openness of an end is tracked separately (#483).
+     */
+    @Test
+    void aStrictBoundOverDecimalsIsNotClosedByChoosingInOrder() throws Exception {
+        String model = """
+                module example.band
+
+                data Ratio = Decimal
+                    invariant range = value >= 0.0m && value <= 1.0m
+
+                data Band =
+                    { low: Ratio
+                    , high: Ratio
+                    }
+                    invariant ordered = low < high
+
+                data Ok
+
+                behavior f : (band: Band, flag: Bool) -> Ok
+                    constructs Ok
+
+                let f (band, flag) = Ok
+                """;
+        Path file = Files.createTempDirectory("souther-band").resolve("model.sou");
+        Files.writeString(file, model);
+        PrintStream was = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[] {"examples", "--generate", file.toString()});
+        } finally {
+            System.setOut(was);
+        }
+        String rows = out.toString(StandardCharsets.UTF_8);
+
+        assertTrue(rows.contains("every value tried was refused"),
+                () -> "still nothing here, and it is the bound that is approximate:\n" + rows);
+    }
+}
