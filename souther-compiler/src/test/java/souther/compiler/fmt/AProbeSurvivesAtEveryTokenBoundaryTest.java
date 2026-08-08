@@ -27,6 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the end of a member list went unnoticed. So a probe comment is written into every boundary between
  * two of a fixture's tokens, and required back from every variant that still parses.
  *
+ * <p>And required to be a fixed point. A comment can be put somewhere the next formatting reads
+ * differently, and then it settles somewhere else again; the first output is already wrong and
+ * nothing that looks at one formatting can see it. The corpus has been checked for this all along
+ * and said nothing, because the corpus does not write a comment at every boundary.
+ *
  * <p>Required back as a comment, not as text. Counting {@code // probe} in the output says it
  * survived when it was written into another comment's line, where it is no longer a comment and a
  * reader has lost it. So the output is parsed and its {@code LINE_COMMENT} tokens compared against
@@ -178,6 +183,7 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
     private static void sweep(boolean onItsOwnLine) {
         List<String> lost = new ArrayList<>();
         List<String> moved = new ArrayList<>();
+        List<String> unstable = new ArrayList<>();
         List<String> rewritten = new ArrayList<>();
         List<String> refused = new ArrayList<>();
         int checked = 0;
@@ -206,6 +212,10 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                             + CstParser.parse(formatted).errors());
                     continue;
                 }
+                if (!formatted.equals(Formatter.format(formatted))) {
+                    unstable.add(context(variant));
+                    continue;
+                }
                 int was = neighbour(variant, onItsOwnLine);
                 int now = neighbour(formatted, onItsOwnLine);
                 if (was != now && was >= 0 && was < mustStay.size() && mustStay.get(was)) {
@@ -232,6 +242,10 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                 moved.size() + " of " + checked + " probes left code that ends or begins a line of"
                         + " the canonical form, which is code a comment can stay beside:\n"
                         + String.join("\n", moved));
+        assertTrue(unstable.isEmpty(),
+                unstable.size() + " of " + checked + " came back as something the next formatting"
+                        + " writes differently, so the first placement was already wrong:\n"
+                        + String.join("\n", unstable));
         assertTrue(lost.isEmpty() && rewritten.isEmpty() && refused.isEmpty(),
                 "of " + checked + " swept, " + lost.size() + " came back with the comments changed,"
                         + " " + rewritten.size() + " with the code changed and " + refused.size()

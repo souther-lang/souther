@@ -1305,35 +1305,26 @@ public final class Formatter {
             out.afterCase().computeIfAbsent(code.end(), _ -> new ArrayList<>()).add(comment);
             return;
         }
-        // A construct written over several lines has more lines than its last: `data D =` and
-        // `match x with` and the `{` of a block each end one. A comment there ends that line, not
-        // the construct, so it is held against the token rather than against the node.
-        SyntaxNode slot = slotOf(endingAt(code));
+        // Of the constructs ending where the comment is, the outermost one the layout gives a line
+        // to. Outermost because `data D = A | B // c` is about the declaration and not about `B`;
+        // only among those that have a line, because a `with` binding has one even though the row
+        // it is in goes on to its expected value — the comment is itself what ends that line.
+        SyntaxNode slot = slotEndingAt(code);
+        if (slot == null) {
+            // Nothing ends here, so the comment was written in the middle of a construct: it ends
+            // the line that construct is on, which is where the same comment written after that
+            // construct's last token would go. Reading the two the same way is what makes the
+            // answer survive a second formatting.
+            slot = slotOf(endingAt(code));
+        }
         if (slot == null) {
             return;
         }
-        // A comment after a token in the middle of a construct ends no construct's line. It ends
-        // the line that construct is on, and what ends that line is whatever ends where the
-        // construct does — which is where the same comment would go if it had been written after
-        // the construct's last token instead. Reading the two the same way is what makes the answer
-        // survive a second formatting.
         // A pipeline's declared output is written after its last stage and on that stage's line, so
         // the stage is not what ends the line: what ends it is the declaration.
         boolean moreOfTheLineFollows = slot.parent() != null
                 && slot.parent().kind() == SyntaxKind.PIPE_BEHAVIOR
                 && slot.end() != slot.parent().end();
-        // The construct the slot ends together with may itself sit in the middle of a line — a
-        // `with` clause ends where its last binding does and the row goes on to its expected value.
-        SyntaxToken slotEnd = lastCodeTokenOf(slot);
-        SyntaxNode ends = slotEnd == null ? slot : endingAt(slotEnd);
-        if (ends.parent() != null && ends.parent().parent() != null
-                && ends.end() != ends.parent().end()
-                && !takesALineOf(ends.parent().kind(), ends.kind())
-                && !isSpine(ends.parent())   // a run's parts are its lines, not the run's
-                && slotOf(ends.parent()) != null) {
-            add(out.after(), slotOf(ends.parent()), comment);
-            return;
-        }
         if ((slot.end() != code.end() || moreOfTheLineFollows) && !endsAWrittenLine(code)) {
             SyntaxToken last = lastCodeTokenOf(moreOfTheLineFollows ? slot.parent() : slot);
             if (last != null && last.end() != code.end()) {
@@ -1414,6 +1405,25 @@ public final class Formatter {
             }
         }
         return last;
+    }
+
+    /** The outermost construct ending at {@code code} that the layout gives a line of its own, or
+     * nothing where none of them has one. */
+    private static SyntaxNode slotEndingAt(SyntaxToken code) {
+        SyntaxNode best = null;
+        for (SyntaxNode c = code.parent();
+                c != null && c.parent() != null && c.end() == code.end();
+                c = c.parent()) {
+            // The last part of a run has a line only while the run is inside another one. The last
+            // part of the outermost run ends where the run does, and what the run is inside goes on
+            // writing that line — a condition's `then`, a call's `)`.
+            boolean endsTheOutermostRun = isSpine(c.parent()) && c.end() == c.parent().end()
+                    && !isSpine(c.parent().parent());
+            if (takesALineOf(c.parent().kind(), c.kind()) && !endsTheOutermostRun) {
+                best = c;
+            }
+        }
+        return best;
     }
 
     /** The construct that owns the line {@code owner} is written on. */
