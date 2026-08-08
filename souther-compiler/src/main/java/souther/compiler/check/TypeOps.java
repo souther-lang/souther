@@ -1303,6 +1303,38 @@ public final class TypeOps {
     }
 
     /**
+     * One name a value wears, and the declaration it is written by.
+     *
+     * <p>Kept together because a rule is read at a layer and reported by the declaration that wrote
+     * it — a failure names a clause of a type, and dropping which type that was leaves a diagnostic
+     * with nothing to point at.
+     */
+    public record Layer(TypeName named, Ast.Data data) {}
+
+    /**
+     * The names wrapped round a value of {@code t}, outermost first.
+     *
+     * <p>One place says how far a newtype reaches, because more than one thing needs to know: what a
+     * construction has to satisfy, what a position's range is, what a comparison of two such values
+     * compares. Each working it out for itself is how they came to disagree about a value wearing two
+     * names — the projection reading through and the range reader stopping at the first.
+     *
+     * <p>Stops on a name already worn, so a declaration that wraps its own kind ends the walk rather
+     * than repeating it. A type that is not a newtype has one layer or none.
+     */
+    public static List<Layer> newtypeChain(Type t, Symbols symbols) {
+        List<Layer> layers = new ArrayList<>();
+        Set<TypeName> worn = new LinkedHashSet<>();
+        Type at = t;
+        while (at instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
+                && data.newtype() && worn.add(ref.name())) {
+            layers.add(new Layer(ref.name(), data));
+            at = fieldTypes(data, symbols).get("value");
+        }
+        return List.copyOf(layers);
+    }
+
+    /**
      * The {@code Int} or {@code Decimal} a value of {@code t} is carried as, reaching through as many
      * newtypes as it is written with, or {@code null} where it is carried as neither.
      *

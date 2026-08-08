@@ -306,8 +306,9 @@ public final class Partitions {
             return own;
         }
         return new Bounds(own.min() == null ? null : highest(own.min(), projected.min()),
+                own.minFrom(),
                 own.max() == null ? null : lowest(own.max(), projected.max()),
-                own.decimal());
+                own.maxFrom(), own.decimal());
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -383,7 +384,15 @@ public final class Partitions {
     // --- reading an invariant's bounds -------------------------------------------------------------
 
     /** What a newtype's invariant says about the range of its value. */
-    private record Bounds(BigDecimal min, BigDecimal max, boolean decimal) {
+    /**
+     * What a newtype's rules leave the value between, and which of the names it wears said so.
+     *
+     * <p>The layer is kept because a boundary is reported by the rule that drew it, and a value
+     * wearing two names is bounded by rules written on either. Read off the outermost name, an edge
+     * that `Minute` drew would be reported as `StartMinute`'s.
+     */
+    private record Bounds(BigDecimal min, TypeName minFrom, BigDecimal max, TypeName maxFrom,
+                          boolean decimal) {
 
         boolean isEmpty() {
             return min == null && max == null;
@@ -392,39 +401,58 @@ public final class Partitions {
     }
 
     private static Bounds boundsOf(Type type, Symbols symbols) {
-        if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
-                || !data.newtype()) {
+        Type base = TypeOps.numericBase(type, symbols);
+        if (base == null) {
             return null;
         }
-        Type base = TypeOps.newtypeInner(ref.name(), symbols);
-        if (base != Type.INT && base != Type.DECIMAL) {
-            return null;
-        }
-        boolean decimal = base == Type.DECIMAL;
         BigDecimal min = null;
         BigDecimal max = null;
-        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-            for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                Optional<InvariantConstraints.Constraint> read =
-                        InvariantConstraints.of(each, base);
-                if (read.isEmpty()) {
-                    continue;
-                }
-                switch (read.get()) {
-                    case InvariantConstraints.Min m -> min = highest(min, BigDecimal.valueOf(m.n()));
-                    case InvariantConstraints.Max m -> max = lowest(max, BigDecimal.valueOf(m.n()));
-                    case InvariantConstraints.Positive _ -> min = highest(min, BigDecimal.ONE);
-                    case InvariantConstraints.NonNegative _ -> min = highest(min, BigDecimal.ZERO);
-                    case InvariantConstraints.DecimalMin m -> min = highest(min, m.n());
-                    case InvariantConstraints.DecimalMax m -> max = lowest(max, m.n());
-                    case InvariantConstraints.DecimalPositive _ -> min = highest(min, BigDecimal.ONE);
-                    case InvariantConstraints.DecimalNonNegative _ ->
-                            min = highest(min, BigDecimal.ZERO);
-                    default -> { }   // a rule this partition does not read: length, pattern, size
+        TypeName minFrom = null;
+        TypeName maxFrom = null;
+        // Every name the value wears, not the outermost one. A rule written on the type a newtype
+        // wraps bounds the value as much as one written on the newtype does, and the two intersect:
+        // `Inner: value >= 0` under `Outer: value <= 10` is a range of `[0, 10]`, and neither layer
+        // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
+        // and which layer each end came from is kept, because that is the rule a report names.
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
+            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
+                    BigDecimal low = lowerOf(InvariantConstraints.of(each, base).orElse(null));
+                    BigDecimal high = upperOf(InvariantConstraints.of(each, base).orElse(null));
+                    if (low != null && (min == null || low.compareTo(min) > 0)) {
+                        min = low;
+                        minFrom = layer.named();
+                    }
+                    if (high != null && (max == null || high.compareTo(max) < 0)) {
+                        max = high;
+                        maxFrom = layer.named();
+                    }
                 }
             }
         }
-        return new Bounds(min, max, decimal);
+        return new Bounds(min, minFrom, max, maxFrom, base == Type.DECIMAL);
+    }
+
+    /** The lower bound a constraint states, or null where it states none. */
+    private static BigDecimal lowerOf(InvariantConstraints.Constraint read) {
+        return switch (read) {
+            case InvariantConstraints.Min m -> BigDecimal.valueOf(m.n());
+            case InvariantConstraints.Positive _, InvariantConstraints.DecimalPositive _ ->
+                    BigDecimal.ONE;
+            case InvariantConstraints.NonNegative _, InvariantConstraints.DecimalNonNegative _ ->
+                    BigDecimal.ZERO;
+            case InvariantConstraints.DecimalMin m -> m.n();
+            case null, default -> null;   // length, pattern, size, or a rule this cannot read
+        };
+    }
+
+    /** The upper bound a constraint states, or null where it states none. */
+    private static BigDecimal upperOf(InvariantConstraints.Constraint read) {
+        return switch (read) {
+            case InvariantConstraints.Max m -> BigDecimal.valueOf(m.n());
+            case InvariantConstraints.DecimalMax m -> m.n();
+            case null, default -> null;
+        };
     }
 
     /** The cuts of a position, each carrying the rule that drew it. */
@@ -441,11 +469,11 @@ public final class Partitions {
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
         if (bounds.min != null) {
-            put(byValue, numeric(bounds.min, bounds.decimal), ref.name(), "min",
+            put(byValue, numeric(bounds.min, bounds.decimal), bounds.minFrom(), "min",
                     moved(own == null ? null : own.min(), bounds.min) ? within : null);
         }
         if (bounds.max != null) {
-            put(byValue, numeric(bounds.max, bounds.decimal), ref.name(), "max",
+            put(byValue, numeric(bounds.max, bounds.decimal), bounds.maxFrom(), "max",
                     moved(own == null ? null : own.max(), bounds.max) ? within : null);
         }
         return List.copyOf(byValue.values());

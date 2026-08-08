@@ -371,7 +371,7 @@ public final class InvariantChecker {
             return true;
         }
         if (data.newtype()) {
-            if (!everyRuleBecameABound(data, symbols)) {
+            if (!everyRuleBecameABound(named, data, symbols)) {
                 return false;
             }
         } else {
@@ -398,16 +398,19 @@ public final class InvariantChecker {
      * one that gave none — {@code isOdd(value)} beside {@code value >= 0} — is a way the type refuses
      * a value that the bounds do not express.
      */
-    private static boolean everyRuleBecameABound(Ast.Data data, Symbols symbols) {
-        Type base = TypeOps.newtypeInner(new TypeName("", data.name()), symbols);
-        if (base == null) {
-            base = TypeOps.fieldTypes(data, symbols).get("value");
-        }
-        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-            for (Ast.Expr each
-                    : souther.compiler.codegen.InvariantConstraints.clauses(clause.expr())) {
-                if (souther.compiler.codegen.InvariantConstraints.of(each, base).isEmpty()) {
-                    return false;
+    private static boolean everyRuleBecameABound(TypeName named, Ast.Data data, Symbols symbols) {
+        Type carried = TypeOps.numericBase(Type.ref(named), symbols);
+        Type base = carried != null ? carried : TypeOps.fieldTypes(data, symbols).get("value");
+        // Every name the value wears, read against what it is carried as. Asking only the outermost
+        // one leaves a rule a layer down unaccounted for, and reading it against the type that layer
+        // declares rather than against the number underneath makes every such rule unreadable.
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(Type.ref(named), symbols)) {
+            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                for (Ast.Expr each
+                        : souther.compiler.codegen.InvariantConstraints.clauses(clause.expr())) {
+                    if (souther.compiler.codegen.InvariantConstraints.of(each, base).isEmpty()) {
+                        return false;
+                    }
                 }
             }
         }
