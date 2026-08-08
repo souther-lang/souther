@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,20 +59,89 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
 
     @Test
     void aRuleTheProjectionCouldNotReadLeavesTheEdgeItRefusesUnknown() {
-        assertInstanceOf(BoundaryAssessment.Writability.Unknown.class,
-                writabilityAt(HOLED, "example.holed", "f", "0"),
-                "the decoder refused every candidate at 0");
-        assertEquals(BoundaryAssessment.Writability.Unknown.Reason.REFUSED,
-                ((BoundaryAssessment.Writability.Unknown)
-                        writabilityAt(HOLED, "example.holed", "f", "0")).reason(),
+        BoundaryAssessment at = assessmentAt(HOLED, "example.holed", "f", "0");
+
+        assertInstanceOf(BoundaryAssessment.Writability.Unknown.class, at.writability(),
+                "nothing proved it and nothing built it");
+        BoundaryAssessment.Attempt.Refused refused = assertInstanceOf(
+                BoundaryAssessment.Attempt.Refused.class, at.attempt(),
                 "and refused is not impossible: nothing here says no row can be written");
+        assertEquals(Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                refused.why().reason());
     }
 
     @Test
     void anEdgeTheSameRuleDoesNotReachIsWitnessedByTheValueThatWasBuilt() {
+        BoundaryAssessment at = assessmentAt(HOLED, "example.holed", "f", "10");
+
         assertInstanceOf(BoundaryAssessment.Writability.WitnessedByConstruction.class,
-                writabilityAt(HOLED, "example.holed", "f", "10"),
-                "a value at 10 went through the decoder");
+                at.writability(), "a value at 10 went through the decoder");
+        assertInstanceOf(BoundaryAssessment.Attempt.Built.class, at.attempt(),
+                "and the value it built is kept, because it is also the row an author is offered");
+    }
+
+    /**
+     * A projection's proof and a search that came back with nothing are both true at once.
+     *
+     * <p>Two answers about two different things: whether a value at the edge exists, and whether this
+     * run managed to produce one. Reading the second off the first is what left `--generate` silent
+     * about a boundary it could say something useful about — the report named the row as owed and the
+     * block printed neither a row nor a reason.
+     *
+     * <p>Every rule of {@code Amount} was read, so 0 is proven to be a value it holds. The row needs a
+     * second input as well, and nothing can be written for that one — which is a fact about this
+     * search and not about the edge.
+     */
+    private static final String PROVEN_BUT_UNREACHED = """
+            module example.proven
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Code = String
+                invariant String.matches("(?=.*a).*b", value)
+
+            data Ok
+
+            behavior place : (amount: Amount, code: Code) -> Ok
+                constructs Ok
+
+            let place (amount, code) = Ok
+
+            example place
+                | "some" : (Amount(7), Code("ab")) -> Ok
+            """;
+
+    @Test
+    void anEdgeTheProjectionProvesCanStillBeOneNoSearchReached() {
+        BoundaryAssessment at =
+                assessmentAt(PROVEN_BUT_UNREACHED, "example.proven", "place", "0");
+
+        assertInstanceOf(BoundaryAssessment.Coverage.Missed.class, at.coverage());
+        assertInstanceOf(BoundaryAssessment.Writability.ProvenByProjection.class, at.writability(),
+                "every rule of `Amount` was read, so 0 is a value it holds");
+        assertInstanceOf(BoundaryAssessment.Attempt.Refused.class, at.attempt(),
+                "and the search still came back with nothing, which takes nothing away from that");
+    }
+
+    /**
+     * The same boundary, as the block an author reads.
+     *
+     * <p>This is what recovering the attempt from the verdict cost: the report named the row as owed
+     * and the block said nothing at all, because the verdict was "provable" and the attempt that had
+     * failed was no longer anywhere to be read.
+     */
+    @Test
+    void anEdgeNoSearchReachedIsStillSaidInTheBlock() {
+        Compilation compilation = Compilation.ofSource(PROVEN_BUT_UNREACHED, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+
+        String block = souther.compiler.report.GeneratedRows.of(
+                compilation, "example.proven", "place", true);
+
+        assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
+        assertTrue(block.contains("every value tried was refused"), block);
     }
 
     /**
@@ -132,7 +203,11 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
         BoundaryAssessment at = assessmentAt(model, "example.at", "f", "0");
         assertInstanceOf(BoundaryAssessment.Coverage.Hit.class, at.coverage());
         assertInstanceOf(BoundaryAssessment.Writability.WitnessedByRow.class, at.writability(),
-                "the row is the witness; no candidate was built for a value that is already there");
+                "the row is the witness");
+        assertEquals(BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE,
+                assertInstanceOf(BoundaryAssessment.Attempt.NotAttempted.class, at.attempt())
+                        .reason(),
+                "and no candidate was built for a value that is already there");
     }
 
     /**
@@ -173,6 +248,54 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
         assertEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, absent.reason());
         assertTrue(at.writability().known(),
                 "nobody wrote a row, which says nothing about whether one could be written");
+        assertInstanceOf(BoundaryAssessment.Attempt.Built.class, at.attempt(),
+                "a value was built here, and what it settles is the writability and not the rows");
+    }
+
+    /**
+     * A line waiting on the arms is a line nothing is built for.
+     *
+     * <p>Meeting a guard's line takes the comparison having run, which nothing measures until the
+     * build asks for the arms. Until then no row there is owed to anybody, and building a candidate
+     * would hand somebody a specific piece of work on the strength of a question nobody put.
+     */
+    @Test
+    void aLineWaitingOnTheArmsIsALineNothingIsBuiltFor() {
+        String model = """
+                module example.waiting
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+
+                data Ok
+                data Big
+
+                behavior f : (n: N) -> Ok | Big
+                    constructs Ok, Big
+
+                let f (n) = if n.value <= 4 then Ok else Big
+
+                example f
+                    | "some" : (N(2)) -> Ok
+                """;
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        // What a guard's line waits on, and this build does not ask for it.
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        compilation.answerEverything();
+        Map<String, List<BoundaryAssessment>> boundaries =
+                compilation.db().ask(new Adequacy.Boundaries("example.waiting")).value();
+
+        List<BoundaryAssessment> guards = boundaries.get("f").stream()
+                .filter(b -> b.origin().startsWith("guard")).toList();
+        assertFalse(guards.isEmpty(), "the comparison draws lines: " + boundaries.get("f"));
+        for (BoundaryAssessment at : guards) {
+            assertEquals(BoundaryAssessment.Coverage.Reason.ARMS_NOT_ASKED,
+                    assertInstanceOf(BoundaryAssessment.Coverage.NotMeasured.class, at.coverage())
+                            .reason(), at.label());
+            assertEquals(BoundaryAssessment.Attempt.Reason.NOT_MEASURED,
+                    assertInstanceOf(BoundaryAssessment.Attempt.NotAttempted.class, at.attempt())
+                            .reason(), at.label());
+        }
     }
 
     private static BoundaryAssessment.Writability writabilityAt(String model, String module,

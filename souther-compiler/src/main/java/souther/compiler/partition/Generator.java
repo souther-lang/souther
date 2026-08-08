@@ -241,15 +241,18 @@ public final class Generator {
     /**
      * What building a row at one boundary came to: the row, or why there is none.
      *
-     * <p>Exactly one of the two. A caller measuring the boundary reads whether a row was built, which
-     * is a value that went through the decoder and so a witness that the edge can be written; a caller
-     * offering work to a person reads the row itself. The attempt is made once and both read it.
+     * <p>One or the other, and the type says so. A caller measuring the boundary reads whether a row
+     * was built, which is a value that went through the decoder and so a witness that the edge can be
+     * written; a caller offering work to a person reads the row itself. The attempt is made once and
+     * both read it.
      */
-    public record BoundaryAttempt(GeneratedRow row, UnresolvedCombination unresolved) {
+    public sealed interface BoundaryAttempt {
 
-        public boolean built() {
-            return row != null;
-        }
+        /** A value with the edge in it, built and accepted. */
+        record Built(GeneratedRow row) implements BoundaryAttempt {}
+
+        /** No row came of it, and why. Never a statement that none exists. */
+        record Unresolved(UnresolvedCombination why) implements BoundaryAttempt {}
     }
 
     /**
@@ -267,13 +270,13 @@ public final class Generator {
         Axis axis = subject.axes().stream().filter(a -> a.id().equals(obligation.axis())).findFirst()
                 .orElse(null);
         if (axis == null) {
-            return new BoundaryAttempt(null, new UnresolvedCombination(List.of(),
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(),
                     UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
         String label = axis.path() + " = " + written(obligation.value());
         FixtureTemplate at = valueOf(obligation.value(), axis.type(), subject.symbols());
         if (at == null) {
-            return new BoundaryAttempt(null, new UnresolvedCombination(List.of(label),
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                     UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
@@ -290,12 +293,12 @@ public final class Generator {
                             ? Map.of(axis.path().toString(), List.of(at)) : Map.of();
             Outcome tried = valueAt(subject, p, here, settled, check);
             if (tried.value() == null) {
-                return new BoundaryAttempt(null,
+                return new BoundaryAttempt.Unresolved(
                         new UnresolvedCombination(List.of(label), tried.reason(), tried.detail()));
             }
             inputs.add(tried.value());
         }
-        return new BoundaryAttempt(new GeneratedRow(List.of(label), inputs), null);
+        return new BoundaryAttempt.Built(new GeneratedRow(List.of(label), inputs));
     }
 
     // --- the pair space -------------------------------------------------------------------------

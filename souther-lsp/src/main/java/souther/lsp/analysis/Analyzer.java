@@ -485,10 +485,18 @@ public final class Analyzer {
         return String.join(" · ", parts);
     }
 
-    /** Whether a line was measured against the rows at all. A line waiting on the arms has no answer
-     * to show beside a declaration, and a count that included it would move when the setting did. */
+    /**
+     * Whether a line came to an answer against the rows.
+     *
+     * <p>Hit or missed, and nothing else. A line waiting on the arms has no answer to show beside a
+     * declaration, and one whose value could not be read has no answer either — a lens counting it
+     * would put a number in front of an author that says a row is missing at a value nothing was able
+     * to look at. The report can afford to include such a line because it writes "undecided" beside
+     * the count; one number on one line has nowhere to put that word.
+     */
     private static boolean settled(souther.compiler.query.BoundaryAssessment.Coverage coverage) {
-        return !(coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.NotMeasured);
+        return coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Hit
+                || coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Missed;
     }
 
     /** The caret at one position, as a range of no width. */

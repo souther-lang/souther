@@ -238,7 +238,9 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                                 new TypeName("example.rate", "Amount"), "value <= 100"),
                         BoundaryObligation.BoundarySide.AT, new ObservedValue.Integer(100)),
                 new BoundaryAssessment.Coverage.Hit(),
-                new BoundaryAssessment.Writability.WitnessedByRow());
+                new BoundaryAssessment.Writability.WitnessedByRow(),
+                new BoundaryAssessment.Attempt.NotAttempted(
+                        BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");

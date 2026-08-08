@@ -167,4 +167,57 @@ class AdequacyLensTest {
         assertEquals(List.of(), new Analyzer()
                 .codeActions(MODULE, TRIP, on(9), graphOf(Map.of(MODULE, TRIP))));
     }
+
+    /**
+     * A line whose value could not be read is left out of the ratio.
+     *
+     * <p>A lens is one number on one line and has nowhere to put a word beside it. The report writes
+     * "undecided" next to the count and can afford to include such a line; drawn over a declaration
+     * the same line reads as a row the author has not written, at a value nothing was able to look
+     * at. So the ratio counts the lines that came to an answer, and the rest are absent rather than
+     * counted as missing.
+     *
+     * <p>The row below hands the behavior more nodes than an observation keeps, so the value at
+     * {@code cost} is truncated and the boundaries there are undecided.
+     */
+    @Test
+    void aLineWhoseValueCouldNotBeReadIsNotInTheRatio() {
+        StringBuilder items = new StringBuilder();
+        for (int i = 0; i < 64; i++) {
+            items.append(i == 0 ? "" : ", ")
+                    .append("Item { a = \"").append(i).append("\", b = \"").append(i)
+                    .append("\", c = \"").append(i).append("\" }");
+        }
+        StringBuilder groups = new StringBuilder();
+        for (int i = 0; i < 64; i++) {
+            groups.append(i == 0 ? "" : ", ")
+                    .append("Group { items = [ ").append(items).append(" ] }");
+        }
+        String unread = """
+                module example.wide
+
+                data Amount = Int
+                    invariant value >= 0 && value <= 1000
+
+                data Item = { a: String, b: String, c: String }
+                data Group = { items: List<Item> }
+                data Draft = { groups: List<Group>, cost: Amount }
+                data Ok = { n: Int }
+
+                behavior take : (request: Draft) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = request.cost.value }
+
+                example take
+                    | (Draft { groups = [ %s ], cost = Amount(0) }) -> Ok { n = 0 }
+                """.formatted(groups);
+
+        List<CodeLens> lenses = measuring(Adequacy.Level.ALL)
+                .codeLenses(MODULE, graphOf(Map.of(MODULE, unread)));
+
+        assertEquals(1, lenses.size());
+        assertFalse(lenses.get(0).title().contains("boundary"),
+                "the invariant draws two lines and neither was decided: " + lenses.get(0).title());
+    }
 }

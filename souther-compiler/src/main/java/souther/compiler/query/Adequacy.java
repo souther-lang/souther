@@ -716,9 +716,10 @@ public final class Adequacy {
     /**
      * Rows that would fill what every behavior of one module has not covered.
      *
-     * <p>Its own key rather than part of the coverage, because it costs what the coverage does not: it
-     * builds values through the derived decoders to find out which of them a model admits. A report
-     * nobody asked to generate rows for should not pay for that.
+     * <p>Its own key rather than part of the coverage, because filling the combinations searches the
+     * pair space, which nobody who only wanted a report should pay for. The rows at the edges are not
+     * that: {@link Boundaries} builds one value per line to find out whether a line can be written at,
+     * and the row that comes of it is read from there rather than searched for again.
      *
      * <p>The two kinds of row stay apart in the answer. Filling a combination and writing a row at an
      * edge are different requests, asked with different flags, and a caller that merged them could not
@@ -774,7 +775,7 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
-                Generator.GenerationResult atEdges = offered(
+                Generator.GenerationResult atEdges = offered(spec.name(),
                         boundaries == null ? List.of()
                                 : boundaries.getOrDefault(spec.name(), List.of()));
                 try {
@@ -798,53 +799,37 @@ public final class Adequacy {
         }
 
         /**
-         * The rows at the edges, read off what the boundary assessment already built.
+         * The rows at the edges, read off what the boundary assessment already tried.
          *
-         * <p>Nothing is built here. A value at an edge was constructed to find out whether one could
-         * be, and the row that came of it is the row an author is offered — the same attempt read for
-         * a second purpose rather than made a second time. Which is what keeps the report and this
-         * block from naming different sets of boundaries.
+         * <p>Nothing is built here, and nothing is worked out from the verdict either. The attempt
+         * says what happened; this prints it. Reading it back off {@link BoundaryAssessment#writability()}
+         * would lose the case that matters most to an author — an edge the projection proves is
+         * writable and the search could not produce a row for — which came out as a verdict of
+         * "provable" with nothing said about the row that never appeared.
          */
-        private static Generator.GenerationResult offered(List<BoundaryAssessment> boundaries) {
+        private static Generator.GenerationResult offered(String behavior,
+                                                          List<BoundaryAssessment> boundaries) {
             List<Generator.GeneratedRow> rows = new ArrayList<>();
             List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
+            List<Incompleteness> stopped = new ArrayList<>();
             for (BoundaryAssessment each : boundaries) {
-                switch (each.writability()) {
-                    case BoundaryAssessment.Writability.WitnessedByConstruction built ->
-                            rows.add(built.row());
-                    case BoundaryAssessment.Writability.Unknown why -> {
-                        Generator.UnresolvedCombination.Reason said = unresolvedFor(why.reason());
-                        if (said != null) {
-                            unresolved.add(new Generator.UnresolvedCombination(
-                                    List.of(each.label()), said, why.detail()));
+                switch (each.attempt()) {
+                    case BoundaryAssessment.Attempt.Built built -> rows.add(built.row());
+                    case BoundaryAssessment.Attempt.Refused why -> unresolved.add(why.why());
+                    // Nothing was tried. Only one of the reasons is news: the decoders could not be
+                    // reached, so this block is short of rows it would otherwise have offered. The
+                    // others are boundaries nobody is owed a row at, and saying so would be noise.
+                    case BoundaryAssessment.Attempt.NotAttempted absent -> {
+                        if (absent.reason() == BoundaryAssessment.Attempt.Reason.RUNTIME_ABSENT
+                                || absent.reason()
+                                        == BoundaryAssessment.Attempt.Reason.NO_CLASSES) {
+                            stopped.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                                    Incompleteness.Scope.BEHAVIOR, behavior));
                         }
                     }
-                    // A row is already at it, or the model proves one can be written and the attempt
-                    // that would have offered it was not needed. Neither is a piece of work to hand
-                    // over: the first is done, and the second is a boundary nothing missed.
-                    default -> { }
                 }
             }
-            return new Generator.GenerationResult(rows, unresolved, List.of());
-        }
-
-        /**
-         * Why no row was built, in the words the block prints — or nothing, where the block has
-         * nothing to say.
-         *
-         * <p>An attempt that was never made is the second. Every reason here describes what happened
-         * to a candidate, and a line saying "no value can be written there" about a boundary nothing
-         * was tried at would be a claim about the model made out of a missing classpath. What stopped
-         * the whole behavior is already said, once, where it stopped.
-         */
-        private static Generator.UnresolvedCombination.Reason unresolvedFor(
-                BoundaryAssessment.Writability.Unknown.Reason reason) {
-            return switch (reason) {
-                case REFUSED -> Generator.UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED;
-                case SEARCH_LIMIT -> Generator.UnresolvedCombination.Reason.SEARCH_LIMIT;
-                case NO_REPRESENTATIVE -> Generator.UnresolvedCombination.Reason.NO_REPRESENTATIVE;
-                case NOT_ATTEMPTED -> null;
-            };
+            return new Generator.GenerationResult(rows, unresolved, distinct(stopped));
         }
 
         private static Generator.GenerationResult pairsFor(

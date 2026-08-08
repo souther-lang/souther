@@ -22,7 +22,7 @@ import java.math.BigDecimal;
  * about and what the generator offers are three readings of this and not three measurements.
  */
 public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverage,
-                                 Writability writability) {
+                                 Writability writability, Attempt attempt) {
 
     /**
      * Whether a row sits at the value, and whether that could be told.
@@ -83,34 +83,54 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
          * strongest of these and the only one that costs nothing to find. */
         record WitnessedByRow() implements Writability {}
 
-        /** A value with this edge in it was built through the module's own decoder. The row is kept
-         * because it is also the row an author is offered — one attempt, two readers. */
-        record WitnessedByConstruction(Generator.GeneratedRow row) implements Writability {}
+        /** A value with this edge in it was built through the module's own decoder. What was built is
+         * in {@link BoundaryAssessment#attempt()} and not here: this says which evidence settled the
+         * question, and the evidence itself has one home. */
+        record WitnessedByConstruction() implements Writability {}
 
-        /** Nothing has shown a row can be written here. Not a claim that none can. */
-        record Unknown(Reason reason, String detail) implements Writability {
-
-            public static Unknown of(Reason reason) {
-                return new Unknown(reason, null);
-            }
-
-            /** Why nothing was shown, which decides what an author can do about it. */
-            public enum Reason {
-                /** Candidates were built and the decoder refused every one of them. Another value of
-                 *  the same edge may well build. */
-                REFUSED,
-                /** No value at all can be written at some position of the row. */
-                NO_REPRESENTATIVE,
-                /** The search stopped before reaching it. */
-                SEARCH_LIMIT,
-                /** Nothing was built against: the module's classes or the runtime were not there. */
-                NOT_ATTEMPTED
-            }
-        }
+        /** Nothing has shown a row can be written here. Not a claim that none can, and it carries no
+         * reason of its own — what was tried and what came of it is the attempt's to say. */
+        record Unknown() implements Writability {}
 
         /** Whether a row is known to be writable here. False leaves it open, never closed. */
         default boolean known() {
             return !(this instanceof Unknown);
+        }
+    }
+
+    /**
+     * What was built at this boundary, and what came of it.
+     *
+     * <p>Its own answer and not a shade of {@link Writability}. An edge the projection already proved
+     * is one a search can still fail to reach — the two are about different things, and a reader that
+     * recovered the attempt from the verdict would find nothing to say about a row it could not
+     * produce at an edge it knows exists. The report reads the verdict; {@code --generate} reads this.
+     *
+     * <p>Made once. The row a person is offered and the value that witnessed the edge are the same
+     * value, built one time and read twice.
+     */
+    public sealed interface Attempt {
+
+        /** A value with the edge in it, built and accepted by the module's own decoders. */
+        record Built(Generator.GeneratedRow row) implements Attempt {}
+
+        /** Candidates were built and none survived, or none could be chosen. What the search met,
+         * in its own words, so that what is printed about it says what happened. */
+        record Refused(Generator.UnresolvedCombination why) implements Attempt {}
+
+        /** Nothing was tried, and why not. Separate from a refusal because they license different
+         * sentences: one is a fact about values, the other is a fact about this run. */
+        record NotAttempted(Reason reason) implements Attempt {}
+
+        enum Reason {
+            /** A row already sits at the value. There is nothing to find out and nothing to offer. */
+            A_ROW_IS_ALREADY_THERE,
+            /** The line was not measured against the rows, so no row here is owed to anybody yet. */
+            NOT_MEASURED,
+            /** The module's classes were not there to build against. */
+            NO_CLASSES,
+            /** The runtime is not on this host's classpath, so the decoders could not be reached. */
+            RUNTIME_ABSENT
         }
     }
 

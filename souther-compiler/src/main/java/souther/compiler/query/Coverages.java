@@ -279,10 +279,46 @@ final class Coverages {
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
             BoundaryAssessment.Coverage coverage =
                     coverageOf(each, axis, parameters, observed, armsAsked);
+            BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
             out.add(new BoundaryAssessment(each, coverage,
-                    writabilityOf(each, coverage, knownWritable, probe)));
+                    writabilityOf(coverage, knownWritable, attempt), attempt));
         }
         return out;
+    }
+
+    /**
+     * What building a row at this boundary came to, where one was worth building.
+     *
+     * <p>Nothing is built where nothing is owed: a boundary a row already sits at needs no candidate,
+     * and one whose measurement never happened is not a piece of work to hand to anybody. Where a
+     * candidate was worth building and there was nothing to build against, that is said as well —
+     * it is a fact about the run, and reading it as a fact about the value is how "the classpath is
+     * short of a jar" would become "this edge may not be writable".
+     */
+    private static BoundaryAssessment.Attempt attemptAt(BoundaryObligation obligation,
+                                                        BoundaryAssessment.Coverage coverage,
+                                                        Probe probe) {
+        if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
+            return new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
+        }
+        if (!worthBuilding(coverage)) {
+            return new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.NOT_MEASURED);
+        }
+        if (probe == null) {
+            return new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.NO_CLASSES);
+        }
+        souther.compiler.partition.Generator.BoundaryAttempt made = probe.attempt(obligation);
+        return switch (made) {
+            case null -> new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.RUNTIME_ABSENT);
+            case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
+                    new BoundaryAssessment.Attempt.Built(built.row());
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
+                    new BoundaryAssessment.Attempt.Refused(left.why());
+        };
     }
 
     /** Whether a row sits at one boundary, and whether that could be told. */
@@ -322,43 +358,32 @@ final class Coverages {
     }
 
     /**
-     * What says a row can be written at one boundary.
+     * What says a row can be written at one boundary: the verdict, over the evidence there is.
      *
      * <p>The strongest evidence already in hand first. A row at the value went through the decoder,
-     * which is the whole of what writable means, and costs nothing to read. Otherwise a value is built:
-     * that is the same attempt the generator offers an author, made once here and read by both. The
-     * projection stands behind the attempt rather than in front of it — where it read every rule it
-     * proves the edge inhabited whatever the decoder made of the particular candidates tried, which is
-     * what keeps a refusal from turning into a claim of impossibility.
+     * which is the whole of what writable means, and costs nothing to read. Then the value that was
+     * built, which went through the same decoder. Then the projection, which stands behind both rather
+     * than in front of them: where it read every rule it proves the edge inhabited whatever the search
+     * made of the particular candidates it tried.
      *
-     * <p>Nothing is built where nothing is owed: a boundary a row already sits at needs no candidate,
-     * and one whose measurement never happened is not a piece of work to hand to anybody.
+     * <p>Only the verdict is decided here. What was tried and what came of it is the attempt's to
+     * say, and it is kept whether or not it changed this answer — an edge the projection proves is one
+     * a search can still fail to reach, and a reader that had only this could not tell that it had.
      */
     private static BoundaryAssessment.Writability writabilityOf(
-            BoundaryObligation obligation, BoundaryAssessment.Coverage coverage,
-            boolean knownWritable, Probe probe) {
+            BoundaryAssessment.Coverage coverage, boolean knownWritable,
+            BoundaryAssessment.Attempt attempt) {
         if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
             return new BoundaryAssessment.Writability.WitnessedByRow();
         }
-        if (!worthBuilding(coverage) || probe == null) {
-            return knownWritable ? new BoundaryAssessment.Writability.ProvenByProjection()
-                    : BoundaryAssessment.Writability.Unknown.of(
-                            BoundaryAssessment.Writability.Unknown.Reason.NOT_ATTEMPTED);
+        if (attempt instanceof BoundaryAssessment.Attempt.Built) {
+            return new BoundaryAssessment.Writability.WitnessedByConstruction();
         }
-        souther.compiler.partition.Generator.BoundaryAttempt attempt = probe.attempt(obligation);
-        if (attempt == null) {
-            return knownWritable ? new BoundaryAssessment.Writability.ProvenByProjection()
-                    : BoundaryAssessment.Writability.Unknown.of(
-                            BoundaryAssessment.Writability.Unknown.Reason.NOT_ATTEMPTED);
-        }
-        if (attempt.built()) {
-            return new BoundaryAssessment.Writability.WitnessedByConstruction(attempt.row());
-        }
-        // Every candidate refused. Which does not make the edge unwritable — another value of it may
-        // build — so a projection that read every rule still proves what the attempt could not find.
+        // A refusal and an attempt nobody made leave the same verdict, and a projection that read
+        // every rule proves what neither of them found. Which is where the asymmetry lives: nothing
+        // a search does can take a proof away, because nothing a search does is evidence against.
         return knownWritable ? new BoundaryAssessment.Writability.ProvenByProjection()
-                : new BoundaryAssessment.Writability.Unknown(
-                        reasonOf(attempt.unresolved().reason()), attempt.unresolved().detail());
+                : new BoundaryAssessment.Writability.Unknown();
     }
 
     /**
@@ -373,16 +398,6 @@ final class Coverages {
         return coverage instanceof BoundaryAssessment.Coverage.Missed
                 || (coverage instanceof BoundaryAssessment.Coverage.NotMeasured absent
                         && absent.reason() == BoundaryAssessment.Coverage.Reason.NO_ROWS);
-    }
-
-    private static BoundaryAssessment.Writability.Unknown.Reason reasonOf(
-            souther.compiler.partition.Generator.UnresolvedCombination.Reason reason) {
-        return switch (reason) {
-            case NO_REPRESENTATIVE ->
-                    BoundaryAssessment.Writability.Unknown.Reason.NO_REPRESENTATIVE;
-            case ALL_CANDIDATES_REJECTED -> BoundaryAssessment.Writability.Unknown.Reason.REFUSED;
-            case SEARCH_LIMIT -> BoundaryAssessment.Writability.Unknown.Reason.SEARCH_LIMIT;
-        };
     }
 
     /**
