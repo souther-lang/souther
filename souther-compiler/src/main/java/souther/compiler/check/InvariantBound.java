@@ -13,8 +13,10 @@ import java.util.Optional;
  * <p>Read off the comparison. What a report measures a position at is where the rules about it stop,
  * and that is not the same question as which runtime check the rule becomes: the runtime states a
  * decimal above zero directly and has no word for a decimal above five, so a reader written for it
- * answers "no bound" to a rule that plainly draws one. Asked here of {@code value OP literal} and of
- * nothing else, which is the whole of what a range can hold anyway.
+ * answers "no bound" to a rule that plainly draws one. Asked here of an ordering of
+ * {@code value} against a literal, and of one end at a time. An equality states both ends at once
+ * and is not read: it was not read before either, and giving a position one value is a different
+ * answer from bounding it, which the report has nowhere to put yet.
  *
  * <p>Over whole numbers a strict comparison names the adjacent value, and the end lands on a value
  * the rule admits. Over decimals there is no adjacent value, so the end stays on the literal and says
