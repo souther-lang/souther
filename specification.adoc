@@ -2637,7 +2637,7 @@ Only a comparison written as the whole of a `+guard+`'s condition is read. In `+
 
 A record's rule takes an edge in and does not put one there. A position its own type leaves open is one the model draws no line through, whatever a rule relates it to, because a rule between two fields is not a partition of one of them.
 
-What is read of such a rule is what a comparison of numbers states — an ordering between two fields, or between a field and a constant. A rule of another shape leaves the position where its type left it, which is the direction to miss in: an edge too far out is a row an author cannot write, and an edge that was never moved is one they can.
+What is read of such a rule is what a comparison of numbers states — an ordering between two fields, or between a field and a constant. A rule of another shape leaves the position where its type left it, and that edge is then not one anything promises: the rule that could not be read refuses a value at the edge as readily as one past it. Such an edge is reported and not counted, and no build is refused over it (<<example-adequacy>>) — the same account a combination nothing has settled gets. A row written at the value settles it, being a value that went through the decoder, and the edge counts from then on.
 
 An invariant's bound is a boundary and not a partition. Everything outside it is refused at construction (<<e1903>>), so there is no class on the far side to cover — what remains is an edge worth a row. Both sides of a `+guard+`'s line do have values, so it wants the line and its neighbour, and the neighbour only where the type has one: `+cost <= 100000+` asks for 100001 on an `+Int+`, and asks for nothing beside it on a `+Decimal+`, which has no next value.
 

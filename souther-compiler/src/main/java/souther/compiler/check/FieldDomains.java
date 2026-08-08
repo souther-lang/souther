@@ -120,6 +120,14 @@ public final class FieldDomains {
         if (atom != null && !numbers.projectionIsLosslessAt(atom)) {
             return false;
         }
+        // A relation is only a projection where both ends brought their ranges. A type declared in
+        // another module is read here in the form its operations have already been settled into, so
+        // its bound never arrives — and a rule relating such a position to another narrows nothing
+        // while the derivation puts the type's own edges back, which is an edge nobody can write
+        // rather than a narrowing missed.
+        if (atom != null && numbers.isRelated(atom) && numbers.boundsOf(atom).isEmpty()) {
+            return false;
+        }
         Set<String> positions = unreadPositions;
         if (positions == null) {
             positions = unread.get();

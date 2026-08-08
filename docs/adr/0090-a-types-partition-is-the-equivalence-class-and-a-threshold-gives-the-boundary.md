@@ -46,7 +46,19 @@ one the model draws no line through: a rule between two fields is not a partitio
 treating it as one would divide an `Int` the author never bounded. What is read of such a rule is an
 ordering of numbers and nothing else; a rule of another shape leaves the position where its type left
 it, which is the safe direction — an edge too far out is a row nobody can write, and an edge never
-moved is one they can.
+moved is not one either.
+
+An edge whose rules were not all read is not a gap. Both answers were wrong: counting it asks for a
+row that may be impossible, and falling back to the type's own edge is no better, since the rule that
+could not be read refuses that value as readily as the one beyond it. So it is reported, left out of
+the denominator, and refuses no build — which is what ADR-0091 already does with a combination nothing
+has settled, for the same reason. What settles it is a witness rather than an argument: a row at the
+value went through the decoder, and from then on the edge is counted like any other.
+
+Whether the rules were all read is asked of the position and of the bound's own derivation. A rule the
+domain could not hold is a rule about the atoms it names, so a pattern on a label leaves the minutes
+beside it exactly as they were; and a bound reached through a difference carries the doubt of every
+atom on that path, because that is the path the bound itself came along.
 
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both

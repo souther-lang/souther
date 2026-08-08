@@ -279,7 +279,10 @@ final class Coverages {
                     met == Met.UNDECIDED ? MeasurementStatus.UNAVAILABLE
                             : met == Met.UNREADABLE ? MeasurementStatus.PARTIAL
                                     : MeasurementStatus.COMPLETE,
-                    met == Met.UNDECIDED ? absent : null, knownWritable));
+                    // A row at the value is a value that went through the decoder, which is the
+                    // whole of what writable means. Where there is one, what the projection could
+                    // not promise has been settled by something better than a promise.
+                    met == Met.UNDECIDED ? absent : null, knownWritable || met == Met.YES));
         }
         return out;
     }
