@@ -775,7 +775,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         measured(pairs, partition.pairs().status(), partition.pairs().reason());
         partition.notDerivable().forEach(out.putArray("notDerivable")::add);
         ArrayNode omitted = out.putArray("omitted");
-        partition.omitted().forEach(o -> omitted.add(o.reason().subject()));
+        partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
     }
 
     private static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch) {

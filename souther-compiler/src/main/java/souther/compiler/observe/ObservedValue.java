@@ -87,8 +87,7 @@ public sealed interface ObservedValue {
 
     /** A value larger than {@link Limits} allows. What is kept is its size and a digest, which is enough
      * to tell two truncated values apart without holding either. */
-    record Truncated(Incompleteness.Code reason, int observedSize, String digest)
-            implements ObservedValue {}
+    record Truncated(int observedSize, String digest) implements ObservedValue {}
 
     /** An empty map with a stable iteration order, for building a {@link Constructed}. */
     static Map<String, ObservedValue> fields() {

@@ -78,9 +78,7 @@ public record Incompleteness(Code code, Scope scope, String subject, Optional<So
          */
         PROBE_MAPPING_LOST,
         /** A search gave up before it could decide. */
-        SEARCH_LIMIT,
-        /** An axis was dropped because the axis limit was reached. */
-        AXIS_OMITTED
+        SEARCH_LIMIT
     }
 
     public Incompleteness {

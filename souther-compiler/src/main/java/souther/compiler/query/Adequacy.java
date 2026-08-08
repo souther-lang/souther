@@ -1257,7 +1257,7 @@ public final class Adequacy {
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
                         MeasurementStatus.COMPLETE, behavior.pos(),
-                        List.of(dropped.reason().subject())));
+                        List.of(dropped.axis().toString())));
             }
         }
 

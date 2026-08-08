@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -313,10 +312,8 @@ class PartitionsTest {
 
         assertEquals(Partitions.MAX_AXES, partitioning.derivable().size());
         assertEquals(3, partitioning.omitted().size());
-        assertTrue(partitioning.omitted().stream()
-                .allMatch(i -> i.reason().code() == Incompleteness.Code.AXIS_OMITTED));
-        assertTrue(partitioning.omitted().get(0).reason().subject().contains("run/wide.f12"),
-                partitioning.omitted().get(0).reason().subject());
+        assertTrue(partitioning.omitted().get(0).axis().toString().contains("run/wide.f12"),
+                partitioning.omitted().get(0).axis().toString());
         // A `Bool` is classified and never cut, so dropping one loses a measure nothing refuses a
         // build over. What a dropped axis was carrying is decided here because it cannot be read back:
         // a position nobody measured leaves the same absence as one the rows cover.

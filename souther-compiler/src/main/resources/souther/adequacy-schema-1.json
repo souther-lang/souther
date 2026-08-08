@@ -292,7 +292,7 @@
         "code": {
           "description": "`observation_absent` is a source none of whose rows were observed, whatever stopped them — the diagnostics say what. `linkage_failed` is the generated classes not linking, and no more than that: the case it exists for is the runtime being off the host's classpath, and the JVM raises the same error for a class it will not verify or accept the format of, which is why the word is the error and not one of its causes. What did not happen next is not part of it — one of the places that write it was running an example, and the others were building a value after the rows had been read.",
           "enum": ["value_unreadable", "value_truncated", "row_undecided", "observation_absent",
-                   "linkage_failed", "probe_mapping_lost", "search_limit", "axis_omitted"]
+                   "linkage_failed", "probe_mapping_lost", "search_limit"]
         },
         "subject": { "type": "string" },
         "at": { "$ref": "#/$defs/at" }

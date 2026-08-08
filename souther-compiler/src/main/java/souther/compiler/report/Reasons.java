@@ -52,7 +52,7 @@ final class Reasons {
                     gap.subject());
             case ROW_UNDECIDED -> String.format(
                     "a row of `%s` did not come back, so what it covers is unknown", gap.subject());
-            case VALUE_UNREADABLE, VALUE_TRUNCATED, PROBE_MAPPING_LOST, SEARCH_LIMIT, AXIS_OMITTED ->
+            case VALUE_UNREADABLE, VALUE_TRUNCATED, PROBE_MAPPING_LOST, SEARCH_LIMIT ->
                     String.format("%s (%s)", gap.subject(),
                             gap.code().name().toLowerCase(Locale.ROOT));
         };
