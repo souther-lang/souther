@@ -216,6 +216,50 @@ class WhatGoesBetweenTwoTokensOnALineTest {
                     | B { a } -> 2
                     | C -> 3
             """,
+            // one bracket closing or opening against another, which node-kind coverage does not
+            // reach on its own: a construct nested directly inside another's brackets
+            """
+            module m
+
+            let ints (a: Int): List<Int> = [1, 2]
+
+            let listed (a: Int): R = R { a = [1] }
+
+            let called (a: Int): R = R { a = f(1) }
+
+            let inside (a: Int): Int = f(R { a = 1 })
+
+            let nested (a: Int): R = R { a = S { b = 1 } }
+
+            let described (a: Int): Int = f("x")
+
+            let stringed (a: Int): R = R { a = "x" }
+
+            let flagged (a: Int): R = R { a = true }
+
+            let unflagged (a: Int): R = R { a = false }
+
+            let two (a: Int): Int = f("x", "y")
+
+            let parenArg (a: Int): Int = f(a, (a))
+
+            let annotated (a: Int): Int = {
+                let x: Int = 1
+                x
+            }
+
+            let opened (a: Int): Int = call(({ a }) -> a)
+
+            let arith (a: Int): Int = 1 + a * 2 - a
+
+            let compared (a: Int): Bool = a <= 1
+
+            let after (a: Int): Int = f(a) + 1
+
+            let atLeast (a: Int): Bool = f(a) >= 1
+
+            let piped (a: Int): Int = 1 |> double
+            """,
             """
             examples for m
 
@@ -291,8 +335,10 @@ class WhatGoesBetweenTwoTokensOnALineTest {
     }
 
     /** Every adjacency in the canonical form of every source, excluding the pairs a break separated,
-     * which are the other rules' business. */
-    private static List<Adjacency> adjacencies() {
+     * which are the other rules' business. Read by
+     * {@link TheSpacingRuleAgreesWithTheCanonicalFormTest} as well: what is measured — the rendered
+     * text — is the same, and what each of the two holds it against is not. */
+    static List<Adjacency> adjacencies() {
         List<Adjacency> out = new ArrayList<>();
         for (String source : corpus()) {
             String canonical = Formatter.format(source);
@@ -387,7 +433,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
         // A type ascribed to a name is written tight against it; a signature is spaced from its name.
         out.put("IDENT COLON", row(
                 "BEHAVIOR_DEF", " ", "EXPOSED_ENTRY", " ",
-                "FIELD", "", "FN_DEF", "", "FN_PARAM", "", "PARAM", ""));
+                "FIELD", "", "FN_DEF", "", "FN_PARAM", "", "LET_STMT", "", "PARAM", ""));
         // `<` and `>` are a type's brackets or a comparison's operator.
         out.put("IDENT LT", row("TYPE_REF", "", "BINARY_EXPR", " "));
         out.put("LT IDENT", row("TYPE_ARGS", "", "BINARY_EXPR", " "));
@@ -425,12 +471,15 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             INT_LIT RPAREN
             LBRACE RBRACE
             LBRACKET IDENT
+            LBRACKET INT_LIT
             LBRACKET LPAREN
             LBRACKET RBRACKET
             LPAREN INT_LIT
+            LPAREN LBRACE
             LPAREN LBRACKET
             LPAREN LPAREN
             LPAREN RPAREN
+            LPAREN STRING_LIT
             LPAREN TYPEVAR
             LT LPAREN
             LT TYPEVAR
@@ -438,6 +487,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             QUESTION COMMA
             QUESTION RPAREN
             RBRACE COMMA
+            RBRACE RPAREN
             RBRACKET COMMA
             RBRACKET RPAREN
             RPAREN COLON
@@ -445,6 +495,8 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             RPAREN RBRACKET
             RPAREN RPAREN
             SPREAD IDENT
+            STRING_LIT COMMA
+            STRING_LIT RPAREN
             TRUE_KW COMMA
             TYPEVAR COMMA
             TYPEVAR GT
@@ -464,6 +516,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ARROW TYPEVAR
             ARROW UNREACHABLE_KW
             ASSIGN DOT
+            ASSIGN FALSE_KW
             ASSIGN IDENT
             ASSIGN IF_KW
             ASSIGN INT_LIT
@@ -471,6 +524,8 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ASSIGN LBRACKET
             ASSIGN LPAREN
             ASSIGN MINUS
+            ASSIGN STRING_LIT
+            ASSIGN TRUE_KW
             AS_KW IDENT
             BEHAVIOR_KW IDENT
             COLON IDENT
@@ -480,6 +535,8 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             COMMA IDENT
             COMMA INT_LIT
             COMMA LBRACKET
+            COMMA LPAREN
+            COMMA STRING_LIT
             COMMA TRUE_KW
             COMMA TYPEVAR
             CONSTRUCTS_KW IDENT
@@ -496,6 +553,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             EQ INT_LIT
             EXPOSING_KW LPAREN
             FALSE_KW ELSE_KW
+            FALSE_KW RBRACE
             GE IDENT
             GE INT_LIT
             GT ASSIGN
@@ -512,6 +570,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IDENT GE
             IDENT IDENT
             IDENT LBRACE
+            IDENT LE
             IDENT LET_KW
             IDENT OR
             IDENT PIPE
@@ -519,6 +578,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IDENT PLUS
             IDENT PLUSPLUS
             IDENT RBRACE
+            IDENT STAR
             IDENT STRING_LIT
             IDENT THEN_KW
             IDENT VPIPE
@@ -527,11 +587,14 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IMPORT_KW IDENT
             INT_LIT ELSE_KW
             INT_LIT MINUS
+            INT_LIT PLUS
             INT_LIT RBRACE
             INT_LIT THEN_KW
+            INT_LIT VPIPE
             INVARIANT_KW IDENT
             LBRACE IDENT
             LBRACE SPREAD
+            LE INT_LIT
             LET_KW IDENT
             LET_KW LBRACE
             LET_KW LPAREN
@@ -544,28 +607,37 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             PIPE LPAREN
             PIPE STRING_LIT
             PIPEFWD IDENT
+            PLUS IDENT
             PLUS INT_LIT
             PLUSPLUS IDENT
             PLUSPLUS LBRACKET
             RBRACE ARROW
             RBRACE ASSIGN
             RBRACE AS_KW
+            RBRACE RBRACE
             RBRACKET ELSE_KW
+            RBRACKET RBRACE
             RPAREN ARROW
             RPAREN ASSIGN
             RPAREN AS_KW
             RPAREN ELSE_KW
             RPAREN EQ
+            RPAREN GE
+            RPAREN PLUS
+            RPAREN RBRACE
             RPAREN STAR
             RPAREN THEN_KW
             RPAREN WITH_KW
             STAR IDENT
+            STAR INT_LIT
             STRING_LIT COLON
+            STRING_LIT RBRACE
             THEN_KW DECIMAL_LIT
             THEN_KW FALSE_KW
             THEN_KW IDENT
             THEN_KW INT_LIT
             THEN_KW LPAREN
+            TRUE_KW RBRACE
             TYPEVAR ASSIGN
             UNREACHABLE_KW STRING_LIT
             VPIPE IDENT
