@@ -219,6 +219,44 @@ public final class Compiler {
         return compilation;
     }
 
+    /**
+     * The compilation of one source, driven as far as it goes, with nothing raised.
+     *
+     * <p>Beside {@link #compiled} rather than in place of it. A caller about to write classes out has
+     * to stop at the first error, there being nothing to write; a caller about to say what the rows
+     * cover has an answer either way. The specification puts the two apart — an example report
+     * "changes what compiles" not at all — and this is the half of that the entry points did not
+     * have. What refused the compilation is refused still: it is in the reports, and the caller reads
+     * it there rather than catching it.
+     */
+    public static Compilation analyzed(String source, String defaultModuleName,
+                                       List<Located> warningsOut, Adequacy.Asked measure) {
+        return answered(Compilation.ofSource(source, defaultModuleName), warningsOut, measure);
+    }
+
+    /** As {@link #analyzed}, for a module set resolved against {@code path} — what
+     *  {@link #compiledModules} is to {@link #compiled}. */
+    public static Compilation analyzedModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure) {
+        return answered(Compilation.ofSources(sources, path), warningsOut, measure);
+    }
+
+    /**
+     * Asks the whole compilation and collects its warnings.
+     *
+     * <p>The warnings are collected whatever the compilation came to, which is where this parts from
+     * the raising entry points: they reach the collection only by getting past every error, so a
+     * compilation with one reports no warnings at all. Nothing about a warning depends on the errors
+     * beside it.
+     */
+    private static Compilation answered(Compilation compilation, List<Located> warningsOut,
+                                        Adequacy.Asked measure) {
+        compilation.measure(measure);
+        compilation.answerEverything();
+        warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
+        return compilation;
+    }
+
     private static Map<String, byte[]> classesOf(Compilation compilation) {
         return new LinkedHashMap<>(compilation.classes());
     }
@@ -272,8 +310,8 @@ public final class Compiler {
      * The compilation of a module set, driven to completion, with the first error raised — what
      * {@link #linking} returns the classes of, for a caller that wants more than the classes.
      *
-     * <p>{@code souther examples} is such a caller: it asks how well the rows cover the model, which
-     * is read off the same compile that would have written the classes out.
+     * <p>For a caller that has to have a compilation there is nothing to go on with. A caller that
+     * can say something either way takes {@link #analyzedModules} instead.
      */
     public static Compilation compiledModules(List<String> sources, ModulePath path,
                                               List<Located> warningsOut) {

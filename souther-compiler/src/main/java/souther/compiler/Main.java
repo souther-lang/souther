@@ -316,9 +316,17 @@ public final class Main {
      * {@code souther examples <file.sou>...}: how well the model's {@code example}s cover it.
      *
      * <p>Its own command rather than a flag on {@code compile}, because the two answer different
-     * questions. {@code compile} writes classes out and stops at the first error; this asks a model
-     * that already compiles how much of it the rows have pinned down. Mixing them would put a report
-     * on stdout next to {@code wrote <path>} and make a failing build the only way to see it.
+     * questions. {@code compile} writes classes out and stops at the first error; this asks how much
+     * of a model the rows have pinned down, which is a question about what was observed and not
+     * about whether anything can be written out. Mixing them would put a report on stdout next to
+     * {@code wrote <path>} and make a failing build the only way to see it.
+     *
+     * <p>So the three things this answers with are decided apart. The report goes to stdout wherever
+     * there is a subject to report on; the diagnostics go to stderr as they always did; the exit code
+     * says whether the command succeeded, and an error still means it did not. Reading the report off
+     * a compile that had to survive every error is what left the whole {@code incompleteness} channel
+     * unreachable — all but one of the reasons that field carries arrive with a diagnostic beside
+     * them, so the fail-fast path hid the whole of it.
      */
     private static int examplesSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
@@ -388,10 +396,20 @@ public final class Main {
             }
             ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY
                     : ModulePath.ofClassPath(classPath);
+            // The analysing entry points, not the compiling ones. What the rows cover is a question
+            // this command answers from whatever was observed, and taking the compilation from an
+            // entry point that raises the first error made every failure the report describes the
+            // one thing that stopped it being written.
             Compilation compilation = texts.size() == 1 && classPath.isEmpty()
-                    ? Compiler.compiled(texts.get(0), Runner.moduleName(sources.get(0)), warnings,
+                    ? Compiler.analyzed(texts.get(0), Runner.moduleName(sources.get(0)), warnings,
                             measure)
-                    : Compiler.compiledModules(texts, path, warnings, measure);
+                    : Compiler.analyzedModules(texts, path, warnings, measure);
+            // Said first, and whatever the command answers with after. What is wrong with the source
+            // is the same news whether the rest of this reports, refuses, or succeeds.
+            List<Located> errors = compilation.errors(compilation.db().allReports());
+            List<Located> said = new ArrayList<>(errors);
+            said.addAll(warnings);
+            report(said, sources, render);
             // Before the report, because a name that names nothing is not something a report can
             // say. Filtering one after the fact leaves an empty document whose every word is about
             // what was measured, and nothing measured anything.
@@ -400,16 +418,29 @@ public final class Main {
                 System.err.println(Messages.get(refused.key(), render.locale(), refused.args()));
                 return 2;
             }
-            AdequacyReport report = AdequacyReport.of(compilation).only(module, behavior);
-            report(warnings, sources, render);
-            String rendered = render.json() ? report.json() + System.lineSeparator() : report.human();
-            System.out.print(rendered);
-            // After the report, because the rows are what to do about what the report just said.
-            // Beside it rather than in it where the report is JSON: the rows are source, and source in
-            // the middle of a JSON document is not a document.
-            if (generate) {
-                String rows = GeneratedRows.of(compilation, module, behavior, boundaries);
-                (render.json() ? System.err : System.out).print(rows);
+            AdequacyReport assessed = AdequacyReport.of(compilation);
+            // Whether there is anything to report on is a question about the compilation, and what
+            // the report shows is a question about the selection. They are asked of different things
+            // — this of everything that formed, `only` of what was named — so that neither can come
+            // to stand for the other. That is the shape of the defect this command had.
+            boolean assessable = !assessed.modules().isEmpty();
+            AdequacyReport report = assessed.only(module, behavior);
+            if (assessable) {
+                String rendered = render.json() ? report.json() + System.lineSeparator()
+                        : report.human();
+                System.out.print(rendered);
+                // After the report, because the rows are what to do about what the report just said.
+                // Beside it rather than in it where the report is JSON: the rows are source, and
+                // source in the middle of a JSON document is not a document.
+                if (generate) {
+                    String rows = GeneratedRows.of(compilation, module, behavior, boundaries);
+                    (render.json() ? System.err : System.out).print(rows);
+                }
+            }
+            // The report is written either way; whether the command succeeded is a separate answer,
+            // and an error is an error whatever could still be said about the rows.
+            if (!errors.isEmpty()) {
+                return 1;
             }
             // What the report just named, and nothing else. A row waiting for a `let` is not one of
             // them: waiting is the normal state of a model being written, and a gate on it refuses the

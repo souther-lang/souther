@@ -2587,7 +2587,7 @@ The base form is written inline, in the same source as the behavior. To keep fix
 [#example-adequacy]
 === What the rows establish
 
-An `+example+` fixes the value rule for one input. Whether a model's rows together say enough about it is a different question, and `+souther examples+` answers it from what evaluating them observed. Nothing here changes what compiles; it reports.
+An `+example+` fixes the value rule for one input. Whether a model's rows together say enough about it is a different question, and `+souther examples+` answers it from what evaluating them observed. Nothing here changes what compiles; it reports. And what compiles does not decide whether it reports: a compilation that raised a diagnostic observed whatever it observed, and the rows covered whatever they covered (<<example-report-emission>>).
 
 These are the questions the dial asks of a model's rows, each answered where the measurement was complete:
 
@@ -2707,6 +2707,25 @@ That difference is the one worth reading. `+not applicable+` asks nothing of an 
 *A measure's reason is the measure's own.* It is not worked out from the numbers beside it, from how many rows a behavior has, or from whether the behavior is injected. Those correlate with the reason and are not it.
 
 *The JSON form carries the same two.* Every measure emits `+status+`, and emits `+reason+` exactly where `+status+` is `+unavailable+`. `+schemaVersion+` is raised when a field is removed or renamed, and not when one is added: a document written before a field existed is still a document of this version. That holds one way only. Every object in the schema is closed, so an older copy of it refuses a document carrying a field added since; a reader that has to accept newer documents wants the newer schema rather than a higher number.
+
+*What the rows could not be observed doing.* Beside the measures, the report carries the reasons the rows were not observed — what happened, and what it happened to: a behavior, a source, the module, or a position in a value. A row that did not come back, a source none of whose rows were evaluated, a run whose instrumentation could not be tied back to the body. The JSON writes them as `+incompleteness+`.
+
+This is not the whole account of what an assessment went without, and an empty list does not say that everything was read. What stopped a measure from reading what was observed is said by that measure instead: a position dropped for being past the axis limit, a combination count that stopped at its own limit, a value too large to be read back. Those carry no entry here, and a report may say `+partial+` with this list empty. The division is which half of the work did not happen — the rows not observed, or the observations not read — and `+status+` is what a reader asks about completeness either way.
+
+These are not the compilation's diagnostics restated. A diagnostic says what is wrong with the source and where; one of these says which evidence the assessment went without, which is a fact about the measurement. Most of them will sit beside a diagnostic that accounts for it — a source that would not evaluate is a source something was wrong with — and one of them never does: the runtime not being reachable is a fact about the host that no source can be corrected for. Neither substitutes for the other: a reader wanting to know what to fix reads the diagnostics, and one wanting to know how far the report's own numbers can be trusted reads these.
+
+[#example-report-emission]
+=== When the report is written
+
+What the command answers with, what it says went wrong, and whether it succeeded are three results, decided apart:
+
+* [[a-diagnostic-does-not-withhold-the-report]]a diagnostic MUST NOT on its own withhold the report. The rows covered what they covered, and that is the question this command was asked;
+* [[no-subject-leaves-no-report]]where nothing the compilation produced can be measured — no module formed at all — there is no subject for a measure to be about, and no report is written;
+* [[an-error-still-refuses-the-command]]an error MUST still be reported, and MUST still leave a non-zero exit status. `+--strict+` decides the exit status of a compilation that raised none (<<example-adequacy>>).
+
+This is what makes the reasons above reportable. All but one of them arrive with a diagnostic beside them, so a report written only for a compilation that raised none could carry almost nothing that field is for — the exception being the runtime not being reachable, which no source is at fault for.
+
+A reader that took an empty stdout for a refused command reads the exit status instead: a failing invocation may write a report and a non-zero status together.
 
 [#control-flow]
 == Control structures
