@@ -9,7 +9,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BoundaryInput;
 import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.BoundaryOutput;
-import souther.compiler.types.BoundaryScalar;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -108,8 +108,8 @@ final class SignatureBoundary {
 
     /** The scalar a primitive stands for. {@code Raw} is written like one and is the language's own
      *  vocabulary rather than a model's, so it is refused as the name it is. */
-    private static BoundaryScalar scalar(Type.Prim prim, Where where) {
-        BoundaryScalar scalar = BoundaryScalar.of(prim);
+    private static LeafScalar scalar(Type.Prim prim, Where where) {
+        LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
             throw foreignName(TypeName.primitive("Raw"), where);
         }

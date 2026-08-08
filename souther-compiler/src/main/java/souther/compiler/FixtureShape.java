@@ -3,7 +3,7 @@ package souther.compiler;
 import souther.compiler.check.Symbols;
 import souther.compiler.types.BoundaryInput;
 import souther.compiler.types.BoundaryOutput;
-import souther.compiler.types.BoundaryScalar;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -45,7 +45,7 @@ public sealed interface FixtureShape {
 
     /** A scalar read by a leaf decoder. The six are the six a boundary writes, and for the same
      *  reason rather than by borrowing: they are the primitives a codec exists for. */
-    record Scalar(BoundaryScalar scalar) implements FixtureShape {
+    record Scalar(LeafScalar scalar) implements FixtureShape {
         @Override
         public Type type() {
             return scalar.type();
@@ -135,28 +135,31 @@ public sealed interface FixtureShape {
         };
     }
 
-    /** The same of what a behavior answers. */
-    static FixtureShape of(BoundaryOutput out) {
+    /**
+     * The shape a whole answer is written as, or null where the answer is several types.
+     *
+     * <p>Partial, and named for it. A union nobody named is not one shape: which of its members a
+     * value is is what the row writes, and the row is built against that case. Every other answer is
+     * one shape, and projects as an input does.
+     */
+    static FixtureShape ofWholeAnswer(BoundaryOutput out) {
         return switch (out) {
             case BoundaryOutput.Scalar s -> new Scalar(s.scalar());
             case BoundaryOutput.Nominal n -> new Nominal(n.name());
-            case BoundaryOutput.ListOf l -> new ListOf(of(l.element()));
-            case BoundaryOutput.SetOf s -> new SetOf(of(s.element()));
-            case BoundaryOutput.MapOf m -> new MapOf(key(m.key()), of(m.value()));
-            // A union nobody named is several types, and a fixture states a value of one of them:
-            // which one is what the row writes, and it is built against that case.
-            case BoundaryOutput.Cases c -> throw new IllegalStateException(
-                    "`" + Type.show(c.type()) + "` names several types; a fixture states one of them");
+            case BoundaryOutput.ListOf l -> new ListOf(ofWholeAnswer(l.element()));
+            case BoundaryOutput.SetOf s -> new SetOf(ofWholeAnswer(s.element()));
+            case BoundaryOutput.MapOf m -> new MapOf(key(m.key()), ofWholeAnswer(m.value()));
+            case BoundaryOutput.Cases _ -> null;
         };
     }
 
     /** A key a boundary map carries, as the position a fixture writes it at. */
     private static FixtureShape key(souther.compiler.types.BoundaryMapKey key) {
         return switch (key) {
-            case souther.compiler.types.BoundaryMapKey.Text _ -> new Scalar(BoundaryScalar.STRING);
-            case souther.compiler.types.BoundaryMapKey.Date _ -> new Scalar(BoundaryScalar.DATE);
+            case souther.compiler.types.BoundaryMapKey.Text _ -> new Scalar(LeafScalar.STRING);
+            case souther.compiler.types.BoundaryMapKey.Date _ -> new Scalar(LeafScalar.DATE);
             case souther.compiler.types.BoundaryMapKey.DateTime _ ->
-                    new Scalar(BoundaryScalar.DATETIME);
+                    new Scalar(LeafScalar.DATETIME);
             case souther.compiler.types.BoundaryMapKey.StringNewtype n -> new Nominal(n.name());
             case souther.compiler.types.BoundaryMapKey.UnitEnum e -> new Nominal(e.name());
         };
@@ -172,7 +175,7 @@ public sealed interface FixtureShape {
     }
 
     private static FixtureShape scalar(Type.Prim prim) {
-        BoundaryScalar scalar = BoundaryScalar.of(prim);
+        LeafScalar scalar = LeafScalar.of(prim);
         if (scalar == null) {
             throw new FixtureException("`Raw` is the reserved type and has no decoder, so a fixture"
                     + " has nothing to build one through");
@@ -183,22 +186,28 @@ public sealed interface FixtureShape {
     /**
      * A name a fixture builds through the codec derived for it.
      *
-     * <p>Two names have none. {@code Raw} is spelled like a primitive and denotes a reference, which
-     * is the whole reason the reader's {@code Raw} arm never ran — it fell through to reflection and
-     * failed there instead. And a data souther-runtime implements by hand belongs to no compiled
-     * module, so nothing derived a codec for it; a rounding mode is a computation's input rather
-     * than a value anything reads from text.
+     * <p>Which names have one is what {@link Symbols#declaredByCompilation} answers: a codec is
+     * derived for what a module of this compilation declared, and for nothing else. The language's
+     * own vocabulary is the other side of that line — a rounding mode is implemented by
+     * souther-runtime and belongs to no compiled module, so nothing derived one for it, and a
+     * rounding policy is a computation's input rather than a value read from text anyway.
+     *
+     * <p>Asked of that answer rather than worked out from where the name lives. Reading it off the
+     * runtime namespace and a failed lookup computes the same set out of a spelling convention and
+     * an absence, which is two things to keep true where the table already holds one.
+     *
+     * <p>{@code Raw} is spelled like a primitive and denotes a reference, which is the whole reason
+     * the reader's {@code Raw} arm never ran — it fell through to reflection and failed there
+     * instead. It is refused as the reserved name it is.
      */
     private static FixtureShape nominal(TypeName name, Symbols symbols) {
         if (name.isPrimitive()) {
             return scalar(primitive(name));
         }
-        if (TypeName.RUNTIME.equals(name.module())) {
-            throw new FixtureException("`" + name.name() + "` is implemented by the runtime rather"
-                    + " than derived, so it has no decoder a fixture could build one through");
-        }
-        if (symbols.get(name) == null) {
-            throw new FixtureException("`" + name.name() + "` is not a type this example can read");
+        if (!symbols.declaredByCompilation(name)) {
+            throw new FixtureException("`" + name.name() + "` is declared by the language rather"
+                    + " than by a module here, so no codec was derived for it and a fixture has"
+                    + " nothing to build one through");
         }
         return new Nominal(name);
     }

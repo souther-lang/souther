@@ -199,7 +199,10 @@ final class NeutralForm {
                     throw new FixtureException("a `Map` fixture is a list of (key, value) pairs,"
                             + " e.g. [ (\"apple\", 3) ]");
                 }
-                m.put(pair.get(0), shaped(pair.get(1), map.value()));
+                // Both sides. A key is a position of the same kind as a value, so an inner
+                // collection written in key position is the neutral form of that collection
+                // and not the list of pairs it was written as.
+                m.put(shaped(pair.get(0), map.key()), shaped(pair.get(1), map.value()));
             }
             return m;
         }

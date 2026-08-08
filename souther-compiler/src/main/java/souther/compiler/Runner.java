@@ -5,7 +5,7 @@ import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.BoundaryMapKey;
-import souther.compiler.types.BoundaryScalar;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BoundaryInput;
 import souther.compiler.types.BoundaryOutput;
 import souther.compiler.types.Type;
@@ -591,7 +591,7 @@ public final class Runner {
     /** A scalar over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
      *  temporal is a string that is then parsed — so a date reads as {@code string().date()}, the
      *  same two steps the generated JSON decoder takes. */
-    private static Decoder<JsonNode, ?> leafDecoder(BoundaryScalar scalar) {
+    private static Decoder<JsonNode, ?> leafDecoder(LeafScalar scalar) {
         return switch (scalar) {
             case STRING -> JsonDecoders.string();
             case INT -> JsonDecoders.long_();
@@ -662,9 +662,9 @@ public final class Runner {
      */
     private static String encodeKey(MemoryClassLoader loader, BoundaryMapKey key, Object value) {
         return (String) switch (key) {
-            case BoundaryMapKey.Text _ -> encodeLeaf(BoundaryScalar.STRING, value);
-            case BoundaryMapKey.Date _ -> encodeLeaf(BoundaryScalar.DATE, value);
-            case BoundaryMapKey.DateTime _ -> encodeLeaf(BoundaryScalar.DATETIME, value);
+            case BoundaryMapKey.Text _ -> encodeLeaf(LeafScalar.STRING, value);
+            case BoundaryMapKey.Date _ -> encodeLeaf(LeafScalar.DATE, value);
+            case BoundaryMapKey.DateTime _ -> encodeLeaf(LeafScalar.DATETIME, value);
             case BoundaryMapKey.StringNewtype n ->
                     encodeThrough(loader, n.name().qualified(), n.name().name(), value);
             case BoundaryMapKey.UnitEnum e ->
@@ -695,7 +695,7 @@ public final class Runner {
         return encoded;
     }
 
-    private static Object encodeLeaf(BoundaryScalar scalar, Object value) {
+    private static Object encodeLeaf(LeafScalar scalar, Object value) {
         return switch (scalar) {
             case STRING -> ObjectEncoders.string().encode((String) value);
             case INT -> ObjectEncoders.long_().encode((Long) value);

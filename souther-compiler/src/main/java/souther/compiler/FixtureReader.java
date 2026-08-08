@@ -9,7 +9,7 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BoundaryInput;
 import souther.compiler.types.BoundaryOutput;
-import souther.compiler.types.BoundaryScalar;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -232,9 +232,11 @@ public final class FixtureReader {
         }
         // A collection output has no case name to decode against, so the behavior's answer is what
         // says which of `List`/`Set`/`Map` the written list means and what its elements are — the
-        // same decision a collection argument's position makes.
-        if (isCollection(out)) {
-            return built(expected, FixtureShape.of(out));
+        // same decision a collection argument's position makes. An answer of several types is not
+        // one shape, and nothing here writes a collection of them.
+        FixtureShape whole = FixtureShape.ofWholeAnswer(out);
+        if (whole != null && isCollection(whole)) {
+            return built(expected, whole);
         }
         return raw(expected);   // a literal expected value
     }
@@ -279,9 +281,9 @@ public final class FixtureReader {
         }
     }
 
-    private static boolean isCollection(BoundaryOutput out) {
-        return out instanceof BoundaryOutput.ListOf || out instanceof BoundaryOutput.SetOf
-                || out instanceof BoundaryOutput.MapOf;
+    private static boolean isCollection(FixtureShape shape) {
+        return shape instanceof FixtureShape.ListOf || shape instanceof FixtureShape.SetOf
+                || shape instanceof FixtureShape.MapOf;
     }
 
     /** The arm an expected names, as it was written — what a row that names no case of the target is
@@ -1025,12 +1027,19 @@ public final class FixtureReader {
         return switch (shape) {
             case FixtureShape.Scalar s -> leafDecoder(s.scalar());
             // An imported type's decoder lives in its declaring module's package, not this one's.
+            //
+            // A shape that got here was admitted, and admitting a name is the compiler saying a
+            // codec was derived for it. So the class not being there, or having no `decoder()`, is
+            // this compiler disagreeing with itself and not a fixture that cannot be read — which is
+            // what reporting it as one used to make of it, in the reader's own words, about a
+            // program the author would find nothing wrong with.
             case FixtureShape.Nominal n -> {
                 try {
                     Class<?> c = loader.loadClass(n.name().qualified());
                     yield (Decoder<Object, ?>) staticCodec(c, "decoder");
-                } catch (ReflectiveOperationException _) {
-                    throw new FixtureException("no decoder for `" + n.name().name() + "`");
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("`" + n.name().qualified() + "` was admitted as a"
+                            + " type a fixture builds through its derived decoder, and it has none", e);
                 }
             }
             // A collection is decoded the way a data's collection field is, built from the same
@@ -1046,7 +1055,7 @@ public final class FixtureReader {
     /** The leaf decoder for a scalar. A fixture hands over the value it wrote — a temporal arrives
      *  parsed, since that is what the checker read — so these are the neutral-source decoders and
      *  not the ones that parse text. */
-    private static Decoder<Object, ?> leafDecoder(BoundaryScalar scalar) {
+    private static Decoder<Object, ?> leafDecoder(LeafScalar scalar) {
         return switch (scalar) {
             case STRING -> ObjectDecoders.string();
             case INT -> ObjectDecoders.long_();

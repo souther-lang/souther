@@ -6,7 +6,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.BoundaryInput;
 import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.BoundaryOutput;
-import souther.compiler.types.BoundaryScalar;
+import souther.compiler.types.LeafScalar;
 
 import souther.compiler.meta.ModulePath;
 
@@ -54,7 +54,7 @@ class OneBoundaryAnswerReachesTheReaderTest {
                 """, "f");
 
         assertEquals(4, sig.ins().size());
-        assertEquals(BoundaryScalar.INT,
+        assertEquals(LeafScalar.INT,
                 assertInstanceOf(BoundaryInput.Scalar.class, sig.ins().get(0)).scalar());
 
         BoundaryInput.ListOf ids = assertInstanceOf(BoundaryInput.ListOf.class, sig.ins().get(1));
@@ -62,7 +62,7 @@ class OneBoundaryAnswerReachesTheReaderTest {
                 assertInstanceOf(BoundaryInput.Nominal.class, ids.element()).name().name());
 
         BoundaryInput.SetOf seen = assertInstanceOf(BoundaryInput.SetOf.class, sig.ins().get(2));
-        assertEquals(BoundaryScalar.STRING,
+        assertEquals(LeafScalar.STRING,
                 assertInstanceOf(BoundaryInput.Scalar.class, seen.element()).scalar());
 
         // The key is the witness the map-key rule answers with, so a key position holds a kind rather

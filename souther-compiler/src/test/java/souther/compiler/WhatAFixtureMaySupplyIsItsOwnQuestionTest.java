@@ -9,8 +9,11 @@ import souther.compiler.types.Type;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -51,6 +54,26 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
                 """));
     }
 
+    /**
+     * A key is a position of the same kind as a value, in the neutral form as well as in the
+     * classification. An inner collection written in key position is that collection's neutral form
+     * and not the list of pairs it was written as — which the shaping left alone while admitting it,
+     * so the shape said yes and the decode said {@code not_a_map}.
+     */
+    @Test
+    void aMapKeyIsShapedLikeAnythingElseAtThatPosition() {
+        assertDoesNotThrow(() -> Compiler.compile(HEAD + """
+                let sizeOfNested (m: Map<Map<Int, Int>, Int>) : Int = Map.size(m)
+                example f
+                  | "a map keys a map" : (sizeOfNested(Map.fromList([ (Map.fromList([ (1, 2) ]), 3) ]))) -> Out { n = 1 }
+                """));
+        assertDoesNotThrow(() -> Compiler.compile(HEAD + """
+                let deep (m: Map<List<Map<Int, Int>>, Int>) : Int = Map.size(m)
+                example f
+                  | "and at depth" : (deep(Map.fromList([ ([ Map.fromList([ (1, 2) ]) ], 3) ]))) -> Out { n = 1 }
+                """));
+    }
+
     /** And the kinds that already built go on building. */
     @Test
     void theCollectionsThatBuiltStillBuild() {
@@ -63,19 +86,19 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
     }
 
     /**
-     * A type the runtime implements by hand belongs to no compiled module, so nothing derived a
-     * codec for it. That is a fact about the type, and it is what the refusal says — it used to be
-     * reported as a reflective lookup that came back empty, which is a fact about how the reader
-     * went looking.
+     * A codec is derived for what a module of this compilation declared and for nothing else, which
+     * is one answer the symbol table already holds. A rounding mode is the language's own, so
+     * nothing derived one for it — and that is a fact about the type, where the old refusal reported
+     * a reflective lookup that came back empty, which is a fact about how the reader went looking.
      */
     @Test
-    void aTypeTheRuntimeImplementsIsRefusedForHavingNoDerivedCodec() {
+    void aTypeTheLanguageDeclaresIsRefusedForHavingNoDerivedCodec() {
         CompileException e = err(HEAD + """
                 let scaled (m: RoundingMode) : Int = 1
                 example f
                   | "r" : (scaled(HALF_UP)) -> Out { n = 1 }
                 """);
-        assertTrue(e.getMessage().contains("implemented by the runtime"), e.getMessage());
+        assertTrue(e.getMessage().contains("declared by the language"), e.getMessage());
     }
 
     /**
@@ -105,16 +128,44 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
     }
 
     /**
+     * What a module of this compilation declared includes what it read off the path: a type an
+     * imported module declares has a codec its own build derived, and a fixture builds through it.
+     * The rule is one question to the symbol table, so this is the side of that line the wording
+     * does not name.
+     */
+    @Test
+    void aTypeAnImportedModuleDeclaresBuilds() {
+        java.util.Map<String, byte[]> library = Compiler.compile("""
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                """);
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module app.order
+                import shared.money ( Amount )
+                data Out = { n: Int }
+                behavior place : (a: Amount) -> Out
+                    constructs Out
+                let place (a) = Out { n = a.value }
+                example place
+                  | "an imported type in a fixture" : (Amount(5)) -> Out { n = 5 }
+                """), library::get));
+    }
+
+    /**
      * A position a behavior's boundary established carries its own admitted answer, and the reader
      * reads it rather than putting the type through this walk a second time. What makes that a
-     * projection rather than a second decision is that every type a boundary admits is one a fixture
-     * admits — so there is nothing in the crossing that can refuse.
+     * projection rather than a second decision is that every concrete type a boundary admits is one
+     * a fixture admits — so there is nothing in the crossing that can refuse.
+     *
+     * <p>Concrete, because an answer of several types is not one shape: which of them a value is is
+     * what the row writes, which is the row's claim and not the position's answer. That one is
+     * {@link #anAnswerOfSeveralTypesIsNotOneShape}.
      *
      * <p>Asked of witnesses a compile produced, not of ones written here: what has to hold is about
      * the shapes a boundary actually builds.
      */
     @Test
-    void everyShapeABoundaryAdmitsIsOneAFixtureAdmits() {
+    void everyConcreteShapeABoundaryAdmitsProjectsWithoutRefusing() {
         Compilation compilation = Compiler.compiled("""
                 module demo
 
@@ -133,7 +184,49 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
         for (BoundaryInput in : sig.ins()) {
             assertDoesNotThrow(() -> FixtureShape.of(in), Type.show(in.type()));
         }
-        assertDoesNotThrow(() -> FixtureShape.of(sig.out()));
+        assertNotNull(FixtureShape.ofWholeAnswer(sig.out()));
+    }
+
+    /**
+     * And an answer of several types is not one shape. The projection says so rather than raising:
+     * a row states a value of one of them, and it is built against the case it names.
+     */
+    @Test
+    void anAnswerOfSeveralTypesIsNotOneShape() {
+        Compilation compilation = Compiler.compiled("""
+                module demo
+
+                data Adult = { name: String }
+                data Minor = { age: Int }
+
+                behavior classify : (age: Int) -> Adult | Minor
+                    constructs Adult, Minor
+                let classify (age) = {
+                    guard age >= 18 else Minor { age = age }
+                    Adult { name = "adult" }
+                }
+                """, "demo", new ArrayList<>());
+        Sig sig = compilation.signatures("demo").get("classify");
+
+        assertNull(FixtureShape.ofWholeAnswer(sig.out()));
+
+        // and a row against such a behavior states one of them, by naming it
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Adult = { name: String }
+                data Minor = { age: Int }
+
+                behavior classify : (age: Int) -> Adult | Minor
+                    constructs Adult, Minor
+                let classify (age) = {
+                    guard age >= 18 else Minor { age = age }
+                    Adult { name = "adult" }
+                }
+
+                example classify
+                  | "grown" : (20) -> Adult { name = "adult" }
+                """));
     }
 
     /**

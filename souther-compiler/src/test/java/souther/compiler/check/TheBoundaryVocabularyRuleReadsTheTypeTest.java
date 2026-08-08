@@ -1,6 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BoundaryScalar;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -24,7 +24,7 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
 
     @Test
     void theReservedPrimitiveIsNoScalarTheBoundaryWrites() {
-        assertNull(BoundaryScalar.of(Type.Prim.RAW));
+        assertNull(LeafScalar.of(Type.Prim.RAW));
     }
 
     @Test
@@ -38,7 +38,7 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
             if (prim == Type.Prim.RAW) {
                 continue;
             }
-            assertNotNull(BoundaryScalar.of(prim), prim.toString());
+            assertNotNull(LeafScalar.of(prim), prim.toString());
             assertTrue(TypeOps.declaredByAModel(TypeName.primitive(Type.show(prim)), null),
                     prim.toString());
         }
