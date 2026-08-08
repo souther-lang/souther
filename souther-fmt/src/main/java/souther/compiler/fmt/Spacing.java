@@ -46,7 +46,7 @@ final class Spacing {
      * and this function has no answer for it.
      */
     static String between(SyntaxKind joining, SyntaxKind left, SyntaxKind right) {
-        Pair pair = new Pair(left, right);
+        Pair pair = new Pair(asWritten(left), asWritten(right));
         Map<SyntaxKind, String> byConstruct = DECIDED.get(pair);
         if (byConstruct != null) {
             String answer = byConstruct.get(joining);
@@ -70,6 +70,25 @@ final class Spacing {
     }
 
     private record Pair(SyntaxKind left, SyntaxKind right) {
+    }
+
+    /**
+     * The kinds that are one value written out. They are one class for this question and the rows
+     * are read under one of them, which is what makes the rule answer for a decimal where a source
+     * wrote an integer, or for a string where it wrote a name — the kinds a corpus reaches one of
+     * and a source reaches another.
+     *
+     * <p>This is a compression of the rows and not a second input to the rule: the rows are still
+     * written between two token kinds, and {@link #decided()} refuses to load if two of them
+     * disagree once read this way. Nothing outside here reads the class, and the specification's
+     * own transcription of the rule is written kind by kind, so it is not this claim that is being
+     * checked against the canonical form — it is the answers.
+     */
+    private static final Set<SyntaxKind> WRITTEN_VALUES = Set.of(SyntaxKind.INT_LIT,
+            SyntaxKind.DECIMAL_LIT, SyntaxKind.STRING_LIT, SyntaxKind.TRUE_KW, SyntaxKind.FALSE_KW);
+
+    private static SyntaxKind asWritten(SyntaxKind kind) {
+        return WRITTEN_VALUES.contains(kind) ? SyntaxKind.INT_LIT : kind;
     }
 
     /**
@@ -372,7 +391,18 @@ final class Spacing {
             """;
 
     private static final Set<Pair> TIGHT_PAIRS = pairs(TIGHT_ROWS);
-    private static final Set<Pair> SPACED_PAIRS = pairs(SPACED_ROWS);
+    private static final Set<Pair> SPACED_PAIRS = disjointFrom(TIGHT_PAIRS, pairs(SPACED_ROWS));
+
+    /** The two lists read under the class above, and refused if a pair lands in both. */
+    private static Set<Pair> disjointFrom(Set<Pair> tight, Set<Pair> spaced) {
+        for (Pair p : spaced) {
+            if (tight.contains(p)) {
+                throw new IllegalStateException(
+                        "two rows for " + p.left() + " " + p.right() + " disagree");
+            }
+        }
+        return spaced;
+    }
     private static final Map<Pair, Map<SyntaxKind, String>> DECIDED = decided();
 
     private static Set<Pair> pairs(String rows) {
@@ -382,7 +412,8 @@ final class Spacing {
                 continue;
             }
             String[] parts = line.strip().split("\\s+");
-            out.add(new Pair(SyntaxKind.valueOf(parts[0]), SyntaxKind.valueOf(parts[1])));
+            out.add(new Pair(asWritten(SyntaxKind.valueOf(parts[0])),
+                    asWritten(SyntaxKind.valueOf(parts[1]))));
         }
         return out;
     }
@@ -394,9 +425,14 @@ final class Spacing {
                 continue;
             }
             String[] parts = line.strip().split("\\s+");
-            Pair pair = new Pair(SyntaxKind.valueOf(parts[0]), SyntaxKind.valueOf(parts[1]));
-            out.computeIfAbsent(pair, _ -> new EnumMap<>(SyntaxKind.class))
-                    .put(SyntaxKind.valueOf(parts[2]), parts[3].equals("spaced") ? SPACED : TIGHT);
+            Pair pair = new Pair(asWritten(SyntaxKind.valueOf(parts[0])),
+                    asWritten(SyntaxKind.valueOf(parts[1])));
+            String answer = parts[3].equals("spaced") ? SPACED : TIGHT;
+            String before = out.computeIfAbsent(pair, _ -> new EnumMap<>(SyntaxKind.class))
+                    .put(SyntaxKind.valueOf(parts[2]), answer);
+            if (before != null && !before.equals(answer)) {
+                throw new IllegalStateException("two rows for " + line.strip() + " disagree");
+            }
         }
         return out;
     }

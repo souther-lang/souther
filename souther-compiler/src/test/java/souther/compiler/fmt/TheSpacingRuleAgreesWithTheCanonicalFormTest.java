@@ -64,4 +64,27 @@ class TheSpacingRuleAgreesWithTheCanonicalFormTest {
         assertEquals(191, reached.size(),
                 "the pairs the corpus writes: 45 tight, 137 spaced, 9 the construct decides");
     }
+
+    /**
+     * A value written out is a value written out, whichever kind of one it is. The corpus reaches
+     * one of them in a position and a source reaches another — an integer in a list where someone
+     * else writes a decimal — and the rule answers both, because it reads the rows under one class
+     * for them. Before it did, a decimal in a list was an adjacency no row held and the formatter
+     * refused a source it had nothing wrong with.
+     */
+    @Test
+    void aValueWrittenOutIsAnsweredWhicheverKindOfOneItIs() {
+        String source = """
+                module m
+
+                let listed (a: Int): List<Decimal> = [2.5m, 3.5m]
+
+                let called (a: Int): Int = f(1.5m, "x", true, false)
+
+                let made (a: Int): R = R { k = 1.5m, s = "t", b = false }
+
+                let compared (a: Decimal): Bool = a <= 1.5m
+                """;
+        assertEquals(source, Formatter.format(source));
+    }
 }
