@@ -158,7 +158,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             if (observed == null) {
                 // The rows of this source were never evaluated, so nothing here can be counted as
                 // covered or as missing. Which is a fact about the measurement, not about the model.
-                incompleteness.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                incompleteness.add(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
                         Incompleteness.Scope.SOURCE, sourceId));
                 continue;
             }
@@ -363,8 +363,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 branch(out, behavior);
             }
             for (Incompleteness gap : module.incompleteness()) {
-                out.append(String.format("    · not measured: %s (%s)%n", gap.subject(),
-                        gap.code().name().toLowerCase(java.util.Locale.ROOT)));
+                out.append(String.format("    · %s%n", Reasons.said(gap)));
             }
         }
         int total = implemented + injected;

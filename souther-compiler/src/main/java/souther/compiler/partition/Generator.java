@@ -132,8 +132,16 @@ public final class Generator {
             incompleteness = List.copyOf(incompleteness);
         }
 
+        /**
+         * Whether this result has nothing to say — which a reason is not.
+         *
+         * <p>A result that is nothing but a reason used to answer yes, and the block it belongs to
+         * was dropped whole. So an author who asked what to write got silence where the answer was
+         * that the generator could not look, and silence is what having nothing left to write looks
+         * like.
+         */
         public boolean isEmpty() {
-            return rows.isEmpty() && unresolved.isEmpty();
+            return rows.isEmpty() && unresolved.isEmpty() && incompleteness.isEmpty();
         }
     }
 

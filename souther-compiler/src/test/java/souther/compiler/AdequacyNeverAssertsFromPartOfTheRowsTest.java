@@ -217,7 +217,11 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     compilation.db().ask(new Adequacy.Generated(module)).value();
             assertNotNull(generated);
 
-            assertEquals("", GeneratedRows.of(module, generated, true), module);
+            String written = GeneratedRows.of(module, generated, true);
+            assertFalse(written.contains("example "),
+                    module + " offers a row that may already be written: " + written);
+            assertTrue(written.contains("generation stopped"),
+                    module + " says nothing about why it wrote nothing: " + written);
         }
     }
 

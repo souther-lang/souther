@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://souther-lang.org/schema/adequacy-1.json",
   "title": "Souther adequacy report",
-  "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and a key added since does not — such a key is optional, so a document written before it existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
+  "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it, and something added since does not — a key added since is optional, and a word added to an enumerated field is one no earlier document carried, so a document written before either existed is still a document of this version. That is one direction: every object here is closed, so an older copy of this schema refuses a document carrying a key added since. A reader that has to accept newer documents wants the newer schema, not a higher number.",
   "type": "object",
   "required": ["schemaVersion", "compilerVersion", "status", "adequacy", "modules"],
   "additionalProperties": false,
@@ -290,8 +290,9 @@
           "description": "What `subject` names, and so what the reason counts against. Anything larger than a behavior counts against every behavior inside it."
         },
         "code": {
-          "enum": ["value_unreadable", "value_truncated", "row_undecided", "runtime_absent",
-                   "probe_mapping_lost", "search_limit", "axis_omitted"]
+          "description": "`observation_absent` is a source none of whose rows were observed, whatever stopped them — the diagnostics say what. `linkage_failed` is the generated classes not linking, and no more than that: the case it exists for is the runtime being off the host's classpath, and the JVM raises the same error for a class it will not verify or accept the format of, which is why the word is the error and not one of its causes. What did not happen next is not part of it — one of the places that write it was running an example, and the others were building a value after the rows had been read.",
+          "enum": ["value_unreadable", "value_truncated", "row_undecided", "observation_absent",
+                   "linkage_failed", "probe_mapping_lost", "search_limit", "axis_omitted"]
         },
         "subject": { "type": "string" },
         "at": { "$ref": "#/$defs/at" }
