@@ -17,12 +17,11 @@ import java.util.Map;
  * {@code endsAt} the day has no room for. Reading the field's type alone names values the record
  * refuses.
  *
- * <p>The projection is exact over the clauses the numeric domain could take, and only over those.
- * {@link #exact} says whether that was all of them: a clause outside the fragment — a call, a
- * pattern, a sum of three terms — narrows nothing here, so where one is present these bounds are
- * wider than what the declaration actually says. Wide is the safe direction for deciding a value is
- * impossible, and the wrong direction for deciding that the edge of the range can be written, which
- * is why the two answers are handed over together.
+ * <p>The bounds are as wide as what the rules could be read as, and only that. {@link #allRulesRead}
+ * says whether that was all of them: a clause outside the fragment — a call, a pattern, a sum of
+ * three terms — narrows nothing here, so where one is present these bounds admit values nothing can
+ * build. Wide is the safe direction for deciding a value is impossible and the wrong direction for
+ * deciding that an edge can be written, which is why the two answers are handed over together.
  */
 public final class FieldDomains {
 
@@ -78,7 +77,13 @@ public final class FieldDomains {
     public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
                                   Map<String, BigDecimal> settled) {
         if (data.newtype()) {
-            return NONE;   // a newtype's value is the same position it is; there are no siblings
+            // A newtype's value is the same position it is, so there are no siblings and no bounds
+            // to hand out per field. Whether a row can be written at an edge is still a question: its
+            // own rules can hold a hole no range keeps, and the edge of the range is then a value
+            // nothing builds. Answering it `true` here is what made that depend on whether the
+            // newtype was a parameter or a field of one.
+            return new FieldDomains(Map.of(), false, true, NumericDomain.top(),
+                    () -> InvariantChecker.everyRuleRead(named, data, symbols));
         }
         InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, settled);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();

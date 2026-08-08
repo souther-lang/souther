@@ -278,8 +278,10 @@ public final class InvariantChecker {
             for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
                 Type type = fields.get(field.getKey());
                 if (type != null) {
+                    // No depth limit here: this is the reading a boundary is derived from, and a
+                    // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            k, at, 1);
+                            k, at, 1, Integer.MAX_VALUE, new HashSet<>());
                 }
             }
         } catch (RuntimeException why) {
@@ -1193,8 +1195,27 @@ public final class InvariantChecker {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        if (depth > FIELDS_SEEDED || !(root.type() instanceof Type.Ref ref)
-                || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
+        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>());
+    }
+
+    /**
+     * The same, as far as {@code limit} levels down, with the types on the way recorded.
+     *
+     * <p>How far to seed is not one number. What a walk over a body can afford to read of a
+     * parameter is a cost bound and stops at {@code FIELDS_SEEDED}; what a construction has to
+     * satisfy has no depth at all, since a rule four records down refuses the outermost value
+     * exactly as one on the top does. A projection that stopped at two and was then classified by a
+     * walk that did not would call a bound complete that a rule below it moves.
+     *
+     * <p>{@code onPath} is the types entered on the way here, so a record that holds another of its
+     * own kind stops rather than descending for ever. Kept per path and not for the whole walk: two
+     * fields of one type are two positions and both are seeded.
+     */
+    private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
+                         Set<TypeName> onPath) {
+        if (depth > limit || !(root.type() instanceof Type.Ref ref)
+                || !(symbols.get(ref.name()) instanceof Ast.Data data)
+                || !onPath.add(ref.name())) {
             return k;
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
@@ -1218,11 +1239,13 @@ public final class InvariantChecker {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
             Core value = given.get(bindings.get("value"));
-            return value == null ? out : seedAt(value, out, at, depth + 1);
+            out = value == null ? out : seedAt(value, out, at, depth + 1, limit, onPath);
+        } else {
+            for (Core value : given.values()) {
+                out = seedAt(value, out, at, depth + 1, limit, onPath);
+            }
         }
-        for (Core value : given.values()) {
-            out = seedAt(value, out, at, depth + 1);
-        }
+        onPath.remove(ref.name());
         return out;
     }
 

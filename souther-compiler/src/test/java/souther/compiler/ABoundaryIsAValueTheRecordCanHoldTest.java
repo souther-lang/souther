@@ -291,6 +291,84 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         assertTrue(report.contains("not known to be writable: f/r.a = 10"), () -> report);
     }
 
+    /**
+     * A bound four records down narrows the edge at the top.
+     *
+     * <p>How far a report takes an input apart is a limit on what is worth measuring. What a
+     * construction has to satisfy has no such limit, and the reading a boundary is derived from has
+     * to reach as far as the second: `n < l1.l2.leaf.x` with `x` stopping at 10 puts `n` at 9, and a
+     * reading that stopped two levels down would have left it at 10 with nothing able to hold it.
+     */
+    @Test
+    void aBoundBelowWhatAReportLooksAtStillMovesTheEdgeAboveIt() throws Exception {
+        List<String> asked = boundariesOf("""
+                module example.deepbound
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+
+                data Leaf = { x: N }
+                data L2 = { leaf: Leaf }
+                data L1 = { l2: L2 }
+
+                data Root =
+                    { n: N
+                    , l1: L1
+                    }
+                    invariant ordered = n < l1.l2.leaf.x
+
+                data Ok
+
+                behavior f : (root: Root) -> Ok
+                    constructs Ok
+
+                let f (root) = Ok
+
+                example f
+                    | "x" : (Root { n = N(1),
+                        l1 = L1 { l2 = L2 { leaf = Leaf { x = N(2) } } } }) -> Ok
+                """);
+
+        assertTrue(asked.stream().anyMatch(l -> l.contains("root.n = 9")
+                        && l.contains("within Root")),
+                () -> "x stops at 10, so n stops at 9: " + asked);
+        assertFalse(asked.stream().anyMatch(l -> l.contains("root.n = 10")), () -> "asked " + asked);
+    }
+
+    /**
+     * A newtype taken straight as a parameter is held to its own rules like any other position.
+     *
+     * <p>It has no siblings, which is why it has no per-field bounds to hand out. It still has rules
+     * a range cannot keep, and `value /= 0` makes the bottom of `[0, 10]` a value the decoder
+     * refuses. Answering the question at the door for a newtype is what made this depend on whether
+     * the type was a parameter or a field of one.
+     */
+    @Test
+    void aNewtypeTakenStraightIsHeldToItsOwnRules() throws Exception {
+        String holed = """
+                module example.holednewtype
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+                    invariant nonzero = value /= 0
+
+                data Ok
+
+                behavior f : (n: N) -> Ok
+                    constructs Ok
+
+                let f (n) = Ok
+
+                example f
+                    | "x" : (N(3)) -> Ok
+                """;
+
+        String report = reportOn(holed);
+
+        assertEquals(List.of(), boundariesOf(holed), "0 is in the range and no row can write it");
+        assertTrue(report.contains("not known to be writable: f/n = 0"), () -> report);
+    }
+
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test
