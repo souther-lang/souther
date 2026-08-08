@@ -3,6 +3,7 @@ package souther.lsp;
 import souther.lsp.analysis.Analyzer;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -82,7 +83,18 @@ public enum LspMethod {
         }
     }
 
+    /**
+     * Everything derived from the table is derived once, as the class is loaded.
+     *
+     * <p>A table that contradicts itself is not a request's failure to be reported to whoever
+     * happened to ask first — it is this server being unable to say what it does, and it says so
+     * before it has answered anything.
+     */
     private static final Map<String, LspMethod> BY_WIRE = byWire();
+
+    private static final Map<String, Object> CAPABILITIES = capabilities();
+
+    private static final List<Map<String, Object>> REGISTRATIONS = registrations();
 
     private final String wire;
     private final Advertisement advertisement;
@@ -107,35 +119,50 @@ public enum LspMethod {
         return Optional.ofNullable(BY_WIRE.get(wire));
     }
 
-    /**
-     * The {@code capabilities} object of the initialize result.
-     *
-     * <p>Built from the methods rather than beside them, so a client is told about what is answered
-     * and nothing else. A capability several methods share is one field, and one they disagree
-     * about is a contradiction rather than a last-writer-wins.
-     */
+    /** The {@code capabilities} object of the initialize result. */
     public static Map<String, Object> serverCapabilities() {
+        return CAPABILITIES;
+    }
+
+    /**
+     * The registrations to send once the client reports {@code initialized}, in the shape the
+     * protocol's {@code Registration} takes.
+     */
+    public static List<Map<String, Object>> dynamicRegistrations() {
+        return REGISTRATIONS;
+    }
+
+    /**
+     * The capabilities, built from the methods rather than beside them, so a client is told about
+     * what is answered and nothing else.
+     *
+     * <p>One field may announce several methods, and then it is the one advertisement all of them
+     * hold — not one written out again under the same key. Two methods reaching the same field by
+     * different advertisements are refused even where both spell the same value: the field would
+     * announce one of them, and the other would be answered without being announced, which is the
+     * whole of what a capability rules out.
+     */
+    private static Map<String, Object> capabilities() {
+        Map<String, LspMethod> announcedBy = new LinkedHashMap<>();
         Map<String, Object> capabilities = new LinkedHashMap<>();
         for (LspMethod method : values()) {
             if (!(method.advertisement instanceof Advertisement.StaticCapability capability)) {
                 continue;
             }
-            Object already = capabilities.put(capability.key(), capability.value());
-            if (already != null && !already.equals(capability.value())) {
-                throw new IllegalStateException(
-                        "two values advertised under " + capability.key() + ": " + already
-                                + " and " + capability.value());
+            LspMethod first = announcedBy.putIfAbsent(capability.key(), method);
+            if (first == null) {
+                capabilities.put(capability.key(), capability.value());
+            } else if (first.advertisement != method.advertisement) {
+                throw new IllegalStateException(first + " and " + method + " both advertise "
+                        + capability.key() + " without sharing one advertisement");
             }
         }
-        return capabilities;
+        return Collections.unmodifiableMap(capabilities);
     }
 
-    /**
-     * The registrations to send once the client reports {@code initialized}, in the shape the
-     * protocol's {@code Registration} takes. The method each one registers is the method that holds
-     * it, so what is registered and what is answered cannot name different things.
-     */
-    public static List<Map<String, Object>> dynamicRegistrations() {
+    /** The registrations, whose {@code method} is the method holding each one, so what is registered
+     * and what is answered cannot name different things. */
+    private static List<Map<String, Object>> registrations() {
         List<Map<String, Object>> registrations = new ArrayList<>();
         for (LspMethod method : values()) {
             if (!(method.advertisement instanceof Advertisement.DynamicRegistration registration)) {
@@ -145,9 +172,9 @@ public enum LspMethod {
             entry.put("id", registration.id());
             entry.put("method", method.wire);
             entry.put("registerOptions", registration.registerOptions());
-            registrations.add(entry);
+            registrations.add(Collections.unmodifiableMap(entry));
         }
-        return registrations;
+        return Collections.unmodifiableList(registrations);
     }
 
     /**

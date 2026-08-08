@@ -264,6 +264,129 @@ class LspServerTest {
         assertEquals(0, actions.size(), "with no context diagnostics the server skips the compile");
     }
 
+    /**
+     * A module with a type, a use of it, and a behavior, so the navigation requests below have
+     * somewhere to go.
+     *
+     * <p>`data X` is at line 1 character 5; the `X` in the signature is at line 2 character 17.
+     */
+    private static final String NAVIGABLE =
+            "module demo\ndata X = { a: Int }\nbehavior f : (x: X) -> X\nlet f (x) = x\n";
+
+    /** Opens {@code NAVIGABLE} and asks one request of it, answering with that request's result. */
+    private static JsonNode askOf(String uri, String method, Map<String, Object> params) {
+        byte[] input = frames(
+                message(1, "initialize", Map.of()),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", NAVIGABLE))),
+                message(2, method, params));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+        return responseFor(readFrames(out.toByteArray()), 2);
+    }
+
+    @Test
+    void documentSymbolsNameWhatTheModuleDeclares() {
+        String uri = "file:///s.sou";
+        JsonNode symbols = askOf(uri, "textDocument/documentSymbol",
+                Map.of("textDocument", Map.of("uri", uri)));
+
+        List<String> names = new ArrayList<>();
+        for (JsonNode symbol : symbols) {
+            names.add(symbol.get("name").asString());
+        }
+        assertTrue(names.contains("X"), names.toString());
+        assertTrue(names.contains("f"), names.toString());
+    }
+
+    @Test
+    void semanticTokensComeBackAsFiveNumbersEach() {
+        String uri = "file:///t.sou";
+        JsonNode data = askOf(uri, "textDocument/semanticTokens/full",
+                Map.of("textDocument", Map.of("uri", uri))).get("data");
+
+        assertTrue(data.size() > 0, "the module is highlighted");
+        assertEquals(0, data.size() % 5, "line, start, length, type, modifiers: " + data);
+    }
+
+    @Test
+    void hoverOverATypeShowsHowItIsDeclared() {
+        String uri = "file:///h.sou";
+        JsonNode hover = askOf(uri, "textDocument/hover", Map.of(
+                "textDocument", Map.of("uri", uri),
+                "position", Map.of("line", 1, "character", 5)));   // on `data X`
+
+        assertNotNull(hover, "a declaration says something about itself");
+        String contents = hover.get("contents").get("value").asString();
+        assertTrue(contents.contains("data X"), contents);
+    }
+
+    @Test
+    void definitionGoesFromAUseToTheDeclaration() {
+        String uri = "file:///d.sou";
+        JsonNode location = askOf(uri, "textDocument/definition", Map.of(
+                "textDocument", Map.of("uri", uri),
+                "position", Map.of("line", 2, "character", 17)));   // the `X` in the signature
+
+        assertNotNull(location, "the use resolves");
+        assertEquals(uri, location.get("uri").asString());
+        assertEquals(1, location.get("range").get("start").get("line").asInt(),
+                "the `data X` line, zero-based");
+    }
+
+    @Test
+    void referencesAnswerWithTheDeclarationAndItsUses() {
+        String uri = "file:///r2.sou";
+        JsonNode locations = askOf(uri, "textDocument/references", Map.of(
+                "textDocument", Map.of("uri", uri),
+                "position", Map.of("line", 1, "character", 5),   // on `data X`
+                "context", Map.of("includeDeclaration", true)));
+
+        assertEquals(3, locations.size(),
+                "the declaration plus its two type uses: " + locations);
+    }
+
+    @Test
+    void aCodeLensIsDrawnOverABehaviorTheClientAskedToMeasure() throws Exception {
+        Path dir = Files.createTempDirectory("lens");
+        String text = """
+                module demo
+
+                data Draft = { cost: Int }
+                data Submitted = { cost: Int }
+
+                behavior submit : (request: Draft) -> Submitted
+                let submit (request) = Submitted { cost = request.cost }
+
+                example submit
+                    | (Draft { cost = 1 }) -> Submitted { cost = 1 }
+                """;
+        Path source = dir.resolve("demo.sou");
+        Files.writeString(source, text);
+        String uri = source.toUri().toString();
+
+        byte[] input = frames(
+                message(1, "initialize", Map.of(
+                        "rootUri", dir.toUri().toString(),
+                        "initializationOptions", Map.of("souther", Map.of("adequacy", "witness")))),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", text))),
+                message(2, "textDocument/codeLens", Map.of("textDocument", Map.of("uri", uri))));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        JsonNode lenses = responseFor(readFrames(out.toByteArray()), 2);
+        assertEquals(1, lenses.size(), "one behavior, so one line: " + lenses);
+        assertEquals(5, lenses.get(0).get("range").get("start").get("line").asInt(),
+                "the `behavior` line, zero-based");
+        assertTrue(lenses.get(0).get("command").get("title").asString().contains("row"),
+                lenses.get(0).toString());
+    }
+
     // --- helpers: build and read framed JSON-RPC messages ---
 
     /** The {@code result} array of the response to request {@code id}. */

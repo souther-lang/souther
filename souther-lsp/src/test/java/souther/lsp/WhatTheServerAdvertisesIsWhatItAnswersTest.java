@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,6 +17,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -29,9 +32,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * that the property survives the wire — that a method the handshake invites is not met with
  * {@code method not found} at the connection, which is what a client actually depends on.
  *
- * <p>The methods are read from {@link LspMethod} rather than listed here on purpose. A list written
- * in this file would be a third copy of the set, agreeing with neither side by construction and
- * silently going stale exactly when the other two change.
+ * <p>Which method a capability announces is a different question, and one the server cannot answer
+ * about itself: that {@code hoverProvider} is the field a client reads before sending
+ * {@code textDocument/hover} is the protocol's, not ours. {@link #everyMethodIsAnnouncedTheWayTheProtocolSaysItIs}
+ * writes that relation out. It is deliberately a second copy of what {@link LspMethod} declares,
+ * for the reason the protocol-facing tests keep their method literals: one side says what this
+ * server believes and the other says what the protocol defines, and only holding them together
+ * catches a capability announcing a method it does not name.
+ *
+ * <p>Everywhere else the methods are read from {@link LspMethod} rather than listed. Which methods
+ * exist is settled there, and a list of them written here would be a third copy of that set.
  */
 class WhatTheServerAdvertisesIsWhatItAnswersTest {
 
@@ -58,8 +68,17 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
         return params;
     }
 
+    /**
+     * No method a capability announces comes back as one the server does not have.
+     *
+     * <p>Only that. What a handler answers with, and whether it answers at all rather than failing
+     * on the way, is each method's own behaviour and is tested where that behaviour is. A
+     * notification has no reply to be refused in, so for the three that share full document sync
+     * there is nothing here to observe; they are walked with the rest because which methods a
+     * capability announces is not this test's to decide.
+     */
     @Test
-    void everyAdvertisedMethodIsAnsweredAtTheConnection() {
+    void noAdvertisedMethodIsRefusedAsNotFound() {
         for (LspMethod method : LspMethod.values()) {
             if (!(method.advertisement() instanceof Advertisement.StaticCapability capability)) {
                 continue;
@@ -70,8 +89,78 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
                     message(null, "textDocument/didOpen", Map.of(
                             "textDocument", Map.of("uri", URI, "text", TEXT))),
                     message(2, method.wire(), everyShape())), 2);
-            assertNull(error, capability.key() + " invites " + method.wire()
-                    + ", which answers: " + error);
+            if (error != null) {
+                assertNotEquals(METHOD_NOT_FOUND, error.get("code").asInt(),
+                        capability.key() + " invites " + method.wire() + ", which is refused");
+            }
+        }
+    }
+
+    /**
+     * How each method is announced, written from the protocol rather than read from the server.
+     *
+     * <p>A capability key is what the protocol says a client reads before sending that method. The
+     * value under the key is not here: whether a provider is spelled {@code true} or an options
+     * object is this server's to decide, and repeating it would copy a decision rather than witness
+     * an agreement.
+     */
+    @Test
+    void everyMethodIsAnnouncedTheWayTheProtocolSaysItIs() {
+        Map<LspMethod, String> byCapability = new LinkedHashMap<>();
+        byCapability.put(LspMethod.DID_OPEN, "textDocumentSync");
+        byCapability.put(LspMethod.DID_CHANGE, "textDocumentSync");
+        byCapability.put(LspMethod.DID_CLOSE, "textDocumentSync");
+        byCapability.put(LspMethod.DOCUMENT_SYMBOL, "documentSymbolProvider");
+        byCapability.put(LspMethod.SEMANTIC_TOKENS_FULL, "semanticTokensProvider");
+        byCapability.put(LspMethod.HOVER, "hoverProvider");
+        byCapability.put(LspMethod.DEFINITION, "definitionProvider");
+        byCapability.put(LspMethod.REFERENCES, "referencesProvider");
+        byCapability.put(LspMethod.COMPLETION, "completionProvider");
+        byCapability.put(LspMethod.CODE_ACTION, "codeActionProvider");
+        byCapability.put(LspMethod.CODE_LENS, "codeLensProvider");
+        byCapability.put(LspMethod.RENAME, "renameProvider");
+        byCapability.put(LspMethod.FORMATTING, "documentFormattingProvider");
+
+        Set<LspMethod> registeredAfterTheHandshake = EnumSet.of(LspMethod.DID_CHANGE_WATCHED_FILES);
+
+        Map<LspMethod, Advertisement.Reason> announcedByNothing = new LinkedHashMap<>();
+        announcedByNothing.put(LspMethod.INITIALIZE, Advertisement.Reason.LIFECYCLE);
+        announcedByNothing.put(LspMethod.INITIALIZED, Advertisement.Reason.LIFECYCLE);
+        announcedByNothing.put(LspMethod.SHUTDOWN, Advertisement.Reason.LIFECYCLE);
+        announcedByNothing.put(LspMethod.EXIT, Advertisement.Reason.LIFECYCLE);
+        announcedByNothing.put(LspMethod.SET_TRACE,
+                Advertisement.Reason.UNADVERTISED_PROTOCOL_METHOD);
+        announcedByNothing.put(LspMethod.DID_CHANGE_CONFIGURATION,
+                Advertisement.Reason.UNADVERTISED_PROTOCOL_METHOD);
+
+        Set<LspMethod> written = EnumSet.noneOf(LspMethod.class);
+        for (LspMethod method : byCapability.keySet()) {
+            assertTrue(written.add(method), method + " is written more than once");
+        }
+        for (LspMethod method : registeredAfterTheHandshake) {
+            assertTrue(written.add(method), method + " is written more than once");
+        }
+        for (LspMethod method : announcedByNothing.keySet()) {
+            assertTrue(written.add(method), method + " is written more than once");
+        }
+        assertEquals(EnumSet.allOf(LspMethod.class), written,
+                "every method the server answers says here how a client hears about it");
+
+        for (Map.Entry<LspMethod, String> row : byCapability.entrySet()) {
+            Advertisement.StaticCapability capability = assertInstanceOf(
+                    Advertisement.StaticCapability.class, row.getKey().advertisement(),
+                    row.getKey() + " is announced by a capability");
+            assertEquals(row.getValue(), capability.key(),
+                    "the capability a client reads before sending " + row.getKey().wire());
+        }
+        for (LspMethod method : registeredAfterTheHandshake) {
+            assertInstanceOf(Advertisement.DynamicRegistration.class, method.advertisement(),
+                    method + " is registered rather than carried by a capability");
+        }
+        for (Map.Entry<LspMethod, Advertisement.Reason> row : announcedByNothing.entrySet()) {
+            Advertisement.None none = assertInstanceOf(Advertisement.None.class,
+                    row.getKey().advertisement(), row.getKey() + " is announced by nothing");
+            assertEquals(row.getValue(), none.reason(), "why " + row.getKey() + " is not announced");
         }
     }
 
