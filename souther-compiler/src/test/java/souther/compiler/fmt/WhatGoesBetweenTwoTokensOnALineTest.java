@@ -40,10 +40,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * this is what it reads.
  *
  * <p><b>Where the construct is load-bearing.</b> For all but nine pairs of token kinds the answer is
- * the same from every construct that can join them, so the pair alone decides. The nine are written
- * out below with each construct's answer, and they are the whole of what a rule for this has to say
- * about position. The remaining two hundred are not transcribed: they are pinned by the rule and by
- * the coverage above it, and a listing of them would freeze the corpus rather than state a rule.
+ * the same from every construct that can join them, so the pair alone decides. Those nine are written
+ * out with each construct's answer, and the rest with theirs — the whole function is transcribed,
+ * because it does not compress. Grouping the kinds into words, brackets, commas, dots and operators
+ * leaves eight of the twenty-four class pairs taking both answers, and splitting the classes far
+ * enough to fix that arrives back at the kind. So the table is the rule, and a pair reaching the
+ * corpus that no row holds fails: a new adjacency is a decision, and it is made here rather than by
+ * whichever construct writes it first.
  *
  * <p>The corpus is not a sample of Souther. It is a set of sources chosen so that every node kind in
  * {@link SyntaxKind} is built at least once, and that is asserted — a kind added to the grammar
@@ -199,6 +202,19 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             let listMany (a: Int): List<Int> = [a, a]
 
             let tupleType (t: (Int)): Int = 1
+
+            let emptyTupleType (t: ()): Int = 1
+
+            let emptyTuplePattern (r: R): Int = {
+                let () = r
+                1
+            }
+
+            let armBraces (a: Int): Int =
+                match a with
+                    | A {} -> 1
+                    | B { a } -> 2
+                    | C -> 3
             """,
             """
             examples for m
@@ -531,6 +547,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             PLUS INT_LIT
             PLUSPLUS IDENT
             PLUSPLUS LBRACKET
+            RBRACE ARROW
             RBRACE ASSIGN
             RBRACE AS_KW
             RBRACKET ELSE_KW

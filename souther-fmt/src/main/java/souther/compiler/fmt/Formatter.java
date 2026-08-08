@@ -1006,10 +1006,26 @@ public final class Formatter {
      * {@code { f = v, g }} in both.
      */
     private static boolean spaceBetween(SyntaxKind left, SyntaxKind right) {
+        if (isOpeningBracket(left) && isClosingBracket(right)) {
+            // Brackets with nothing between them are written with nothing between them, which is the
+            // rule `delimited` states for a construct built as a document. A pattern is built as a
+            // run of tokens instead, so the rule has to be written on both paths; both are asked
+            // about it by AllOfABracketedConstructsCardinalitiesAreSweptTest.
+            return false;
+        }
         return left != SyntaxKind.DOT && right != SyntaxKind.DOT       // a qualified name is one name
                 && right != SyntaxKind.COMMA
                 && right != SyntaxKind.LPAREN                          // what is opened, not a call
                 && left != SyntaxKind.LPAREN && right != SyntaxKind.RPAREN;
+    }
+
+    /** The brackets a construct is written between. One place knows which they are. */
+    static boolean isOpeningBracket(SyntaxKind k) {
+        return k == SyntaxKind.LPAREN || k == SyntaxKind.LBRACKET || k == SyntaxKind.LBRACE;
+    }
+
+    static boolean isClosingBracket(SyntaxKind k) {
+        return k == SyntaxKind.RPAREN || k == SyntaxKind.RBRACKET || k == SyntaxKind.RBRACE;
     }
 
     private Doc matchCase(SyntaxNode n) {
@@ -1258,10 +1274,7 @@ public final class Formatter {
      * above the first member rather than above the bracket — which is also what keeps the answer
      * the same on a second formatting, when the bracket has moved onto the member's line. */
     private static boolean opens(SyntaxToken t) {
-        return switch (t.kind()) {
-            case LBRACE, LPAREN, LBRACKET -> true;
-            default -> false;
-        };
+        return isOpeningBracket(t.kind());
     }
 
     /** The code the comment at {@code i} was written above, or null where the file ends first. */
