@@ -155,28 +155,27 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
 
     @Test
     void aProbeOnALineOfItsOwnComesBackExactlyOnce() {
-        sweep(true, 245);
+        sweep(true);
     }
 
     @Test
     void aProbeAtTheEndOfALineComesBackExactlyOnce() {
-        sweep(false, 293);
+        sweep(false);
     }
 
     /**
-     * {@code travelled} is how many of the boundaries are inside a construct the layout gives no
-     * line of its own. A comment written there cannot stay: the rest of that line would be written
-     * inside it, so it goes to the nearest construct that has a line. Which construct that is, is
-     * measured rather than listed — the probe's neighbour is an index into the code tokens, and
-     * those are required to come back unchanged, so an index that moved says the comment left the
-     * code it was written next to.
+     * Which boundaries have to keep their comment is read from the canonical form rather than from
+     * the formatter: a comment at the end of a line has to come back at the end of that line, and
+     * one on a line of its own has to come back above the same line. So a token that already ends a
+     * line of the fixture is a place a comment must stay, and one in the middle of a line is a place
+     * it cannot — the rest of that line would be written inside it, and it goes to the nearest
+     * construct the layout gives a line to.
      *
-     * <p>The number goes down as constructs are given lines of their own, and each time it does, a
-     * comment that used to travel now stays. It going up is a comment that stopped staying, which
-     * nothing else here would report: the comment is still there and the code around it is
-     * unchanged, and only what it is next to has changed.
+     * <p>The probe's neighbour is an index into the code tokens, and those are required to come back
+     * unchanged, so the index names the same token before and after. That makes this an answer to
+     * what the comment is next to that needs neither an oracle nor the classifier under test.
      */
-    private static void sweep(boolean onItsOwnLine, int travelled) {
+    private static void sweep(boolean onItsOwnLine) {
         List<String> lost = new ArrayList<>();
         List<String> moved = new ArrayList<>();
         List<String> rewritten = new ArrayList<>();
@@ -185,6 +184,7 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
         java.util.Map<Integer, Integer> contributed = new java.util.LinkedHashMap<>();
         for (String fixture : List.of(WHOLE_MODULE, THE_OTHER_FORMS)) {
             List<String> expected = commentsOf(fixture);
+            List<Boolean> mustStay = mustStay(fixture, onItsOwnLine);
             int before = checked;
             for (String variant : variants(fixture, onItsOwnLine)) {
                 if (!CstParser.parse(variant).errors().isEmpty()) {
@@ -208,8 +208,8 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                 }
                 int was = neighbour(variant, onItsOwnLine);
                 int now = neighbour(formatted, onItsOwnLine);
-                if (was != now) {
-                    moved.add(context(variant) + "  from " + was + " to " + now);
+                if (was != now && was >= 0 && was < mustStay.size() && mustStay.get(was)) {
+                    moved.add(context(variant) + "  left token " + was + " for " + now);
                 }
                 List<String> got = commentsOf(formatted);
                 got.sort(null);
@@ -228,9 +228,9 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                     "a fixture contributed only " + e.getValue() + " variants; it is not being swept");
         }
         assertTrue(checked > 150, "only " + checked + " variants parsed; the sweep found nothing");
-        assertTrue(moved.size() <= travelled,
-                moved.size() + " of " + checked + " probes left the code they were written next to,"
-                        + " where " + travelled + " have no line to stay on:\n"
+        assertTrue(moved.isEmpty(),
+                moved.size() + " of " + checked + " probes left code that ends or begins a line of"
+                        + " the canonical form, which is code a comment can stay beside:\n"
                         + String.join("\n", moved));
         assertTrue(lost.isEmpty() && rewritten.isEmpty() && refused.isEmpty(),
                 "of " + checked + " swept, " + lost.size() + " came back with the comments changed,"
@@ -261,6 +261,38 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
             if (!t.isTrivia() && t.kind() != SyntaxKind.EOF && !out.contains(t.end())) {
                 out.add(t.end());
             }
+        }
+        return out;
+    }
+
+    /**
+     * For each code token of {@code source}, whether a comment written beside it has a line to stay
+     * on: the token ends a line, for a comment written at the end of one, or begins a line, for a
+     * comment written above one.
+     */
+    private static List<Boolean> mustStay(String source, boolean onItsOwnLine) {
+        List<Boolean> out = new ArrayList<>();
+        List<SyntaxToken> all = tokens(CstParser.parse(source).root());
+        List<Integer> code = new ArrayList<>();
+        for (int i = 0; i < all.size(); i++) {
+            if (!all.get(i).isTrivia() && all.get(i).kind() != SyntaxKind.EOF) {
+                code.add(i);
+            }
+        }
+        for (int c = 0; c < code.size(); c++) {
+            int step = onItsOwnLine ? -1 : 1;
+            boolean ends = true;
+            for (int i = code.get(c) + step; i >= 0 && i < all.size(); i += step) {
+                SyntaxToken t = all.get(i);
+                if (!t.isTrivia()) {
+                    ends = t.kind() == SyntaxKind.EOF;
+                    break;
+                }
+                if (t.text().indexOf('\n') >= 0) {
+                    break;                            // a line break before the next code: it ends
+                }
+            }
+            out.add(ends);
         }
         return out;
     }

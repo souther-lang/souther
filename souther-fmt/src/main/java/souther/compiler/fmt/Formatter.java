@@ -281,7 +281,8 @@ public final class Formatter {
                     afterOf(row)));
         }
         rows.add(endOf(n));
-        return concat(text("example "), text(target), nest(INDENT, concat(rows)));
+        return concat(text("example "), text(target),
+                afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows)));
     }
 
     /**
@@ -327,7 +328,8 @@ public final class Formatter {
             rows.add(concat(HARDLINE, concat(aboveOf(row), fakeRow(row)), afterOf(row)));
         }
         rows.add(endOf(n));
-        return concat(text("fake "), text(target), nest(INDENT, concat(rows)));
+        return concat(text("fake "), text(target),
+                afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows)));
     }
 
     private Doc fakeRow(SyntaxNode n) {
@@ -396,6 +398,7 @@ public final class Formatter {
         var product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
             return concat(text("data "), text(name), text(" ="),
+                    afterToken(n.token(SyntaxKind.ASSIGN)),
                     nest(INDENT, concat(concat(HARDLINE, productBody(product.get())), concat(invariants))));
         }
         var sum = n.child(SyntaxKind.SUM_BODY);
@@ -625,13 +628,13 @@ public final class Formatter {
     /** A lambda's parameters as a definition's parameter list — always parenthesised, which is the
      * only shape a definition writes. */
     private Doc lambdaParams(SyntaxNode lambda) {
-        List<Doc> params = new ArrayList<>();
+        List<Member> params = new ArrayList<>();
         for (SyntaxNode c : lambda.childNodes()) {
             if (isPatternNode(c.kind())) {
-                params.add(pattern(c));
+                params.add(member(c, pattern(c)));
             }
         }
-        return delimited("(", SOFTLINE, plain(params), ")");
+        return delimited("(", SOFTLINE, withEndComments(lambda, params), ")");
     }
 
     private Doc fnParamList(SyntaxNode n) {
@@ -665,7 +668,8 @@ public final class Formatter {
                 }
             }
         }
-        return concat(delimited("(", SOFTLINE, params, ")"), text(" -> "), result);
+        return concat(delimited("(", SOFTLINE, withEndComments(n, params), ")"),
+                text(" -> "), result);
     }
 
     private Doc retType(SyntaxNode n) {
@@ -887,6 +891,7 @@ public final class Formatter {
             return Doc.NIL;
         }
         List<Doc> lines = new ArrayList<>();
+        lines.add(afterToken(n.token(SyntaxKind.ELSE_KW)));
         for (SyntaxNode arm : childNodes(arms.get(), SyntaxKind.ELSE_ARM)) {
             lines.add(concat(HARDLINE, aboveOf(arm), text("| " + firstIdent(arm) + " -> "),
                     expr(onlyExpr(arm)), afterOf(arm)));
@@ -917,7 +922,8 @@ public final class Formatter {
             cases.add(concat(HARDLINE, concat(aboveOf(c), matchCase(c)), afterOf(c)));
         }
         cases.add(endOf(n));
-        return concat(text("match "), expr(scrutinee), text(" with"), nest(INDENT, concat(cases)));
+        return concat(text("match "), expr(scrutinee), text(" with"),
+                afterToken(n.token(SyntaxKind.WITH_KW)), nest(INDENT, concat(cases)));
     }
 
     private Doc matchCase(SyntaxNode n) {
@@ -948,16 +954,16 @@ public final class Formatter {
     }
 
     private Doc lambda(SyntaxNode n) {
-        List<Doc> params = new ArrayList<>();
+        List<Member> params = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             if (isPatternNode(c.kind())) {
-                params.add(pattern(c));
+                params.add(member(c, pattern(c)));
             }
         }
         // `x -> e` keeps its bare parameter; anything parenthesised was written that way
         Doc paramsDoc = n.token(SyntaxKind.LPAREN).isPresent()
-                ? delimited("(", SOFTLINE, plain(params), ")")
-                : params.get(0);
+                ? delimited("(", SOFTLINE, withEndComments(n, params), ")")
+                : concat(params.get(0).doc(), params.get(0).trailing());
         return concat(paramsDoc, text(" -> "), expr(lastExprChild(n)));
     }
 
@@ -1007,7 +1013,8 @@ public final class Formatter {
             lines.add(concat(HARDLINE, lead, d, afterOf(c)));
         }
         lines.add(endOf(n));
-        return concat(text("{"), nest(INDENT, concat(lines)), HARDLINE, text("}"));
+        return concat(text("{"), afterToken(n.token(SyntaxKind.LBRACE)),
+                nest(INDENT, concat(lines)), HARDLINE, text("}"));
     }
 
     /** A binding pattern, written back as it was: a name, a tuple, a newtype opened by its
@@ -1018,29 +1025,29 @@ public final class Formatter {
                 return text(firstIdent(n));
             }
             case PATTERN_TUPLE -> {
-                List<Doc> elems = new ArrayList<>();
+                List<Member> elems = new ArrayList<>();
                 for (SyntaxNode c : n.childNodes()) {
                     if (isPatternNode(c.kind())) {
-                        elems.add(pattern(c));
+                        elems.add(member(c, pattern(c)));
                     }
                 }
-                return delimited("(", SOFTLINE, plain(elems), ")");
+                return delimited("(", SOFTLINE, withEndComments(n, elems), ")");
             }
             case PATTERN_CTOR -> {
                 return concat(qualifiedName(n), text("("), pattern(patternChild(n)), text(")"));
             }
             case PATTERN_RECORD -> {
-                List<Doc> fields = new ArrayList<>();
+                List<Member> fields = new ArrayList<>();
                 for (SyntaxNode f : n.childNodes()) {
                     if (f.kind() != SyntaxKind.PATTERN_FIELD) {
                         continue;
                     }
                     List<SyntaxToken> names = idents(f);
-                    fields.add(names.size() > 1
+                    fields.add(member(f, names.size() > 1
                             ? concat(text(names.get(0).text()), text(" = "), text(names.get(1).text()))
-                            : text(names.get(0).text()));
+                            : text(names.get(0).text())));
                 }
-                return delimited("{", LINE, plain(fields), "}");
+                return delimited("{", LINE, withEndComments(n, fields), "}");
             }
             default -> {
                 return text(firstIdent(n));
@@ -1198,8 +1205,13 @@ public final class Formatter {
      * together is what turned a comment about a case into a comment about the declaration.
      */
     private static void above(Attachments out, SyntaxToken next, SyntaxToken comment, SyntaxNode file) {
-        if (next != null && opens(next)) {
-            // what opens a construct is the construct's, and it shares a line with the first member
+        SyntaxNode begins = next == null ? null : beginningAt(next);
+        // What opens a construct is the construct's, and it shares a line with the first member —
+        // unless a member begins at that bracket itself, as a `fake` row does at its `(`, in which
+        // case the comment is above the member and not above what the member opens with.
+        boolean opensSomethingElse = begins != null && begins.parent() != null
+                && !takesALineOf(begins.parent().kind(), begins.kind());
+        if (next != null && opens(next) && opensSomethingElse) {
             SyntaxElement first = firstMemberOf(next.parent());
             if (first instanceof SyntaxNode node) {
                 place(out, node, comment, true);
@@ -1227,7 +1239,7 @@ public final class Formatter {
         } else if (closes(next)) {
             add(out.atEnd(), next.parent(), comment);
         } else {
-            place(out, beginningAt(next), comment, true);
+            place(out, begins, comment, true);
         }
     }
 
@@ -1243,7 +1255,18 @@ public final class Formatter {
             out.afterCase().computeIfAbsent(nameEnd(code), _ -> new ArrayList<>()).add(comment);
             return;
         }
-        place(out, endingAt(code), comment, false);
+        // A construct written over several lines has more lines than its last: `data D =` and
+        // `match x with` and the `{` of a block each end one. A comment there ends that line, not
+        // the construct, so it is held against the token rather than against the node.
+        SyntaxNode slot = slotOf(endingAt(code));
+        if (slot == null) {
+            return;
+        }
+        if (slot.end() != code.end() && endsAWrittenLine(code)) {
+            out.afterCase().computeIfAbsent(code.end(), _ -> new ArrayList<>()).add(comment);
+        } else {
+            add(out.after(), slot, comment);
+        }
     }
 
     /**
@@ -1255,6 +1278,47 @@ public final class Formatter {
      * rather than about what the comment was written about.
      */
     private static void place(Attachments out, SyntaxNode owner, SyntaxToken comment, boolean above) {
+        SyntaxNode slot = slotOf(owner);
+        if (slot != null) {
+            add(above ? out.above() : out.after(), slot, comment);
+        }
+    }
+
+    /**
+     * Whether the layout always ends a line at {@code t}. These are the tokens a construct written
+     * over several lines opens with — the {@code =} of a product block, the {@code with} of a match,
+     * the {@code {} of a block — where the line a comment ends is the construct's first and not its
+     * last. Whether a bracketed construct breaks depends on its width, so its brackets are not here:
+     * a comment there goes to the line the whole construct ends.
+     */
+    private static boolean endsAWrittenLine(SyntaxToken t) {
+        SyntaxNode parent = t.parent();
+        return switch (t.kind()) {
+            case ASSIGN -> parent.kind() == SyntaxKind.DATA_DEF
+                    && parent.child(SyntaxKind.PRODUCT_BODY).isPresent();
+            case WITH_KW -> parent.kind() == SyntaxKind.MATCH_EXPR;
+            case LBRACE -> parent.kind() == SyntaxKind.BLOCK_EXPR;
+            case ELSE_KW -> parent.child(SyntaxKind.ELSE_ARMS).isPresent();
+            case IDENT -> (parent.kind() == SyntaxKind.EXAMPLE_DEF
+                        || parent.kind() == SyntaxKind.FAKE_DEF)
+                    // the target, not the `example` that opens the line with it
+                    && lastIdentOf(parent) != null && lastIdentOf(parent).end() == t.end();
+            default -> false;
+        };
+    }
+
+    private static SyntaxToken lastIdentOf(SyntaxNode n) {
+        SyntaxToken last = null;
+        for (SyntaxElement e : n.children()) {
+            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+                last = t;
+            }
+        }
+        return last;
+    }
+
+    /** The construct that owns the line {@code owner} is written on. */
+    private static SyntaxNode slotOf(SyntaxNode owner) {
         SyntaxNode from = owner;
         // A run the layout flattens is written as segments, and a part of the spine ends where its
         // own segment does rather than where the whole run does. Only inside the run, though: the
@@ -1265,10 +1329,10 @@ public final class Formatter {
         }
         for (SyntaxNode c = from; c != null && c.parent() != null; c = c.parent()) {
             if (takesALineOf(c.parent().kind(), c.kind())) {
-                add(above ? out.above() : out.after(), c, comment);
-                return;
+                return c;
             }
         }
+        return null;
     }
 
     /** Whether {@code n} is a run the layout writes as one chain of segments rather than as the
@@ -1421,10 +1485,18 @@ public final class Formatter {
     /** Whether {@code t} is what closes a construct whose members take a line each — the place a
      * comment written under the last member goes. */
     private static boolean closes(SyntaxToken t) {
-        if (t.end() != t.parent().end() || !holdsLines(t.parent().kind())) {
-            return false;   // a bracket in the middle of a construct closes nothing
+        if (!holdsLines(t.parent().kind())) {
+            return false;
         }
-        return switch (t.kind()) {
+        // Usually a construct's members run to its own end. A function type and a parenthesised
+        // lambda are written as one node whose members stop at a bracket in the middle of it —
+        // `(Int, String) -> Bool` — and the layout writes that bracketed run as a construct of its
+        // own, so what closes the run closes something even though it closes no node.
+        boolean ends = t.end() == t.parent().end()
+                || ((t.parent().kind() == SyntaxKind.FN_TYPE
+                        || t.parent().kind() == SyntaxKind.LAMBDA_EXPR)
+                    && t.kind() == SyntaxKind.RPAREN);
+        return ends && switch (t.kind()) {
             case RBRACE, RPAREN, RBRACKET, GT -> true;
             default -> false;
         };
@@ -1484,6 +1556,8 @@ public final class Formatter {
                     || k == SyntaxKind.DEPENDS_CLAUSE || k == SyntaxKind.RET_TYPE;
             case RET_TYPE, TYPE_ARGS, TUPLE_TYPE -> Formatter::isTypeNode;
             case FN_TYPE -> k -> k == SyntaxKind.RET_TYPE;
+            case LAMBDA_EXPR, PATTERN_TUPLE -> Formatter::isPatternNode;
+            case PATTERN_RECORD -> k -> k == SyntaxKind.PATTERN_FIELD;
             case BINARY_EXPR -> k -> isExprKind(k) && k != SyntaxKind.BINARY_EXPR;
             case BLOCK_EXPR -> _ -> true;
             case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> Formatter::isExprKind;
@@ -1549,6 +1623,26 @@ public final class Formatter {
     private Doc afterCase(SyntaxToken ident) {
         List<Doc> parts = new ArrayList<>();
         for (SyntaxToken c : comments.afterCase().getOrDefault(ident.end(), List.of())) {
+            if (consumedComments.add(c.start())) {
+                parts.add(Doc.trailing(c.text().stripTrailing()));
+            }
+        }
+        return concat(parts);
+    }
+
+    /** The comment written at the end of the line {@code t} ends, where that is a line inside a
+     * construct rather than the construct's own last line. */
+    private Doc afterToken(java.util.Optional<SyntaxToken> t) {
+        return t.map(this::afterToken).orElse(Doc.NIL);
+    }
+
+    private Doc afterToken(SyntaxToken t, boolean present) {
+        return present ? afterToken(t) : Doc.NIL;
+    }
+
+    private Doc afterToken(SyntaxToken t) {
+        List<Doc> parts = new ArrayList<>();
+        for (SyntaxToken c : comments.afterCase().getOrDefault(t.end(), List.of())) {
             if (consumedComments.add(c.start())) {
                 parts.add(Doc.trailing(c.text().stripTrailing()));
             }

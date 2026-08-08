@@ -349,6 +349,30 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
+    /**
+     * Written at the end of a line a construct opens with rather than the line it ends on. A
+     * construct written over several lines has more lines than its last, and `data D =`,
+     * `match x with` and the `{` of a block each end one of them. The whole construct's line was the
+     * only one anything could be attached to, so a comment there came back after its last line.
+     */
+    @Test
+    void aLineAConstructOpensWith() {
+        assertEquals("""
+                module m
+
+                data D = // about the block
+                    { a: Int
+                    , b: Int
+                    }
+                """, Formatter.format("""
+                module m
+                data D =   // about the block
+                    { a: Int
+                    , b: Int
+                    }
+                """));
+    }
+
     /** No member to be about: the comment was written above the construct, and stays above it rather
      * than moving inside where the construct's own end comments go. */
     @Test
