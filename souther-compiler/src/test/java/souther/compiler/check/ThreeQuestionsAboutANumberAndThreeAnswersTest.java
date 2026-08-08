@@ -74,16 +74,16 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
     }
 
     /**
-     * Two layers: arithmetic says no and means it, and the analyser says no by borrowing that answer.
+     * Two layers: arithmetic says no and means it, and the other two say yes.
      *
-     * <p>The middle column is what the language does with such a value — `StartMinute < StartMinute`
-     * compares, because comparison reaches the base. The third is what the analyser can do with it,
-     * and today it is the first column's answer wearing the third column's name.
+     * <p>This is the row the three questions part on, and the row #461 was. The language compares
+     * such a value because comparison reaches the base; the analyser carries it for the same reason,
+     * and used to refuse it by answering with the arithmetic column.
      */
     @Test
-    void aNewtypeOverANewtypeIsANumberTheAnalyserCannotCarry() {
-        assertEquals(new Answers(null, Type.INT, null), of("StartMinute"));
-        assertEquals(new Answers(null, Type.DECIMAL, null), of("Share"));
+    void aNewtypeOverANewtypeIsNoArithmeticAndStillANumber() {
+        assertEquals(new Answers(null, Type.INT, Type.INT), of("StartMinute"));
+        assertEquals(new Answers(null, Type.DECIMAL, Type.DECIMAL), of("Share"));
     }
 
     /** And a chain over something that is no number is no number by any of the three. */

@@ -1302,6 +1302,19 @@ public final class TypeOps {
         return t;
     }
 
+    /**
+     * The {@code Int} or {@code Decimal} a value of {@code t} is carried as, reaching through as many
+     * newtypes as it is written with, or {@code null} where it is carried as neither.
+     *
+     * <p>The language's own reading: a comparison of two such values compares the numbers underneath
+     * however many names are wrapped round them (ADR-0047). Not what arithmetic asks — that is
+     * {@link #directNumericNewtypeBase} and stops at one layer, which the language means.
+     */
+    public static Type numericBase(Type t, Symbols symbols) {
+        Type carried = base(t, symbols);
+        return carried == Type.INT || carried == Type.DECIMAL ? carried : null;
+    }
+
     /** What a single-value newtype directly wraps (one level, so a newtype over a newtype answers
      * with that newtype), or {@code null} for anything that is not one. */
     static Type wrapped(Type t, Symbols symbols) {

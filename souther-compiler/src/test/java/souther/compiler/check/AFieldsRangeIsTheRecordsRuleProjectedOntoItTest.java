@@ -230,18 +230,15 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
     }
 
     /**
-     * A newtype over a newtype is bounded by neither reading.
+     * A rule reaches through as many names as are wrapped round the number.
      *
-     * <p>The range a boundary is derived from and the range this projects are read by two different
-     * walks, and what matters is that they agree: a bound only one of them found would narrow one end
-     * of a position and leave the other where its type left it, which is not a range of anything.
-     * They agree here on nothing — `data StartMinute = Minute` carries no bound to either, and the
-     * position is reported as not derivable — so there is nothing to take in. That the inner rule is
-     * lost is older than this and is a limit of what a bound is read off, not of the projection.
-     * Reported separately; this holds the agreement, and will want the bounds once that is fixed.
+     * <p>`data StartMinute = Minute` is a number the language compares, so it is one the domain
+     * carries (#461). Both ends are minutes of a day and the rule between them is read at the atoms
+     * they are, so `from` stops where `to` can still be — a name wrapped round a number is not a
+     * place a rule stops.
      */
     @Test
-    void aNewtypeOverANewtypeIsBoundedByNeitherReading() {
+    void aRuleReachesThroughAsManyNamesAsAreWrappedRoundTheNumber() {
         FieldDomains domains = domainsIn("""
                 module example.nested
 
@@ -258,8 +255,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                     invariant ordered = from.value < to.value
                 """, "Span");
 
-        assertNull(domains.at("from"));
-        assertNull(domains.at("to"));
+        assertBounds(domains.at("from"), 0, 1439);
+        assertBounds(domains.at("to"), 1, 1440);
     }
 
     /**

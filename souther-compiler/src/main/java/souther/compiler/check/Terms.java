@@ -771,6 +771,12 @@ final class Terms {
      * numbers or dense ones would otherwise classify the type a second time, and two classifications
      * of one type are two chances to disagree.
      *
+     * <p>Every number the language calls one, today: the domain holds a scalar, and a value the
+     * language compares as a number is one it can hold. The two are answered by one call for that
+     * reason and not because they are one question — an equality reaches values no domain carries,
+     * and a type being comparable is no promise that an affine domain can hold it. Where those come
+     * apart this stops delegating; until then the delegation is what says why the answers agree.
+     *
      * <p>Remembered by the type it names — asked at every leaf of every affine walk, and answering it
      * walks the declaration's fields.
      */
@@ -779,10 +785,10 @@ final class Terms {
             return t;
         }
         if (!(t instanceof Type.Ref ref)) {
-            return TypeOps.directNumericNewtypeBase(t, symbols);
+            return TypeOps.numericBase(t, symbols);
         }
         return affineScalarBases.computeIfAbsent(ref.name(),
-                _ -> java.util.Optional.ofNullable(TypeOps.directNumericNewtypeBase(t, symbols)))
+                _ -> java.util.Optional.ofNullable(TypeOps.numericBase(t, symbols)))
                 .orElse(null);
     }
 
