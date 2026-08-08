@@ -146,11 +146,23 @@ public sealed interface FixtureShape {
         return switch (out) {
             case BoundaryOutput.Scalar s -> new Scalar(s.scalar());
             case BoundaryOutput.Nominal n -> new Nominal(n.name());
-            case BoundaryOutput.ListOf l -> new ListOf(ofWholeAnswer(l.element()));
-            case BoundaryOutput.SetOf s -> new SetOf(ofWholeAnswer(s.element()));
-            case BoundaryOutput.MapOf m -> new MapOf(key(m.key()), ofWholeAnswer(m.value()));
+            // Carried outward rather than answered for at the top. Nothing today writes a union
+            // anywhere but a behavior's own answer — `|` belongs to the written return type and a
+            // composition merges its retired cases there — so an element that is several types does
+            // not arrive. What this keeps is that it could not be swallowed if it did: a `ListOf`
+            // holding nothing is a shape whose reader would find out later and elsewhere.
+            case BoundaryOutput.ListOf l -> wrapping(ofWholeAnswer(l.element()), ListOf::new);
+            case BoundaryOutput.SetOf s -> wrapping(ofWholeAnswer(s.element()), SetOf::new);
+            case BoundaryOutput.MapOf m -> wrapping(ofWholeAnswer(m.value()),
+                    value -> new MapOf(key(m.key()), value));
             case BoundaryOutput.Cases _ -> null;
         };
+    }
+
+    /** {@code held} in its container, or nothing where there was nothing to hold. */
+    private static FixtureShape wrapping(FixtureShape held,
+                                         java.util.function.Function<FixtureShape, FixtureShape> in) {
+        return held == null ? null : in.apply(held);
     }
 
     /** A key a boundary map carries, as the position a fixture writes it at. */
