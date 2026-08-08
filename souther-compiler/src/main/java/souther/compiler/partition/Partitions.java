@@ -620,9 +620,10 @@ public final class Partitions {
 
         Bounds bounds = narrowed(boundsOf(new Type.Ref(newtype), symbols), within);
         if (bounds != null && !bounds.isEmpty()) {
-            candidates.add(bounds.decimal()
-                    ? FixtureTemplate.decimal(inside(bounds))
-                    : FixtureTemplate.integer(inside(bounds).longValueExact()));
+            for (BigDecimal edge : edgesOf(bounds)) {
+                candidates.add(bounds.decimal() ? FixtureTemplate.decimal(edge)
+                        : FixtureTemplate.integer(edge.longValueExact()));
+            }
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
@@ -644,11 +645,26 @@ public final class Partitions {
         return List.copyOf(once.values());
     }
 
-    /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
-     * there is, and it is the value a boundary wants written anyway. */
-    private static BigDecimal inside(Bounds bounds) {
-        return bounds.min() != null ? bounds.min().value()
-                : bounds.max() != null ? bounds.max().value() : BigDecimal.ZERO;
+    /**
+     * The numbers the bound admits that are worth proposing, in the order to try them.
+     *
+     * <p>The lower edge first: it is inside whatever upper edge there is, and it is the value a
+     * boundary wants written anyway, so an assignment that builds today builds on the same number.
+     *
+     * <p>Then the upper one, which is reached only where the first was refused. What refuses it is a
+     * rule relating this position to another: `low < high` with `low` already fixed leaves `high` a
+     * range starting at the value `low` took, and over decimals that range starts at the one number
+     * the rule will not accept. Offering the far end is not knowing which number the rule wants — it
+     * is having a second number to be refused at, which a range with one edge does not.
+     */
+    private static List<BigDecimal> edgesOf(Bounds bounds) {
+        if (bounds.min() == null) {
+            return List.of(bounds.max().value());
+        }
+        if (bounds.max() == null || bounds.max().value().compareTo(bounds.min().value()) == 0) {
+            return List.of(bounds.min().value());
+        }
+        return List.of(bounds.min().value(), bounds.max().value());
     }
 
     private static boolean isBool(ObservedValue v, boolean expected) {

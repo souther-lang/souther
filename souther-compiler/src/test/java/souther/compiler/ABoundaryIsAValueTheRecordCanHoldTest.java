@@ -51,6 +51,31 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                     -> ShortShift
             """;
 
+    /** Two fields of one record, each bounded at both ends by its own type and related to the other
+     * by a strict rule the decimals give no next value to step to. */
+    private static final String BAND = """
+            module example.band
+
+            data Ratio = Decimal
+                invariant withinOne = value >= 0.0m && value <= 1.0m
+
+            data Band =
+                { low: Ratio
+                , high: Ratio
+                }
+                invariant ordered = low < high
+
+            data Ok
+
+            behavior classify : (band: Band) -> Ok
+                constructs Ok
+
+            let classify (band) = Ok
+
+            example classify
+                | "a" : (Band { low = Ratio(0.1m), high = Ratio(0.9m) }) -> Ok
+            """;
+
     private static List<String> boundariesOf(String model) throws Exception {
         return reportOn(model).lines()
                 .map(String::trim)
@@ -222,31 +247,9 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
      */
     @Test
     void anEdgeNothingPromisesIsSaidAndNotCounted() throws Exception {
-        String dense = """
-                module example.band
+        String report = reportOn(BAND);
 
-                data Ratio = Decimal
-                    invariant withinOne = value >= 0.0m && value <= 1.0m
-
-                data Band =
-                    { low: Ratio
-                    , high: Ratio
-                    }
-                    invariant ordered = low < high
-
-                data Ok
-
-                behavior classify : (band: Band) -> Ok
-                    constructs Ok
-
-                let classify (band) = Ok
-
-                example classify
-                    | "a" : (Band { low = Ratio(0.1m), high = Ratio(0.9m) }) -> Ok
-                """;
-        String report = reportOn(dense);
-
-        List<String> owed = boundariesOf(dense);
+        List<String> owed = boundariesOf(BAND);
 
         assertTrue(report.contains("not known to be writable: classify/band.low = 1"), () -> report);
         assertFalse(owed.stream().anyMatch(l -> l.contains("classify/band.low = 1")),
@@ -256,6 +259,25 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
         // construct and not by how far one reading of the rules got.
         assertTrue(owed.stream().anyMatch(l -> l.contains("classify/band.high = 1")),
                 () -> "a row at the top of the upper field builds: " + owed);
+    }
+
+    /**
+     * One pair of values, reached from either field of the rule that relates them.
+     *
+     * <p>`low < high` is satisfied by `{ 0, 1 }` whichever end is fixed first. Fixing `high` at 1
+     * leaves `low` a range whose bottom the rule takes, and fixing `low` at 0 leaves `high` a range
+     * whose bottom it does not — so a position that proposes one value has nothing left to offer
+     * the moment that value is refused, and the same pair comes back found one way and missing the
+     * other.
+     */
+    @Test
+    void thePairIsFoundFromEitherFieldOfTheRule() throws Exception {
+        List<String> owed = boundariesOf(BAND);
+
+        assertTrue(owed.stream().anyMatch(l -> l.contains("classify/band.low = 0")),
+                () -> "a row at the bottom of the lower field builds: " + owed);
+        assertTrue(owed.stream().anyMatch(l -> l.contains("classify/band.high = 1")),
+                () -> "and so does one at the top of the upper field: " + owed);
     }
 
     /**
