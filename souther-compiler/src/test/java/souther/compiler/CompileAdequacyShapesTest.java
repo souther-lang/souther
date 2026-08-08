@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
@@ -69,7 +70,7 @@ class CompileAdequacyShapesTest {
         assertEquals(1, evidence.axes().size());
         assertEquals(List.of("rate/x < 0.5", "rate/0.5 <= x"), evidence.axes().get(0).classes());
         assertEquals(List.of("0.5"),
-                evidence.boundaries().stream().map(PartitionEvidence.BoundaryCoverage::value)
+                evidence.boundaries().stream().map(BoundaryAssessment::value)
                         .toList());
     }
 
@@ -228,7 +229,7 @@ class CompileAdequacyShapesTest {
                 """), "classify");
 
         List<String> at = evidence.boundaries().stream()
-                .map(PartitionEvidence.BoundaryCoverage::value).filter(v -> v.equals("0")).toList();
+                .map(BoundaryAssessment::value).filter(v -> v.equals("0")).toList();
         assertEquals(2, at.size(), "one line, and two rules that drew it there");
         assertFalse(evidence.axes().isEmpty());
         assertEquals(List.of("rate/0 <= x <= 0", "rate/0 < x"), evidence.axes().get(0).classes(),

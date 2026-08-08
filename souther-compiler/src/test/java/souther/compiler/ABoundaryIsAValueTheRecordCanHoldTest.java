@@ -246,11 +246,16 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 """;
         String report = reportOn(dense);
 
-        assertEquals(List.of(), boundariesOf(dense), "none of them is a row anybody is owed");
-        assertTrue(report.contains("boundary    0/0"), () -> report);
+        List<String> owed = boundariesOf(dense);
+
         assertTrue(report.contains("not known to be writable: classify/band.low = 1"), () -> report);
-        assertTrue(report.contains("adequacy: satisfied"),
-                () -> "and no build is refused over it:\n" + report);
+        assertFalse(owed.stream().anyMatch(l -> l.contains("classify/band.low = 1")),
+                () -> "and nobody is owed a row at it: " + owed);
+        // The other end of the same rule, which the projection could not promise either. A value at
+        // it was built, so it is owed — the two edges are told apart by what something managed to
+        // construct and not by how far one reading of the rules got.
+        assertTrue(owed.stream().anyMatch(l -> l.contains("classify/band.high = 1")),
+                () -> "a row at the top of the upper field builds: " + owed);
     }
 
     /**
@@ -284,11 +289,13 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 """;
         String report = reportOn(holed);
 
-        assertTrue(report.contains("boundary    1/1"),
-                () -> "the row at 0 counts, and 10 is neither met nor owed:\n" + report);
         assertFalse(report.contains("not known to be writable: f/r.a = 0"),
                 () -> "there is a row at it:\n" + report);
-        assertTrue(report.contains("not known to be writable: f/r.a = 10"), () -> report);
+        // The row settles its own edge without anything being built for it, and the other edge is
+        // settled by building one. Two kinds of witness, and the projection proves neither.
+        assertTrue(report.contains("boundary    1/2"),
+                () -> "the row at 0 is met, and 10 was built and is owed:\n" + report);
+        assertTrue(report.contains("no row is at f/r.a = 10"), () -> report);
     }
 
     /**
@@ -365,8 +372,15 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
 
         String report = reportOn(holed);
 
-        assertEquals(List.of(), boundariesOf(holed), "0 is in the range and no row can write it");
+        List<String> owed = boundariesOf(holed);
+
         assertTrue(report.contains("not known to be writable: f/n = 0"), () -> report);
+        assertFalse(owed.stream().anyMatch(l -> l.contains("f/n = 0")),
+                () -> "0 is in the range and the decoder refuses it: " + owed);
+        // A refusal at one edge says nothing about the other. `value /= 0` leaves the top of the
+        // range alone, and a value was built there, so that one is a row somebody is owed.
+        assertTrue(owed.stream().anyMatch(l -> l.contains("f/n = 10")),
+                () -> "and the top of the same range builds: " + owed);
     }
 
     /**

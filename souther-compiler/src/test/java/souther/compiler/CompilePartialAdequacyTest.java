@@ -8,6 +8,7 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -217,11 +218,11 @@ class CompilePartialAdequacyTest {
         PartitionEvidence partition = measured(budgetSpent("")).db()
                 .ask(new Adequacy.Coverage("example.budget")).value().get("take");
 
-        List<PartitionEvidence.BoundaryCoverage> at = partition.boundaries().stream()
+        List<BoundaryAssessment> at = partition.boundaries().stream()
                 .filter(b -> b.value().equals("0")).toList();
         assertEquals(1, at.size());
         assertEquals(MeasurementStatus.PARTIAL, at.get(0).status());
-        assertFalse(at.get(0).hit(), "nothing was read, so nothing was met either");
+        assertFalse(at.get(0).coverage().hit(), "nothing was read, so nothing was met either");
     }
 
     @Test
@@ -380,9 +381,9 @@ class CompilePartialAdequacyTest {
                 .ask(new Adequacy.Coverage("example.split")).value().get("take");
 
         assertEquals(2, partition.boundaries().size());
-        for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
+        for (BoundaryAssessment boundary : partition.boundaries()) {
             assertEquals(MeasurementStatus.PARTIAL, boundary.status(), boundary.value());
-            assertFalse(boundary.hit());
+            assertFalse(boundary.coverage().hit());
         }
     }
 
@@ -586,12 +587,12 @@ class CompilePartialAdequacyTest {
                         DoesNotComeBack.everythingAboutTheRowDescribed("over it")), Adequacy.Asked.reportOnly())
                 .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
 
-        PartitionEvidence.BoundaryCoverage line = partition.boundaries().stream()
+        BoundaryAssessment line = partition.boundaries().stream()
                 .filter(b -> b.value().equals("100")).findFirst().orElseThrow();
-        assertTrue(line.hit(), "a row wrote 100 and went through the comparison");
+        assertTrue(line.coverage().hit(), "a row wrote 100 and went through the comparison");
         assertEquals(MeasurementStatus.COMPLETE, line.status());
 
-        PartitionEvidence.BoundaryCoverage beyond = partition.boundaries().stream()
+        BoundaryAssessment beyond = partition.boundaries().stream()
                 .filter(b -> b.value().equals("101")).findFirst().orElseThrow();
         assertEquals(MeasurementStatus.PARTIAL, beyond.status(),
                 "and the one nothing was found at is undecided, not missed");

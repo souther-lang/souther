@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
@@ -60,7 +61,7 @@ class CompileExampleBoundaryTest {
                 .findFirst().orElseThrow();
     }
 
-    private static List<PartitionEvidence.BoundaryCoverage> at(PartitionEvidence evidence,
+    private static List<BoundaryAssessment> at(PartitionEvidence evidence,
                                                                String value) {
         return evidence.boundaries().stream().filter(b -> b.value().equals(value)).toList();
     }
@@ -94,8 +95,8 @@ class CompileExampleBoundaryTest {
                 example submit
                     | (Draft { cost = Amount(50) }) -> Submitted
                 """);
-        PartitionEvidence.BoundaryCoverage zero = at(away, "0").get(0);
-        assertFalse(zero.hit());
+        BoundaryAssessment zero = at(away, "0").get(0);
+        assertFalse(zero.coverage().hit());
         assertEquals(MeasurementStatus.COMPLETE, zero.status());
         assertTrue(zero.origin().startsWith("invariant"), zero.origin());
 
@@ -104,7 +105,7 @@ class CompileExampleBoundaryTest {
                 example submit
                     | (Draft { cost = Amount(0) }) -> Submitted
                 """);
-        assertTrue(at(edge, "0").get(0).hit(), "a row is written at the edge");
+        assertTrue(at(edge, "0").get(0).coverage().hit(), "a row is written at the edge");
     }
 
     /** A row that writes the value and reaches the comparison meets the line the guard drew. */
@@ -116,9 +117,9 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(100) }) -> Submitted
                 """);
 
-        PartitionEvidence.BoundaryCoverage hundred = at(evidence, "100").get(0);
+        BoundaryAssessment hundred = at(evidence, "100").get(0);
         assertEquals(MeasurementStatus.COMPLETE, hundred.status());
-        assertTrue(hundred.hit(), "the row wrote 100 and the guard compared it");
+        assertTrue(hundred.coverage().hit(), "the row wrote 100 and the guard compared it");
         assertTrue(hundred.origin().startsWith("guard"), hundred.origin());
     }
 
@@ -155,13 +156,13 @@ class CompileExampleBoundaryTest {
                     | (Draft { cost = Amount(-1) }) -> Waiting { cost = Amount(-1) }
                 """);
 
-        PartitionEvidence.BoundaryCoverage first = at(evidence, "0").stream()
+        BoundaryAssessment first = at(evidence, "0").stream()
                 .filter(b -> b.origin().startsWith("guard")).findFirst().orElseThrow();
-        PartitionEvidence.BoundaryCoverage second = at(evidence, "100").get(0);
+        BoundaryAssessment second = at(evidence, "100").get(0);
 
         assertEquals(MeasurementStatus.COMPLETE, second.status(), "the arms were measured");
-        assertFalse(second.hit(), "no row was ever compared against 100");
-        assertFalse(first.hit(), "and the row wrote -1, not 0");
+        assertFalse(second.coverage().hit(), "no row was ever compared against 100");
+        assertFalse(first.coverage().hit(), "and the row wrote -1, not 0");
     }
 
     @Test

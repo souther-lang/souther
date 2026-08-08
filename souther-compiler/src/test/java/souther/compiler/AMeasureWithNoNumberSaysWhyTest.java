@@ -6,6 +6,7 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -217,10 +218,10 @@ class AMeasureWithNoNumberSaysWhyTest {
      * The two origins are measured along separate paths for exactly this reason. */
     @Test
     void anInvariantsLineIsNeverWaitingOnTheArms() {
-        List<PartitionEvidence.BoundaryCoverage> lines = partitions().get("rated").boundaries();
+        List<BoundaryAssessment> lines = partitions().get("rated").boundaries();
         assertFalse(lines.isEmpty(), "the invariant draws two");
-        for (PartitionEvidence.BoundaryCoverage line : lines) {
-            assertEquals(PartitionEvidence.BoundaryCoverage.Reason.NO_ROWS, line.reason(),
+        for (BoundaryAssessment line : lines) {
+            assertEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, line.reason(),
                     line.origin() + " at " + line.value());
         }
     }
@@ -307,8 +308,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage("example.unseen")).value().get("elsewhere");
         assertFalse(partition.boundaries().isEmpty(), "the invariant and the guard draw lines");
-        for (PartitionEvidence.BoundaryCoverage line : partition.boundaries()) {
-            assertNotEquals(PartitionEvidence.BoundaryCoverage.Reason.NO_ROWS, line.reason(),
+        for (BoundaryAssessment line : partition.boundaries()) {
+            assertNotEquals(BoundaryAssessment.Coverage.Reason.NO_ROWS, line.reason(),
                     line.origin() + " at " + line.value());
             assertEquals(MeasurementStatus.PARTIAL, line.status(),
                     line.origin() + " at " + line.value());

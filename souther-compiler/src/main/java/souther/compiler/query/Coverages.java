@@ -53,22 +53,21 @@ final class Coverages {
     }
 
     /**
-     * @param armsAsked whether the build asked for the arms at all. A boundary a {@code guard} drew is
-     *                  not decided without them: the value being written is not the same as the
-     *                  comparison having been evaluated. Whether the run then managed to read them is
-     *                  a second question, and {@code observed} answers it — the two fail differently
-     *                  and a measure that took one boolean for both could not say which had happened.
+     * @param boundaries what was established about every line this behavior's rules drew, made once
+     *                   by {@link souther.compiler.query.Adequacy.Boundaries} and read here. Measuring
+     *                   a line takes putting a value through the module's decoders, which is not
+     *                   something a coverage count can do on its own and not something that should
+     *                   happen twice.
      */
     static PartitionEvidence of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols, Core body,
                                 CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
-                                boolean armsAsked, Exclusions excluded) {
+                                List<BoundaryAssessment> boundaries, Exclusions excluded) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
         Partitions.Partitioning partitioning =
                 partitioningOf(behavior, sig, symbols, body, plan, excluded);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
-        List<PartitionEvidence.BoundaryCoverage> boundaries = new ArrayList<>();
         List<String> notDerivable = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
@@ -83,12 +82,6 @@ final class Coverages {
                 axes.add(coverageOf(axis, readings, excluded));
                 divided.add(axis);
             }
-            // Whether the arms were measured, and nothing else. A row that did not finish makes a
-            // *missing* hit undecidable and takes nothing away from one that was found: a row that
-            // wrote the value and went through the comparison did so whatever else stopped.
-            boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
-                    armsAsked, observed.armsUnseen(), observed.someRowsUnseen(),
-                    partitioning.edgeIsKnownWritable(axis.path().toString())));
         }
         return new PartitionEvidence(axes, boundaries, pairsOf(divided, readings),
                 notDerivable, partitioning.omitted());
@@ -240,51 +233,156 @@ final class Coverages {
     }
 
     /**
-     * Whether a row was written at each boundary.
+     * A way to find out whether a value can be built at a boundary, or nothing where there is nothing
+     * to build against.
+     *
+     * <p>The decoder a row's own fixture goes through, reached through the generator. It is the only
+     * thing in the compiler that can answer the question — an invariant relating two fields refuses a
+     * pair each field would have accepted alone — and it answers it one way: what it builds is a
+     * witness, and what it refuses is a refusal of the candidates it tried.
+     */
+    @FunctionalInterface
+    interface Probe {
+
+        /** What building a row at this boundary came to, or null where the attempt could not be made
+         * at all — which leaves the edge unknown rather than refused. */
+        souther.compiler.partition.Generator.BoundaryAttempt attempt(BoundaryObligation obligation);
+    }
+
+    /**
+     * Everything known about each line one position's rules drew.
+     *
+     * <p>The one place either question about a boundary is answered. Whether a row sits at it is read
+     * off this compilation's rows; whether a row could sit at it is settled by the projection where
+     * that read every rule, and by building a value where it did not. Both used to be worked out twice
+     * — once for the report and once for the rows the generator offers — under rules that did not
+     * quite agree, so a line the report called undecided was one the generator handed to an author
+     * anyway.
      *
      * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so
      * the value is the whole of what there is to reach. A guard's is not — the comparison has to have
      * been evaluated, and a row can carry the exact value and never reach the guard that cares about
      * it because an earlier branch went the other way. Nothing measures that until the arms are
-     * instrumented, so a guard's boundary reports as unavailable rather than as met or missed.
+     * instrumented, so a guard's boundary is unmeasured rather than met or missed.
+     *
+     * @param armsAsked whether the build asked for the arms at all. Whether the run then managed to
+     *                  read them is a second question, and {@code observed} answers it — the two fail
+     *                  differently and a measure that took one boolean for both could not say which
+     *                  had happened.
+     * @param probe     null where the module's classes or the runtime are not there to build against
      */
-    private static List<PartitionEvidence.BoundaryCoverage> boundariesOf(
-            Axis axis, List<String> parameters, List<RowOutcome> rows, Symbols symbols,
-            boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen,
-            boolean knownWritable) {
-        List<PartitionEvidence.BoundaryCoverage> out = new ArrayList<>();
+    static List<BoundaryAssessment> assess(
+            Axis axis, List<String> parameters, souther.compiler.query.Adequacy.Observed observed,
+            Symbols symbols, boolean armsAsked, boolean knownWritable, Probe probe) {
+        List<RowOutcome> rows = observed.rows();
+        List<BoundaryAssessment> out = new ArrayList<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
-            PartitionEvidence.BoundaryCoverage.Reason absent = each.origin() instanceof OriginRef.GuardOrigin
-                    ? whyNoGuardLine(rows, armsAsked, armsUnseen, someRowsUnseen)
-                    : whyNoInvariantLine(rows, someRowsUnseen);
-            Met met = absent != null ? Met.UNDECIDED : switch (each.origin()) {
-                case OriginRef.GuardOrigin g -> evaluatedAt(axis, parameters, rows, each.value(), g);
-                default -> writtenAt(axis, parameters, rows, each.value());
-            };
-            // A row nothing read may be the row that is at this value. Found is still found — one row
-            // at the boundary settles it whatever else went unread — but not-found is not settled.
-            if (met == Met.NO && someRowsUnseen) {
-                met = Met.UNREADABLE;
-            }
-            // Nor is a hit that could not be looked for: a row that never finished left no hits, and
-            // a guard's line is met by going through the comparison.
-            if (met == Met.NO && each.origin() instanceof OriginRef.GuardOrigin
-                    && rows.stream().anyMatch(
-                            row -> row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE)) {
-                met = Met.UNREADABLE;
-            }
-            out.add(new PartitionEvidence.BoundaryCoverage(idOf(each.axis()),
-                    each.origin().describe(), each.side(), plain(each.value()),
-                    met == Met.YES,
-                    met == Met.UNDECIDED ? MeasurementStatus.UNAVAILABLE
-                            : met == Met.UNREADABLE ? MeasurementStatus.PARTIAL
-                                    : MeasurementStatus.COMPLETE,
-                    // A row at the value is a value that went through the decoder, which is the
-                    // whole of what writable means. Where there is one, what the projection could
-                    // not promise has been settled by something better than a promise.
-                    met == Met.UNDECIDED ? absent : null, knownWritable || met == Met.YES));
+            BoundaryAssessment.Coverage coverage =
+                    coverageOf(each, axis, parameters, observed, armsAsked);
+            out.add(new BoundaryAssessment(each, coverage,
+                    writabilityOf(each, coverage, knownWritable, probe)));
         }
         return out;
+    }
+
+    /** Whether a row sits at one boundary, and whether that could be told. */
+    private static BoundaryAssessment.Coverage coverageOf(
+            BoundaryObligation obligation, Axis axis, List<String> parameters,
+            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
+        List<RowOutcome> rows = observed.rows();
+        boolean guard = obligation.origin() instanceof OriginRef.GuardOrigin;
+        BoundaryAssessment.Coverage.Reason absent = guard
+                ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen())
+                : whyNoInvariantLine(rows, observed.someRowsUnseen());
+        if (absent != null) {
+            return new BoundaryAssessment.Coverage.NotMeasured(absent);
+        }
+        Met met = guard
+                ? evaluatedAt(axis, parameters, rows, obligation.value(),
+                        (OriginRef.GuardOrigin) obligation.origin())
+                : writtenAt(axis, parameters, rows, obligation.value());
+        if (met == Met.YES) {
+            return new BoundaryAssessment.Coverage.Hit();
+        }
+        if (met == Met.UNREADABLE) {
+            return new BoundaryAssessment.Coverage.Undecided();
+        }
+        // A row nothing read may be the row that is at this value. Found is still found — one row at
+        // the boundary settles it whatever else went unread — but not-found is not settled.
+        if (observed.someRowsUnseen()) {
+            return new BoundaryAssessment.Coverage.Undecided();
+        }
+        // Nor is a hit that could not be looked for: a row that never finished left no hits, and a
+        // guard's line is met by going through the comparison.
+        if (guard && rows.stream().anyMatch(
+                row -> row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE)) {
+            return new BoundaryAssessment.Coverage.Undecided();
+        }
+        return new BoundaryAssessment.Coverage.Missed();
+    }
+
+    /**
+     * What says a row can be written at one boundary.
+     *
+     * <p>The strongest evidence already in hand first. A row at the value went through the decoder,
+     * which is the whole of what writable means, and costs nothing to read. Otherwise a value is built:
+     * that is the same attempt the generator offers an author, made once here and read by both. The
+     * projection stands behind the attempt rather than in front of it — where it read every rule it
+     * proves the edge inhabited whatever the decoder made of the particular candidates tried, which is
+     * what keeps a refusal from turning into a claim of impossibility.
+     *
+     * <p>Nothing is built where nothing is owed: a boundary a row already sits at needs no candidate,
+     * and one whose measurement never happened is not a piece of work to hand to anybody.
+     */
+    private static BoundaryAssessment.Writability writabilityOf(
+            BoundaryObligation obligation, BoundaryAssessment.Coverage coverage,
+            boolean knownWritable, Probe probe) {
+        if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
+            return new BoundaryAssessment.Writability.WitnessedByRow();
+        }
+        if (!worthBuilding(coverage) || probe == null) {
+            return knownWritable ? new BoundaryAssessment.Writability.ProvenByProjection()
+                    : BoundaryAssessment.Writability.Unknown.of(
+                            BoundaryAssessment.Writability.Unknown.Reason.NOT_ATTEMPTED);
+        }
+        souther.compiler.partition.Generator.BoundaryAttempt attempt = probe.attempt(obligation);
+        if (attempt == null) {
+            return knownWritable ? new BoundaryAssessment.Writability.ProvenByProjection()
+                    : BoundaryAssessment.Writability.Unknown.of(
+                            BoundaryAssessment.Writability.Unknown.Reason.NOT_ATTEMPTED);
+        }
+        if (attempt.built()) {
+            return new BoundaryAssessment.Writability.WitnessedByConstruction(attempt.row());
+        }
+        // Every candidate refused. Which does not make the edge unwritable — another value of it may
+        // build — so a projection that read every rule still proves what the attempt could not find.
+        return knownWritable ? new BoundaryAssessment.Writability.ProvenByProjection()
+                : new BoundaryAssessment.Writability.Unknown(
+                        reasonOf(attempt.unresolved().reason()), attempt.unresolved().detail());
+    }
+
+    /**
+     * Whether a candidate is worth building for this boundary.
+     *
+     * <p>A line nothing measured is not a line an author is behind on. Where the arms were not asked
+     * for, a guard's line has no answer at all, and where a row went unread the row that is at this
+     * value may be one of the rows nothing saw — building a candidate for either hands somebody a
+     * specific piece of work that may already be done.
+     */
+    private static boolean worthBuilding(BoundaryAssessment.Coverage coverage) {
+        return coverage instanceof BoundaryAssessment.Coverage.Missed
+                || (coverage instanceof BoundaryAssessment.Coverage.NotMeasured absent
+                        && absent.reason() == BoundaryAssessment.Coverage.Reason.NO_ROWS);
+    }
+
+    private static BoundaryAssessment.Writability.Unknown.Reason reasonOf(
+            souther.compiler.partition.Generator.UnresolvedCombination.Reason reason) {
+        return switch (reason) {
+            case NO_REPRESENTATIVE ->
+                    BoundaryAssessment.Writability.Unknown.Reason.NO_REPRESENTATIVE;
+            case ALL_CANDIDATES_REJECTED -> BoundaryAssessment.Writability.Unknown.Reason.REFUSED;
+            case SEARCH_LIMIT -> BoundaryAssessment.Writability.Unknown.Reason.SEARCH_LIMIT;
+        };
     }
 
     /**
@@ -295,13 +393,13 @@ final class Coverages {
      * run, which puts the arms in front of the rows: nothing a row carries decides it until the
      * classes that record where the row went exist and survived.
      */
-    private static PartitionEvidence.BoundaryCoverage.Reason whyNoGuardLine(
+    private static BoundaryAssessment.Coverage.Reason whyNoGuardLine(
             List<RowOutcome> rows, boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen) {
         if (!armsAsked) {
-            return PartitionEvidence.BoundaryCoverage.Reason.ARMS_NOT_ASKED;
+            return BoundaryAssessment.Coverage.Reason.ARMS_NOT_ASKED;
         }
         if (armsUnseen) {
-            return PartitionEvidence.BoundaryCoverage.Reason.ARMS_UNREADABLE;
+            return BoundaryAssessment.Coverage.Reason.ARMS_UNREADABLE;
         }
         return whyNoInvariantLine(rows, someRowsUnseen);
     }
@@ -314,13 +412,13 @@ final class Coverages {
      * separately — an invariant's line can never be waiting on the arms, and a measure that could say
      * so would be able to say something that is not true of it.
      */
-    private static PartitionEvidence.BoundaryCoverage.Reason whyNoInvariantLine(
+    private static BoundaryAssessment.Coverage.Reason whyNoInvariantLine(
             List<RowOutcome> rows, boolean someRowsUnseen) {
         // Nothing read is not the same as nothing written. A source that could not be evaluated may
         // hold the row that is at this line, so the question is undecided rather than unasked, and
         // the reading below settles it that way.
         return rows.isEmpty() && !someRowsUnseen
-                ? PartitionEvidence.BoundaryCoverage.Reason.NO_ROWS : null;
+                ? BoundaryAssessment.Coverage.Reason.NO_ROWS : null;
     }
 
     /**
@@ -358,36 +456,6 @@ final class Coverages {
             }
         }
         return unreadable ? Met.UNREADABLE : Met.NO;
-    }
-
-    /**
-     * The boundaries a row could have been written at and demonstrably none was.
-     *
-     * <p>Includes a line a {@code guard} drew, where the arms were measured. Writing the row and
-     * meeting the line are different questions and the second needs the arms — but the row to write is
-     * the same row either way, and a line the report names as unmet that the generator will not offer
-     * is the one place an author is told about a gap and left to fill it by hand.
-     *
-     * <p>Left out where the arms were not measured, and where some row wrote the position unreadably:
-     * a row generated for either may be a row that is already there.
-     */
-    static List<BoundaryObligation> unmet(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                          Symbols symbols, boolean armsMeasured) {
-        List<BoundaryObligation> out = new ArrayList<>();
-        for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
-            boolean guard = each.origin() instanceof OriginRef.GuardOrigin;
-            if (guard && !armsMeasured) {
-                continue;
-            }
-            Met met = guard
-                    ? evaluatedAt(axis, parameters, rows, each.value(),
-                            (OriginRef.GuardOrigin) each.origin())
-                    : writtenAt(axis, parameters, rows, each.value());
-            if (met == Met.NO) {
-                out.add(each);
-            }
-        }
-        return out;
     }
 
     private static Met writtenAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
@@ -433,16 +501,6 @@ final class Coverages {
             case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
             case null, default -> null;
         };
-    }
-
-    private static String idOf(AxisId axis) {
-        return axis.toString();
-    }
-
-    /** A boundary as the author would write it, not as a record prints itself. */
-    private static String plain(ObservedValue value) {
-        java.math.BigDecimal number = numberOf(value);
-        return number == null ? String.valueOf(value) : number.stripTrailingZeros().toPlainString();
     }
 
     private Coverages() {}

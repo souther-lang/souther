@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
@@ -169,8 +170,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                     wrong.add("axis " + axis.path() + ": " + axis.uncovered());
                 }
             }
-            for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
-                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()) {
+            for (BoundaryAssessment boundary : partition.boundaries()) {
+                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.coverage().hit()) {
                     wrong.add("boundary " + boundary.axis() + " = " + boundary.value());
                 }
             }
@@ -255,7 +256,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
         assertEquals(MeasurementStatus.COMPLETE, AdequacyReport.of(compilation).status());
         assertTrue(partition.axes().stream().anyMatch(a -> !a.uncovered().isEmpty()),
                 "a class nothing is in");
-        assertTrue(partition.boundaries().stream().anyMatch(b -> !b.hit()),
+        assertTrue(partition.boundaries().stream().anyMatch(b -> !b.coverage().hit()),
                 "a boundary nothing is at");
         assertTrue(partition.pairs().unknown() > 0, "a combination nothing reaches");
         assertFalse(compilation.db().ask(new Adequacy.BranchCoverage(module)).value()

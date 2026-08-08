@@ -1,8 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.Partitions;
 
 import java.util.List;
@@ -24,7 +22,7 @@ import java.util.Set;
  *                     one cost — a position that was carrying a boundary leaves the rows there
  *                     unmeasured rather than covered
  */
-public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> boundaries,
+public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryAssessment> boundaries,
                                 PairSpace pairs, List<String> notDerivable,
                                 List<Partitions.OmittedAxis> omitted) {
 
@@ -135,35 +133,6 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
 
         public List<String> uncovered() {
             return classes.stream().filter(c -> !covered.contains(c)).toList();
-        }
-    }
-
-    /**
-     * One value a row has to be written at, and whether one was.
-     *
-     * @param reason why it could not be told, where it could not. A guard's line and an invariant's
-     *               are not measured the same way and do not fail to be measured for the same
-     *               reasons, which is why the two are built along separate paths
-     */
-    public record BoundaryCoverage(String axis, String origin, BoundaryObligation.BoundarySide side,
-                                   String value, boolean hit, MeasurementStatus status,
-                                   Reason reason, boolean knownWritable) {
-
-        /** Why a line has no answer. */
-        public enum Reason {
-            /** The build did not ask for the arms, and a guard's line is met by reaching the
-             *  comparison rather than by writing the value. Never a reason for an invariant's line,
-             *  which needs no arms. */
-            ARMS_NOT_ASKED,
-            /** The rows ran without instrumentation, so no row can be shown to have reached the
-             *  comparison. Never a reason for an invariant's line. */
-            ARMS_UNREADABLE,
-            /** No row names this behavior. */
-            NO_ROWS
-        }
-
-        public BoundaryCoverage {
-            Unavailable.check(status, reason);
         }
     }
 

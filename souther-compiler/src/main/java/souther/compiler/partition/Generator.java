@@ -239,55 +239,63 @@ public final class Generator {
     }
 
     /**
-     * Rows at the boundaries nothing has been written at.
+     * What building a row at one boundary came to: the row, or why there is none.
+     *
+     * <p>Exactly one of the two. A caller measuring the boundary reads whether a row was built, which
+     * is a value that went through the decoder and so a witness that the edge can be written; a caller
+     * offering work to a person reads the row itself. The attempt is made once and both read it.
+     */
+    public record BoundaryAttempt(GeneratedRow row, UnresolvedCombination unresolved) {
+
+        public boolean built() {
+            return row != null;
+        }
+    }
+
+    /**
+     * A row at one boundary, built through the module's own decoders.
      *
      * <p>One row per boundary rather than one row covering several, because a row is a question put to
      * a person and a row sitting on three edges at once is three answers they have to separate.
+     *
+     * <p>Nothing here decides that a boundary cannot be written at. A refusal is a refusal of the
+     * candidates that were tried, and another value of the same edge may build; what comes back says
+     * which of the two happened and leaves the reading to the caller.
      */
-    public static GenerationResult forBoundaries(Subject subject, List<BoundaryObligation> unmet,
-                                                 CandidateCheck check) {
-        List<GeneratedRow> rows = new ArrayList<>();
-        List<UnresolvedCombination> unresolved = new ArrayList<>();
-        for (BoundaryObligation each : unmet) {
-            Axis axis = subject.axes().stream().filter(a -> a.id().equals(each.axis())).findFirst()
-                    .orElse(null);
-            if (axis == null) {
-                continue;
-            }
-            String label = axis.path() + " = " + written(each.value());
-            FixtureTemplate at = valueOf(each.value(), axis.type(), subject.symbols());
-            if (at == null) {
-                unresolved.add(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.NO_REPRESENTATIVE));
-                continue;
-            }
-            List<FixtureTemplate> inputs = new ArrayList<>();
-            UnresolvedCombination left = null;
-            // What the rest of the row has to sit beside. A field of a record is not chosen from its
-            // own type once another field of that record is fixed: the rule relating them says what
-            // is left, and taking the bottom of the type's range instead is how a boundary that can
-            // be written came back as one every value tried was refused at.
-            BigDecimal settledAt = numberOf(each.value());
-            Map<String, BigDecimal> settled = settledAt == null ? Map.of()
-                    : Map.of(axis.path().toString(), settledAt);
-            for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-                Map<String, List<FixtureTemplate>> here =
-                        TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
-                                ? Map.of(axis.path().toString(), List.of(at)) : Map.of();
-                Outcome tried = valueAt(subject, p, here, settled, check);
-                if (tried.value() == null) {
-                    left = new UnresolvedCombination(List.of(label), tried.reason(), tried.detail());
-                    break;
-                }
-                inputs.add(tried.value());
-            }
-            if (left != null) {
-                unresolved.add(left);
-                continue;
-            }
-            rows.add(new GeneratedRow(List.of(label), inputs));
+    public static BoundaryAttempt probe(Subject subject, BoundaryObligation obligation,
+                                        CandidateCheck check) {
+        Axis axis = subject.axes().stream().filter(a -> a.id().equals(obligation.axis())).findFirst()
+                .orElse(null);
+        if (axis == null) {
+            return new BoundaryAttempt(null, new UnresolvedCombination(List.of(),
+                    UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
-        return new GenerationResult(rows, unresolved, List.of());
+        String label = axis.path() + " = " + written(obligation.value());
+        FixtureTemplate at = valueOf(obligation.value(), axis.type(), subject.symbols());
+        if (at == null) {
+            return new BoundaryAttempt(null, new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.NO_REPRESENTATIVE));
+        }
+        List<FixtureTemplate> inputs = new ArrayList<>();
+        // What the rest of the row has to sit beside. A field of a record is not chosen from its
+        // own type once another field of that record is fixed: the rule relating them says what
+        // is left, and taking the bottom of the type's range instead is how a boundary that can
+        // be written came back as one every value tried was refused at.
+        BigDecimal settledAt = numberOf(obligation.value());
+        Map<String, BigDecimal> settled = settledAt == null ? Map.of()
+                : Map.of(axis.path().toString(), settledAt);
+        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
+            Map<String, List<FixtureTemplate>> here =
+                    TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
+                            ? Map.of(axis.path().toString(), List.of(at)) : Map.of();
+            Outcome tried = valueAt(subject, p, here, settled, check);
+            if (tried.value() == null) {
+                return new BoundaryAttempt(null,
+                        new UnresolvedCombination(List.of(label), tried.reason(), tried.detail()));
+            }
+            inputs.add(tried.value());
+        }
+        return new BoundaryAttempt(new GeneratedRow(List.of(label), inputs), null);
     }
 
     // --- the pair space -------------------------------------------------------------------------
