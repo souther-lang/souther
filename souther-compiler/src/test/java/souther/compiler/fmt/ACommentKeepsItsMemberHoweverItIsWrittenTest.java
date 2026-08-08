@@ -417,6 +417,49 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
+    /** A match arm's body is a segment of the same shape, and was the third instance of the same
+     * miss. */
+    @Test
+    void andAMatchArmsBody() {
+        assertEquals("""
+                module m
+
+                data A
+
+                data B
+
+                data S = A | B
+
+                data O =
+                    { n: Int
+                    }
+
+                behavior f : (s: S) -> O
+                    constructs O
+
+                let f (s) =
+                    O {
+                        n = match s with
+                            | A
+                                // result for A
+                                -> 1
+                            | B -> 2
+                    }
+                """, Formatter.format("""
+                module m
+                data A
+                data B
+                data S = A | B
+                data O = { n: Int }
+                behavior f : (s: S) -> O constructs O
+                let f (s) = O { n = match s with
+                    | A ->
+                        // result for A
+                        1
+                    | B -> 2 }
+                """));
+    }
+
     /** No member to be about: the comment was written above the construct, and stays above it rather
      * than moving inside where the construct's own end comments go. */
     @Test

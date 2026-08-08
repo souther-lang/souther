@@ -191,6 +191,17 @@ public final class Formatter {
                 : new Segment(connector, concat(doc, afterOf(owner)), aboveOf(owner));
     }
 
+    /** The same for a part the grammar writes as a bare identifier rather than as a node — a sum's
+     * cases. It is the only other way a chain's part can stand for something written, so between the
+     * two of them nothing else builds a {@link Segment}. */
+    private Segment segment(String connector, SyntaxToken owner, Doc doc) {
+        List<Doc> lead = new ArrayList<>();
+        for (Doc c : aboveCase(owner)) {
+            lead.add(concat(c, HARDLINE));
+        }
+        return new Segment(connector, concat(doc, afterCase(owner)), concat(lead));
+    }
+
     /**
      * A head and the parts written after it, each opening with its connector — a union's {@code |},
      * an operator chain's operator, a pipeline's {@code |>}, an example row's {@code :} and
@@ -418,19 +429,14 @@ public final class Formatter {
                 if (!(e instanceof SyntaxToken t) || t.kind() != SyntaxKind.IDENT) {
                     continue;
                 }
-                Doc body = concat(text(t.text()), afterCase(t));
                 if (head == null) {
-                    head = body;
+                    head = concat(text(t.text()), afterCase(t));
                     headComments = new ArrayList<>();
                     for (Doc c : aboveCase(t)) {
                         headComments.add(concat(c, HARDLINE));
                     }
                 } else {
-                    List<Doc> lead = new ArrayList<>();
-                    for (Doc c : aboveCase(t)) {
-                        lead.add(concat(c, HARDLINE));
-                    }
-                    cases.add(new Segment("| ", body, concat(lead)));   // a case is a token
+                    cases.add(segment("| ", t, text(t.text())));
                 }
             }
             Doc chain = chained(head, cases);
