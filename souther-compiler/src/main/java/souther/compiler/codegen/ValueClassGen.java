@@ -162,7 +162,8 @@ final class ValueClassGen {
                 ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
                     BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
                     int slot = 0;
-                    Map<String, BindingId> bound = TypeOps.fieldBindings(data, symbols);
+                    Map<String, BindingId> bound =
+                            TypeOps.fieldBindings(symbols.own(data.name()), data, symbols);
                     for (Map.Entry<String, Type> f : fields.entrySet()) {
                         gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
                         slot += width(f.getValue());
@@ -657,7 +658,8 @@ final class ValueClassGen {
                     mb.withCode(code -> {
                         BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
                         int slot = 0;
-                        Map<String, BindingId> bound = TypeOps.fieldBindings(data, symbols);
+                        Map<String, BindingId> bound =
+                                TypeOps.fieldBindings(symbols.own(data.name()), data, symbols);
                         for (Map.Entry<String, Type> f : fields.entrySet()) {
                             gen.bind(bound.get(f.getKey()), f.getKey(), slot, f.getValue());
                             slot += width(f.getValue());

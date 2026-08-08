@@ -795,10 +795,19 @@ public final class TypeOps {
      * <p>What is fixed is the numbering: a field is numbered among the fields of the declaration
      * that declares it, in the order that declaration writes them. An include brings a field in
      * without renumbering it, so the two passes agree however either of them reaches it.
+     *
+     * <p>{@code declared} is which declaration this is, and is asked of the caller because
+     * {@code data} cannot say: a declaration carries the name it was written under and not the module
+     * that wrote it. Worked out here from that name it would be worked out against whoever is
+     * reading, and a reader of another module's declaration would bind its fields under its own name
+     * — a different binding for the same field, and the clauses carried in with the declaration
+     * resolve against nothing. A caller reading its own declaration passes {@link Symbols#own}; a
+     * caller reading one it reached passes the name it reached it by.
      */
-    public static Map<String, BindingId> fieldBindings(Ast.Data data, Symbols symbols) {
+    public static Map<String, BindingId> fieldBindings(TypeName declared, Ast.Data data,
+                                                       Symbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
-        walkFields(data, symbols.own(data.name()), symbols, new LinkedHashSet<>(), bindings);
+        walkFields(data, declared, symbols, new LinkedHashSet<>(), bindings);
         return bindings;
     }
 

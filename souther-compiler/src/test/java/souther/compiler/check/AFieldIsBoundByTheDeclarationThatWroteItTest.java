@@ -12,7 +12,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
 import java.util.Collections;
@@ -91,8 +90,9 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         return (Ast.Data) def;
     }
 
-    private static Symbols readerScope(Compilation c) {
-        return c.db().ask(new Names.NameScope("demo")).value();
+    /** The clauses as the module named {@code reading} reads them. */
+    private static Clauses readBy(Compilation c, String reading) {
+        return new Clauses(c.db().ask(new Names.NameScope(reading)).value(), Map.of());
     }
 
     /**
@@ -107,7 +107,7 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
             Compilation c = compiled(reached);
 
             assertEquals(Map.of("lo", new BindingId(declaring, 0), "hi", new BindingId(declaring, 1)),
-                    TypeOps.fieldBindings(range(c), readerScope(c)),
+                    readBy(c, "demo").bindingsOf(RANGE, range(c)),
                     "reached " + reached + ": a field is bound by the declaration that wrote it");
         }
     }
@@ -125,18 +125,13 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
         for (Reached reached : Reached.values()) {
             Compilation c = compiled(reached);
             Ast.Data range = range(c);
+            Ast.Expr clause = range.invariants().get(0).expr();
 
-            Core athome = clause(range, c.db().ask(new Names.NameScope("up")).value());
+            Core athome = readBy(c, "up").typed(clause, RANGE, range);
             assertNotNull(athome, "the declaring module reads its own rule");
-            assertEquals(athome, clause(range, readerScope(c)),
+            assertEquals(athome, readBy(c, "demo").typed(clause, RANGE, range),
                     "reached " + reached + ": one rule, read the same either side of the boundary");
         }
-    }
-
-    private static Core clause(Ast.Data data, Symbols symbols) {
-        return Elaborator.elaborate(data.invariants().get(0).expr(),
-                DataChecker.fieldScope(data, symbols),
-                CheckContext.of(symbols).forData(data).forDischarge(), Type.BOOL);
     }
 
     /**
@@ -179,13 +174,13 @@ class AFieldIsBoundByTheDeclarationThatWroteItTest {
     @Test
     void aReadersOwnDeclarationDoesNotShareABindingWithAnImportedNamesake() {
         Compilation c = compiled(Reached.BESIDE_THE_READERS_OWN);
-        Symbols scope = readerScope(c);
+        Clauses read = readBy(c, "demo");
 
         TypeName ours = new TypeName("demo", "Range");
         Ast.Data mine = (Ast.Data) c.db().ask(new Names.ResolvedDeclaration(ours)).value();
 
-        assertTrue(Collections.disjoint(TypeOps.fieldBindings(range(c), scope).values(),
-                        TypeOps.fieldBindings(mine, scope).values()),
+        assertTrue(Collections.disjoint(read.bindingsOf(RANGE, range(c)).values(),
+                        read.bindingsOf(ours, mine).values()),
                 "two declarations of `Range` bind two sets of fields");
     }
 

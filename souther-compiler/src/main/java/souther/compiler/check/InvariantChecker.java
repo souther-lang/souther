@@ -124,16 +124,17 @@ public final class InvariantChecker {
      * where the clause is written, which is the pre-expansion position; {@code clause} is that clause
      * in the representation the check reads.
      */
-    public static ClauseDischarge capabilityOf(Ast.Expr clause, SourcePos at, Ast.Data data,
-                                               Symbols symbols) {
+    public static ClauseDischarge capabilityOf(Ast.Expr clause, SourcePos at, TypeName named,
+                                               Ast.Data data, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         // Read over the declaration's own fields, each standing for itself: a construction hands one
         // value per field, so a clause naming a field names something wherever it is built. These
         // stand for a value rather than holding one, so they are entered as locations and nothing is
         // seeded of them — what a clause owes is the question, and answering it here would be
         // assuming it.
-        Core stated = c.clauses.typed(clause, data);
-        Denotations fields = Denotations.none().locations(c.clauses.bindingsOf(data).values());
+        Core stated = c.clauses.typed(clause, named, data);
+        Denotations fields = Denotations.none()
+                .locations(c.clauses.bindingsOf(named, data).values());
         Predicates.Owed owed;
         try {
             owed = stated == null ? Predicates.Owed.UNREADABLE
@@ -370,7 +371,7 @@ public final class InvariantChecker {
         if (Terms.asOperator(e) instanceof Core.Binary bin && Terms.isArith(bin.op())
                 && bin.type() instanceof Type.Ref r
                 && symbols.get(r.name()) instanceof Ast.Data type && type.newtype()) {
-            BindingId value = clauses.bindingsOf(type).get("value");
+            BindingId value = clauses.bindingsOf(r.name(), type).get("value");
             if (value != null && terms.affineOf(bin, at, k) != null) {
                 report(bin, type, bin.pos(), attempted,
                         verdictOf(r.name(), type, Map.of(value, bin), k, at, true));
@@ -384,7 +385,7 @@ public final class InvariantChecker {
      * value and not a choice of two.
      */
     private Verdict verdictOf(Core.NewData nd, Ast.Data type, Known k, Denotations at) {
-        Map<String, BindingId> fields = clauses.bindingsOf(type);
+        Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName(), type);
         Map<BindingId, Core> given = new HashMap<>();
         for (Core.FieldInit fi : nd.inits()) {
             BindingId field = fields.get(fi.name());
@@ -958,7 +959,7 @@ public final class InvariantChecker {
             return k;
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
-        Map<String, BindingId> bindings = clauses.bindingsOf(data);
+        Map<String, BindingId> bindings = clauses.bindingsOf(ref.name(), data);
         Map<BindingId, Core> given = new HashMap<>();
         fields.forEach((name, type) -> {
             BindingId field = bindings.get(name);
