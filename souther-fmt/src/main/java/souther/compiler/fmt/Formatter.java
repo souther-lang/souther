@@ -372,27 +372,26 @@ public final class Formatter {
                 binds.add(member(b, TokenDoc.node(b.kind(), concat(ident(firstIdent(b)), GAP,
                         ASSIGN, GAP, expr(firstExprChildOpt(b).orElseThrow())))));
             }
-            input = concat(input, GAP, TokenDoc.token(SyntaxKind.WITH_KW, "with"), GAP,
-                    TokenDoc.node(with.get().kind(),
-                            group(nest(INDENT, separated(withEndComments(with.get(), binds))))));
+            input = concat(input, GAP, TokenDoc.node(with.get().kind(),
+                    concat(TokenDoc.token(SyntaxKind.WITH_KW, "with"), GAP,
+                            group(nest(INDENT, separated(withEndComments(with.get(), binds)))))));
         }
 
         List<Segment> segs = new ArrayList<>();
         var desc = n.token(SyntaxKind.STRING_LIT);
         Member head;
         if (desc.isPresent()) {
-            head = head(desc.get(), concat(PIPE, GAP, token(desc.get())));
+            head = head(desc.get(), token(desc.get()));
             segs.add(segment(COLON, n.child(SyntaxKind.ARG_LIST).orElse(null), input));
         } else {
             // with no description the input opens the row, so the row's head carries its comments
             SyntaxNode args = n.child(SyntaxKind.ARG_LIST).orElse(null);
-            head = args == null ? synthetic(concat(PIPE, GAP, input))
-                    : head(args, concat(PIPE, GAP, input));
+            head = args == null ? synthetic(input) : head(args, input);
         }
         List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
         segs.add(segment(ARROW, expected.isEmpty() ? null : expected.get(0),
                 expected.isEmpty() ? TokenDoc.NIL : expr(expected.get(0))));
-        return TokenDoc.node(n.kind(), chained(head, segs));
+        return concat(PIPE, GAP, TokenDoc.node(n.kind(), chained(head, segs)));
     }
 
     private TokenDoc fakeDef(SyntaxNode n) {
@@ -417,11 +416,10 @@ public final class Formatter {
         }
         List<SyntaxNode> outs = exprChildren(n);
         // the input opens the row, so the head carries what was written above and beside it
-        Member head = args.map(a -> head(a, concat(PIPE, GAP, input)))
-                .orElse(synthetic(concat(PIPE, GAP, input)));
-        return TokenDoc.node(n.kind(), chained(head,
+        Member head = args.map(a -> head(a, input)).orElse(synthetic(input));
+        return concat(PIPE, GAP, TokenDoc.node(n.kind(), chained(head,
                 List.of(segment(ARROW, outs.isEmpty() ? null : outs.get(0),
-                        outs.isEmpty() ? TokenDoc.NIL : expr(outs.get(0))))));
+                        outs.isEmpty() ? TokenDoc.NIL : expr(outs.get(0)))))));
     }
 
     private TokenDoc moduleHeader(SyntaxNode n) {
@@ -449,7 +447,9 @@ public final class Formatter {
                 qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow()));
         Optional<SyntaxNode> alias = n.child(SyntaxKind.IMPORT_ALIAS);
         if (alias.isPresent()) {
-            d = concat(d, GAP, TokenDoc.token(SyntaxKind.AS_KW, "as"), GAP, token(idents(alias.get()).get(0)));
+            d = concat(d, GAP, TokenDoc.node(alias.get().kind(),
+                    concat(TokenDoc.token(SyntaxKind.AS_KW, "as"), GAP,
+                            token(idents(alias.get()).get(0)))));
         }
         Optional<SyntaxNode> list = n.child(SyntaxKind.NAME_LIST);
         if (list.isEmpty()) {
@@ -481,8 +481,9 @@ public final class Formatter {
         var product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
             if (isEmptyProduct(product.get())) {
-                return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.DATA_KW, "data"), GAP, ident(name), GAP, ASSIGN, GAP,
-                        LBRACE, GAP, RBRACE,
+                return TokenDoc.node(n.kind(),
+                        concat(TokenDoc.token(SyntaxKind.DATA_KW, "data"), GAP, ident(name), GAP,
+                        ASSIGN, GAP, TokenDoc.node(product.get().kind(), concat(LBRACE, GAP, RBRACE)),
                         afterToken(n.token(SyntaxKind.ASSIGN)),
                         nest(INDENT, concat(invariants))));
             }
@@ -601,17 +602,19 @@ public final class Formatter {
             List<TokenDoc> clauses = new ArrayList<>();
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
-                    clauses.add(concat(HARD_GAP,
-                            concat(aboveOf(c), TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP, nameList(c, 0)),
-                            afterOf(c)));
+                    clauses.add(concat(HARD_GAP, concat(aboveOf(c), TokenDoc.node(c.kind(),
+                            concat(TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP,
+                                    nameList(c, 0)))), afterOf(c)));
                 } else if (c.kind() == SyntaxKind.DEPENDS_CLAUSE) {
-                    clauses.add(concat(HARD_GAP,
-                            concat(aboveOf(c), TokenDoc.token(SyntaxKind.DEPENDS_KW, "depends"), GAP, ident("on"), GAP, nameList(c, 1)),
-                            afterOf(c)));
+                    clauses.add(concat(HARD_GAP, concat(aboveOf(c), TokenDoc.node(c.kind(),
+                            concat(TokenDoc.token(SyntaxKind.DEPENDS_KW, "depends"), GAP,
+                                    ident("on"), GAP, nameList(c, 1)))), afterOf(c)));
                 }
             }
-            return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name), GAP, COLON, GAP, params,
-                    GAP, ARROW, GAP, ret, nest(INDENT, concat(clauses))));
+            return TokenDoc.node(n.kind(),
+                    concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name),
+                            GAP, COLON, GAP, TokenDoc.node(s.kind(), concat(params, GAP, ARROW, GAP,
+                                    ret, nest(INDENT, concat(clauses))))));
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         List<SyntaxNode> stages = childNodes(pipe, SyntaxKind.STAGE);
@@ -1054,7 +1057,7 @@ public final class Formatter {
                     afterOf(arm)));
         }
         lines.add(endOf(arms.get()));
-        return nest(INDENT, concat(lines));
+        return TokenDoc.node(arms.get().kind(), nest(INDENT, concat(lines)));
     }
 
     /** The {@code as x} of an attempted construction, or nothing where none was written. It sits
@@ -1123,10 +1126,9 @@ public final class Formatter {
             }
         }
         TokenDoc written = concat(pattern);
-        return TokenDoc.node(n.kind(), chained(patternEnd == null
-                        ? synthetic(concat(PIPE, GAP, written))
-                        : head(patternEnd, concat(PIPE, GAP, written)),
-                List.of(segment(ARROW, body, expr(body)))));
+        return concat(PIPE, GAP, TokenDoc.node(n.kind(), chained(patternEnd == null
+                        ? synthetic(written) : head(patternEnd, written),
+                List.of(segment(ARROW, body, expr(body))))));
     }
 
     private TokenDoc lambda(SyntaxNode n) {
