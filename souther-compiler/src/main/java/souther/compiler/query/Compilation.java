@@ -163,6 +163,20 @@ public final class Compilation {
         return db.ask(new Shapes.Scope(module)).value();
     }
 
+    /**
+     * The names of the behaviors {@code module} declares, or null where its declarations could not
+     * be read.
+     *
+     * <p>What the source says rather than what got as far as being measured. A caller resolving a
+     * name that arrived from outside needs the first: a behavior that was declared and could not be
+     * prepared is a measurement that is missing, and answering "no such name" over it would report
+     * the one as the other. Which is also why the unreadable case is null rather than empty — an
+     * empty set is a module that declares no behavior, and that is an answer.
+     */
+    public Set<String> declaredBehaviors(String module) {
+        return db.ask(new Front.Behaviors(module)).value();
+    }
+
     /** The signatures of the behaviors {@code module} declares — what each takes and what it
      * answers, as the shapes a decoder and an encoder are built for. */
     public Map<String, Sig> signatures(String module) {
