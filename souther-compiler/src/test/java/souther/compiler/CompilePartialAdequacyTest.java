@@ -246,12 +246,14 @@ class CompilePartialAdequacyTest {
 
         assertEquals(List.of(), generated.get("take").pairs().rows(),
                 "the flag's classes are undecided, so nothing is written for them");
-        assertFalse(generated.get("take").pairs().incompleteness().isEmpty(),
+        assertFalse(generated.get("take").pairs().reasons().isEmpty(),
                 "and the position that could not be read is named");
         String written = GeneratedRows.of("example.budget", generated, true);
         assertFalse(written.contains("example take"), "no row is offered: " + written);
-        assertTrue(written.contains("generation stopped"),
+        assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
+        assertFalse(written.contains("generation stopped"),
+                "and it did not stop — every position it had was one it could not read: " + written);
     }
 
     /**
