@@ -57,12 +57,6 @@ final class Gaps {
     private record GapSlot(TokenDoc.Break policy) implements Slot {
     }
 
-    /** Text a construct still spells for itself. It is not a token, so it is not an end of a
-     * boundary — a construct part-way through being moved onto the rule is refused rather than
-     * asked about an adjacency one side of which it is still writing. */
-    private record RawSlot() implements Slot {
-    }
-
     /** One boundary of a document: what the layout may do there, the kind on each side, and the
      * construct that joins them. The construct is null where the boundary always breaks or a
      * comment stands beside it, which are the two the rule is not asked about. */
@@ -149,7 +143,6 @@ final class Gaps {
                 }
                 case GapSlot _ -> boundarySince = true;
                 case TriviaSlot _ -> boundarySince = true;
-                case RawSlot _ -> boundarySince = true;
             }
         }
         return out;
@@ -161,8 +154,6 @@ final class Gaps {
             case TokenDoc.MustBreak _ -> { }
             case TokenDoc.Token t -> out.add(new TokenSlot(t.kind(), within));
             case TokenDoc.Comment _ -> out.add(new TriviaSlot());
-            case TokenDoc.Raw _ -> out.add(new RawSlot());
-            case TokenDoc.RawLine _ -> out.add(new RawSlot());
             case TokenDoc.Trailing _ -> out.add(new TriviaSlot());
             case TokenDoc.Gap g -> out.add(new GapSlot(g.policy()));
             case TokenDoc.Node n -> collect(n.doc(),
@@ -229,9 +220,6 @@ final class Gaps {
                 }
                 case GapSlot _ -> throw new IllegalStateException(
                         "two boundaries meet where their tokens have one adjacency");
-                case RawSlot _ -> throw new IllegalStateException(
-                        "a boundary beside text a construct still spells itself; the construct on"
-                                + " that side has not been moved onto the rule yet");
             }
         }
         throw new IllegalStateException(
@@ -261,8 +249,6 @@ final class Gaps {
             case TokenDoc.MustBreak _ -> Doc.MUST_BREAK;
             case TokenDoc.Token t -> Doc.text(t.lexeme());
             case TokenDoc.Comment c -> Doc.text(c.text());
-            case TokenDoc.Raw r -> Doc.text(r.s());
-            case TokenDoc.RawLine l -> new Doc.Line(l.flat());
             case TokenDoc.Trailing t -> Doc.trailing(t.text());
             case TokenDoc.Node n -> lower(n.doc(), answers, next);
             case TokenDoc.Nest n -> Doc.nest(n.indent(), lower(n.doc(), answers, next));

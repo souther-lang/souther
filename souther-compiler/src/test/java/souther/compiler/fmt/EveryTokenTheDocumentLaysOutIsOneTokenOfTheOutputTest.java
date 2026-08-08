@@ -22,16 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * leaf spelling two tokens at once, or one the renderer drops, is a leaf the spacing rule cannot
  * see across, and issue #476 is about not having any of those.
  *
- * <p>Held one way round for now. Most of the document is still text a construct spelled for itself,
- * so what the document lays out as tokens is part of the output rather than all of it, and what is
- * checked is that this part lines up: every token the document holds matches a token of the output,
- * they are in the same order, and no two of them match the same one. As constructs move onto the
- * rule the part grows, and when the last of the raw text goes this becomes the equality it is
- * heading for — the whole sequence, both ways.
+ * <p>The whole sequence, both ways. There is nothing else the document can hold: a leaf spelling
+ * more than one token cannot be built, so what the formatter writes is tokens and the boundaries
+ * between them, and lexing what that renders to has to give the same tokens back.
  *
- * <p>What it does not say, in either form, is that the output holds everything the source did. A
- * brace the formatter never emitted is missing from the document and from the output alike and this
- * check passes; that one is the golden corpus's to catch.
+ * <p>What it does not say is that the output holds everything the source did. A brace the formatter
+ * never emitted is missing from the document and from the output alike and this check passes; that
+ * one is the golden corpus's to catch.
  */
 class EveryTokenTheDocumentLaysOutIsOneTokenOfTheOutputTest {
 
@@ -71,36 +68,30 @@ class EveryTokenTheDocumentLaysOutIsOneTokenOfTheOutputTest {
     }
 
     @Test
-    void eachOneMatchesATokenOfTheOutputAndTheyAreInOrder() {
+    void theyAreTheTokensOfTheOutput() {
         List<String> wrong = new ArrayList<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             List<TokenDoc.Token> laid = laidOut(Formatter.document(CstParser.parse(source).root()));
             List<SyntaxToken> output = written(Formatter.format(source));
-            int at = 0;
-            for (TokenDoc.Token t : laid) {
-                int found = -1;
-                for (int j = at; j < output.size(); j++) {
-                    if (output.get(j).kind() == t.kind() && output.get(j).text().equals(t.lexeme())) {
-                        found = j;
-                        break;
-                    }
-                }
-                if (found < 0) {
-                    wrong.add("the document lays out " + t.kind() + " [" + t.lexeme()
-                            + "] and the output has no such token after the ones before it");
+            if (laid.size() != output.size()) {
+                wrong.add("the document lays out " + laid.size() + " tokens and the output has "
+                        + output.size());
+                continue;
+            }
+            for (int i = 0; i < laid.size(); i++) {
+                if (laid.get(i).kind() != output.get(i).kind()
+                        || !laid.get(i).lexeme().equals(output.get(i).text())) {
+                    wrong.add("token " + i + " is " + laid.get(i).kind() + " ["
+                            + laid.get(i).lexeme() + "] in the document and " + output.get(i).kind()
+                            + " [" + output.get(i).text() + "] in the output");
                     break;
                 }
-                at = found + 1;
             }
         }
         assertEquals(List.of(), wrong);
     }
 
-    /**
-     * And the check is not passing on an empty hand. These are the constructs moved onto the rule so
-     * far — the ones that used to spell a whole run of tokens as one piece of text — so their tokens
-     * are what the document has to be laying out.
-     */
+    /** And the check is not passing on an empty hand. */
     @Test
     void theConstructsMovedSoFarLayTheirTokensOut() {
         String source = """
