@@ -397,6 +397,10 @@ public final class InvariantChecker {
      * <p>The same reader, so the same answer: a conjunct that gave the position a bound was read, and
      * one that gave none — {@code isOdd(value)} beside {@code value >= 0} — is a way the type refuses
      * a value that the bounds do not express.
+     *
+     * <p>Which reader that is depends on what the value is carried as. A number's range comes from
+     * the comparison itself; anything else — a length, a pattern, a size — is read as the runtime
+     * check it becomes, which is the only reading of those there is.
      */
     private static boolean everyRuleBecameABound(TypeName named, Ast.Data data, Symbols symbols) {
         Type carried = TypeOps.numericBase(Type.ref(named), symbols);
@@ -406,9 +410,12 @@ public final class InvariantChecker {
         // declares rather than against the number underneath makes every such rule unreadable.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(Type.ref(named), symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                boolean numeric = base == Type.INT || base == Type.DECIMAL;
                 for (Ast.Expr each
                         : souther.compiler.codegen.InvariantConstraints.clauses(clause.expr())) {
-                    if (souther.compiler.codegen.InvariantConstraints.of(each, base).isEmpty()) {
+                    boolean read = numeric ? InvariantBound.of(each, base).isPresent()
+                            : souther.compiler.codegen.InvariantConstraints.of(each, base).isPresent();
+                    if (!read) {
                         return false;
                     }
                 }

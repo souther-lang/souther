@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigDecimal;
@@ -58,18 +59,16 @@ public record GuardEdge(CoverageSites.GuardRef guard, int site, TermPath path,
         if (admissible == null) {
             return false;
         }
-        if (low != null && admissible.max() != null) {
-            int order = low.compareTo(admissible.max());
-            if (order > 0 || (order == 0 && !lowInclusive)) {
-                return true;
-            }
-        }
-        if (high != null && admissible.min() != null) {
-            int order = high.compareTo(admissible.min());
-            if (order < 0 || (order == 0 && !highInclusive)) {
-                return true;
-            }
-        }
-        return false;
+        // Two half-lines meeting at one number share it only where both hold it, and either side may
+        // be the one that does not. Asked of the pair rather than of the edge, because reading the
+        // arm's openness alone would call an arm at the top of a range reachable in a position whose
+        // rules stop short of it.
+        return !Endpoint.someValueLiesBetween(end(low, lowInclusive), admissible.max())
+                || !Endpoint.someValueLiesBetween(admissible.min(), end(high, highInclusive));
+    }
+
+    /** An end of this edge, or no end at all where the edge is open in that direction. */
+    private static Endpoint end(BigDecimal value, boolean inclusive) {
+        return value == null ? null : new Endpoint(value, inclusive);
     }
 }

@@ -5,9 +5,12 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.InvariantBound;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -148,18 +151,18 @@ public final class Partitions {
             // the record it sits in says about it. Reading the type again here would put a threshold
             // back inside a range the record has no values in.
             NumericDomain.Bounds domain = base.domains().get(axis.path().toString());
-            BigDecimal min = domain == null ? null : domain.min();
-            BigDecimal max = domain == null ? null : domain.max();
             // Filtered once, and both answers read the filtered list. A line outside what the
             // position holds divides nothing, and it is not a boundary either: leaving it in the
             // cuts while the intervals dropped it asks for a row at a value the record refuses,
-            // which is the thing being fixed here happening again one field over.
+            // which is the thing being fixed here happening again one field over. The end the
+            // position stops short of is outside it as much as anything past it is.
             List<Threshold> reachable = here.stream()
-                    .filter(t -> (min == null || t.value().compareTo(min) >= 0)
-                            && (max == null || t.value().compareTo(max) <= 0))
+                    .filter(t -> domain == null || domain.admits(t.value()))
                     .toList();
             List<PartitionClass> classes = Intervals.classesOf(
-                    Intervals.of(reachable, min, max), axis.path(), axis.type(), symbols);
+                    Intervals.of(reachable, domain == null ? null : domain.min(),
+                            domain == null ? null : domain.max()),
+                    axis.path(), axis.type(), symbols);
             // What the position is, not what an invariant said about it. There is a bound to read
             // only where the type is a newtype carrying one, and a plain `Decimal` has none — read
             // off the bound, every such position would be called an integer and a threshold of
@@ -215,9 +218,16 @@ public final class Partitions {
         BoundaryDomain domain = decimal ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
         List<BoundaryObligation> out = new ArrayList<>();
         for (Cut cut : axis.cuts()) {
+            // A line the position does not reach. The rule that drew it did so about the type, and
+            // what is left of the type here may stop short of it or leave the value out — `low < high`
+            // under one `[0, 1]` leaves `low` every value up to 1 and not 1 itself. Writing the value
+            // is how an edge is met, so where the value is refused there is nothing to write.
+            boolean reachable = holds(within, cut.value());
             for (OriginRef origin : cut.origins()) {
-                out.add(new BoundaryObligation(axis.id(), origin,
-                        BoundaryObligation.BoundarySide.AT, cut.value()));
+                if (reachable) {
+                    out.add(new BoundaryObligation(axis.id(), origin,
+                            BoundaryObligation.BoundarySide.AT, cut.value()));
+                }
                 if (origin instanceof OriginRef.GuardOrigin guard) {
                     // The other class's edge is the neighbour on the side the cut value is not on —
                     // where that class has values. A guard at the end of what the position can hold
@@ -254,8 +264,7 @@ public final class Partitions {
         if (number == null) {
             return true;
         }
-        return (within.min() == null || number.compareTo(within.min()) >= 0)
-                && (within.max() == null || number.compareTo(within.max()) <= 0);
+        return within.admits(number);
     }
 
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
@@ -343,9 +352,9 @@ public final class Partitions {
         // from the rule that put one there, and which record did the narrowing is said beside it.
         return new Bounds(
                 own.min() == null ? null
-                        : new End(highest(own.min().value(), projected.min()), own.min().from()),
+                        : new End(Endpoint.lower(own.min().at(), projected.min()), own.min().from()),
                 own.max() == null ? null
-                        : new End(lowest(own.max().value(), projected.max()), own.max().from()),
+                        : new End(Endpoint.upper(own.max().at(), projected.max()), own.max().from()),
                 own.decimal());
     }
 
@@ -365,11 +374,11 @@ public final class Partitions {
         if (own == null) {
             return null;   // not a number, so nothing bounds it either way
         }
-        BigDecimal min = own.min() == null ? null : own.min().value();
-        BigDecimal max = own.max() == null ? null : own.max().value();
+        Endpoint min = own.min() == null ? null : own.min().at();
+        Endpoint max = own.max() == null ? null : own.max().at();
         return projected == null ? new NumericDomain.Bounds(min, max)
-                : new NumericDomain.Bounds(highest(min, projected.min()),
-                        lowest(max, projected.max()));
+                : new NumericDomain.Bounds(Endpoint.lower(min, projected.min()),
+                        Endpoint.upper(max, projected.max()));
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -452,9 +461,20 @@ public final class Partitions {
      * they are two rules a row could be owed to, which is the accounting a cut already keeps. Holding
      * one would drop an obligation rather than a line of text.
      */
-    private record End(BigDecimal value, List<TypeName> from) {
+    private record End(Endpoint at, List<TypeName> from) {
 
-        /** This end, or {@code other} where it is the stronger, or both where they agree. */
+        BigDecimal value() {
+            return at.value();
+        }
+
+        /**
+         * This end, or {@code other} where it is the stronger, or both where they agree.
+         *
+         * <p>Which number survives and whether the value is one of the range's own are the same
+         * question asked of {@link Endpoint}, so that this and the domain cannot disagree about it.
+         * Where the two are at one number both names are kept: each is a rule the line is owed to,
+         * however far into the range each of them reaches.
+         */
         static End tighter(End had, End one, boolean upper) {
             if (one == null) {
                 return had;
@@ -462,13 +482,13 @@ public final class Partitions {
             if (had == null) {
                 return one;
             }
-            int order = one.value().compareTo(had.value());
-            if (order == 0) {
-                List<TypeName> both = new ArrayList<>(had.from());
-                one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
-                return new End(had.value(), List.copyOf(both));
+            Endpoint at = upper ? Endpoint.upper(had.at(), one.at()) : Endpoint.lower(had.at(), one.at());
+            if (had.value().compareTo(one.value()) != 0) {
+                return at == had.at() ? had : one;
             }
-            return (upper ? order < 0 : order > 0) ? one : had;
+            List<TypeName> both = new ArrayList<>(had.from());
+            one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
+            return new End(at, List.copyOf(both));
         }
     }
 
@@ -502,42 +522,20 @@ public final class Partitions {
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                    InvariantConstraints.Constraint read =
-                            InvariantConstraints.of(each, base).orElse(null);
-                    min = End.tighter(min, endOf(lowerOf(read), layer), false);
-                    max = End.tighter(max, endOf(upperOf(read), layer), true);
+                    InvariantBound read = InvariantBound.of(each, base).orElse(null);
+                    if (read == null) {
+                        continue;
+                    }
+                    End end = new End(read.end(), List.of(layer.named()));
+                    if (read.lower()) {
+                        min = End.tighter(min, end, false);
+                    } else {
+                        max = End.tighter(max, end, true);
+                    }
                 }
             }
         }
         return new Bounds(min, max, base == Type.DECIMAL);
-    }
-
-    private static End endOf(BigDecimal value, TypeOps.Layer layer) {
-        return value == null ? null : new End(value, List.of(layer.named()));
-    }
-
-
-
-    /** The lower bound a constraint states, or null where it states none. */
-    private static BigDecimal lowerOf(InvariantConstraints.Constraint read) {
-        return switch (read) {
-            case InvariantConstraints.Min m -> BigDecimal.valueOf(m.n());
-            case InvariantConstraints.Positive _, InvariantConstraints.DecimalPositive _ ->
-                    BigDecimal.ONE;
-            case InvariantConstraints.NonNegative _, InvariantConstraints.DecimalNonNegative _ ->
-                    BigDecimal.ZERO;
-            case InvariantConstraints.DecimalMin m -> m.n();
-            case null, default -> null;   // length, pattern, size, or a rule this cannot read
-        };
-    }
-
-    /** The upper bound a constraint states, or null where it states none. */
-    private static BigDecimal upperOf(InvariantConstraints.Constraint read) {
-        return switch (read) {
-            case InvariantConstraints.Max m -> BigDecimal.valueOf(m.n());
-            case InvariantConstraints.DecimalMax m -> m.n();
-            case null, default -> null;
-        };
     }
 
     /** The cuts of a position, each carrying the rule that drew it. */
@@ -564,7 +562,10 @@ public final class Partitions {
         if (end == null) {
             return;
         }
-        boolean moved = own != null && own.value().compareTo(end.value()) != 0;
+        // Taken in, which a record can do by moving the end or by taking away the value it stops
+        // at. `low < high` under one `[0, 1]` leaves `low` the same 1 and no longer holding it, and
+        // that is the record's doing as much as a smaller number would have been.
+        boolean moved = own != null && !own.at().equals(end.at());
         for (TypeName from : end.from()) {
             put(into, numeric(end.value(), decimal), from, clause, moved ? within : null);
         }
@@ -606,11 +607,11 @@ public final class Partitions {
         if (type == null) {
             return List.of();
         }
-        if (type == Type.INT) {
-            return List.of(FixtureTemplate.integer(admissible(within, true).longValueExact()));
-        }
-        if (type == Type.DECIMAL) {
-            return List.of(FixtureTemplate.decimal(admissible(within, false)));
+        if (type == Type.INT || type == Type.DECIMAL) {
+            BigDecimal value = inside(within, type == Type.DECIMAL);
+            return value == null ? List.of()
+                    : List.of(type == Type.INT ? FixtureTemplate.integer(value.longValueExact())
+                            : FixtureTemplate.decimal(value));
         }
         if (type == Type.STRING) {
             return List.of(FixtureTemplate.string("x"));
@@ -653,10 +654,9 @@ public final class Partitions {
      * The same, with a second value offered at a numeric position.
      *
      * <p>One value is enough only where the rules that decide it are the rules the projection holds.
-     * A disequality is a hole no range keeps, a strict bound over the decimals is recorded as the
-     * non-strict one, and a form that is neither an interval nor a difference is not recorded at all —
-     * so the end a projection names can be the one value the rules refuse, and a position offering
-     * only that has nothing left to try.
+     * A disequality is a hole no range keeps, and a form that is neither an interval nor a difference
+     * is not recorded at all — so the value a range gives up can be one those rules refuse, and a
+     * position offering only that has nothing left to try.
      *
      * <p>Displaced and not invented. A whole number has a next one; a decimal between two ends has a
      * midpoint, and where it has no second end it gets no second value, because an epsilon is a value
@@ -698,20 +698,29 @@ public final class Partitions {
 
     /** A second number of a range, or null where the type has none to give. */
     private static BigDecimal displaced(NumericDomain.Bounds range, boolean whole) {
-        BigDecimal from = admissible(range, whole);
-        BigDecimal min = range == null ? null : range.min();
-        BigDecimal max = range == null ? null : range.max();
+        BigDecimal from = inside(range, !whole);
+        if (from == null) {
+            return null;
+        }
+        Endpoint min = range == null ? null : range.min();
+        Endpoint max = range == null ? null : range.max();
         if (!whole) {
-            // No smallest step, so the only second value a range names is one inside both its ends.
-            return min == null || max == null || min.compareTo(max) >= 0 ? null
-                    : min.add(max).divide(BigDecimal.valueOf(2));
+            // No smallest step, so the only second value a range names is one inside both its ends —
+            // and the one already on offer is that value where the range is open below.
+            return min == null || max == null || !min.inclusive() ? null
+                    : Endpoint.valueBetween(Endpoint.exclusive(min.value()), max, Granularity.DENSE);
         }
         BigDecimal up = from.add(BigDecimal.ONE);
-        if (max == null || up.compareTo(max) <= 0) {
+        if (holdsNumber(range, up)) {
             return up;
         }
         BigDecimal down = from.subtract(BigDecimal.ONE);
-        return min == null || down.compareTo(min) >= 0 ? down : null;
+        return holdsNumber(range, down) ? down : null;
+    }
+
+    /** Whether a range holds a number, with no range holding everything. */
+    private static boolean holdsNumber(NumericDomain.Bounds range, BigDecimal value) {
+        return range == null || range.admits(value);
     }
 
     /**
@@ -740,10 +749,10 @@ public final class Partitions {
 
         Bounds own = boundsOf(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
-        if (bounds != null && !bounds.isEmpty()) {
-            candidates.add(own.decimal()
-                    ? FixtureTemplate.decimal(inside(bounds))
-                    : FixtureTemplate.integer(inside(bounds).longValueExact()));
+        BigDecimal held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.decimal());
+        if (held != null) {
+            candidates.add(own.decimal() ? FixtureTemplate.decimal(held)
+                    : FixtureTemplate.integer(held.longValueExact()));
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
@@ -765,35 +774,12 @@ public final class Partitions {
         return List.copyOf(once.values());
     }
 
-    /**
-     * A number the position can hold, for a position whose type says nothing about which one.
-     *
-     * <p>The lower end where there is one, the upper where there is only that, and zero where the
-     * position is left open — which is what a type with no rules has always offered here. The same
-     * order a newtype's own candidate is chosen in: the low end is inside whatever high end there is,
-     * so one rule picks a value for both shapes of range.
-     *
-     * <p>{@code whole} takes an end in to the nearest whole number inside it. A projection divides,
-     * so what it leaves an {@code Int} can have a fraction on it that no {@code Int} has.
-     */
-    private static BigDecimal admissible(NumericDomain.Bounds within, boolean whole) {
-        if (within == null) {
-            return BigDecimal.ZERO;
-        }
-        if (within.min() != null) {
-            return whole ? within.min().setScale(0, java.math.RoundingMode.CEILING) : within.min();
-        }
-        if (within.max() != null) {
-            return whole ? within.max().setScale(0, java.math.RoundingMode.FLOOR) : within.max();
-        }
-        return BigDecimal.ZERO;
-    }
-
-    /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
-     * there is, and it is the value a boundary wants written anyway. */
-    private static BigDecimal inside(NumericDomain.Bounds bounds) {
-        return bounds.min() != null ? bounds.min()
-                : bounds.max() != null ? bounds.max() : BigDecimal.ZERO;
+    /** A number the position holds, or null where it holds none. The ends decide it, so nothing here
+     * reads one of them as a number and loses whether the range reaches it. */
+    private static BigDecimal inside(NumericDomain.Bounds within, boolean decimal) {
+        Granularity spacing = decimal ? Granularity.DENSE : Granularity.DISCRETE;
+        return within == null ? BigDecimal.ZERO
+                : Endpoint.valueBetween(within.min(), within.max(), spacing);
     }
 
     /**
@@ -819,11 +805,15 @@ public final class Partitions {
         }
         Bounds own = boundsOf(type, symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
+        // The far end has to be a value the position holds. Where the range stops short of it there
+        // is nothing there to hold back, and a dense order has no value beside it to hold back
+        // instead — what is inside is already what the first tier offers.
         if (bounds == null || bounds.min() == null || bounds.max() == null
-                || bounds.max().compareTo(bounds.min()) == 0) {
+                || !bounds.max().inclusive()
+                || bounds.max().value().compareTo(bounds.min().value()) == 0) {
             return List.of();
         }
-        BigDecimal far = bounds.max();
+        BigDecimal far = bounds.max().value();
         FixtureTemplate held = FixtureTemplate.newtype(ref.name(), own.decimal()
                 ? FixtureTemplate.decimal(far) : FixtureTemplate.integer(far.longValueExact()));
         // Nothing already on offer: a range whose far edge is the number the base type stands for
@@ -840,22 +830,6 @@ public final class Partitions {
     private static ObservedValue numeric(BigDecimal value, boolean decimal) {
         return decimal ? new ObservedValue.Decimal(value)
                 : new ObservedValue.Integer(value.longValueExact());
-    }
-
-    /** The higher of two bounds, where a null is no bound at all and so never the higher. */
-    private static BigDecimal highest(BigDecimal had, BigDecimal one) {
-        if (one == null) {
-            return had;
-        }
-        return had == null || one.compareTo(had) > 0 ? one : had;
-    }
-
-    /** The lower of two, the same way. */
-    private static BigDecimal lowest(BigDecimal had, BigDecimal one) {
-        if (one == null) {
-            return had;
-        }
-        return had == null || one.compareTo(had) < 0 ? one : had;
     }
 
     private Partitions() {}

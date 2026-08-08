@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -153,8 +154,9 @@ class AGuardsArmsAreNotItsThresholdTest {
     }
 
     private static NumericDomain.Bounds holds(Long min, Long max) {
-        return new NumericDomain.Bounds(min == null ? null : BigDecimal.valueOf(min),
-                max == null ? null : BigDecimal.valueOf(max));
+        return new NumericDomain.Bounds(
+                min == null ? null : Endpoint.inclusive(BigDecimal.valueOf(min)),
+                max == null ? null : Endpoint.inclusive(BigDecimal.valueOf(max)));
     }
 
     @Test
@@ -179,6 +181,27 @@ class AGuardsArmsAreNotItsThresholdTest {
         assertTrue(above(10, false).provenDisjoint(holds(0L, 10L)),
                 "there is no value of [0, 10] above 10");
         assertTrue(below(0, false).provenDisjoint(holds(0L, 10L)));
+    }
+
+    /**
+     * The position's own end is open at the value the arm starts at.
+     *
+     * <p>Two half-lines meeting at one number share it only where both hold it, and either side can
+     * be the one that does not. A rule that reaches an end without including it — `low < high` over
+     * decimals leaves `low` short of the top of its type — leaves the arm at that number nothing to
+     * be taken by, however the arm itself is written.
+     */
+    @Test
+    void anArmAtAnEndThePositionDoesNotReachIsProvenUnreachable() {
+        NumericDomain.Bounds under = new NumericDomain.Bounds(
+                Endpoint.inclusive(BigDecimal.ZERO), Endpoint.exclusive(BigDecimal.TEN));
+        NumericDomain.Bounds over = new NumericDomain.Bounds(
+                Endpoint.exclusive(BigDecimal.ZERO), Endpoint.inclusive(BigDecimal.TEN));
+
+        assertTrue(above(10, true).provenDisjoint(under), "no value of [0, 10) is 10 or above");
+        assertTrue(below(0, true).provenDisjoint(over), "and none of (0, 10] is 0 or below");
+        assertFalse(above(10, true).provenDisjoint(over), "10 is a value of (0, 10]");
+        assertFalse(below(0, true).provenDisjoint(under), "and 0 is one of [0, 10)");
     }
 
     /** Nothing is proven where nothing is known. An unbounded position rules out no arm, and neither

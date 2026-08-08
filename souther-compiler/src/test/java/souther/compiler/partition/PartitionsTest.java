@@ -206,9 +206,9 @@ class PartitionsTest {
                 """, "classify");
 
         assertEquals(List.of(new ObservedValue.Decimal(java.math.BigDecimal.ZERO),
-                        new ObservedValue.Decimal(new java.math.BigDecimal("1.0"))),
+                        new ObservedValue.Decimal(java.math.BigDecimal.ONE)),
                 axis(share, "s").cuts().stream().map(Cut::value).toList(),
-                "`>= 0.0m` is read as non-negative, which is the zero the reader already normalises to");
+                "how many places a literal was written to is not where the line is");
     }
 
     @Test
