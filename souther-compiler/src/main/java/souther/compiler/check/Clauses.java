@@ -35,7 +35,9 @@ final class Clauses {
     private final Map<TypeName, List<Ast.InvariantClause>> inTheAnalysisRepresentation;
     private final Map<Ast.Data, Map<String, Type>> fields = new HashMap<>();
     private final Map<TypeName, Map<String, BindingId>> bindings = new HashMap<>();
-    private final Map<Ast.Expr, Optional<Core>> typed = new IdentityHashMap<>();
+    /** Remembered per declaration, not per clause: a clause an include brings in is one expression
+     * reached under two names, and what it types to is read against the fields of the one asking. */
+    private final Map<TypeName, Map<Ast.Expr, Optional<Core>>> typed = new HashMap<>();
     private final Map<TypeName, List<Ast.InvariantClause>> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
      * filled for the clause to be read at all. */
@@ -88,16 +90,17 @@ final class Clauses {
      * declaration an author wrote wrongly.
      */
     Core typed(Ast.Expr clause, TypeName named, Ast.Data data) {
-        return typed.computeIfAbsent(clause, written -> {
-            try {
-                return Optional.ofNullable(Elaborator.elaborate(written,
-                        DataChecker.fieldScope(named, data, symbols),
-                        CheckContext.of(symbols).forData(data).forDischarge(),
-                        Type.BOOL));
-            } catch (RuntimeException _) {
-                return Optional.empty();
-            }
-        }).orElse(null);
+        return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
+                .computeIfAbsent(clause, written -> {
+                    try {
+                        return Optional.ofNullable(Elaborator.elaborate(written,
+                                DataChecker.fieldScope(named, data, symbols),
+                                CheckContext.of(symbols).forData(data).forDischarge(),
+                                Type.BOOL));
+                    } catch (RuntimeException _) {
+                        return Optional.empty();
+                    }
+                }).orElse(null);
     }
 
     /**
