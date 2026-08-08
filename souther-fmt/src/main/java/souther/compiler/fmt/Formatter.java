@@ -435,7 +435,8 @@ public final class Formatter {
         }
         var newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
-            Doc inner = typeRef(typeChild(newtype.get()));
+            Doc inner = concat(aboveOf(newtype.get()), typeRef(typeChild(newtype.get())),
+                    afterOf(newtype.get()));
             return concat(text("data "), text(name), text(" = "), inner, nest(INDENT, concat(invariants)));
         }
         return concat(text("data "), text(name));   // unit
@@ -479,7 +480,8 @@ public final class Formatter {
         if (sig.isPresent()) {
             SyntaxNode s = sig.get();
             Doc params = paramList(s.child(SyntaxKind.PARAM_LIST).orElseThrow());
-            Doc ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
+            SyntaxNode retNode = s.child(SyntaxKind.RET_TYPE).orElseThrow();
+            Doc ret = concat(aboveOf(retNode), retType(retNode), afterOf(retNode));
             List<Doc> clauses = new ArrayList<>();
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
@@ -668,13 +670,19 @@ public final class Formatter {
 
     private Doc retType(SyntaxNode n) {
         List<Doc> cases = new ArrayList<>();
+        List<Segment> rest = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
-            if (isTypeNode(c.kind())) {
-                cases.add(typeTerm(c));
+            if (!isTypeNode(c.kind())) {
+                continue;
+            }
+            Doc body = concat(typeTerm(c), afterOf(c));
+            if (cases.isEmpty()) {
+                cases.add(concat(aboveOf(c), body));
+            } else {
+                rest.add(new Segment("| ", body, aboveOf(c)));
             }
         }
-        Doc d = cases.isEmpty() ? Doc.NIL
-                : chained(cases.get(0), segments("| ", cases.subList(1, cases.size())));
+        Doc d = cases.isEmpty() ? Doc.NIL : chained(cases.get(0), rest);
         // `T?` in a core signature, the same mark a field carries
         return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, text("?")) : d;
     }
@@ -1179,31 +1187,48 @@ public final class Formatter {
         return null;
     }
 
+    /**
+     * What a comment written above {@code next} was written about: the outermost construct that
+     * begins there. This is what the comment describes, and it is decided without asking whether
+     * that construct has anywhere to put it — that is the next question, and answering the two
+     * together is what turned a comment about a case into a comment about the declaration.
+     */
     private static void above(Attachments out, SyntaxToken next, SyntaxToken comment, SyntaxNode file) {
         if (next != null && opens(next)) {
             // what opens a construct is the construct's, and it shares a line with the first member
             SyntaxElement first = firstMemberOf(next.parent());
             if (first instanceof SyntaxNode node) {
-                add(out.above(), node, comment);
+                place(out, node, comment, true);
                 return;
             }
             if (first instanceof SyntaxToken token) {
-                out.aboveCase().computeIfAbsent(token.start(), _ -> new ArrayList<>()).add(comment);
+                out.aboveCase().computeIfAbsent(nameStart(token), _ -> new ArrayList<>()).add(comment);
                 return;
             }
         }
         if (next == null) {
             add(out.atEnd(), file, comment);          // nothing follows: it closes the file
         } else if (isBareMember(next)) {
-            out.aboveCase().computeIfAbsent(next.start(), _ -> new ArrayList<>()).add(comment);
+            // A clause keyword opens the line its first name is on, the way a bracket does, so a
+            // comment above that name is above the clause rather than between the two.
+            SyntaxElement first = firstMemberOf(next.parent());
+            boolean opensTheClause = first instanceof SyntaxToken t && t.start() == nameStart(next)
+                    && (next.parent().kind() == SyntaxKind.CONSTRUCTS_CLAUSE
+                            || next.parent().kind() == SyntaxKind.DEPENDS_CLAUSE);
+            if (opensTheClause) {
+                place(out, next.parent(), comment, true);
+            } else {
+                out.aboveCase().computeIfAbsent(nameStart(next), _ -> new ArrayList<>()).add(comment);
+            }
         } else if (closes(next)) {
             add(out.atEnd(), next.parent(), comment);
         } else {
-            SyntaxNode owner = hasALine(next);
-            add(owner == null ? out.atEnd() : out.above(), owner == null ? file : owner, comment);
+            place(out, beginningAt(next), comment, true);
         }
     }
 
+    /** What a comment written after {@code code} was written about: the outermost construct that
+     * ends there. */
     private static void after(Attachments out, SyntaxToken code, SyntaxToken comment) {
         if (code == null) {
             return;                                   // a comment with no code before it is above
@@ -1211,13 +1236,110 @@ public final class Formatter {
         // A bare member is only its own line's owner while something follows it. The last case of a
         // sum ends where the declaration does, and what ends on that line is the declaration.
         if (isBareMember(code) && code.end() != code.parent().end()) {
-            out.afterCase().computeIfAbsent(code.end(), _ -> new ArrayList<>()).add(comment);
+            out.afterCase().computeIfAbsent(nameEnd(code), _ -> new ArrayList<>()).add(comment);
             return;
         }
-        SyntaxNode owner = hasALine(code);
-        if (owner != null) {
-            add(out.after(), owner, comment);
+        place(out, endingAt(code), comment, false);
+    }
+
+    /**
+     * Files {@code comment} against {@code owner}, or against the nearest construct above it that
+     * the layout gives a line of its own. A construct with no line of its own has nowhere to put a
+     * comment: written there, the rest of that line would be written inside it. So the comment
+     * travels — a comment after the condition of an {@code if} is written at the end of the
+     * declaration that holds the {@code if} — and how far it travels is a fact about the layout
+     * rather than about what the comment was written about.
+     */
+    private static void place(Attachments out, SyntaxNode owner, SyntaxToken comment, boolean above) {
+        for (SyntaxNode c = owner; c != null && c.parent() != null; c = c.parent()) {
+            if (takesALineOf(c.parent().kind(), c.kind())) {
+                add(above ? out.above() : out.after(), c, comment);
+                return;
+            }
         }
+    }
+
+    /** The outermost construct beginning at {@code t}. */
+    private static SyntaxNode beginningAt(SyntaxToken t) {
+        SyntaxNode node = t.parent();
+        while (node.parent() != null && node.parent().parent() != null
+                && firstCodeOffset(node.parent()) == t.start()) {
+            node = node.parent();
+        }
+        return node;
+    }
+
+    /** The outermost construct ending at {@code t}. */
+    private static SyntaxNode endingAt(SyntaxToken t) {
+        SyntaxNode node = t.parent();
+        while (node.parent() != null && node.parent().parent() != null
+                && node.parent().end() == t.end()) {
+            node = node.parent();
+        }
+        return node;
+    }
+
+    /** Where {@code n}'s own text begins, past whatever trivia the parser put in front of it. */
+    private static int firstCodeOffset(SyntaxNode n) {
+        for (SyntaxToken t : tokens(n)) {
+            if (!t.isTrivia()) {
+                return t.start();
+            }
+        }
+        return n.start();
+    }
+
+    /**
+     * A qualified name is one member written as several identifiers, so a comment anywhere in it is
+     * about the whole name. These answer where that name begins and ends, so the two ends of the
+     * run agree on which member they are, however deep into it the comment was written.
+     */
+    private static int nameStart(SyntaxToken ident) {
+        SyntaxToken at = ident;
+        for (SyntaxToken before = previousOfName(at); before != null; before = previousOfName(at)) {
+            at = before;
+        }
+        return at.start();
+    }
+
+    private static int nameEnd(SyntaxToken ident) {
+        SyntaxToken at = ident;
+        for (SyntaxToken after = nextOfName(at); after != null; after = nextOfName(at)) {
+            at = after;
+        }
+        return at.end();
+    }
+
+    private static SyntaxToken previousOfName(SyntaxToken ident) {
+        List<SyntaxToken> siblings = codeTokensOf(ident.parent());
+        int i = indexOf(siblings, ident);
+        return i >= 2 && siblings.get(i - 1).kind() == SyntaxKind.DOT ? siblings.get(i - 2) : null;
+    }
+
+    private static SyntaxToken nextOfName(SyntaxToken ident) {
+        List<SyntaxToken> siblings = codeTokensOf(ident.parent());
+        int i = indexOf(siblings, ident);
+        return i >= 0 && i + 2 < siblings.size() && siblings.get(i + 1).kind() == SyntaxKind.DOT
+                ? siblings.get(i + 2) : null;
+    }
+
+    private static List<SyntaxToken> codeTokensOf(SyntaxNode n) {
+        List<SyntaxToken> out = new ArrayList<>();
+        for (SyntaxElement e : n.children()) {
+            if (e instanceof SyntaxToken t && !t.isTrivia()) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    private static int indexOf(List<SyntaxToken> tokens, SyntaxToken t) {
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.get(i).start() == t.start()) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static void add(Map<SyntaxNode, List<SyntaxToken>> to, SyntaxNode key, SyntaxToken c) {
@@ -1307,9 +1429,11 @@ public final class Formatter {
             case WITH_CLAUSE -> child == SyntaxKind.WITH_BINDING;
             case ELSE_ARMS -> child == SyntaxKind.ELSE_ARM;
             case PIPE_BEHAVIOR -> child == SyntaxKind.STAGE;
-            case DATA_DEF -> child == SyntaxKind.INVARIANT_CLAUSE;
+            case DATA_DEF -> child == SyntaxKind.INVARIANT_CLAUSE
+                    || child == SyntaxKind.NEWTYPE_BODY;
             case BEHAVIOR_SIG -> child == SyntaxKind.CONSTRUCTS_CLAUSE
-                    || child == SyntaxKind.DEPENDS_CLAUSE;
+                    || child == SyntaxKind.DEPENDS_CLAUSE || child == SyntaxKind.RET_TYPE;
+            case RET_TYPE -> isTypeNode(child);
             case BLOCK_EXPR -> true;
             case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> isExprKind(child);
             case PIPE_EXPR -> isExprKind(child) && child != SyntaxKind.PIPE_EXPR;
@@ -1395,10 +1519,16 @@ public final class Formatter {
      * against where the identifier is. */
     private Member tokenMember(SyntaxToken above, SyntaxToken end, Doc d) {
         List<Doc> lead = new ArrayList<>();
-        for (Doc c : aboveCase(above)) {
+        for (Doc c : unwritten(comments.aboveCase().getOrDefault(nameStart(above), List.of()))) {
             lead.add(concat(c, HARDLINE));
         }
-        return new Member(concat(concat(lead), d), afterCase(end));
+        List<Doc> parts = new ArrayList<>();
+        for (SyntaxToken c : comments.afterCase().getOrDefault(nameEnd(end), List.of())) {
+            if (consumedComments.add(c.start())) {
+                parts.add(Doc.trailing(c.text().stripTrailing()));
+            }
+        }
+        return new Member(concat(concat(lead), d), concat(parts));
     }
 
     /** A member: what is written above its line, the member, and what ends that line — the last kept

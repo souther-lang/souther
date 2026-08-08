@@ -98,7 +98,75 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
-    /** Written as a segment of a chain: a stage of a pipeline. */
+    /** One member written as several identifiers. A comment anywhere in the name is about the
+     * whole name, so the two ends of the run have to agree on which member they are — reading each
+     * identifier as a member of its own left the comment owned by something nobody asked for. */
+    @Test
+    void aMemberWrittenAsSeveralIdentifiers() {
+        assertEquals("""
+                module m
+
+                data A =
+                    { n: Int
+                    }
+
+                behavior f : (n: Int) -> A
+                    // why this one
+                    constructs other.A
+
+                let f (n) = A { n = n }
+                """, Formatter.format("""
+                module m
+                data A = { n: Int }
+                behavior f : (n: Int) -> A
+                    constructs other.
+                        // why this one
+                        A
+                let f (n) = A { n = n }
+                """));
+    }
+
+    /** Written as the tail of a header line: a behavior's return type, with clauses under it. The
+     * clauses are the construct's next lines, so a comment ending the header's line is not a comment
+     * about them. */
+    @Test
+    void aMemberWrittenAsTheTailOfAHeader() {
+        assertEquals("""
+                module m
+
+                data A =
+                    { n: Int
+                    }
+
+                behavior f : (n: Int) -> A // result
+                    constructs A
+
+                let f (n) = A { n = n }
+                """, Formatter.format("""
+                module m
+                data A = { n: Int }
+                behavior f : (n: Int) -> A   // result
+                    constructs A
+                let f (n) = A { n = n }
+                """));
+    }
+
+    /** The same shape one construct down: what a newtype wraps, with an invariant under it. */
+    @Test
+    void andTheSameTailOnADataHeader() {
+        assertEquals("""
+                module m
+
+                data Positive = Int // representation
+                    invariant value > 0
+                """, Formatter.format("""
+                module m
+                data Positive = Int   // representation
+                    invariant value > 0
+                """));
+    }
+
+    /** Written as a segment of a chain: a stage of a pipeline, and a member of a written union. */
     @Test
     void aMemberWrittenAsASegmentOfAChain() {
         assertEquals("""
@@ -132,6 +200,35 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                     |> g
                     // about h
                     |> h }
+                """));
+    }
+
+    @Test
+    void aMemberWrittenAsASegmentOfAWrittenUnion() {
+        assertEquals("""
+                module m
+
+                data A =
+                    { n: Int
+                    }
+
+                data B =
+                    { n: Int
+                    }
+
+                behavior f : (n: Int) -> A
+                    // exceptional result
+                    | B
+
+                let f (n) = A { n = n }
+                """, Formatter.format("""
+                module m
+                data A = { n: Int }
+                data B = { n: Int }
+                behavior f : (n: Int) -> A
+                    // exceptional result
+                    | B
+                let f (n) = A { n = n }
                 """));
     }
 

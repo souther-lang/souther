@@ -14,7 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A comment survives formatting wherever the grammar admits one.
+ * A comment survives formatting at every boundary between two of a fixture's tokens.
+ *
+ * <p>Not at every position the grammar admits one, which is what this used to claim: what is
+ * quantified over is the boundaries of the fixtures below, and a form no fixture is written in is a
+ * form nothing here asks about. A qualified name in a {@code constructs} clause was such a form, and
+ * the formatter refused it.
  *
  * <p>The places are found rather than listed. {@link CommentSurvivalTest} lists them, and a list is
  * the formatter's own idea of where a comment goes written down a second time: the places it omits
@@ -33,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * path through the formatter than its occupied one — an {@code exposing} clause with no entries has
  * no member to hang a comment on and is exactly where one went missing.
  */
-class EveryCommentTheGrammarAdmitsSurvivesTest {
+class AProbeSurvivesAtEveryTokenBoundaryTest {
 
     private static final String PROBE = "// probe";
 
@@ -63,7 +68,7 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
             data S = One | Two
 
             behavior run : (a: A, n: Int) -> B | Small
-                constructs B
+                constructs B, other.mod.Thing
                 depends on helper
 
             let helper (n: Int) = n
@@ -169,6 +174,11 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
                     formatted = Formatter.format(variant);
                 } catch (RuntimeException e) {
                     refused.add(context(variant) + "  " + e.getMessage());
+                    continue;
+                }
+                if (!CstParser.parse(formatted).errors().isEmpty()) {
+                    rewritten.add(context(variant) + "  did not parse: "
+                            + CstParser.parse(formatted).errors());
                     continue;
                 }
                 List<String> got = commentsOf(formatted);
