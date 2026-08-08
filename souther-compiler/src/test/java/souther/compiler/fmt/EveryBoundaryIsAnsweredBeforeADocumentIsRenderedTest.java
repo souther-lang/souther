@@ -130,25 +130,28 @@ class EveryBoundaryIsAnsweredBeforeADocumentIsRenderedTest {
         assertThrows(IllegalStateException.class, () -> doubled.resolve());
     }
 
-    /** A comment is not one of the two tokens a boundary joins, so a boundary standing beside one
-     * has to be a boundary that always breaks — which is what a comment does to a line anyway. */
+    /**
+     * A comment is not one of the two tokens a boundary joins. A boundary that may break and has
+     * one beside it is written broken whatever the width — a group holding a comment is never laid
+     * out flat — so what it would have held unbroken is never written and no rule is asked. One
+     * that cannot break is refused: the line after it would be written inside the comment.
+     */
     @Test
-    void aBoundaryBesideACommentHasToBreak() {
+    void aBoundaryBesideACommentIsTheCommentsLineOrARefusal() {
+        assertEquals("a\n// why\nb", render(TokenDoc.node(SyntaxKind.BLOCK_EXPR, TokenDoc.concat(
+                TokenDoc.token(SyntaxKind.IDENT, "a"),
+                TokenDoc.SOFT_GAP,
+                TokenDoc.comment("// why"),
+                TokenDoc.HARD_GAP,
+                TokenDoc.token(SyntaxKind.IDENT, "b"))), WIDE));
+
         assertThrows(IllegalStateException.class, () -> TokenDoc.node(SyntaxKind.BLOCK_EXPR,
                 TokenDoc.concat(
                         TokenDoc.token(SyntaxKind.IDENT, "a"),
-                        TokenDoc.SOFT_GAP,
+                        TokenDoc.GAP,
                         TokenDoc.comment("// why"),
                         TokenDoc.HARD_GAP,
                         TokenDoc.token(SyntaxKind.IDENT, "b"))).resolve());
-
-        String written = render(TokenDoc.node(SyntaxKind.BLOCK_EXPR, TokenDoc.concat(
-                TokenDoc.token(SyntaxKind.IDENT, "a"),
-                TokenDoc.HARD_GAP,
-                TokenDoc.comment("// why"),
-                TokenDoc.HARD_GAP,
-                TokenDoc.token(SyntaxKind.IDENT, "b"))), WIDE);
-        assertEquals("a\n// why\nb", written);
     }
 
     /** A boundary that always breaks has no unbroken form, so the rule is not asked about it — not

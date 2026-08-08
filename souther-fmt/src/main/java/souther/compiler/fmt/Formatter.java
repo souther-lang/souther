@@ -34,6 +34,18 @@ public final class Formatter {
 
     private static final int INDENT = 4;
 
+    private static final TokenDoc LPAREN = TokenDoc.token(SyntaxKind.LPAREN, "(");
+    private static final TokenDoc RPAREN = TokenDoc.token(SyntaxKind.RPAREN, ")");
+    private static final TokenDoc LBRACE = TokenDoc.token(SyntaxKind.LBRACE, "{");
+    private static final TokenDoc RBRACE = TokenDoc.token(SyntaxKind.RBRACE, "}");
+    private static final TokenDoc LBRACKET = TokenDoc.token(SyntaxKind.LBRACKET, "[");
+    private static final TokenDoc RBRACKET = TokenDoc.token(SyntaxKind.RBRACKET, "]");
+    private static final TokenDoc LT = TokenDoc.token(SyntaxKind.LT, "<");
+    private static final TokenDoc GT = TokenDoc.token(SyntaxKind.GT, ">");
+    private static final TokenDoc COMMA = TokenDoc.token(SyntaxKind.COMMA, ",");
+    private static final TokenDoc DOT = TokenDoc.token(SyntaxKind.DOT, ".");
+    private static final TokenDoc QUESTION = TokenDoc.token(SyntaxKind.QUESTION, "?");
+
     /** The canonical width. It applies to every breakable construct, a declaration's as much as an
      * expression's: a module header that lists more names than fit breaks the same way a call with
      * more arguments than fit does. A line wider than this is one whose content has no separator to
@@ -162,7 +174,7 @@ public final class Formatter {
             }
             parts.add(members.get(i).doc());
             if (i < members.size() - 1) {
-                parts.add(TokenDoc.token(SyntaxKind.COMMA, ","));
+                parts.add(COMMA);
             }
             parts.add(members.get(i).trailing());
         }
@@ -170,22 +182,26 @@ public final class Formatter {
     }
 
     /**
-     * Members between brackets. {@code boundary} is what sits just inside them — {@link TokenDoc#RAW_LINE}
-     * where the flat form has a space there ({@code exposing ( a, b )}, {@code T { a, b }}),
-     * {@link TokenDoc#RAW_SOFTLINE} where it does not ({@code f(a, b)}, {@code [a, b]}).
+     * Members between brackets. What sits just inside them is a boundary like any other: the
+     * layout may break there, and where it does not, what is written is the rule's answer for the
+     * bracket against what stands next to it. It used to be the caller's pick of one line or the
+     * other, which made {@code exposing ( a, b )} and {@code f(a, b)} two decisions instead of one.
+     *
+     * <p>{@code construct} is what the canonical form writes here, which is not always the node the
+     * source had: a definition written {@code let f = (x) -> x} is written back as
+     * {@code let f (x) = x}, and those brackets are a parameter list in what is read back.
      */
-    private static TokenDoc delimited(String open, TokenDoc boundary, List<Member> members, String close) {
+    private static TokenDoc delimited(SyntaxKind construct, TokenDoc open, List<Member> members,
+            TokenDoc close) {
         if (members.isEmpty()) {
-            // Brackets with nothing between them are written with nothing between them. Written here
-            // rather than left to the boundary: laid out flat, the two boundaries are what would go
-            // between the brackets, so a construct written open would put two spaces there and no
-            // rule would have said so. A construct holding only comments is not empty — the comments
-            // stand where a member would, and `withEndComments` hands them over as one.
-            return raw(open + close);
+            // Brackets with nothing between them hold one boundary and not two. Written as two —
+            // one just inside each bracket — what a construct written open put there was two
+            // spaces, and no rule had said so.
+            return TokenDoc.node(construct, concat(open, TokenDoc.GAP, close));
         }
-        return group(concat(raw(open),
-                nest(INDENT, concat(boundary, separated(members))),
-                boundary, raw(close)));
+        return TokenDoc.node(construct, group(concat(open,
+                nest(INDENT, concat(TokenDoc.SOFT_GAP, separated(members))),
+                TokenDoc.SOFT_GAP, close)));
     }
 
     /**
@@ -342,8 +358,8 @@ public final class Formatter {
      */
     private TokenDoc exampleRow(SyntaxNode n) {
         TokenDoc input = n.child(SyntaxKind.ARG_LIST)
-                .map(a -> delimited("(", RAW_SOFTLINE, exprDocs(a), ")"))
-                .orElse(raw("()"));
+                .map(a -> delimited(SyntaxKind.ARG_LIST, LPAREN, exprDocs(a), RPAREN))
+                .orElse(concat(LPAREN, TokenDoc.GAP, RPAREN));
         var with = n.child(SyntaxKind.WITH_CLAUSE);
         if (with.isPresent()) {
             List<Member> binds = new ArrayList<>();
@@ -389,7 +405,7 @@ public final class Formatter {
         var args = n.child(SyntaxKind.ARG_LIST);
         TokenDoc input;
         if (args.isPresent()) {
-            input = delimited("(", RAW_SOFTLINE, exprDocs(args.get()), ")");
+            input = delimited(SyntaxKind.ARG_LIST, LPAREN, exprDocs(args.get()), RPAREN);
         } else {
             input = ident("_");   // the default row
         }
@@ -417,7 +433,8 @@ public final class Formatter {
                     .map(rt -> concat(name, raw(" : "), retType(rt)))
                     .orElse(name)));
         }
-        return delimited("exposing (", RAW_LINE, withEndComments(clause, entries), ")");
+        return delimited(SyntaxKind.EXPOSING_CLAUSE, concat(TokenDoc.token(SyntaxKind.EXPOSING_KW, "exposing"), TokenDoc.GAP,
+                LPAREN), withEndComments(clause, entries), RPAREN);
     }
 
     private TokenDoc importDecl(SyntaxNode n) {
@@ -435,7 +452,7 @@ public final class Formatter {
             names.add(tokenMember(t, t, token(t)));
         }
         return concat(d, raw(" "),
-                delimited("(", RAW_LINE, withEndComments(list.get(), names), ")"));
+                delimited(SyntaxKind.NAME_LIST, LPAREN, withEndComments(list.get(), names), RPAREN));
     }
 
     // --- data ---
@@ -530,10 +547,10 @@ public final class Formatter {
             // No member wrote the opening brace, so the block writes it on a line of its own. This
             // is the body that holds only comments: `dataDef` writes a body holding nothing at all
             // as `{}` and never reaches here.
-            lines.add(TokenDoc.token(SyntaxKind.LBRACE, "{"));
+            lines.add(LBRACE);
         }
         lines.add(endOf(body));
-        lines.add(concat(HARD_GAP, TokenDoc.token(SyntaxKind.RBRACE, "}")));
+        lines.add(concat(HARD_GAP, RBRACE));
         return concat(lines);
     }
 
@@ -555,7 +572,7 @@ public final class Formatter {
 
     private TokenDoc field(SyntaxNode n) {
         TokenDoc d = concat(ident(firstIdent(n)), raw(": "), typeRef(typeChild(n)));
-        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, TokenDoc.token(SyntaxKind.QUESTION, "?")) : d;
+        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, QUESTION) : d;
     }
 
     // --- behavior ---
@@ -605,7 +622,7 @@ public final class Formatter {
             params.add(member(p, concat(ident(firstIdent(p)), raw(": "),
                     retType(p.child(SyntaxKind.RET_TYPE).orElseThrow()))));
         }
-        return delimited("(", RAW_SOFTLINE, withEndComments(n, params), ")");
+        return delimited(SyntaxKind.PARAM_LIST, LPAREN, withEndComments(n, params), RPAREN);
     }
 
     /** One stage of a pipeline, which is a name and is written as one. */
@@ -746,7 +763,7 @@ public final class Formatter {
                 params.add(member(c, pattern(c)));
             }
         }
-        return delimited("(", RAW_SOFTLINE, withEndComments(lambda, params), ")");
+        return delimited(SyntaxKind.FN_PARAM_LIST, LPAREN, withEndComments(lambda, params), RPAREN);
     }
 
     private TokenDoc fnParamList(SyntaxNode n) {
@@ -760,7 +777,7 @@ public final class Formatter {
             }
             params.add(member(p, d));
         }
-        return delimited("(", RAW_SOFTLINE, withEndComments(n, params), ")");
+        return delimited(SyntaxKind.FN_PARAM_LIST, LPAREN, withEndComments(n, params), RPAREN);
     }
 
     // --- types ---
@@ -780,7 +797,7 @@ public final class Formatter {
                 }
             }
         }
-        return concat(delimited("(", RAW_SOFTLINE, withEndComments(n, params), ")"),
+        return concat(delimited(SyntaxKind.FN_TYPE, LPAREN, withEndComments(n, params), RPAREN),
                 raw(" -> "), result);
     }
 
@@ -800,7 +817,7 @@ public final class Formatter {
         }
         TokenDoc d = cases.isEmpty() ? TokenDoc.NIL : chained(synthetic(cases.get(0)), rest);
         // `T?` in a core signature, the same mark a field carries
-        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, TokenDoc.token(SyntaxKind.QUESTION, "?")) : d;
+        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, QUESTION) : d;
     }
 
     private TokenDoc typeRef(SyntaxNode n) {
@@ -811,7 +828,7 @@ public final class Formatter {
                     elems.add(member(c, typeTerm(c)));
                 }
             }
-            return delimited("(", RAW_SOFTLINE, withEndComments(n, elems), ")");
+            return delimited(SyntaxKind.TUPLE_TYPE, LPAREN, withEndComments(n, elems), RPAREN);
         }
         var typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
@@ -828,7 +845,7 @@ public final class Formatter {
                 typeArgs.add(member(c, typeTerm(c)));
             }
         }
-        return concat(name, delimited("<", RAW_SOFTLINE, withEndComments(args.get(), typeArgs), ">"));
+        return concat(name, delimited(SyntaxKind.TYPE_ARGS, LT, withEndComments(args.get(), typeArgs), GT));
     }
 
     private static boolean isTypeNode(SyntaxKind k) {
@@ -846,14 +863,14 @@ public final class Formatter {
         return switch (n.kind()) {
             case LITERAL_EXPR -> token(firstMeaningfulToken(n));
             case VAR_EXPR -> ident(firstIdent(n));
-            case FIELD_ACCESS -> concat(expr(firstExprChild(n)), TokenDoc.token(SyntaxKind.DOT, "."), ident(lastIdent(n)));
-            case FIELD_GETTER -> concat(TokenDoc.token(SyntaxKind.DOT, "."), ident(lastIdent(n)));
+            case FIELD_ACCESS -> concat(expr(firstExprChild(n)), DOT, ident(lastIdent(n)));
+            case FIELD_GETTER -> concat(DOT, ident(lastIdent(n)));
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
             case UNARY_EXPR -> concat(TokenDoc.token(SyntaxKind.MINUS, "-"), expr(onlyExpr(n)));
             case PIPE_EXPR -> pipe(n);
-            case PAREN_EXPR -> concat(TokenDoc.token(SyntaxKind.LPAREN, "("), expr(onlyExpr(n)), TokenDoc.token(SyntaxKind.RPAREN, ")"));
-            case TUPLE_EXPR -> delimited("(", RAW_SOFTLINE, exprDocs(n), ")");
+            case PAREN_EXPR -> concat(LPAREN, expr(onlyExpr(n)), RPAREN);
+            case TUPLE_EXPR -> delimited(SyntaxKind.TUPLE_EXPR, LPAREN, exprDocs(n), RPAREN);
             case LIST_EXPR -> list(n);
             case LIST_COMP -> listComp(n);
             case IF_EXPR -> ifExpr(n);
@@ -884,13 +901,13 @@ public final class Formatter {
         SyntaxNode argList = n.child(SyntaxKind.ARG_LIST).orElse(null);
         if (args.isEmpty()) {
             List<Member> only = argList == null ? List.of() : withEndComments(argList, List.of());
-            return only.isEmpty() ? raw("()") : delimited("(", RAW_SOFTLINE, only, ")");
+            return delimited(SyntaxKind.ARG_LIST, LPAREN, only, RPAREN);
         }
         List<Member> argDocs = new ArrayList<>();
         for (SyntaxNode a : args) {
             argDocs.add(member(a, expr(a)));
         }
-        return delimited("(", RAW_SOFTLINE, withEndComments(argList, argDocs), ")");
+        return delimited(SyntaxKind.ARG_LIST, LPAREN, withEndComments(argList, argDocs), RPAREN);
     }
 
     private TokenDoc binary(SyntaxNode n) {
@@ -966,11 +983,7 @@ public final class Formatter {
     }
 
     private TokenDoc list(SyntaxNode n) {
-        List<Member> elems = exprDocs(n);
-        if (elems.isEmpty()) {
-            return raw("[]");   // exprDocs has already asked for what was written inside
-        }
-        return delimited("[", RAW_SOFTLINE, elems, "]");
+        return delimited(SyntaxKind.LIST_EXPR, LBRACKET, exprDocs(n), RBRACKET);
     }
 
     private TokenDoc listComp(SyntaxNode n) {
@@ -979,8 +992,8 @@ public final class Formatter {
         List<Member> guards = exprs.subList(1, exprs.size());
         // The `|` is the comprehension's and it is on the element's line, so it goes before the
         // comment that ends that line — as a comma does for a member of a list.
-        return group(concat(TokenDoc.token(SyntaxKind.LBRACKET, "["), element.doc(), raw(" |"), element.trailing(),
-                nest(INDENT, concat(RAW_LINE, separated(guards))), RAW_SOFTLINE, TokenDoc.token(SyntaxKind.RBRACKET, "]")));
+        return group(concat(LBRACKET, element.doc(), raw(" |"), element.trailing(),
+                nest(INDENT, concat(RAW_LINE, separated(guards))), RAW_SOFTLINE, RBRACKET));
     }
 
     private TokenDoc ifExpr(SyntaxNode n) {
@@ -1091,7 +1104,7 @@ public final class Formatter {
         }
         // `x -> e` keeps its bare parameter; anything parenthesised was written that way
         TokenDoc paramsDoc = n.token(SyntaxKind.LPAREN).isPresent()
-                ? delimited("(", RAW_SOFTLINE, withEndComments(n, params), ")")
+                ? delimited(SyntaxKind.LAMBDA_EXPR, LPAREN, withEndComments(n, params), RPAREN)
                 : concat(params.get(0).doc(), params.get(0).trailing());
         return concat(paramsDoc, raw(" -> "), expr(lastExprChild(n)));
     }
@@ -1119,7 +1132,7 @@ public final class Formatter {
             members.add(member(c, member));
         }
         return concat(ident(typeName), raw(" "),
-                delimited("{", RAW_LINE, withEndComments(n, members), "}"));
+                delimited(SyntaxKind.NEW_DATA_EXPR, LBRACE, withEndComments(n, members), RBRACE));
     }
 
     private TokenDoc block(SyntaxNode n) {
@@ -1140,8 +1153,8 @@ public final class Formatter {
             lines.add(concat(HARD_GAP, lead, d, afterOf(c)));
         }
         lines.add(endOf(n));
-        return concat(TokenDoc.token(SyntaxKind.LBRACE, "{"), afterToken(n.token(SyntaxKind.LBRACE)),
-                nest(INDENT, concat(lines)), HARD_GAP, TokenDoc.token(SyntaxKind.RBRACE, "}"));
+        return concat(LBRACE, afterToken(n.token(SyntaxKind.LBRACE)),
+                nest(INDENT, concat(lines)), HARD_GAP, RBRACE);
     }
 
     /** A binding pattern, written back as it was: a name, a tuple, a newtype opened by its
@@ -1158,10 +1171,10 @@ public final class Formatter {
                         elems.add(member(c, pattern(c)));
                     }
                 }
-                return delimited("(", RAW_SOFTLINE, withEndComments(n, elems), ")");
+                return delimited(SyntaxKind.PATTERN_TUPLE, LPAREN, withEndComments(n, elems), RPAREN);
             }
             case PATTERN_CTOR -> {
-                return concat(qualifiedName(n), TokenDoc.token(SyntaxKind.LPAREN, "("), pattern(patternChild(n)), TokenDoc.token(SyntaxKind.RPAREN, ")"));
+                return concat(qualifiedName(n), LPAREN, pattern(patternChild(n)), RPAREN);
             }
             case PATTERN_RECORD -> {
                 List<Member> fields = new ArrayList<>();
@@ -1174,7 +1187,7 @@ public final class Formatter {
                             ? concat(token(names.get(0)), raw(" = "), token(names.get(1)))
                             : token(names.get(0))));
                 }
-                return delimited("{", RAW_LINE, withEndComments(n, fields), "}");
+                return delimited(SyntaxKind.PATTERN_RECORD, LBRACE, withEndComments(n, fields), RBRACE);
             }
             default -> {
                 return ident(firstIdent(n));
@@ -2010,7 +2023,7 @@ public final class Formatter {
         for (SyntaxToken t : idents) {
             if (!parts.isEmpty()) {
                 parts.add(TokenDoc.GAP);
-                parts.add(TokenDoc.token(SyntaxKind.DOT, "."));
+                parts.add(DOT);
                 parts.add(TokenDoc.GAP);
             }
             parts.add(TokenDoc.token(t.kind(), t.text()));

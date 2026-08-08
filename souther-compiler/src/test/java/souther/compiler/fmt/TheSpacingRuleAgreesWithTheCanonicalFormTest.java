@@ -61,7 +61,7 @@ class TheSpacingRuleAgreesWithTheCanonicalFormTest {
                 : WhatGoesBetweenTwoTokensOnALineTest.adjacencies()) {
             reached.add(a.pair());
         }
-        assertEquals(165, reached.size(),
-                "the pairs the corpus writes: 39 tight, 117 spaced, 9 the construct decides");
+        assertEquals(179, reached.size(),
+                "the pairs the corpus writes: 44 tight, 126 spaced, 9 the construct decides");
     }
 }

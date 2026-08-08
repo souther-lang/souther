@@ -216,6 +216,31 @@ class WhatGoesBetweenTwoTokensOnALineTest {
                     | B { a } -> 2
                     | C -> 3
             """,
+            // one bracket closing or opening against another, which node-kind coverage does not
+            // reach on its own: a construct nested directly inside another's brackets
+            """
+            module m
+
+            let ints (a: Int): List<Int> = [1, 2]
+
+            let listed (a: Int): R = R { a = [1] }
+
+            let called (a: Int): R = R { a = f(1) }
+
+            let inside (a: Int): Int = f(R { a = 1 })
+
+            let nested (a: Int): R = R { a = S { b = 1 } }
+
+            let described (a: Int): Int = f("x")
+
+            let stringed (a: Int): R = R { a = "x" }
+
+            let flagged (a: Int): R = R { a = true }
+
+            let unflagged (a: Int): R = R { a = false }
+
+            let opened (a: Int): Int = call(({ a }) -> a)
+            """,
             """
             examples for m
 
@@ -427,12 +452,15 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             INT_LIT RPAREN
             LBRACE RBRACE
             LBRACKET IDENT
+            LBRACKET INT_LIT
             LBRACKET LPAREN
             LBRACKET RBRACKET
             LPAREN INT_LIT
+            LPAREN LBRACE
             LPAREN LBRACKET
             LPAREN LPAREN
             LPAREN RPAREN
+            LPAREN STRING_LIT
             LPAREN TYPEVAR
             LT LPAREN
             LT TYPEVAR
@@ -440,6 +468,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             QUESTION COMMA
             QUESTION RPAREN
             RBRACE COMMA
+            RBRACE RPAREN
             RBRACKET COMMA
             RBRACKET RPAREN
             RPAREN COLON
@@ -447,6 +476,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             RPAREN RBRACKET
             RPAREN RPAREN
             SPREAD IDENT
+            STRING_LIT RPAREN
             TRUE_KW COMMA
             TYPEVAR COMMA
             TYPEVAR GT
@@ -473,6 +503,9 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ASSIGN LBRACKET
             ASSIGN LPAREN
             ASSIGN MINUS
+            ASSIGN STRING_LIT
+            ASSIGN TRUE_KW
+            ASSIGN FALSE_KW
             AS_KW IDENT
             BEHAVIOR_KW IDENT
             COLON IDENT
@@ -498,6 +531,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             EQ INT_LIT
             EXPOSING_KW LPAREN
             FALSE_KW ELSE_KW
+            FALSE_KW RBRACE
             GE IDENT
             GE INT_LIT
             GT ASSIGN
@@ -550,10 +584,13 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             PLUSPLUS IDENT
             PLUSPLUS LBRACKET
             RBRACE ARROW
+            RBRACE RBRACE
             RBRACE ASSIGN
             RBRACE AS_KW
             RBRACKET ELSE_KW
+            RBRACKET RBRACE
             RPAREN ARROW
+            RPAREN RBRACE
             RPAREN ASSIGN
             RPAREN AS_KW
             RPAREN ELSE_KW
@@ -563,7 +600,9 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             RPAREN WITH_KW
             STAR IDENT
             STRING_LIT COLON
+            STRING_LIT RBRACE
             THEN_KW DECIMAL_LIT
+            TRUE_KW RBRACE
             THEN_KW FALSE_KW
             THEN_KW IDENT
             THEN_KW INT_LIT

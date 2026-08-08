@@ -30,7 +30,8 @@ final class Gaps {
         List<String> answers = new ArrayList<>();
         for (int i = 0; i < slots.size(); i++) {
             if (slots.get(i) instanceof GapSlot gap) {
-                answers.add(gap.policy() == TokenDoc.Break.ALWAYS ? null : spell(slots, i));
+                answers.add(gap.policy() == TokenDoc.Break.ALWAYS
+                        ? null : spell(slots, i, gap.policy()));
             }
         }
         return lower(doc, answers, new int[1]);
@@ -84,10 +85,20 @@ final class Gaps {
         }
     }
 
-    /** What is written at the boundary at {@code i} where the layout does not break it. */
-    private static String spell(List<Slot> slots, int i) {
-        TokenSlot left = neighbour(slots, i, -1);
-        TokenSlot right = neighbour(slots, i, 1);
+    /**
+     * What is written at the boundary at {@code i} where the layout does not break it.
+     *
+     * <p>Nothing, where a comment stands on either side of it. A comment cannot share the line
+     * after it, so a group holding one is never laid out flat and this boundary is one the output
+     * always breaks; what it would have held unbroken is not written, and the rule is not asked a
+     * question about an interval that is the comment's.
+     */
+    private static String spell(List<Slot> slots, int i, TokenDoc.Break policy) {
+        TokenSlot left = neighbour(slots, i, -1, policy);
+        TokenSlot right = neighbour(slots, i, 1, policy);
+        if (left == null || right == null) {
+            return Spacing.TIGHT;
+        }
         Within joining = deepestHolding(left.within(), right.within());
         if (joining == null) {
             throw new IllegalStateException(
@@ -98,20 +109,32 @@ final class Gaps {
     }
 
     /**
-     * The code token on one side of the boundary at {@code i}. There has to be one. A comment on
-     * that side means the interval is the comment's line rather than this rule's, and another
-     * boundary there means a construct wrote two where its tokens have one — which is how
-     * {@code exposing (  )} came to hold two spaces.
+     * The code token on one side of the boundary at {@code i}. There has to be one.
+     *
+     * <p>Null where a comment stands on that side and the boundary may break, and refused where it
+     * may not. A comment cannot share the line after it, so a group holding one is never laid out
+     * flat: a boundary that may break and has a comment beside it is one the output always breaks,
+     * and the answer this returns for it is never written. A boundary that cannot break has no such
+     * answer — the line would go on inside the comment — and a construct that wrote one there is
+     * writing something the reader cannot read.
+     *
+     * <p>Another boundary on that side means a construct wrote two where its tokens have one, which
+     * is how {@code exposing (  )} came to hold two spaces.
      */
-    private static TokenSlot neighbour(List<Slot> slots, int i, int step) {
+    private static TokenSlot neighbour(List<Slot> slots, int i, int step, TokenDoc.Break policy) {
         for (int j = i + step; j >= 0 && j < slots.size(); j += step) {
             switch (slots.get(j)) {
                 case TokenSlot t -> {
                     return t;
                 }
-                case TriviaSlot _ -> throw new IllegalStateException(
-                        "a comment stands beside a boundary that does not always break; what is"
-                                + " written across a comment is its line's and not this rule's");
+                case TriviaSlot _ -> {
+                    if (policy != TokenDoc.Break.MAY) {
+                        throw new IllegalStateException(
+                                "a comment stands beside a boundary that cannot break; the line"
+                                        + " after it would be written inside the comment");
+                    }
+                    return null;   // the comment's line, and this boundary breaks
+                }
                 case GapSlot _ -> throw new IllegalStateException(
                         "two boundaries meet where their tokens have one adjacency");
                 case RawSlot _ -> throw new IllegalStateException(

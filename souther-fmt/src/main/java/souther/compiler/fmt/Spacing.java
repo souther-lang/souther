@@ -156,12 +156,20 @@ final class Spacing {
             INT_LIT RPAREN
             LBRACE RBRACE
             LBRACKET IDENT
+            LBRACKET INT_LIT
+            LBRACKET STRING_LIT
             LBRACKET LPAREN
             LBRACKET RBRACKET
             LPAREN INT_LIT
+            LPAREN DECIMAL_LIT
+            DECIMAL_LIT RPAREN
+            LPAREN DOT
+            LPAREN MINUS
+            LPAREN LBRACE
             LPAREN LBRACKET
             LPAREN LPAREN
             LPAREN RPAREN
+            LPAREN STRING_LIT
             LPAREN TYPEVAR
             LT LPAREN
             LT TYPEVAR
@@ -169,6 +177,8 @@ final class Spacing {
             QUESTION COMMA
             QUESTION RPAREN
             RBRACE COMMA
+            RBRACE RBRACKET
+            RBRACE RPAREN
             RBRACKET COMMA
             RBRACKET RPAREN
             RPAREN COLON
@@ -176,6 +186,9 @@ final class Spacing {
             RPAREN RBRACKET
             RPAREN RPAREN
             SPREAD IDENT
+            STRING_LIT RPAREN
+            STRING_LIT RBRACKET
+            TRUE_KW RPAREN
             TRUE_KW COMMA
             TYPEVAR COMMA
             TYPEVAR GT
@@ -203,6 +216,9 @@ final class Spacing {
             ASSIGN LBRACKET
             ASSIGN LPAREN
             ASSIGN MINUS
+            ASSIGN STRING_LIT
+            ASSIGN TRUE_KW
+            ASSIGN FALSE_KW
             AS_KW IDENT
             BEHAVIOR_KW IDENT
             COLON IDENT
@@ -228,6 +244,7 @@ final class Spacing {
             EQ INT_LIT
             EXPOSING_KW LPAREN
             FALSE_KW ELSE_KW
+            FALSE_KW RBRACE
             GE IDENT
             GE INT_LIT
             GT ASSIGN
@@ -280,10 +297,13 @@ final class Spacing {
             PLUSPLUS IDENT
             PLUSPLUS LBRACKET
             RBRACE ARROW
+            RBRACE RBRACE
             RBRACE ASSIGN
             RBRACE AS_KW
             RBRACKET ELSE_KW
+            RBRACKET RBRACE
             RPAREN ARROW
+            RPAREN RBRACE
             RPAREN ASSIGN
             RPAREN AS_KW
             RPAREN ELSE_KW
@@ -293,7 +313,9 @@ final class Spacing {
             RPAREN WITH_KW
             STAR IDENT
             STRING_LIT COLON
+            STRING_LIT RBRACE
             THEN_KW DECIMAL_LIT
+            TRUE_KW RBRACE
             THEN_KW FALSE_KW
             THEN_KW IDENT
             THEN_KW INT_LIT
