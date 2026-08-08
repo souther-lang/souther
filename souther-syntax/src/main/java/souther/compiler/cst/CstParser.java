@@ -659,6 +659,9 @@ public final class CstParser {
         bump();   // with
         withBinding();
         while (eat(SyntaxKind.COMMA)) {
+            if (!at(SyntaxKind.IDENT)) {
+                break;   // a trailing comma is consumed and ends the clause
+            }
             withBinding();
         }
         finish();

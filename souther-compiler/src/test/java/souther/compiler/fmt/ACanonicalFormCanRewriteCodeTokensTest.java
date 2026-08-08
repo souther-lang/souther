@@ -28,7 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <ul>
  *   <li>a token is <b>removed</b> — a trailing comma, which every comma-separated list may carry and
- *       the canonical form writes none of;
+ *       the canonical form writes none of. Each of those lists is a row here: the grammar admits one
+ *       in fourteen constructs, which is every loop in {@code CstParser} that reads a comma;
  *   <li>a token is <b>added</b> — the {@code |} in front of a match's first arm, which the grammar
  *       makes optional and the canonical form always writes;
  *   <li>tokens are <b>rewritten</b> — a definition whose right-hand side is a lambda is written with
@@ -78,6 +79,43 @@ class ACanonicalFormCanRewriteCodeTokensTest {
                 new Rewrite("a trailing comma in a product's fields", REMOVED,
                         "module m\n\ndata R =\n    { a: Int,\n    }\n",
                         "module m\n\ndata R =\n    { a: Int\n    }\n"),
+                new Rewrite("a trailing comma in a tuple", REMOVED,
+                        "module m\n\nlet t = (1, 2,)\n",
+                        "module m\n\nlet t = (1, 2)\n"),
+                new Rewrite("a trailing comma in a tuple type", REMOVED,
+                        "module m\n\nlet f (a: (Int, Int,)): Int = 1\n",
+                        "module m\n\nlet f (a: (Int, Int)): Int = 1\n"),
+                new Rewrite("a trailing comma in a record literal's fields", REMOVED,
+                        "module m\n\ndata R =\n    { a: Int\n    }\n\nlet r = R { a = 1, }\n",
+                        "module m\n\ndata R =\n    { a: Int\n    }\n\nlet r = R { a = 1 }\n"),
+                new Rewrite("a trailing comma in a type argument list", REMOVED,
+                        "module m\n\nlet f (a: Map<String, Int,>): Int = 1\n",
+                        "module m\n\nlet f (a: Map<String, Int>): Int = 1\n"),
+                new Rewrite("a trailing comma in a lambda's parameters", REMOVED,
+                        "module m\n\nlet f: (Int, Int) -> Int = (x, y,) -> x\n",
+                        "module m\n\nlet f: (Int, Int) -> Int = (x, y) -> x\n"),
+                new Rewrite("a trailing comma in a `constructs` name list", REMOVED,
+                        "module m exposing (b)\n\ndata R =\n    { a: Int\n    }\n\nbehavior b : (n: Int)"
+                                + " -> R\n    constructs R,\n\nlet b (n) = R { a = n }\n",
+                        "module m exposing ( b )\n\ndata R =\n    { a: Int\n    }\n\nbehavior b :"
+                                + " (n: Int) -> R\n    constructs R\n\nlet b (n) = R { a = n }\n"),
+                new Rewrite("a trailing comma in a behavior's parameters", REMOVED,
+                        "module m exposing (b)\n\ndata R =\n    { a: Int\n    }\n\nbehavior b :"
+                                + " (n: Int,) -> R\n    constructs R\n\nlet b (n) = R { a = n }\n",
+                        "module m exposing ( b )\n\ndata R =\n    { a: Int\n    }\n\nbehavior b :"
+                                + " (n: Int) -> R\n    constructs R\n\nlet b (n) = R { a = n }\n"),
+                new Rewrite("a trailing comma in an example row's arguments", REMOVED,
+                        "module m exposing (b)\n\ndata R =\n    { a: Int\n    }\n\nbehavior b :"
+                                + " (n: Int) -> R\n    constructs R\n\nlet b (n) = R { a = n }\n\n"
+                                + "example b\n    | (1,) -> R { a = 1 }\n",
+                        "module m exposing ( b )\n\ndata R =\n    { a: Int\n    }\n\nbehavior b :"
+                                + " (n: Int) -> R\n    constructs R\n\nlet b (n) = R { a = n }\n\n"
+                                + "example b\n    | (1) -> R { a = 1 }\n"),
+                new Rewrite("a trailing comma in an example row's `with` bindings", REMOVED,
+                        "examples for m\n\nexample helper\n"
+                                + "    | (1) with dep = two, other = three, -> 2\n",
+                        "examples for m\n\nexample helper\n"
+                                + "    | (1) with dep = two, other = three -> 2\n"),
 
                 new Rewrite("the bar in front of a match's first arm", ADDED,
                         "module m\n\nlet f (a: Int): Int =\n    match a with\n        A -> 1\n        | B -> 2\n",
