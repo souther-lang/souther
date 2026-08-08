@@ -81,10 +81,9 @@ class TheCanonicalFormMeansWhatTheSourceMeantTest {
 
     /**
      * A definition that writes a function type is a value of that type, and its lambda stays on the
-     * right of {@code =}: lifting the parameters out would leave the written type describing
-     * something the definition is no longer. The frontend reads it that way, so the canonical form
-     * has to write it that way — and since a lambda's own parameters cannot carry types, this is the
-     * only way to write a typed function value at all.
+     * right of {@code =}: writing the parameters on the left would leave the written type describing
+     * something the definition is not. That one is the specification's, not the canonical form's —
+     * the two spellings are two definitions, so there is nothing here to choose between.
      */
     @Test
     void aDefinitionThatWritesAFunctionTypeKeepsItsLambda() {
@@ -96,7 +95,11 @@ class TheCanonicalFormMeansWhatTheSourceMeantTest {
         assertEquals(source, Formatter.format(source));
     }
 
-    /** And one that writes no type is the parameter-list form, which is what moves. */
+    /**
+     * And a definition that writes no type is written with its parameters on the left. Which of the
+     * two spellings a definition has is what the specification settles; which one the canonical form
+     * writes is settled here, and this is the whole of it.
+     */
     @Test
     void andOneThatWritesNoTypeIsWrittenWithItsParametersOnTheLeft() {
         String source = """
