@@ -7,7 +7,7 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.BoundaryScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -19,7 +19,6 @@ import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
-import net.unit8.raoh.decode.builtin.StringDecoder;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
@@ -122,7 +121,13 @@ public final class FixtureReader {
 
     /** One written fixture, decoded against the type of the position it is written in. */
     Object built(Ast.Expr written, Type type) {
-        return decode(type, raw(written, type));
+        return built(written, FixtureShape.of(type, symbols));
+    }
+
+    /** The same, where the position's shape has already been settled — which is what a caller that
+     *  holds one does rather than handing back the type it was admitted from. */
+    Object built(Ast.Expr written, FixtureShape shape) {
+        return decode(shape, raw(written, shape.type()));
     }
 
     /**
@@ -955,9 +960,10 @@ public final class FixtureReader {
 
     // --- decode a raw value into the parameter/expected type ----------------------------------
 
-    private Object decode(Type type, Object rawValue) {
+    private Object decode(FixtureShape shape, Object rawValue) {
+        Type type = shape.type();
         Object raw = neutral.shaped(rawValue, type);
-        Decoder<Object, ?> decoder = decoderFor(type);
+        Decoder<Object, ?> decoder = decoderFor(shape);
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
@@ -1002,102 +1008,87 @@ public final class FixtureReader {
     }
 
     @SuppressWarnings("unchecked")
-    private Decoder<Object, ?> decoderFor(Type type) {
-        if (type instanceof Type.Prim prim) {
-            return switch (prim) {
-                case STRING -> ObjectDecoders.string();
-                case INT -> ObjectDecoders.long_();
-                case BOOL -> ObjectDecoders.bool();
-                case DECIMAL -> ObjectDecoders.decimal();
-                case DATE -> ObjectDecoders.date();
-                case DATETIME -> ObjectDecoders.dateTime();
-                case RAW -> throw new FixtureException("the Raw type cannot be an example input");
-            };
-        }
-        if (type instanceof Type.Ref ref) {
+    private Decoder<Object, ?> decoderFor(FixtureShape shape) {
+        return switch (shape) {
+            case FixtureShape.Scalar s -> leafDecoder(s.scalar());
             // An imported type's decoder lives in its declaring module's package, not this one's.
-            try {
-                Class<?> c = loader.loadClass(ref.name().qualified());
-                return (Decoder<Object, ?>) staticCodec(c, "decoder");
-            } catch (ReflectiveOperationException _) {
-                throw new FixtureException("no decoder for `" + ref.name().name() + "`");
-            }
-        }
-        // A collection is decoded the way a data's collection field is, built from the same pieces the
-        // derived decoder is (spec 10.2): a list over its element decoder, a set as a list
-        // deduplicated, a map over its value decoder with the keys remapped through the key type.
-        // Without this a collection could only reach an example inside a data, so a behavior taking
-        // one had to be given a wrapper that exists for no other reason (issue #97).
-        if (type instanceof Type.ListOf list) {
-            return ObjectDecoders.list(decoderFor(list.element()));
-        }
-        if (type instanceof Type.SetOf set) {
-            return ObjectDecoders.list(decoderFor(set.element()))
-                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
-        }
-        if (type instanceof Type.MapOf map) {
-            return rekeyed(ObjectDecoders.map(decoderFor(map.value())), map.key());
-        }
-        throw new FixtureException("`" + Type.show(type) + "` is not supported as an example value yet");
-    }
-
-    /**
-     * A map's keys, built through the key type after the values decode — so the key's invariant runs
-     * and a fixture that breaks it is reported instead of reaching the behavior as a bare string.
-     * Every key is tried and its failures merged, as the derived decoder's rekey helper does, so a
-     * fixture with two bad keys names both rather than stopping at the first, and two keys that are
-     * one key once built are refused rather than collapsed.
-     *
-     * <p>Every key kind is rekeyed, not the named ones alone. A map that crosses may also be keyed by
-     * a temporal or by a plain {@code String}, and a key left as the text the decoded map carried is
-     * a key the behavior cannot look up by the type it was declared with.
-     */
-    private Decoder<Object, ?> rekeyed(Decoder<Object, ?> values, Type key) {
-        Decoder<Object, ?> keyDecoder = keyDecoderFor(key);
-        return values.flatMapWithPath((decoded, path) -> {
-            Map<Object, Object> out = new LinkedHashMap<>();
-            Issues issues = Issues.EMPTY;
-            for (Map.Entry<?, ?> entry : ((Map<?, ?>) decoded).entrySet()) {
-                net.unit8.raoh.Path at = path.append(String.valueOf(entry.getKey()));
-                Result<?> k = keyDecoder.decode(entry.getKey(), at);
-                switch (k) {
-                    case Ok<?>(var decodedKey) -> {
-                        if (out.containsKey(decodedKey)) {
-                            issues = issues.merge(((Err<?>) Result.fail(at, "duplicate_key",
-                                    "two keys are the same key once decoded")).issues());
-                        } else {
-                            out.put(decodedKey, entry.getValue());
-                        }
-                    }
-                    case Err<?>(var found) -> issues = issues.merge(found);
+            case FixtureShape.Nominal n -> {
+                try {
+                    Class<?> c = loader.loadClass(n.name().qualified());
+                    yield (Decoder<Object, ?>) staticCodec(c, "decoder");
+                } catch (ReflectiveOperationException _) {
+                    throw new FixtureException("no decoder for `" + n.name().name() + "`");
                 }
             }
-            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
-        });
-    }
-
-    /** The decoder for one boundary map key, over the text the decoded map carried. Which key it is
-     *  is the checker's rule to say, asked here rather than written out again — a fixture is read
-     *  from a written expression, not from the codec IR the witness travels in. This is not
-     *  {@link #decoderFor}: there a {@code Date} is handed over already parsed, and in key position
-     *  it is the text that arrives. */
-    private Decoder<Object, ?> keyDecoderFor(Type key) {
-        BoundaryMapKey classified = TypeOps.classifyConcreteMapKey(key, symbols);
-        if (classified == null) {
-            throw new FixtureException("`" + Type.show(key) + "` cannot key a Map that crosses");
-        }
-        return switch (classified) {
-            case BoundaryMapKey.StringNewtype n -> decoderFor(Type.ref(n.name()));
-            case BoundaryMapKey.UnitEnum e -> decoderFor(Type.ref(e.name()));
-            case BoundaryMapKey.Text _ -> keyText();
-            case BoundaryMapKey.Date _ -> keyText().date();
-            case BoundaryMapKey.DateTime _ -> keyText().dateTime();
+            // A collection is decoded the way a data's collection field is, built from the same
+            // pieces the derived decoder is (spec 10.2): a list over its element decoder, a set as a
+            // list deduplicated, a map over its value decoder with the keys read by their own.
+            case FixtureShape.ListOf l -> ObjectDecoders.list(decoderFor(l.element()));
+            case FixtureShape.SetOf s -> ObjectDecoders.list(decoderFor(s.element()))
+                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
+            case FixtureShape.MapOf m -> mapDecoder(m.key(), m.value());
         };
     }
 
-    /** The string leaf a key's text is read through, canonicalizing as every arriving text is. */
-    private static StringDecoder<Object> keyText() {
-        return ObjectDecoders.string().normalize();
+    /** The leaf decoder for a scalar. A fixture hands over the value it wrote — a temporal arrives
+     *  parsed, since that is what the checker read — so these are the neutral-source decoders and
+     *  not the ones that parse text. */
+    private static Decoder<Object, ?> leafDecoder(BoundaryScalar scalar) {
+        return switch (scalar) {
+            case STRING -> ObjectDecoders.string();
+            case INT -> ObjectDecoders.long_();
+            case BOOL -> ObjectDecoders.bool();
+            case DECIMAL -> ObjectDecoders.decimal();
+            case DATE -> ObjectDecoders.date();
+            case DATETIME -> ObjectDecoders.dateTime();
+        };
+    }
+
+    /**
+     * The decoder for a map a fixture writes.
+     *
+     * <p>Its own rather than the neutral-source map decoder wrapped in a rekey. That one reads an
+     * object of strings, which is the form a map crosses a boundary as; a fixture writes a list of
+     * pairs and what it hands over is a map of the keys themselves. Reading it through the string
+     * form was what made a {@code Map<Int, Int>} unbuildable — the last of the boundary's
+     * assumptions standing in a position that crosses nothing.
+     *
+     * <p>Both sides go through their own decoder, so a key's invariant runs where a key is written
+     * and a value's where a value is. Every entry is tried and the failures merged, so a fixture
+     * with two bad entries names both rather than stopping at the first, and two keys that are one
+     * key once decoded are refused rather than collapsed.
+     */
+    private Decoder<Object, ?> mapDecoder(FixtureShape key, FixtureShape value) {
+        Decoder<Object, ?> keys = decoderFor(key);
+        Decoder<Object, ?> values = decoderFor(value);
+        return (raw, path) -> {
+            if (!(raw instanceof Map<?, ?> entries)) {
+                return Result.fail(path, "not_a_map",
+                        "a `Map` fixture is a list of (key, value) pairs, e.g. [ (\"apple\", 3) ]");
+            }
+            Map<Object, Object> out = new LinkedHashMap<>();
+            Issues issues = Issues.EMPTY;
+            for (Map.Entry<?, ?> entry : entries.entrySet()) {
+                net.unit8.raoh.Path at = path.append(String.valueOf(entry.getKey()));
+                Result<?> k = keys.decode(entry.getKey(), at);
+                Result<?> v = values.decode(entry.getValue(), at);
+                if (k instanceof Err<?>(var badKey)) {
+                    issues = issues.merge(badKey);
+                }
+                if (v instanceof Err<?>(var badValue)) {
+                    issues = issues.merge(badValue);
+                }
+                if (k instanceof Ok<?>(var decodedKey) && v instanceof Ok<?>(var decodedValue)) {
+                    if (out.containsKey(decodedKey)) {
+                        issues = issues.merge(((Err<?>) Result.fail(at, "duplicate_key",
+                                "two keys are the same key once decoded")).issues());
+                    } else {
+                        out.put(decodedKey, decodedValue);
+                    }
+                }
+            }
+            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
+        };
     }
 
     /** One decoded input, in the form the compiler owns. Never throws: a value that cannot be read is
