@@ -223,12 +223,12 @@ public final class Formatter {
         return new Member(concat(aboveOf(owner), doc), afterOf(owner));
     }
 
+    /** The same for a head the grammar writes as a token — an example row's description, a match
+     * arm's pattern. Nothing is read above it: a comment written above one of those, or between the
+     * {@code |} and the token itself, is about the row, and the row writes it above its own line. So
+     * this head carries only what ends the line it opens. */
     private Member head(SyntaxToken owner, Doc doc) {
-        List<Doc> lead = new ArrayList<>();
-        for (Doc c : aboveCase(owner)) {
-            lead.add(concat(c, HARDLINE));
-        }
-        return new Member(concat(concat(lead), doc), afterCase(owner));
+        return new Member(doc, afterCase(owner));
     }
 
     /** A head the source has nothing at — a `fake` row's default `_`. */
@@ -274,7 +274,10 @@ public final class Formatter {
         return !header;
     }
 
-    private static boolean isTopLevel(SyntaxKind k) {
+    /** The kinds {@link #file} writes as items of the file, and so the kinds the separation between
+     * two items is a function of. Reachable from a test so that the table of what goes between two
+     * of them can be asked whether it covers every pair rather than the pairs someone thought of. */
+    static boolean isTopLevel(SyntaxKind k) {
         return k == SyntaxKind.MODULE_HEADER || k == SyntaxKind.IMPORT_DECL
                 || k == SyntaxKind.DATA_DEF || k == SyntaxKind.BEHAVIOR_DEF || k == SyntaxKind.FN_DEF
                 || k == SyntaxKind.EXAMPLE_DEF || k == SyntaxKind.EXAMPLES_FILE_HEADER
