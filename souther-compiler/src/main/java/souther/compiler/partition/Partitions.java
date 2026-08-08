@@ -10,6 +10,7 @@ import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -380,11 +381,6 @@ public final class Partitions {
                         Endpoint.upper(max, projected.max()));
     }
 
-    /** An end's number, or null where there is no end. */
-    private static BigDecimal valueOf(Endpoint end) {
-        return end == null ? null : end.value();
-    }
-
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
      * {@code value} is the same position it is. */
     private static Map<String, Type> productFields(Type type, Symbols symbols) {
@@ -608,11 +604,11 @@ public final class Partitions {
         if (type == null) {
             return List.of();
         }
-        if (type == Type.INT) {
-            return List.of(FixtureTemplate.integer(admissible(within, true).longValueExact()));
-        }
-        if (type == Type.DECIMAL) {
-            return List.of(FixtureTemplate.decimal(admissible(within, false)));
+        if (type == Type.INT || type == Type.DECIMAL) {
+            BigDecimal value = inside(within, type == Type.DECIMAL);
+            return value == null ? List.of()
+                    : List.of(type == Type.INT ? FixtureTemplate.integer(value.longValueExact())
+                            : FixtureTemplate.decimal(value));
         }
         if (type == Type.STRING) {
             return List.of(FixtureTemplate.string("x"));
@@ -655,10 +651,9 @@ public final class Partitions {
      * The same, with a second value offered at a numeric position.
      *
      * <p>One value is enough only where the rules that decide it are the rules the projection holds.
-     * A disequality is a hole no range keeps, a strict bound over the decimals is recorded as the
-     * non-strict one, and a form that is neither an interval nor a difference is not recorded at all —
-     * so the end a projection names can be the one value the rules refuse, and a position offering
-     * only that has nothing left to try.
+     * A disequality is a hole no range keeps, and a form that is neither an interval nor a difference
+     * is not recorded at all — so the value a range gives up can be one those rules refuse, and a
+     * position offering only that has nothing left to try.
      *
      * <p>Displaced and not invented. A whole number has a next one; a decimal between two ends has a
      * midpoint, and where it has no second end it gets no second value, because an epsilon is a value
@@ -700,19 +695,29 @@ public final class Partitions {
 
     /** A second number of a range, or null where the type has none to give. */
     private static BigDecimal displaced(NumericDomain.Bounds range, boolean whole) {
-        BigDecimal from = admissible(range, whole);
-        BigDecimal min = range == null ? null : valueOf(range.min());
-        BigDecimal max = range == null ? null : valueOf(range.max());
+        BigDecimal from = inside(range, !whole);
+        if (from == null) {
+            return null;
+        }
+        Endpoint min = range == null ? null : range.min();
+        Endpoint max = range == null ? null : range.max();
         if (!whole) {
-            // No smallest step, so the only second value a range names is one inside both its ends.
-            return min == null || max == null ? null : midpoint(min, max);
+            // No smallest step, so the only second value a range names is one inside both its ends —
+            // and the one already on offer is that value where the range is open below.
+            return min == null || max == null || !min.inclusive() ? null
+                    : Endpoint.valueBetween(Endpoint.exclusive(min.value()), max, Granularity.DENSE);
         }
         BigDecimal up = from.add(BigDecimal.ONE);
-        if (max == null || up.compareTo(max) <= 0) {
+        if (holdsNumber(range, up)) {
             return up;
         }
         BigDecimal down = from.subtract(BigDecimal.ONE);
-        return min == null || down.compareTo(min) >= 0 ? down : null;
+        return holdsNumber(range, down) ? down : null;
+    }
+
+    /** Whether a range holds a number, with no range holding everything. */
+    private static boolean holdsNumber(NumericDomain.Bounds range, BigDecimal value) {
+        return range == null || range.admits(value);
     }
 
     /**
@@ -741,10 +746,10 @@ public final class Partitions {
 
         Bounds own = boundsOf(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
-        if (bounds != null && !bounds.isEmpty()) {
-            candidates.add(own.decimal()
-                    ? FixtureTemplate.decimal(inside(bounds))
-                    : FixtureTemplate.integer(inside(bounds).longValueExact()));
+        BigDecimal held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.decimal());
+        if (held != null) {
+            candidates.add(own.decimal() ? FixtureTemplate.decimal(held)
+                    : FixtureTemplate.integer(held.longValueExact()));
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
@@ -766,59 +771,12 @@ public final class Partitions {
         return List.copyOf(once.values());
     }
 
-    /**
-     * A number the position can hold, for a position whose type says nothing about which one.
-     *
-     * <p>The lower end where there is one, the upper where there is only that, and zero where the
-     * position is left open — which is what a type with no rules has always offered here. The same
-     * order a newtype's own candidate is chosen in: the low end is inside whatever high end there is,
-     * so one rule picks a value for both shapes of range.
-     *
-     * <p>{@code whole} takes an end in to the nearest whole number inside it. A projection divides,
-     * so what it leaves an {@code Int} can have a fraction on it that no {@code Int} has.
-     */
-    private static BigDecimal admissible(NumericDomain.Bounds within, boolean whole) {
-        if (within == null) {
-            return BigDecimal.ZERO;
-        }
-        if (within.min() != null) {
-            BigDecimal min = within.min().value();
-            return whole ? min.setScale(0, java.math.RoundingMode.CEILING) : min;
-        }
-        if (within.max() != null) {
-            BigDecimal max = within.max().value();
-            return whole ? max.setScale(0, java.math.RoundingMode.FLOOR) : max;
-        }
-        return BigDecimal.ZERO;
-    }
-
-    /**
-     * A number the bound admits.
-     *
-     * <p>An edge the range holds is the value taken, because it is inside whatever other edge there
-     * is and it is the value a boundary wants written anyway. An edge the range stops short of is not
-     * one, and over a dense order there is no value beside it to take instead — so what is taken is a
-     * value from inside: between the two ends where both are known, and a step in from the only one
-     * where there is only one. Nothing about that step is the nearest admitted value; it is one the
-     * rules admit, chosen the same way every time, which is all a candidate has to be.
-     */
-    private static BigDecimal inside(NumericDomain.Bounds bounds) {
-        Endpoint min = bounds.min();
-        Endpoint max = bounds.max();
-        if (min != null && min.inclusive()) {
-            return min.value();
-        }
-        if (min == null) {
-            return max == null ? BigDecimal.ZERO
-                    : max.inclusive() ? max.value() : max.value().subtract(BigDecimal.ONE);
-        }
-        BigDecimal between = max == null ? null : midpoint(min.value(), max.value());
-        return between != null ? between : min.value().add(BigDecimal.ONE);
-    }
-
-    /** The value halfway between two, which every decimal range with two ends has. */
-    private static BigDecimal midpoint(BigDecimal min, BigDecimal max) {
-        return min.compareTo(max) >= 0 ? null : min.add(max).divide(BigDecimal.valueOf(2));
+    /** A number the position holds, or null where it holds none. The ends decide it, so nothing here
+     * reads one of them as a number and loses whether the range reaches it. */
+    private static BigDecimal inside(NumericDomain.Bounds within, boolean decimal) {
+        Granularity spacing = decimal ? Granularity.DENSE : Granularity.DISCRETE;
+        return within == null ? BigDecimal.ZERO
+                : Endpoint.valueBetween(within.min(), within.max(), spacing);
     }
 
     /**
@@ -844,7 +802,11 @@ public final class Partitions {
         }
         Bounds own = boundsOf(type, symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
+        // The far end has to be a value the position holds. Where the range stops short of it there
+        // is nothing there to hold back, and a dense order has no value beside it to hold back
+        // instead — what is inside is already what the first tier offers.
         if (bounds == null || bounds.min() == null || bounds.max() == null
+                || !bounds.max().inclusive()
                 || bounds.max().value().compareTo(bounds.min().value()) == 0) {
             return List.of();
         }

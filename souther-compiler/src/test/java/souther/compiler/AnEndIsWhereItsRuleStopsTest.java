@@ -177,6 +177,37 @@ class AnEndIsWhereItsRuleStopsTest {
                 () -> "so no row is asked for there:\n" + report);
     }
 
+    /**
+     * A position of no type but {@code Decimal} is offered a value from inside its range too.
+     *
+     * <p>What is left of a position once the rest of the assignment is settled is read off the record
+     * either way — `low < high` leaves `high` above whatever `low` took, and above it without holding
+     * it. A value offered at the number the range stops at is refused whether or not somebody wrapped
+     * a name round the position.
+     */
+    @Test
+    void aBareDecimalIsOfferedAValueItsRangeHolds() throws Exception {
+        String rows = reportOn("""
+                module example.probe
+
+                data Pair =
+                    { low: Decimal
+                    , high: Decimal
+                    }
+                    invariant lower = low > 0m
+
+                data Ok
+
+                behavior take : (p: Pair, flag: Bool) -> Ok
+                    constructs Ok
+
+                let take (p, flag) = Ok
+                """, "--generate");
+
+        assertFalse(rows.contains("every value tried was refused"),
+                () -> "a low above zero is a row that builds:\n" + rows);
+    }
+
     private static String reportOn(String model, String... extra) throws Exception {
         Path file = Files.createTempDirectory("souther-ends").resolve("model.sou");
         Files.writeString(file, model);
