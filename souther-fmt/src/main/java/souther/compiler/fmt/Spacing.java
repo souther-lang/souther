@@ -162,6 +162,10 @@ final class Spacing {
             RPAREN GT      TYPE_ARGS        tight
             RPAREN GT      BINARY_EXPR      spaced
             # `-` negates or subtracts.
+            MINUS LPAREN   UNARY_EXPR       tight
+            MINUS LPAREN   BINARY_EXPR      spaced
+            LT LPAREN      TYPE_ARGS        tight
+            LT LPAREN      BINARY_EXPR      spaced
             MINUS IDENT    UNARY_EXPR       tight
             MINUS IDENT    BINARY_EXPR      spaced
             MINUS INT_LIT  UNARY_EXPR       tight
@@ -207,9 +211,7 @@ final class Spacing {
             LPAREN RPAREN
             LPAREN STRING_LIT
             LPAREN TYPEVAR
-            LT LPAREN
             LT TYPEVAR
-            MINUS LPAREN
             QUESTION COMMA
             QUESTION RPAREN
             RBRACE COMMA
