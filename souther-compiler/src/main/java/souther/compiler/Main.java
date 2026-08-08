@@ -392,6 +392,14 @@ public final class Main {
                     ? Compiler.compiled(texts.get(0), Runner.moduleName(sources.get(0)), warnings,
                             measure)
                     : Compiler.compiledModules(texts, path, warnings, measure);
+            // Before the report, because a name that names nothing is not something a report can
+            // say. Filtering one after the fact leaves an empty document whose every word is about
+            // what was measured, and nothing measured anything.
+            Selection.Refusal refused = new Selection(module, behavior).unresolved(compilation);
+            if (refused != null) {
+                System.err.println(Messages.get(refused.key(), render.locale(), refused.args()));
+                return 2;
+            }
             AdequacyReport report = AdequacyReport.of(compilation).only(module, behavior);
             report(warnings, sources, render);
             String rendered = render.json() ? report.json() + System.lineSeparator() : report.human();

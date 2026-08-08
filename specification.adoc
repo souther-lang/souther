@@ -2620,6 +2620,8 @@ Which measures could have found a gap is what was asked for and what the model h
 
 *What refuses a build.* A gap a measure came to an answer about, whichever of the two ways a build asks: `+souther compile --adequacy all --warnings error+` and `+souther examples --strict+` refuse the same findings. How many rows are waiting for a `+let+` refuses nothing. A build that failed on one would fail on the record of what an injected behavior owes, which is what <<example-pending>> says a model being migrated onto is made of.
 
+*A selector names a subject or the command is refused.* `+souther examples --module+` and `+--behavior+` narrow what is reported, and a name that resolves to no subject is a usage error rather than a report of nothing. A report of nothing says the measurement was made and found no gap, which is what a build reading it is entitled to accept. The two names are resolved together, so names that each resolve and hold nothing between them select nothing; and they are resolved against what the sources declare rather than against what reached the report, so a subject that resolves and then cannot be measured is reported as `+partial+` and is not a selector that named nothing.
+
 *The question is asked of a module, not of a source.* A behavior's rows are written in the module's own source and in any number of attached files (<<example-placement>>), so a source-by-source reading would report what another file covers as uncovered.
 
 [#example-partition]
