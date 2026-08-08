@@ -63,6 +63,98 @@ final class Gaps {
     private record RawSlot() implements Slot {
     }
 
+    /** One boundary of a document: what the layout may do there, the kind on each side, and the
+     * construct that joins them. The construct is null where the boundary always breaks or a
+     * comment stands beside it, which are the two the rule is not asked about. */
+    record Boundary(TokenDoc.Break policy, SyntaxKind left, SyntaxKind right, SyntaxKind joining) {
+    }
+
+    /**
+     * Every boundary of {@code doc}, in the order it is written, one for each pair of code tokens
+     * it stands between. For a check that has to see what the document decided rather than what it
+     * rendered to.
+     */
+    static List<Boundary> boundaries(TokenDoc doc) {
+        List<Slot> slots = new ArrayList<>();
+        collect(doc, null, slots);
+        List<Boundary> out = new ArrayList<>();
+        boolean sinceAToken = true;
+        for (int i = 0; i < slots.size(); i++) {
+            if (slots.get(i) instanceof TokenSlot) {
+                sinceAToken = true;
+            }
+            if (!(slots.get(i) instanceof GapSlot gap)) {
+                continue;
+            }
+            if (!sinceAToken) {
+                // more than one boundary where the tokens have one adjacency: the two breaks of a
+                // blank line, and the two just inside brackets that hold nothing but comments
+                continue;
+            }
+            sinceAToken = false;
+            // Reported for every boundary, including the ones the rule is not asked about, so that
+            // each of them says which two tokens it stands between. Walks past a comment and past
+            // another boundary rather than refusing: a blank line is two breaks at one adjacency.
+            TokenSlot left = nearestToken(slots, i, -1);
+            TokenSlot right = nearestToken(slots, i, 1);
+            Within joining = left == null || right == null || crossesAComment(slots, i)
+                    ? null : deepestHolding(left.within(), right.within());
+            out.add(new Boundary(gap.policy(), left == null ? null : left.kind(),
+                    right == null ? null : right.kind(), joining == null ? null : joining.kind()));
+        }
+        return out;
+    }
+
+    private static TokenSlot nearestToken(List<Slot> slots, int i, int step) {
+        for (int j = i + step; j >= 0 && j < slots.size(); j += step) {
+            if (slots.get(j) instanceof TokenSlot t) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a comment stands between the boundary at {@code i} and the token on either side. */
+    private static boolean crossesAComment(List<Slot> slots, int i) {
+        for (int step : new int[] {-1, 1}) {
+            for (int j = i + step; j >= 0 && j < slots.size(); j += step) {
+                if (slots.get(j) instanceof TokenSlot) {
+                    break;
+                }
+                if (slots.get(j) instanceof TriviaSlot) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The pairs of code tokens {@code doc} writes next to each other with no boundary between
+     * them. A construct that leaves one out is deciding what goes there by leaving it out, so the
+     * rule holds everywhere only while this is empty. */
+    static List<String> adjacenciesWithNoBoundary(TokenDoc doc) {
+        List<Slot> slots = new ArrayList<>();
+        collect(doc, null, slots);
+        List<String> out = new ArrayList<>();
+        TokenSlot previous = null;
+        boolean boundarySince = true;
+        for (Slot slot : slots) {
+            switch (slot) {
+                case TokenSlot t -> {
+                    if (previous != null && !boundarySince) {
+                        out.add(previous.kind() + " " + t.kind());
+                    }
+                    previous = t;
+                    boundarySince = false;
+                }
+                case GapSlot _ -> boundarySince = true;
+                case TriviaSlot _ -> boundarySince = true;
+                case RawSlot _ -> boundarySince = true;
+            }
+        }
+        return out;
+    }
+
     private static void collect(TokenDoc doc, Within within, List<Slot> out) {
         switch (doc) {
             case TokenDoc.Nil _ -> { }

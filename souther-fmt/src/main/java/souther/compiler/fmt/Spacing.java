@@ -146,6 +146,7 @@ final class Spacing {
      */
     private static final String TIGHT_ROWS = """
             DECIMAL_LIT COMMA
+            DECIMAL_LIT RPAREN
             DOT IDENT
             FALSE_KW COMMA
             GT COMMA
@@ -161,17 +162,17 @@ final class Spacing {
             LBRACE RBRACE
             LBRACKET IDENT
             LBRACKET INT_LIT
-            LBRACKET STRING_LIT
             LBRACKET LPAREN
             LBRACKET RBRACKET
-            LPAREN INT_LIT
+            LBRACKET STRING_LIT
             LPAREN DECIMAL_LIT
-            DECIMAL_LIT RPAREN
             LPAREN DOT
-            LPAREN MINUS
+            LPAREN IF_KW
+            LPAREN INT_LIT
             LPAREN LBRACE
             LPAREN LBRACKET
             LPAREN LPAREN
+            LPAREN MINUS
             LPAREN RPAREN
             LPAREN STRING_LIT
             LPAREN TYPEVAR
@@ -187,14 +188,16 @@ final class Spacing {
             RBRACKET RPAREN
             RPAREN COLON
             RPAREN COMMA
+            RPAREN DOT
+            RPAREN LPAREN
             RPAREN RBRACKET
             RPAREN RPAREN
             SPREAD IDENT
-            STRING_LIT RPAREN
             STRING_LIT COMMA
             STRING_LIT RBRACKET
-            TRUE_KW RPAREN
+            STRING_LIT RPAREN
             TRUE_KW COMMA
+            TRUE_KW RPAREN
             TYPEVAR COMMA
             TYPEVAR GT
             TYPEVAR QUESTION
