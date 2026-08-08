@@ -528,40 +528,6 @@ final class CodecGen {
                 decoderSigFor(src, cd(typeName), mapInput));
     }
 
-    /** JSON supports nested/list/map/optional but has no temporal leaf, so a type is JSON-decodable
-     * iff no Date/DateTime appears anywhere in its shape. */
-    boolean jsonCompatible(String typeName) {
-        return jsonOk(typeName, new HashSet<>());
-    }
-
-    private boolean jsonOk(String typeName, Set<String> seen) {
-        if (!seen.add(typeName)) {
-            return true;
-        }
-        Ast.Def def = symbols.declaration(typeName);
-        if (def instanceof Ast.SumData sum) {
-            for (Ast.Name caseName : sum.cases()) {
-                if (!jsonOk(caseName.denotes().qualified(), seen)) return false;
-            }
-            return true;
-        }
-        if (def instanceof Ast.Data data) {
-            for (Type t : fieldTypes(data).values()) {
-                if (!jsonOkType(t, seen)) return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean jsonOkType(Type t, Set<String> seen) {
-        if (t instanceof Type.OptionOf o) return jsonOkType(o.element(), seen);
-        if (t instanceof Type.ListOf l) return jsonOkType(l.element(), seen);
-        if (t instanceof Type.SetOf s) return jsonOkType(s.element(), seen);
-        if (t instanceof Type.MapOf m) return jsonOkType(m.value(), seen);
-        if (t instanceof Type.Ref r) return jsonOk(r.name().qualified(), seen);
-        return true;
-    }
-
     /** jOOQ rows are flat: a type is Record-decodable iff it is an object (or a sum of objects/units)
      * whose every field is a scalar column — a primitive, a newtype, or an optional of those; no
      * nested object, list, map, or sum. */

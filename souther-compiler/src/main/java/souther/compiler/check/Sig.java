@@ -1,7 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BoundaryInput;
-import souther.compiler.types.BoundaryOutput;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;

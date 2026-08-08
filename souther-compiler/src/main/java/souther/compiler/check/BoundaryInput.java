@@ -1,4 +1,11 @@
-package souther.compiler.types;
+package souther.compiler.check;
+
+import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.LeafScalar;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+
+import java.util.Objects;
 
 /**
  * A type a value can arrive as, at a behavior's boundary. Every case is a shape a decoder is built
@@ -11,6 +18,11 @@ package souther.compiler.types;
  * itself are all writable, and each is refused by the obligation that owns it. A reader handed a
  * {@code Type} can only know that by knowing all of them; a reader handed one of these knows it by
  * having one.
+ *
+ * <p>It lives beside {@link SignatureBoundary} because {@link Nominal} is closed to it: a name is a
+ * thing the boundary either admits or refuses, and a case that could be assembled with a refused one
+ * would be a witness of nothing. The cases that carry no name stay records — a scalar is a closed
+ * set, and a list, a set or a map can only be built out of witnesses that were already admitted.
  *
  * <p>There is no case for an anonymous union. A parameter names a single type, so an input cannot be
  * one — which is why an input and an output are separate types here rather than one with an arm each
@@ -30,11 +42,43 @@ public sealed interface BoundaryInput {
         }
     }
 
-    /** A type a model declared, decoded by the codec derived for it. */
-    record Nominal(TypeName name) implements BoundaryInput {
+    /**
+     * A type a model declared, decoded by the codec derived for it.
+     *
+     * <p>Not a record: a record's canonical constructor is as accessible as the record, and a public
+     * one would let a name the boundary refuses be assembled into a witness that every reader takes
+     * for one the compiler stands behind. It is made where a name is admitted and nowhere else.
+     */
+    final class Nominal implements BoundaryInput {
+
+        private final TypeName name;
+
+        Nominal(TypeName name) {
+            this.name = name;
+        }
+
+        public TypeName name() {
+            return name;
+        }
+
         @Override
         public Type type() {
             return Type.ref(name);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Nominal n && name.equals(n.name);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(name);
+        }
+
+        @Override
+        public String toString() {
+            return "Nominal[name=" + name + "]";
         }
     }
 

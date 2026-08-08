@@ -2,8 +2,8 @@ package souther.compiler;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
-import souther.compiler.types.BoundaryInput;
-import souther.compiler.types.BoundaryOutput;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;

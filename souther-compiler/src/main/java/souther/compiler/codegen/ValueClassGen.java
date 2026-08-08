@@ -96,7 +96,7 @@ final class ValueClassGen {
             data.decoder().ifPresent(d -> {
                 boolean mapInput = codec.isMapInput(data.name());
                 codec.emitFactory(cb, "decoder", CD_RDecoder, data, "$Dec");
-                if (codec.jsonCompatible(data.name())) codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JSON, mapInput);
+                codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JSON, mapInput);
                 if (codec.recordCompatible(data.name())) codec.emitSourceFactory(cb, data.name(), CodecGen.Src.JOOQ, mapInput);
             });
             data.encoder().ifPresent(e -> codec.emitFactory(cb, "encoder", CD_REncoder, data, "$Enc"));
@@ -105,10 +105,8 @@ final class ValueClassGen {
         data.decoder().ifPresent(dec -> {
             out.put(pkg + "." + data.name() + "$Dec",
                     codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.NEUTRAL));
-            if (codec.jsonCompatible(data.name())) {
-                out.put(pkg + "." + data.name() + "$DecJson",
-                        codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
-            }
+            out.put(pkg + "." + data.name() + "$DecJson",
+                    codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JSON));
             if (codec.recordCompatible(data.name())) {
                 out.put(pkg + "." + data.name() + "$DecRecord",
                         codec.generateDecoderClass(cdName, data, dec, fields, CodecGen.Src.JOOQ));
@@ -215,7 +213,7 @@ final class ValueClassGen {
             sum.decoder().ifPresent(disc -> {
                 codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"),
                         CodecGen.decoderSig(cdX, !enumeration));
-                if (codec.jsonCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, !enumeration);
+                codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, !enumeration);
                 if (codec.recordCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JOOQ, true);
             });
             sum.encoder().ifPresent(enc ->
@@ -226,11 +224,9 @@ final class ValueClassGen {
             out.put(pkg + "." + sum.name() + "$Dec", enumeration
                     ? codec.generateEnumSumDecoder(sum, CodecGen.Src.NEUTRAL)
                     : codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
-            if (codec.jsonCompatible(sum.name())) {
-                out.put(pkg + "." + sum.name() + "$DecJson", enumeration
-                        ? codec.generateEnumSumDecoder(sum, CodecGen.Src.JSON)
-                        : codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
-            }
+            out.put(pkg + "." + sum.name() + "$DecJson", enumeration
+                    ? codec.generateEnumSumDecoder(sum, CodecGen.Src.JSON)
+                    : codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
             if (codec.recordCompatible(sum.name())) {
                 out.put(pkg + "." + sum.name() + "$DecRecord", codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
             }
