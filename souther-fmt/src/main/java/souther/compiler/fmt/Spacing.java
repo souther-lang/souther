@@ -251,6 +251,7 @@ final class Spacing {
             ELSE_KW IDENT
             ELSE_KW IF_KW
             ELSE_KW INT_LIT
+            ELSE_KW LBRACKET
             ELSE_KW LPAREN
             ELSE_KW TRUE_KW
             EQ IDENT
@@ -325,6 +326,7 @@ final class Spacing {
             RBRACE ARROW
             RBRACE ASSIGN
             RBRACE AS_KW
+            RBRACE ELSE_KW
             RBRACE RBRACE
             RBRACKET ELSE_KW
             RBRACKET RBRACE
@@ -357,6 +359,7 @@ final class Spacing {
             THEN_KW FALSE_KW
             THEN_KW IDENT
             THEN_KW INT_LIT
+            THEN_KW LBRACKET
             THEN_KW LPAREN
             TRUE_KW RBRACE
             TYPEVAR ASSIGN

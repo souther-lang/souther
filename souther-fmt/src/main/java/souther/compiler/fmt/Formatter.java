@@ -16,12 +16,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import static souther.compiler.fmt.TokenDoc.HARD_GAP;
-import static souther.compiler.fmt.TokenDoc.RAW_LINE;
-import static souther.compiler.fmt.TokenDoc.RAW_SOFTLINE;
 import static souther.compiler.fmt.TokenDoc.concat;
 import static souther.compiler.fmt.TokenDoc.group;
 import static souther.compiler.fmt.TokenDoc.nest;
-import static souther.compiler.fmt.TokenDoc.raw;
 
 /**
  * A single-canonical-form (gofmt-style) formatter over the concrete syntax tree. It re-derives the
@@ -334,7 +331,7 @@ public final class Formatter {
             case EXAMPLES_FILE_HEADER -> examplesFileHeader(n);
             case EXAMPLE_DEF -> exampleDef(n);
             case FAKE_DEF -> fakeDef(n);
-            default -> raw(n.text().strip());
+            default -> throw new IllegalStateException("no case writes " + n.kind());
         };
     }
 
@@ -354,8 +351,8 @@ public final class Formatter {
                     afterOf(row)));
         }
         rows.add(endOf(n));
-        return concat(raw("example "), ident(target),
-                afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows)));
+        return TokenDoc.node(n.kind(), concat(ident("example"), GAP, ident(target),
+                afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows))));
     }
 
     /**
@@ -406,8 +403,8 @@ public final class Formatter {
             rows.add(concat(HARD_GAP, concat(aboveOf(row), fakeRow(row)), afterOf(row)));
         }
         rows.add(endOf(n));
-        return concat(raw("fake "), ident(target),
-                afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows)));
+        return TokenDoc.node(n.kind(), concat(ident("fake"), GAP, ident(target),
+                afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows))));
     }
 
     private TokenDoc fakeRow(SyntaxNode n) {
@@ -625,7 +622,7 @@ public final class Formatter {
             SyntaxNode st = stages.get(i);
             // What the declaration writes after the last stage is on that stage's line, so it comes
             // before the comment that ends the line rather than after it.
-            parts.add(concat(RAW_LINE, aboveOf(st),
+            parts.add(concat(SOFT_GAP, aboveOf(st),
                     i == 0 ? TokenDoc.NIL : concat(TokenDoc.token(SyntaxKind.PIPEFWD, ">->"), GAP), stage(st),
                     i == stages.size() - 1 ? declaredOut : TokenDoc.NIL, afterOf(st)));
         }
@@ -717,7 +714,7 @@ public final class Formatter {
         if (intrinsic.isPresent()) {
             SyntaxToken body = intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow();
             return TokenDoc.node(n.kind(), concat(head, GAP, ASSIGN,
-                    group(nest(INDENT, concat(RAW_LINE, ident("intrinsic"), GAP, token(body))))));
+                    group(nest(INDENT, concat(SOFT_GAP, ident("intrinsic"), GAP, token(body))))));
         }
         var block = n.child(SyntaxKind.BLOCK_EXPR);
         if (block.isPresent()) {
@@ -725,7 +722,7 @@ public final class Formatter {
         }
         SyntaxNode body = lifted == null ? onlyExpr(n) : lastExprChild(lifted);
         return TokenDoc.node(n.kind(),
-                concat(head, GAP, ASSIGN, group(nest(INDENT, concat(RAW_LINE, expr(body))))));
+                concat(head, GAP, ASSIGN, group(nest(INDENT, concat(SOFT_GAP, expr(body))))));
     }
 
     /** The lambda a parameter-less definition was written as, or null when its body is an ordinary
@@ -906,7 +903,7 @@ public final class Formatter {
             case BLOCK_EXPR -> block(n);
             case UNREACHABLE_EXPR -> TokenDoc.node(n.kind(), concat(
                     TokenDoc.token(SyntaxKind.UNREACHABLE_KW, "unreachable"), GAP, expr(onlyExpr(n))));
-            default -> raw(n.text().strip());
+            default -> throw new IllegalStateException("no case writes " + n.kind());
         };
     }
 
@@ -1021,7 +1018,7 @@ public final class Formatter {
         // comment that ends that line — as a comma does for a member of a list.
         return TokenDoc.node(n.kind(),
                 group(concat(LBRACKET, element.doc(), GAP, PIPE, element.trailing(),
-                        nest(INDENT, concat(RAW_LINE, separated(guards))), RAW_SOFTLINE, RBRACKET)));
+                        nest(INDENT, concat(SOFT_GAP, separated(guards))), SOFT_GAP, RBRACKET)));
     }
 
     private TokenDoc ifExpr(SyntaxNode n) {
@@ -1029,11 +1026,11 @@ public final class Formatter {
         TokenDoc departures = elseArms(n);
         return TokenDoc.node(n.kind(), group(concat(TokenDoc.token(SyntaxKind.IF_KW, "if"), GAP,
                 expr(parts.get(0)), attemptBinder(n), GAP, TokenDoc.token(SyntaxKind.THEN_KW, "then"),
-                nest(INDENT, concat(RAW_LINE, expr(parts.get(1)))),
-                RAW_LINE, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
+                nest(INDENT, concat(SOFT_GAP, expr(parts.get(1)))),
+                SOFT_GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
                 departures != TokenDoc.NIL
                         ? departures
-                        : nest(INDENT, concat(RAW_LINE, expr(parts.get(2)))))));
+                        : nest(INDENT, concat(SOFT_GAP, expr(parts.get(2)))))));
     }
 
     /** An attempt's per-clause departures, one to a line under the {@code else}, or nothing where the
@@ -1046,8 +1043,9 @@ public final class Formatter {
         List<TokenDoc> lines = new ArrayList<>();
         lines.add(afterToken(n.token(SyntaxKind.ELSE_KW)));
         for (SyntaxNode arm : childNodes(arms.get(), SyntaxKind.ELSE_ARM)) {
-            lines.add(concat(HARD_GAP, aboveOf(arm), raw("| " + firstIdent(arm) + " -> "),
-                    expr(onlyExpr(arm)), afterOf(arm)));
+            lines.add(concat(HARD_GAP, aboveOf(arm), TokenDoc.node(arm.kind(),
+                    concat(PIPE, GAP, ident(firstIdent(arm)), GAP, ARROW, GAP, expr(onlyExpr(arm)))),
+                    afterOf(arm)));
         }
         lines.add(endOf(arms.get()));
         return nest(INDENT, concat(lines));
