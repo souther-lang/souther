@@ -3,9 +3,11 @@ package souther.compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.BoundaryScalar;
+import souther.compiler.types.BoundaryInput;
+import souther.compiler.types.BoundaryOutput;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.query.Compilation;
@@ -196,11 +198,9 @@ public final class Runner {
 
         Ast.BehaviorDef spec = resolveBehavior(module, behaviorName);
         Sig sig = sigs.get(spec.name());
-        List<Type> ins = sig.ins();
 
         MemoryClassLoader loader = new MemoryClassLoader(classes, Runner.class.getClassLoader());
-        Object[] args = decodeInputs(loader, compilation.symbols(module.name()), module.name(),
-                spec.name(), ins, inputJson);
+        Object[] args = decodeInputs(loader, spec.name(), sig.ins(), inputJson);
 
         Object result = invoke(loader, module.name(), spec.name(), args);
         Object encoded = encodeOutput(loader, module.name(), spec.name(), sig.out(), result);
@@ -385,8 +385,8 @@ public final class Runner {
      * Arity cannot tell them apart; only decoding against the parameter type can. So the split and the
      * decode are one step, taken with the types in hand.
      */
-    private static Object[] decodeInputs(MemoryClassLoader loader, Symbols symbols, String pkg,
-                                         String name, List<Type> ins, String inputJson) {
+    private static Object[] decodeInputs(MemoryClassLoader loader, String name,
+                                         List<BoundaryInput> ins, String inputJson) {
         int arity = ins.size();
         if (arity == 0) {
             return new Object[0];
@@ -397,7 +397,7 @@ public final class Runner {
         }
         JsonNode tree = parseJson(inputJson);
         if (arity == 1) {
-            return new Object[] {decodeSoleInput(loader, symbols, pkg, ins.get(0), tree)};
+            return new Object[] {decodeSoleInput(loader, ins.get(0), tree)};
         }
         if (!tree.isArray()) {
             throw fail("run.input.notarray", "`" + name + "` takes " + arity
@@ -409,7 +409,7 @@ public final class Runner {
         }
         Object[] args = new Object[arity];
         for (int i = 0; i < arity; i++) {
-            args[i] = decode(loader, symbols, pkg, ins.get(i), tree.get(i), i);
+            args[i] = decode(loader, ins.get(i), tree.get(i), i);
         }
         return args;
     }
@@ -423,12 +423,12 @@ public final class Runner {
      * the value while succeeding as the array's sole element is. When the element fails too, the input
      * is wrong for some other reason and the decoder's own report is what says so.
      */
-    private static Object decodeSoleInput(MemoryClassLoader loader, Symbols symbols, String pkg,
-                                          Type type, JsonNode tree) {
+    private static Object decodeSoleInput(MemoryClassLoader loader, BoundaryInput shape,
+                                          JsonNode tree) {
         try {
-            return decode(loader, symbols, pkg, type, tree, 0);
+            return decode(loader, shape, tree, 0);
         } catch (RunException asWritten) {
-            if (tree.isArray() && tree.size() == 1 && decodes(loader, symbols, pkg, type, tree.get(0))) {
+            if (tree.isArray() && tree.size() == 1 && decodes(loader, shape, tree.get(0))) {
                 throw fail("run.input.wrapped", "This behavior has one parameter. Pass its value"
                         + " directly to --input; remove the outer array.");
             }
@@ -437,10 +437,9 @@ public final class Runner {
     }
 
     /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
-    private static boolean decodes(MemoryClassLoader loader, Symbols symbols, String pkg, Type type,
-                                   JsonNode raw) {
+    private static boolean decodes(MemoryClassLoader loader, BoundaryInput shape, JsonNode raw) {
         try {
-            decode(loader, symbols, pkg, type, raw, 0);
+            decode(loader, shape, raw, 0);
             return true;
         } catch (RunException _) {
             return false;
@@ -449,9 +448,9 @@ public final class Runner {
 
     // --- decode / encode ----------------------------------------------------------------------
 
-    private static Object decode(MemoryClassLoader loader, Symbols symbols, String pkg, Type type,
-                                 JsonNode raw, int index) {
-        Decoder<JsonNode, ?> decoder = decoderFor(loader, symbols, pkg, type, index);
+    private static Object decode(MemoryClassLoader loader, BoundaryInput shape, JsonNode raw,
+                                 int index) {
+        Decoder<JsonNode, ?> decoder = decoderFor(loader, shape, index);
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
@@ -460,7 +459,8 @@ public final class Runner {
             // which the decoder reports by throwing rather than as an issue. That is a malformed
             // --input, so it is reported as one instead of reaching the caller as a stack trace.
             throw fail("run.decode.malformed", "input #" + (index + 1) + " is not shaped like `"
-                    + Type.show(type) + "` — check --input", index + 1, Type.show(type));
+                    + Type.show(shape.type()) + "` — check --input", index + 1,
+                    Type.show(shape.type()));
         }
         if (result instanceof Ok<?> ok) {
             return ok.value();
@@ -489,30 +489,20 @@ public final class Runner {
      * a sum's discriminator are all read exactly as they are at the boundary. What is composed here
      * is only what has no class of its own: the primitives and the collections.
      */
-    private static Decoder<JsonNode, ?> decoderFor(MemoryClassLoader loader, Symbols symbols,
-                                                   String pkg, Type type, int index) {
-        if (type instanceof Type.Prim prim) {
-            return leafDecoder(prim, index);
-        }
-        if (type instanceof Type.Ref ref) {
-            return codecOf(loader, ref.name(), "jsonDecoder");
-        }
-        if (type instanceof Type.ListOf list) {
-            return JsonDecoders.list(decoderFor(loader, symbols, pkg, list.element(), index));
-        }
-        if (type instanceof Type.SetOf set) {
-            return JsonDecoders.list(decoderFor(loader, symbols, pkg, set.element(), index))
+    private static Decoder<JsonNode, ?> decoderFor(MemoryClassLoader loader, BoundaryInput shape,
+                                                   int index) {
+        return switch (shape) {
+            case BoundaryInput.Scalar s -> leafDecoder(s.scalar());
+            case BoundaryInput.Nominal n -> codecOf(loader, n.name(), "jsonDecoder");
+            case BoundaryInput.ListOf l -> JsonDecoders.list(decoderFor(loader, l.element(), index));
+            case BoundaryInput.SetOf s -> JsonDecoders.list(decoderFor(loader, s.element(), index))
                     .map(elements -> Sets.fromList(new java.util.ArrayList<Object>(elements)));
-        }
-        if (type instanceof Type.MapOf map) {
-            Decoder<Object, ?> key = keyDecoder(loader, symbols, map.key(), type, index);
-            return JsonDecoders.map(decoderFor(loader, symbols, pkg, map.value(), index))
-                    .flatMapWithPath((entries, path) -> rekey(key, entries, path));
-        }
-        throw fail("run.decode.unsupported",
-                "input #" + (index + 1) + " has type `" + Type.show(type)
-                        + "`, which `run` cannot decode yet (only a data type, a primitive, or a"
-                        + " collection of those).", index + 1, Type.show(type));
+            case BoundaryInput.MapOf m -> {
+                Decoder<Object, ?> key = keyDecoder(loader, m.key());
+                yield JsonDecoders.map(decoderFor(loader, m.value(), index))
+                        .flatMapWithPath((entries, path) -> rekey(key, entries, path));
+            }
+        };
     }
 
     /**
@@ -521,23 +511,12 @@ public final class Runner {
      * neutral source, whichever source the map itself came from. This is the decoder
      * {@code CodecGen.emitKeyDecoder} builds, in Java.
      *
-     * <p>Which key types arrive here is not decided again. The classification is asked for rather
-     * than carried — {@code run} holds a {@code Type} the compile handed back, not the codec IR the
-     * witness travels in — but it is the checker's rule that answers, so this reads the answer
-     * instead of writing the kinds out: a named key runs its own decoder, and a representation is
-     * the string leaf, parsed for a temporal. A key that classifies as nothing never reached a
-     * codec, so it is reported as an input this cannot decode rather than asserted away.
+     * <p>Which key types arrive here is not decided again, and is not asked again either: the witness
+     * the map-key rule answers with travels in the shape. A named key runs its own decoder, and a
+     * representation is the string leaf, parsed for a temporal.
      */
-    private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, Symbols symbols, Type key,
-                                                 Type map, int index) {
-        BoundaryMapKey classified = TypeOps.classifyConcreteMapKey(key, symbols);
-        if (classified == null) {
-            throw fail("run.decode.unsupported",
-                    "input #" + (index + 1) + " has type `" + Type.show(map)
-                            + "`, which `run` cannot decode yet (only a data type, a primitive, or a"
-                            + " collection of those).", index + 1, Type.show(map));
-        }
-        return switch (classified) {
+    private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, BoundaryMapKey key) {
+        return switch (key) {
             case BoundaryMapKey.StringNewtype n -> codecOf(loader, n.name(), "decoder");
             case BoundaryMapKey.UnitEnum e -> codecOf(loader, e.name(), "decoder");
             case BoundaryMapKey.Text _ -> text();
@@ -609,19 +588,17 @@ public final class Runner {
         }
     }
 
-    /** A primitive over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
+    /** A scalar over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
      *  temporal is a string that is then parsed — so a date reads as {@code string().date()}, the
      *  same two steps the generated JSON decoder takes. */
-    private static Decoder<JsonNode, ?> leafDecoder(Type.Prim prim, int index) {
-        return switch (prim) {
+    private static Decoder<JsonNode, ?> leafDecoder(BoundaryScalar scalar) {
+        return switch (scalar) {
             case STRING -> JsonDecoders.string();
             case INT -> JsonDecoders.long_();
             case BOOL -> JsonDecoders.bool();
             case DECIMAL -> JsonDecoders.decimal();
             case DATE -> JsonDecoders.string().date();
             case DATETIME -> JsonDecoders.string().dateTime();
-            case RAW -> throw fail("run.decode.raw", "input #" + (index + 1)
-                    + " has the reserved Raw type, which `run` cannot decode.", index + 1);
         };
     }
 
@@ -634,7 +611,7 @@ public final class Runner {
      * is not a {@code RunException}, so left alone it reaches the caller as a stack trace.
      */
     private static Object encodeOutput(MemoryClassLoader loader, String pkg, String behavior,
-                                       Type out, Object result) {
+                                       BoundaryOutput out, Object result) {
         try {
             return encode(loader, pkg, behavior, out, result);
         } catch (StackOverflowError _) {
@@ -649,47 +626,50 @@ public final class Runner {
      * discriminator on its own encoder — only the sum's writes one — so taking the encoder off the
      * runtime value would answer a form the same sum's decoder then refuses.
      */
-    private static Object encode(MemoryClassLoader loader, String pkg, String behavior, Type out,
-                                 Object result) {
-        if (out instanceof Type.Prim prim) {
-            return encodeLeaf(prim, result);
-        }
-        // A collection output is encoded element by element: the runtime value is a plain
-        // Collection/Map, so it carries no encoder() of its own — its elements do.
-        if (out instanceof Type.ListOf list) {
-            return encodeElements(loader, pkg, behavior, list.element(), (java.util.Collection<?>) result);
-        }
-        // A Set and a Map are put in the order their encoded members give ([#collections]), which is
-        // done here as well as in the generated codecs because this is where the type is still
-        // known: encoded, a Set and a List are both a java.util.List, and only one is reordered.
-        if (out instanceof Type.SetOf set) {
-            return Representations.sortedArray(
-                    encodeElements(loader, pkg, behavior, set.element(), (java.util.Collection<?>) result));
-        }
-        // A map's key is encoded by the same recursion its value is: a key that crosses writes as a
-        // bare string whichever of the five kinds it is (E1314), and each of them already has the
-        // encoder that writes it — the string leaf, the ISO form of a temporal, the newtype's bare
-        // value, the enumeration's case name. Asking here which kind it is would ask the boundary's
-        // question twice.
-        if (out instanceof Type.MapOf map) {
-            Map<String, Object> encoded = new java.util.LinkedHashMap<>();
-            ((Map<?, ?>) result).forEach((k, v) ->
-                    encoded.put((String) encode(loader, pkg, behavior, map.key(), k),
-                            encode(loader, pkg, behavior, map.value(), v)));
-            return Representations.sortedObject(encoded);
-        }
-        if (out instanceof Type.Ref ref) {
-            return encodeThrough(loader, ref.name().qualified(), ref.name().name(), result);
-        }
-        // An anonymous union is generated as the behavior's result type, which is where its encoder
-        // is (spec 19.8). It is the only output type with no name in the source.
-        if (out instanceof Type.Union) {
-            String className = pkg + "." + Backend.behaviorResultClass(behavior);
-            return encodeThrough(loader, className, Type.show(out), result);
-        }
-        throw fail("run.encode.unsupported", "the output has type `" + Type.show(out)
-                + "`, which `run` cannot encode yet (only a data type, a primitive, or a"
-                + " collection of those).", Type.show(out));
+    private static Object encode(MemoryClassLoader loader, String pkg, String behavior,
+                                 BoundaryOutput out, Object result) {
+        return switch (out) {
+            case BoundaryOutput.Scalar s -> encodeLeaf(s.scalar(), result);
+            // A collection output is encoded element by element: the runtime value is a plain
+            // Collection/Map, so it carries no encoder() of its own — its elements do.
+            case BoundaryOutput.ListOf l ->
+                    encodeElements(loader, pkg, behavior, l.element(), (java.util.Collection<?>) result);
+            // A Set and a Map are put in the order their encoded members give ([#collections]), which
+            // is done here as well as in the generated codecs because this is where the shape is still
+            // known: encoded, a Set and a List are both a java.util.List, and only one is reordered.
+            case BoundaryOutput.SetOf s -> Representations.sortedArray(
+                    encodeElements(loader, pkg, behavior, s.element(), (java.util.Collection<?>) result));
+            case BoundaryOutput.MapOf m -> {
+                Map<String, Object> encoded = new java.util.LinkedHashMap<>();
+                ((Map<?, ?>) result).forEach((k, v) -> encoded.put(encodeKey(loader, m.key(), k),
+                        encode(loader, pkg, behavior, m.value(), v)));
+                yield Representations.sortedObject(encoded);
+            }
+            case BoundaryOutput.Nominal n ->
+                    encodeThrough(loader, n.name().qualified(), n.name().name(), result);
+            // A union nobody named is generated as the behavior's result type, which is where its
+            // encoder is (spec 19.8). It is the only output with no name in the source, so it is the
+            // behavior that says which class to reach for.
+            case BoundaryOutput.Cases c -> encodeThrough(loader,
+                    pkg + "." + Backend.behaviorResultClass(behavior), Type.show(c.type()), result);
+        };
+    }
+
+    /**
+     * A map's key, written as the text it crosses as. Each kind already has the encoder that writes
+     * it — the string leaf, the ISO form of a temporal, the newtype's bare value, the enumeration's
+     * case name — and which kind it is travelled here rather than being asked again.
+     */
+    private static String encodeKey(MemoryClassLoader loader, BoundaryMapKey key, Object value) {
+        return (String) switch (key) {
+            case BoundaryMapKey.Text _ -> encodeLeaf(BoundaryScalar.STRING, value);
+            case BoundaryMapKey.Date _ -> encodeLeaf(BoundaryScalar.DATE, value);
+            case BoundaryMapKey.DateTime _ -> encodeLeaf(BoundaryScalar.DATETIME, value);
+            case BoundaryMapKey.StringNewtype n ->
+                    encodeThrough(loader, n.name().qualified(), n.name().name(), value);
+            case BoundaryMapKey.UnitEnum e ->
+                    encodeThrough(loader, e.name().qualified(), e.name().name(), value);
+        };
     }
 
     /** {@code result} through the derived {@code encoder()} of the named generated class. */
@@ -707,7 +687,7 @@ public final class Runner {
     }
 
     private static List<Object> encodeElements(MemoryClassLoader loader, String pkg, String behavior,
-                                               Type element, java.util.Collection<?> values) {
+                                               BoundaryOutput element, java.util.Collection<?> values) {
         List<Object> encoded = new java.util.ArrayList<>(values.size());
         for (Object v : values) {
             encoded.add(encode(loader, pkg, behavior, element, v));
@@ -715,8 +695,8 @@ public final class Runner {
         return encoded;
     }
 
-    private static Object encodeLeaf(Type.Prim prim, Object value) {
-        return switch (prim) {
+    private static Object encodeLeaf(BoundaryScalar scalar, Object value) {
+        return switch (scalar) {
             case STRING -> ObjectEncoders.string().encode((String) value);
             case INT -> ObjectEncoders.long_().encode((Long) value);
             case BOOL -> ObjectEncoders.bool().encode((Boolean) value);
@@ -724,8 +704,6 @@ public final class Runner {
                     .encode(Representations.canonicalNumber((java.math.BigDecimal) value));
             case DATE -> ObjectEncoders.date().encode((java.time.LocalDate) value);
             case DATETIME -> ObjectEncoders.dateTime().encode((java.time.LocalDateTime) value);
-            case RAW -> throw fail("run.encode.raw",
-                    "the output is the reserved Raw type, which `run` cannot encode.");
         };
     }
 

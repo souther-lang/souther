@@ -226,7 +226,7 @@ public final class ExampleVerifier {
         if (sig == null) {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
         }
-        Set<TypeName> outCases = outCases(sig.out());
+        Set<TypeName> outCases = outCases(sig.outputType());
         for (Ast.ExampleRow row : ex.rows()) {
             checkRow(target, sig, outCases, row, out, rows);
         }
@@ -607,7 +607,7 @@ public final class ExampleVerifier {
     private void checkRowNow(FixtureReader fixtures, ExampleTarget target, Sig sig,
                              Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out,
                              RowState state) {
-        List<Type> ins = sig.ins();
+        List<Type> ins = sig.inputTypes();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of(DiagnosticCode.E1903, "check.example.arity")
                     .at(row.pos()).args(target.name(), ins.size(), row.inputs().size()).build());
@@ -652,7 +652,7 @@ public final class ExampleVerifier {
         Object expectedValue;
         try {
             expectedValue = fixtures.caseOnly(row.expected()) != null ? null
-                    : fixtures.builtExpected(row.expected(), sig.out());
+                    : fixtures.builtExpected(row.expected(), sig.outputType());
         } catch (FixtureException fe) {
             out.add(Diagnostic.of(DiagnosticCode.E1903, "check.example.expected")
                     .at(row.pos()).args(target.name(), fe.getMessage()).build());
@@ -690,7 +690,7 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
-            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.outputType()),
                     "aborted: " + ae.getMessage()));
             state.failed(FailurePhase.INVOCATION);
             return;
@@ -699,11 +699,11 @@ public final class ExampleVerifier {
             state.incomplete(FailurePhase.STACK_EXHAUSTED);
             return;
         }
-        result = projected(result, sig.out());
+        result = projected(result, sig.outputType());
         state.resultArm = symbols.resolve(NeutralForm.simpleName(result));
         state.stage = Stage.COMPARED;
         if (!matches(fixtures, row.expected(), result, expectedValue)) {
-            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.outputType()),
                     fixtures.describeActual(result)));
             state.failed(FailurePhase.COMPARISON);
             return;

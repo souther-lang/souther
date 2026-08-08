@@ -101,11 +101,6 @@ public final class Backend {
         return ctx.pub(name);
     }
 
-    public static Map<String, byte[]> generate(Ast.Module module, TypeChecker.Checked checked) {
-        return generate(module, TypeChecker.symbols(module), Map.of(), Map.of(), Set.of(), Map.of(),
-                Requirements.of(module, Set.of()), checked, Map.of());
-    }
-
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
      * {@code typePackage} maps an imported type or behavior name to its declaring module (spec 4);
      * {@code importedSigs} carries imported behaviors' signatures so a composition can name one as
@@ -119,13 +114,14 @@ public final class Backend {
      * derived decoder's constraint mapping reads (spec §decoder-error). */
     public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
+                                               Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
                                                Set<String> importedInjected,
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked,
                                                Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants) {
-        return generate(module, symbols, typePackage, importedSigs, importedInjected, calleeSigs,
+        return generate(module, symbols, typePackage, sigs, importedSigs, importedInjected, calleeSigs,
                 requirements, checked, dischargeInvariants, Instrumentation.NONE);
     }
 
@@ -144,6 +140,7 @@ public final class Backend {
      */
     public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
+                                               Map<String, Sig> sigs,
                                                Map<String, Sig> importedSigs,
                                                Set<String> importedInjected,
                                                Map<String, ReqSig> calleeSigs,
@@ -152,8 +149,8 @@ public final class Backend {
                                                Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
                                                Instrumentation instrumentation) {
         try {
-            return generating(module, symbols, typePackage, importedSigs, importedInjected, calleeSigs,
-                    requirements, checked, dischargeInvariants, instrumentation);
+            return generating(module, symbols, typePackage, sigs, importedSigs, importedInjected,
+                    calleeSigs, requirements, checked, dischargeInvariants, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -164,6 +161,7 @@ public final class Backend {
 
     private static Map<String, byte[]> generating(Ast.Module module, Symbols symbols,
                                                   Map<String, String> typePackage,
+                                                  Map<String, Sig> sigs,
                                                   Map<String, Sig> importedSigs,
                                                   Set<String> importedInjected,
                                                   Map<String, ReqSig> calleeSigs,
@@ -203,7 +201,6 @@ public final class Backend {
         ctx.setCoveragePlan(instrumentation.coverage());
         ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
-        Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
         // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.
         JvmLimits.checkParameterSlots(module, ctx, recHelpers, sigs, requirements);
@@ -238,7 +235,7 @@ public final class Backend {
         // <behavior名>Result that its cases implement (spec 19.8). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
-        Map<String, List<TypeName>> behaviorResults = b.behaviorResultInterfaces(module, importedSigs);
+        Map<String, List<TypeName>> behaviorResults = b.behaviorResultInterfaces(module, sigs);
         b.rejectResultUnionCollisions(module, behaviorResults, localTypes, behaviorClassOwner);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
         // list is settled when its own module is generated. A member this module declared takes the
@@ -374,16 +371,16 @@ public final class Backend {
                 Sig imported = importedSigs.get(name);
                 if (imported != null) {
                     requiredNames.add(name);
-                    requiredParam.put(name, imported.ins());
-                    requiredSuccess.put(name, imported.out());
+                    requiredParam.put(name, imported.inputTypes());
+                    requiredSuccess.put(name, imported.outputType());
                 }
             }
         }
         for (String name : importedInjected) {
             Sig sig = importedSigs.get(name);
             if (sig != null) {
-                requiredParam.put(name, sig.ins());
-                requiredSuccess.put(name, sig.out());
+                requiredParam.put(name, sig.inputTypes());
+                requiredSuccess.put(name, sig.outputType());
             }
         }
         // The unary-vs-multi dispatch for required behaviors reads these; set once, so the base class,
@@ -424,7 +421,7 @@ public final class Backend {
                                 b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
                         Sig sig = declaredSig(pipe, sigs);
                         out.put(module.name() + "." + behaviorClass(pipe.name()),
-                                b.generateBehaviorInterface(pipe.name(), sig.ins(), sig.out(),
+                                b.generateBehaviorInterface(pipe.name(), sig.inputTypes(), sig.outputType(),
                                         behaviorDeps.getOrDefault(pipe.name(), List.of())));
                     }
                 }
@@ -959,15 +956,14 @@ public final class Backend {
     }
 
     private Map<String, List<TypeName>> behaviorResultInterfaces(Ast.Module module,
-                                                                 Map<String, Sig> importedSigs) {
-        Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
+                                                                 Map<String, Sig> sigs) {
         Map<String, List<TypeName>> results = new LinkedHashMap<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {
             Sig sig = sigs.get(bd.name());
-            if (sig == null || !(sig.out() instanceof Type.Union)) {
+            if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            List<TypeName> members = new ArrayList<>(TypeOps.leafCases(sig.out(), symbols));
+            List<TypeName> members = new ArrayList<>(TypeOps.leafCases(sig.outputType(), symbols));
             Collections.sort(members);
             results.put(CodegenContext.behaviorResultClass(bd.name()), members);
         }
@@ -1052,8 +1048,15 @@ public final class Backend {
      * module written without an {@code exposing} line publishes every behavior it declares, so a jar
      * built before this carries a public {@code Behavior<souther.runtime.DivisionByZero, …>} that this
      * compiler refuses to write.
+     *
+     * <p>Version 9 asks those rules of every signature rather than of every declaration. Admitting
+     * what a boundary carries is now the making of the signature, so a composition's merged output is
+     * subject to it — a case that retired out of a stage's answer is a name in what crosses like any
+     * other — and so is a declaration read back from a jar. A jar built before this was trusted for
+     * both: what its compiler checked was what its author wrote, and a composition it published, or a
+     * declaration a reader takes on faith, was never asked.
      */
-    public static final int BOUNDARY_VERSION = 8;
+    public static final int BOUNDARY_VERSION = 9;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {
@@ -1176,7 +1179,7 @@ public final class Backend {
         // the pipeline's injected fields are the union of its stages' requirements (spec 14.3)
         List<String> reqStages = behaviorDeps.getOrDefault(pipe.name(), List.of());
         // the pipeline takes whatever its first stage takes (spec 14.1)
-        int arity = PipelineSigs.stageSig(flat.get(0), sigs, symbols, pipe.pos()).ins().size();
+        int arity = PipelineSigs.stageSig(flat.get(0), sigs, symbols, pipe.pos()).inputTypes().size();
         ClassDesc[] applyParams = new ClassDesc[arity];
         java.util.Arrays.fill(applyParams, CD_Object);
         MethodTypeDesc mtdApply = MethodTypeDesc.of(CD_Object, applyParams);
@@ -1191,7 +1194,7 @@ public final class Backend {
                 // slot 1 always holds the running value (an output case, as an Object).
                 List<Ast.Var> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
-                Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).out();
+                Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).outputType();
                 applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps,
                         mainline, arity + 1);
                 Label end = code.newLabel();
@@ -1213,9 +1216,9 @@ public final class Backend {
                         }
                         code.goto_(end);
                         code.labelBinding(doApply);
-                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.out(), arity + 1);
+                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.outputType(), arity + 1);
                     } else {
-                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.out(), arity + 1);
+                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.outputType(), arity + 1);
                     }
                     mainline = PipelineSigs.stageOut(mainline, g, symbols, pipe.pos());
                 }
@@ -1223,12 +1226,12 @@ public final class Backend {
                 code.aload(1);
                 // The composition's own return: the running value is a Souther value, and this is
                 // where it becomes a member of the union this composition answers with.
-                ResultBoundary.inject(code, ctx, ctx.bridgedMembers(declaredSig(pipe, sigs).out()),
+                ResultBoundary.inject(code, ctx, ctx.bridgedMembers(declaredSig(pipe, sigs).outputType()),
                         arity + 1);
             });
             if (arity != 1) {
                 Sig sig = declaredSig(pipe, sigs);
-                emitTypedApplyBridge(cb, cdP, typedApplyDesc(pipe.name(), sig.ins(), sig.out()));
+                emitTypedApplyBridge(cb, cdP, typedApplyDesc(pipe.name(), sig.inputTypes(), sig.outputType()));
             }
         });
     }

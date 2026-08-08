@@ -78,7 +78,7 @@ public final class TypeChecker {
      * because the body check reads the same two and they must be the same two.
      */
     public static Reported checkModule(Ast.Module module, Symbols symbols,
-                                       Map<String, Sig> importedSigs, Set<String> importedInjected,
+                                       Map<String, Sig> sigs, Set<String> importedInjected,
                                        Ast.Module lowered, Map<String, ReqSig> reqSigs,
                                        Map<String, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns,
@@ -88,7 +88,7 @@ public final class TypeChecker {
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, importedSigs, importedInjected, lowered, calleeSigs, errors,
+            checkRecovering(module, symbols, sigs, importedInjected, lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns, imported);
         } catch (Unanswerable e) {
             abandoned.add(e);
@@ -179,7 +179,7 @@ public final class TypeChecker {
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
     static void checkRecovering(Ast.Module module, Symbols symbols,
-                                        Map<String, Sig> importedSigs, Set<String> importedInjected,
+                                        Map<String, Sig> sigs, Set<String> importedInjected,
                                         Ast.Module lowered, Map<String, ReqSig> calleeSigs,
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
@@ -261,12 +261,6 @@ public final class TypeChecker {
             allBehaviors.add(b.name());
             if (b instanceof Ast.SpecBehavior spec) {
                 specNames.add(b.name());
-                SpecChecker.rejectAnonymousUnionParams(spec);
-                SpecChecker.rejectTupleIO(spec, symbols);
-                SpecChecker.rejectFunctionIO(spec, symbols);
-                SpecChecker.rejectOptionalIO(spec, symbols);
-                SpecChecker.rejectNonBoundaryMapKeyIO(spec, symbols);
-                SpecChecker.rejectForeignBoundaryName(spec, symbols);
                 List<String> outputCases = new ArrayList<>();
                 for (Ast.TypeTerm t : spec.ret().cases()) {
                     // a function output is refused as unrepresentable; it names no output case
@@ -358,6 +352,17 @@ public final class TypeChecker {
                 injectionTargets.add(spec.name());
             }
         }
+        collect(errors, abandoned, () -> SpecChecker.checkStagesAreSingleInput(module));
+        // The signatures arrive rather than being built here. Making one is what admits what a
+        // boundary carries, and it happens in one place, once; a second construction would be the
+        // same question answered again, which is what carrying the answer was for. Where it did not
+        // build, the module is abandoned from this point on: everything below rests on a behavior
+        // having a signature, and the reason there is none was reported where they are made.
+        // Abandoned here rather than earlier, so the checks that do not read a signature — a
+        // declaration, an `exposing` line, a stage's arity — still say what they found.
+        if (sigs == null) {
+            throw new Unanswerable(module.pos());
+        }
         // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1401).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
@@ -408,11 +413,8 @@ public final class TypeChecker {
                 }
             }
         });
-        collect(errors, abandoned, () -> SpecChecker.checkStagesAreSingleInput(module));
         // an exposed composition must declare its output in `exposing`, matching the inferred one
         // (spec 14.5, ADR-0024), so a far-away change cannot grow a published output silently.
-        // `signatures` builds the map `checkExposedPipeOutputs` reads, so it stays fail-fast.
-        Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, symbols));
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberFields(module, sigs, symbols));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,

@@ -1,11 +1,15 @@
 package souther.compiler.check;
 
+import souther.compiler.types.BoundaryScalar;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The rule is asked of the type, not of the name a source spelling happened to resolve to. Written
@@ -19,16 +23,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 class TheBoundaryVocabularyRuleReadsTheTypeTest {
 
     @Test
-    void theReservedPrimitiveIsRefusedAsItself() {
-        assertEquals("Raw", TypeOps.foreignNameInBoundaryShape(Type.RAW, null).name());
+    void theReservedPrimitiveIsNoScalarTheBoundaryWrites() {
+        assertNull(BoundaryScalar.of(Type.Prim.RAW));
     }
 
     @Test
-    void theReservedPrimitiveIsRefusedAtDepth() {
-        assertEquals("Raw",
-                TypeOps.foreignNameInBoundaryShape(Type.list(Type.RAW), null).name());
-        assertEquals("Raw",
-                TypeOps.foreignNameInBoundaryShape(Type.map(Type.STRING, Type.RAW), null).name());
+    void theReservedNameIsRefusedWhicheverWayItArrives() {
+        assertFalse(TypeOps.declaredByAModel(TypeName.primitive("Raw"), null));
     }
 
     @Test
@@ -37,7 +38,9 @@ class TheBoundaryVocabularyRuleReadsTheTypeTest {
             if (prim == Type.Prim.RAW) {
                 continue;
             }
-            assertNull(TypeOps.foreignNameInBoundaryShape(prim, null), prim.toString());
+            assertNotNull(BoundaryScalar.of(prim), prim.toString());
+            assertTrue(TypeOps.declaredByAModel(TypeName.primitive(Type.show(prim)), null),
+                    prim.toString());
         }
     }
 }

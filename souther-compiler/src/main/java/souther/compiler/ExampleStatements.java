@@ -192,7 +192,7 @@ public final class ExampleStatements {
             // built the table of a fake nothing reads, so this is the first thing that would run it.
             Read<List<Diagnostic>> read = v.within(reader -> {
                 List<Diagnostic> wrong = new ArrayList<>();
-                standins(reader, fk, sig.ins(), sig.out(), wrong);
+                standins(reader, fk, sig.inputTypes(), sig.outputType(), wrong);
                 return wrong;
             }, new Deadline.Work.Table(fk.target(), sourceId, fk.pos()));
             switch (read) {
@@ -372,7 +372,7 @@ public final class ExampleStatements {
             for (Ast.ExampleRow row : ex.rows()) {
                 for (Ast.With w : row.withs()) {
                     Sig depSig = sigs.get(w.dep());
-                    if (depSig != null && depSig.ins().isEmpty()) {
+                    if (depSig != null && depSig.inputTypes().isEmpty()) {
                         stoodIn.add(w.dep());
                     }
                 }
@@ -437,17 +437,17 @@ public final class ExampleStatements {
         if (sig == null) {
             return;
         }
-        Set<TypeName> cases = outCases(sig.out());
+        Set<TypeName> cases = outCases(sig.outputType());
         for (Ast.ExampleRow row : ex.rows()) {
-            if (row.inputs().size() != sig.ins().size()) {
+            if (row.inputs().size() != sig.inputTypes().size()) {
                 continue;
             }
             Read<RecordedRow> read = within(reader -> {
-                Object[] arguments = builtOrNull(reader, row.inputs(), sig.ins());
+                Object[] arguments = builtOrNull(reader, row.inputs(), sig.inputTypes());
                 if (arguments == null) {
                     return null;
                 }
-                Answered answer = readExpected(reader, row.expected(), sig.out(), cases);
+                Answered answer = readExpected(reader, row.expected(), sig.outputType(), cases);
                 return answer instanceof Answered.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
@@ -475,7 +475,7 @@ public final class ExampleStatements {
         }
         // The whole table, built the one way the proxy builds it.
         Read<Standins> read = within(
-                reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
+                reader -> standins(reader, fk, sig.inputTypes(), sig.outputType(), new ArrayList<>()),
                 new Deadline.Work.Table(fk.target(), origin, fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
@@ -564,14 +564,14 @@ public final class ExampleStatements {
             for (Ast.With w : row.withs()) {
                 List<RecordedRow> rows = recorded.get(w.dep());
                 Sig depSig = sigs.get(w.dep());
-                if (rows == null || depSig == null || !depSig.ins().isEmpty()) {
+                if (rows == null || depSig == null || !depSig.inputTypes().isEmpty()) {
                     continue;
                 }
                 // As with a recorded row: a `with` is written on a row, and that row is evaluated
                 // where the example is checked, installing this same value. What did not finish here
                 // did not finish there, and there is where it is said (E1910).
                 Answered constant = within(
-                        reader -> readStandIn(reader, w.value(), depSig.out(), outCases(depSig.out())),
+                        reader -> readStandIn(reader, w.value(), depSig.outputType(), outCases(depSig.outputType())),
                         new Deadline.Work.With(w.dep(), origin, w.value().pos())).orNull();
                 if (constant == null || constant instanceof Answered.Unreadable) {
                     continue;

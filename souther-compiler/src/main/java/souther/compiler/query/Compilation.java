@@ -158,14 +158,13 @@ public final class Compilation {
         return db.ask(new Shapes.Prepared(name)).value();
     }
 
-    /** What the names in {@code module} denote — the table a question about a type is asked against.
-     *  {@code souther run} needs it because it is handed the behavior's types rather than the codec
-     *  IR: a classification it cannot be given, it has to ask the same rule for. */
+    /** What the names in {@code module} denote — the table a question about a type is asked against. */
     public Symbols symbols(String module) {
         return db.ask(new Shapes.Scope(module)).value();
     }
 
-    /** The signatures of the behaviors {@code module} declares. */
+    /** The signatures of the behaviors {@code module} declares — what each takes and what it
+     * answers, as the shapes a decoder and an encoder are built for. */
     public Map<String, Sig> signatures(String module) {
         Map<String, Sig> sigs = db.ask(new Bodies.Signatures(module)).value();
         return sigs == null ? Map.of() : sigs;

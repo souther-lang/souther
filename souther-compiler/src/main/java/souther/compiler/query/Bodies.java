@@ -1135,13 +1135,19 @@ public final class Bodies {
         public Answer<Of> compute(Db db) {
             Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
+            // The signatures the check reads are the ones every other reader reads. Asked for here
+            // rather than built here: a second construction would answer the boundary's question a
+            // second time, and what a phase below the check is handed would be a different answer
+            // that happens to agree. Absent where they did not build, which the check is told by
+            // being handed nothing — it goes as far as it can without one and abandons the module
+            // there, and what went wrong was reported where signatures are made.
+            Answer<Map<String, Sig>> signatures = db.ask(new Signatures(name));
             Answer<Set<String>> injected = db.ask(new ImportedInjected(name));
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
             Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             Answer<Map<String, Ast.FnDef>> published = db.ask(new ImportedDefinitions(name));
-            if (!lowering.present() || !scope.present() || !imported.present()
+            if (!lowering.present() || !scope.present()
                     || !injected.present() || !reqSigs.present() || !sigs.present()
                     || !calleeSigs.present() || !published.present()) {
                 return Answer.absent();
@@ -1149,7 +1155,8 @@ public final class Bodies {
             TypeChecker.Reported reported;
             try {
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
-                        imported.value(), injected.value(), lowering.value().lowered(),
+                        signatures.present() ? signatures.value() : null,
+                        injected.value(), lowering.value().lowered(),
                         reqSigs.value(), calleeSigs.value(), sigs.value(), published.value());
             } catch (CompileException e) {
                 return Answer.absent(e);

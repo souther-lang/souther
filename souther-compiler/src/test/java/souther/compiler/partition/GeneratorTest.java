@@ -64,7 +64,7 @@ class GeneratorTest {
         Sig sig = sigs.get(behavior);
         List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
-        return new Model(new Generator.Subject(parameters, sig.ins(), partitioning.axes(), symbols),
+        return new Model(new Generator.Subject(parameters, sig.inputTypes(), partitioning.axes(), symbols),
                 symbols);
     }
 
