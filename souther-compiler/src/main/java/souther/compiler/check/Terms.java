@@ -39,7 +39,7 @@ import java.util.Set;
 final class Terms {
 
     private final Symbols symbols;
-    private final Map<TypeName, Boolean> numericNewtypes = new HashMap<>();
+    private final Map<TypeName, java.util.Optional<Type>> affineScalarBases = new HashMap<>();
     /** How the values of each atom this has named are spaced. Kept here because this is where an
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
      * anywhere else would be a second place that has to agree about which is which. */
@@ -138,7 +138,7 @@ final class Terms {
         return affine(e, n -> {
             if (n instanceof Core.NewData nd && nd.spreads().isEmpty() && nd.inits().size() == 1
                     && nd.inits().get(0).name().equals("value")
-                    && numericNewtype(Type.ref(nd.typeName()))) {
+                    && affineScalarBase(Type.ref(nd.typeName())) != null) {
                 return affineOf(nd.inits().get(0).value(), at, k);
             }
             Core written = writtenValue(n, at);
@@ -170,7 +170,7 @@ final class Terms {
      */
     private LinearForm givenForm(Core e, Denotations at, Known k) {
         if (!(e instanceof Core.Read r) || !(at.of(r.binding()) instanceof Denotes.Term)
-                || !isNumeric(e.type())) {
+                || affineScalarBase(e.type()) == null) {
             return null;
         }
         Core given = at.valueOf(r.binding());
@@ -225,7 +225,7 @@ final class Terms {
         if (size != null) {
             return size;
         }
-        if (!isNumeric(e.type())) {
+        if (affineScalarBase(e.type()) == null) {
             return null;
         }
         // A path rooted at a binding is the atom of what that binding denotes, and only where a clause
@@ -263,20 +263,14 @@ final class Terms {
 
     /** How the values of a numeric type are spaced. */
     Granularity granularityOf(Type t) {
-        if (t == Type.INT) {
+        Type carrier = affineScalarBase(t);
+        if (carrier == Type.INT) {
             return Granularity.DISCRETE;
         }
-        if (t == Type.DECIMAL) {
+        if (carrier == Type.DECIMAL) {
             return Granularity.DENSE;
         }
-        Type base = TypeOps.directNumericNewtypeBase(t, symbols);
-        if (base == Type.INT) {
-            return Granularity.DISCRETE;
-        }
-        if (base == Type.DECIMAL) {
-            return Granularity.DENSE;
-        }
-        throw new IllegalStateException("not a number: " + Type.show(t));
+        throw new IllegalStateException("not a number the domain carries: " + Type.show(t));
     }
 
     /** The spacing of every atom {@code f} is written over, for the domain to record. Every one of
@@ -761,18 +755,41 @@ final class Terms {
         return null;
     }
 
-    /** Whether {@code t} is a newtype over a number, remembered by the type it names. Asked at every
-     * leaf of every affine walk, and answering it walks the declaration's fields. */
-    boolean numericNewtype(Type t) {
-        if (!(t instanceof Type.Ref ref)) {
-            return TypeOps.directNumericNewtypeBase(t, symbols) != null;
+    /**
+     * The number the affine domain can carry a value of {@code t} as, or null where it can carry
+     * none.
+     *
+     * <p>This is the analyser's own capability and is named for the domain that has it. Two other
+     * questions read like it and are not it: whether arithmetic is closed over the type, which the
+     * language answers only for a newtype directly over a number ({@link
+     * TypeOps#directNumericNewtypeBase}, spec §newtype-arithmetic), and whether the type is an
+     * ordered number, which reaches the recursive base ({@link TypeOps#base}, ADR-0047). Answering
+     * this one with the first is how a comparison the language accepts stopped reaching the
+     * reasoning.
+     *
+     * <p>The carrier and not a yes: a caller that has to know whether it is stepping through whole
+     * numbers or dense ones would otherwise classify the type a second time, and two classifications
+     * of one type are two chances to disagree.
+     *
+     * <p>Every number the language calls one, today: the domain holds a scalar, and a value the
+     * language compares as a number is one it can hold. The two are answered by one call for that
+     * reason and not because they are one question — an equality reaches values no domain carries,
+     * and a type being comparable is no promise that an affine domain can hold it. Where those come
+     * apart this stops delegating; until then the delegation is what says why the answers agree.
+     *
+     * <p>Remembered by the type it names — asked at every leaf of every affine walk, and answering it
+     * walks the declaration's fields.
+     */
+    Type affineScalarBase(Type t) {
+        if (t == Type.INT || t == Type.DECIMAL) {
+            return t;
         }
-        return numericNewtypes.computeIfAbsent(ref.name(),
-                _ -> TypeOps.directNumericNewtypeBase(t, symbols) != null);
-    }
-
-    boolean isNumeric(Type t) {
-        return t == Type.INT || t == Type.DECIMAL || numericNewtype(t);
+        if (!(t instanceof Type.Ref ref)) {
+            return TypeOps.numericBase(t, symbols);
+        }
+        return affineScalarBases.computeIfAbsent(ref.name(),
+                _ -> java.util.Optional.ofNullable(TypeOps.numericBase(t, symbols)))
+                .orElse(null);
     }
 
 

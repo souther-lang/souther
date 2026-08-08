@@ -105,6 +105,112 @@ class PartitionsTest {
                 cost.cuts().stream().map(Cut::value).toList());
     }
 
+    /**
+     * A rule reaches through as many names as are wrapped round the number.
+     *
+     * <p>`data StartMinute = Minute` is one the language compares and bounds, and was one the
+     * derivation read nothing off — the range reader stopped at the first name and the position came
+     * back as one the model draws no line through (#461). Both ends and the rule between them are
+     * read at the numbers underneath, so the cuts are the type's edges taken in by the record.
+     */
+    @Test
+    void aBoundReachesThroughEveryNameWrappedRoundTheNumber() {
+        Partitions.Partitioning span = partitioningOf("""
+                module example.nested
+
+                data Minute = Int
+                    invariant withinDay = value >= 0 && value <= 1440
+
+                data StartMinute = Minute
+                data EndMinute = Minute
+
+                data Span =
+                    { from: StartMinute
+                    , to: EndMinute
+                    }
+                    invariant ordered = from.value < to.value
+
+                data Ok = { at: String }
+
+                behavior classify : (span: Span) -> Ok
+                    constructs Ok
+
+                let classify (span) = Ok { at = "x" }
+                """, "classify");
+
+        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(1439L)),
+                axis(span, "span.from").cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of(new ObservedValue.Integer(1L), new ObservedValue.Integer(1440L)),
+                axis(span, "span.to").cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of("invariant Minute (min)", "invariant Minute (max) within Span"),
+                axis(span, "span.from").cuts().stream()
+                        .map(c -> c.origins().get(0).describe()).toList(),
+                "the rule that drew each end is the one that wrote it, not the outermost name");
+    }
+
+    /**
+     * Bounds on two of the names a value wears intersect, and each end is owed to the rule that put
+     * it there.
+     *
+     * <p>Neither layer alone says the range is `[0, 10]`. A reader that took the outermost
+     * declaration's clauses would answer `[nothing, 10]`, and one that kept a single name per end
+     * would drop an obligation where two layers state the same bound.
+     */
+    @Test
+    void boundsOnTwoOfTheNamesIntersectAndBothAreOwed() {
+        Partitions.Partitioning wrapped = partitioningOf("""
+                module example.wrapped
+
+                data Inner = Int
+                    invariant innerMin = value >= 0
+
+                data Outer = Inner
+                    invariant outerMin = value >= 0
+                    invariant outerMax = value <= 10
+
+                data Ok = { at: String }
+
+                behavior classify : (o: Outer) -> Ok
+                    constructs Ok
+
+                let classify (o) = Ok { at = "x" }
+                """, "classify");
+        Axis o = axis(wrapped, "o");
+
+        assertEquals(List.of(new ObservedValue.Integer(0L), new ObservedValue.Integer(10L)),
+                o.cuts().stream().map(Cut::value).toList());
+        assertEquals(List.of("invariant Outer (min)", "invariant Inner (min)"),
+                o.cuts().get(0).origins().stream().map(OriginRef::describe).toList(),
+                "one value, two rules, and a row is owed to each");
+        assertEquals(List.of("invariant Outer (max)"),
+                o.cuts().get(1).origins().stream().map(OriginRef::describe).toList());
+    }
+
+    /** A `Decimal` under two names reads the same way. */
+    @Test
+    void theSameHoldsOverADecimalBase() {
+        Partitions.Partitioning share = partitioningOf("""
+                module example.share
+
+                data Ratio = Decimal
+                    invariant withinOne = value >= 0.0m && value <= 1.0m
+
+                data Share = Ratio
+
+                data Ok = { at: String }
+
+                behavior classify : (s: Share) -> Ok
+                    constructs Ok
+
+                let classify (s) = Ok { at = "x" }
+                """, "classify");
+
+        assertEquals(List.of(new ObservedValue.Decimal(java.math.BigDecimal.ZERO),
+                        new ObservedValue.Decimal(new java.math.BigDecimal("1.0"))),
+                axis(share, "s").cuts().stream().map(Cut::value).toList(),
+                "`>= 0.0m` is read as non-negative, which is the zero the reader already normalises to");
+    }
+
     @Test
     void aTypeTheModelDrawsNoLineThroughIsNotDerivable() {
         Axis note = axis(partitioningOf(KINDS, "submit"), "request.note");

@@ -1289,17 +1289,81 @@ public final class TypeOps {
         return owners;
     }
 
-    /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —
+    /**
+     * The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —
      * the base of its {@code value} type, recursively (so {@code 管理職 = レベル = Int} bases to Int).
-     * A newtype's value is what its comparison and equality read. */
+     * A newtype's value is what its comparison and equality read.
+     */
     public static Type base(Type t, Symbols symbols) {
-        if (isSingleValueNewtype(t, symbols)) {
-            Type inner = fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
-            if (inner != null) {
-                return base(inner, symbols);
+        return newtypeSpine(t, symbols).terminal();
+    }
+
+    /**
+     * The names wrapped round a value and what is left when they are off.
+     *
+     * <p>The one walk. How far a newtype reaches is a fact about the declarations and not about who
+     * is asking, and two readers deciding it apart is what #461 was: a comparison reaching the base
+     * while the range beside it stopped at the first name. Everything that needs to know derives from
+     * here — what a value is carried as, which declarations' rules apply to it, whether it is a
+     * number at all.
+     *
+     * <p>Stops on a name already worn, so a declaration reachable from itself ends the walk rather
+     * than repeating it, and stops where a newtype's {@code value} is not declared.
+     */
+    public static NewtypeSpine newtypeSpine(Type t, Symbols symbols) {
+        List<Layer> layers = new ArrayList<>();
+        Set<TypeName> worn = new LinkedHashSet<>();
+        Type at = t;
+        while (isSingleValueNewtype(at, symbols) && worn.add(((Type.Ref) at).name())) {
+            Ast.Data data = (Ast.Data) symbols.get(((Type.Ref) at).name());
+            layers.add(new Layer(((Type.Ref) at).name(), data));
+            Type inner = fieldTypes(data, symbols).get("value");
+            if (inner == null) {
+                break;
             }
+            at = inner;
         }
-        return t;
+        return new NewtypeSpine(List.copyOf(layers), at);
+    }
+
+    /** The names a value wears, and the type underneath them. */
+    public record NewtypeSpine(List<Layer> layers, Type terminal) {}
+
+    /**
+     * One name a value wears, and the declaration it is written by.
+     *
+     * <p>Kept together because a rule is read at a layer and reported by the declaration that wrote
+     * it — a failure names a clause of a type, and dropping which type that was leaves a diagnostic
+     * with nothing to point at.
+     */
+    public record Layer(TypeName named, Ast.Data data) {}
+
+    /**
+     * The names wrapped round a value of {@code t}, outermost first.
+     *
+     * <p>One place says how far a newtype reaches, because more than one thing needs to know: what a
+     * construction has to satisfy, what a position's range is, what a comparison of two such values
+     * compares. Each working it out for itself is how they came to disagree about a value wearing two
+     * names — the projection reading through and the range reader stopping at the first.
+     *
+     * <p>Stops on a name already worn, so a declaration that wraps its own kind ends the walk rather
+     * than repeating it. A type that is not a newtype has one layer or none.
+     */
+    public static List<Layer> newtypeChain(Type t, Symbols symbols) {
+        return newtypeSpine(t, symbols).layers();
+    }
+
+    /**
+     * The {@code Int} or {@code Decimal} a value of {@code t} is carried as, reaching through as many
+     * newtypes as it is written with, or {@code null} where it is carried as neither.
+     *
+     * <p>The language's own reading: a comparison of two such values compares the numbers underneath
+     * however many names are wrapped round them (ADR-0047). Not what arithmetic asks — that is
+     * {@link #directNumericNewtypeBase} and stops at one layer, which the language means.
+     */
+    public static Type numericBase(Type t, Symbols symbols) {
+        Type carried = newtypeSpine(t, symbols).terminal();
+        return carried == Type.INT || carried == Type.DECIMAL ? carried : null;
     }
 
     /** What a single-value newtype directly wraps (one level, so a newtype over a newtype answers
