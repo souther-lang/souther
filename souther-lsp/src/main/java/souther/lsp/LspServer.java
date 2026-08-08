@@ -91,41 +91,69 @@ public final class LspServer {
                 "the request could not be completed (" + cause.getClass().getSimpleName() + ")");
     }
 
-    /** Returns true when the server should stop (on {@code exit}). */
+    /**
+     * Returns true when the server should stop (on {@code exit}).
+     *
+     * <p>Naming the method is where a client learns the server does not answer it: nothing below
+     * this point takes a spelling, so there is no second place a method could be refused, and none
+     * where one could be answered without being declared.
+     */
     private boolean dispatch(String method, JsonNode id, JsonNode params) {
-        switch (method) {
-            case "initialize" -> { captureRoots(params); respond(id, initializeResult()); }
-            case "initialized" -> registerFileWatchers();
-            case "$/setTrace", "workspace/didChangeConfiguration" -> { /* no-op */ }
-            case "textDocument/didOpen" -> InboundDecoders.decode(InboundDecoders.DID_OPEN, params)
-                    .ifPresent(p -> { documents.open(p.uri(), p.text()); publishAll(); });
-            case "textDocument/didChange" -> InboundDecoders.decode(InboundDecoders.DID_CHANGE, params)
-                    .ifPresent(p -> { documents.change(p.uri(), p.text()); publishAll(); });
-            case "textDocument/didClose" -> InboundDecoders.decode(InboundDecoders.DOC_REF, params)
-                    .ifPresent(p -> { documents.close(p.uri()); clearDiagnostics(p.uri()); });
-            case "workspace/didChangeWatchedFiles" -> {
+        LspMethod named = LspMethod.of(method).orElse(null);
+        if (named == null) {
+            if (id != null && !id.isNull()) {
+                respondError(id, -32601, "method not found: " + method);
+            }
+            return false;   // a notification has no reply, so an unknown one is simply dropped
+        }
+        return answer(named, id, params);
+    }
+
+    /**
+     * Carries out one method.
+     *
+     * <p>A switch expression with no {@code default}: a method added to {@link LspMethod} and left
+     * unhandled here does not compile. That is what makes the set of methods the server answers the
+     * set written there, and so the set the handshake is built from.
+     */
+    private boolean answer(LspMethod method, JsonNode id, JsonNode params) {
+        return switch (method) {
+            case INITIALIZE -> { captureRoots(params); respond(id, initializeResult()); yield false; }
+            case INITIALIZED -> { registerDynamically(); yield false; }
+            case SET_TRACE, DID_CHANGE_CONFIGURATION -> false;   // no-op
+            case DID_OPEN -> {
+                InboundDecoders.decode(InboundDecoders.DID_OPEN, params)
+                        .ifPresent(p -> { documents.open(p.uri(), p.text()); publishAll(); });
+                yield false;
+            }
+            case DID_CHANGE -> {
+                InboundDecoders.decode(InboundDecoders.DID_CHANGE, params)
+                        .ifPresent(p -> { documents.change(p.uri(), p.text()); publishAll(); });
+                yield false;
+            }
+            case DID_CLOSE -> {
+                InboundDecoders.decode(InboundDecoders.DOC_REF, params)
+                        .ifPresent(p -> { documents.close(p.uri()); clearDiagnostics(p.uri()); });
+                yield false;
+            }
+            case DID_CHANGE_WATCHED_FILES -> {
                 workspace.markChanged();   // a file changed on disk; drop the cached scan and re-read
                 publishAll();
+                yield false;
             }
-            case "textDocument/documentSymbol" -> respond(id, documentSymbols(params));
-            case "textDocument/semanticTokens/full" -> respond(id, semanticTokens(params));
-            case "textDocument/hover" -> respond(id, hover(params));
-            case "textDocument/definition" -> respond(id, definition(params));
-            case "textDocument/references" -> respond(id, references(params));
-            case "textDocument/completion" -> respond(id, completion(params));
-            case "textDocument/codeAction" -> respond(id, codeActions(params));
-            case "textDocument/codeLens" -> respond(id, codeLenses(params));
-            case "textDocument/rename" -> respond(id, rename(params));
-            case "textDocument/formatting" -> respond(id, formatting(params));
-            case "shutdown" -> respond(id, null);
-            case "exit" -> { return true; }
-            default -> {
-                if (id != null && !id.isNull()) {
-                    respondError(id, -32601, "method not found: " + method);
-                }
-            }
-        }
-        return false;
+            case DOCUMENT_SYMBOL -> { respond(id, documentSymbols(params)); yield false; }
+            case SEMANTIC_TOKENS_FULL -> { respond(id, semanticTokens(params)); yield false; }
+            case HOVER -> { respond(id, hover(params)); yield false; }
+            case DEFINITION -> { respond(id, definition(params)); yield false; }
+            case REFERENCES -> { respond(id, references(params)); yield false; }
+            case COMPLETION -> { respond(id, completion(params)); yield false; }
+            case CODE_ACTION -> { respond(id, codeActions(params)); yield false; }
+            case CODE_LENS -> { respond(id, codeLenses(params)); yield false; }
+            case RENAME -> { respond(id, rename(params)); yield false; }
+            case FORMATTING -> { respond(id, formatting(params)); yield false; }
+            case SHUTDOWN -> { respond(id, null); yield false; }
+            case EXIT -> true;
+        };
     }
 
     // --- capabilities ---
@@ -177,25 +205,10 @@ public final class LspServer {
         };
     }
 
+    /** What the client is told it may call, drawn from the methods that are answered. */
     private Map<String, Object> initializeResult() {
-        Map<String, Object> capabilities = new LinkedHashMap<>();
-        capabilities.put("textDocumentSync", 1);   // 1 = full document sync
-        capabilities.put("documentSymbolProvider", true);
-        capabilities.put("hoverProvider", true);
-        capabilities.put("definitionProvider", true);
-        capabilities.put("referencesProvider", true);
-        capabilities.put("renameProvider", true);
-        capabilities.put("completionProvider", Map.of());   // invoked completion; no trigger characters
-        capabilities.put("codeActionProvider", true);
-        capabilities.put("codeLensProvider", Map.of("resolveProvider", false));
-        capabilities.put("documentFormattingProvider", true);
-        Map<String, Object> semanticTokens = new LinkedHashMap<>();
-        semanticTokens.put("legend", Map.of("tokenTypes", Analyzer.TOKEN_TYPES,
-                "tokenModifiers", List.of()));
-        semanticTokens.put("full", true);
-        capabilities.put("semanticTokensProvider", semanticTokens);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("capabilities", capabilities);
+        result.put("capabilities", LspMethod.serverCapabilities());
         result.put("serverInfo", Map.of("name", "souther-lsp", "version", "0.1.0"));
         return result;
     }
@@ -526,18 +539,19 @@ public final class LspServer {
         conn.write(JSON.writeValueAsString(message));
     }
 
-    /** Asks the client to watch the workspace's {@code .sou} files and report on-disk changes via
-     * {@code workspace/didChangeWatchedFiles}, so the cached disk scan is invalidated when a file is
-     * created, edited, or deleted outside the editor rather than relying on the client watching by
-     * default. The registration response is a no-op here (dropped by {@link #run}); a client without
-     * dynamic registration simply ignores the request. */
-    private void registerFileWatchers() {
-        Map<String, Object> registration = new LinkedHashMap<>();
-        registration.put("id", "souther-sou-watcher");
-        registration.put("method", "workspace/didChangeWatchedFiles");
-        registration.put("registerOptions",
-                Map.of("watchers", List.of(Map.of("globPattern", "**/*.sou"))));
-        sendRequest("client/registerCapability", Map.of("registrations", List.of(registration)));
+    /** Announces the methods no capability carries — asking the client to watch the workspace's
+     * {@code .sou} files and report on-disk changes via {@code workspace/didChangeWatchedFiles}, so
+     * the cached disk scan is dropped when a file is created, edited, or deleted outside the editor
+     * rather than relying on the client watching by default. What is registered comes from the same
+     * methods the capabilities do, so this and the handshake describe one server between them. The
+     * registration response is a no-op here (dropped by {@link #run}); a client without dynamic
+     * registration simply ignores the request. */
+    private void registerDynamically() {
+        List<Map<String, Object>> registrations = LspMethod.dynamicRegistrations();
+        if (registrations.isEmpty()) {
+            return;
+        }
+        sendRequest("client/registerCapability", Map.of("registrations", registrations));
     }
 
     private void sendRequest(String method, Object params) {
