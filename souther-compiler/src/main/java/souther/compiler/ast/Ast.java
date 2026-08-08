@@ -3,7 +3,7 @@ package souther.compiler.ast;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
@@ -832,11 +832,11 @@ public interface Ast {
     /** A {@code Map<K, T>} decoder: each object value is decoded with {@code value}, and each of the
      * object's string keys through {@code key}.
      *
-     * <p>The key is a {@link BoundaryMapKey} rather than a {@code DecRef}: a key position holds one of
+     * <p>The key is a {@link MapKeyRepresentation} rather than a {@code DecRef}: a key position holds one of
      * the representations the boundary admits, and nothing else — not a list, not an option — so the
      * type says as much and a reader that switches on it needs no arm for what cannot be there. It is
      * also the classification the checker already made, carried here rather than worked out again. */
-    record MapDecRef(DecRef value, BoundaryMapKey key, SourcePos pos) implements DecRef {}
+    record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef {}
 
     /** A primitive field decoder kind. */
     /** A statement in a single-value decoder body. */
@@ -894,7 +894,7 @@ public interface Ast {
     /** Encodes a {@code Map<K, T>} to a {@code Raw.Object}, each value via {@code elem} and each key
      * to its bare string through {@code key} — the representation the checker admitted it as, closed
      * for the reason {@link MapDecRef}'s is. */
-    record MapEnc(Expr source, EncElem elem, BoundaryMapKey key, SourcePos pos) implements RawExpr {}
+    record MapEnc(Expr source, EncElem elem, MapKeyRepresentation key, SourcePos pos) implements RawExpr {}
 
     /** Encodes an optional field: {@code None} becomes {@code Raw.Null}, {@code Some(v)} encodes
      * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elemVar}. */
@@ -946,7 +946,7 @@ public interface Ast {
 
     /** A {@code Map<K, V>} element, each value encoded by {@code value} and each key by {@code key},
      * as {@link MapEnc} does for a field. */
-    record MapElemEnc(EncElem value, BoundaryMapKey key, SourcePos pos) implements EncElem {}
+    record MapElemEnc(EncElem value, MapKeyRepresentation key, SourcePos pos) implements EncElem {}
 
     record RawEntry(String key, RawExpr value, SourcePos pos) implements Ast {}
 

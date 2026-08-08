@@ -8,7 +8,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
@@ -265,9 +265,9 @@ public final class Deriver {
      * out here: this asks for the classification and puts it in the codec IR, where the backend reads
      * it. A key with no classification never had a boundary representation, and is refused (ADR-0040).
      */
-    private static BoundaryMapKey mapKey(Type.MapOf mo, Ast.Data d, String field, SourcePos pos,
+    private static MapKeyRepresentation mapKey(Type.MapOf mo, Ast.Data d, String field, SourcePos pos,
                                          Symbols symbols) {
-        BoundaryMapKey key = TypeOps.classifyConcreteMapKey(mo.key(), symbols);
+        MapKeyRepresentation key = TypeOps.classifyConcreteMapKey(mo.key(), symbols);
         if (key == null) {
             throw badMapKey(mo.key(), d, field, pos);
         }

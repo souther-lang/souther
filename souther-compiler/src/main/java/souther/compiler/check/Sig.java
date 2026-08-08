@@ -1,7 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BoundaryInput;
-import souther.compiler.types.BoundaryOutput;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -17,12 +15,17 @@ import java.util.Objects;
  * admits it.
  *
  * <p>That is why this is not a record. A public canonical constructor would let anything below the
- * check assemble a signature out of shapes nothing admitted — a {@code Nominal} naming a type the
- * language declares of its own operations, say — and every reader below would take it for one the
- * compiler stands behind. The constructor is package-private, so {@link SignatureBoundary} and the
- * composition it is called from are the only places one is made, and the arrow from a type to a
- * signature runs through the walk rather than around it. The shapes themselves stay open: what
- * matters is what may be raised to a signature, not what may be described.
+ * check assemble a signature out of shapes nothing admitted, and every reader below would take it
+ * for one the compiler stands behind. The constructor is package-private, so {@link
+ * SignatureBoundary} and the composition it is called from are the only places one is made, and the
+ * arrow from a type to a signature runs through the walk rather than around it.
+ *
+ * <p>The shapes are closed the same way rather than left open. A signature that can only be made by
+ * the walk still says nothing about a shape held on its own, and a reader is handed shapes — a case
+ * of a union, an element of a list, a map's key — as often as it is handed a whole signature. So a
+ * case that names a type has a package-private constructor too, and one that names none is a
+ * representation the boundary always admits. What a witness is worth is that it exists, and that
+ * holds of every one of them or of none.
  */
 public final class Sig {
 

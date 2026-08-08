@@ -4,10 +4,11 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.TypeOps;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.check.BoundaryMapKey;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
-import souther.compiler.types.BoundaryInput;
-import souther.compiler.types.BoundaryOutput;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.query.Compilation;
@@ -516,12 +517,12 @@ public final class Runner {
      * representation is the string leaf, parsed for a temporal.
      */
     private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, BoundaryMapKey key) {
-        return switch (key) {
-            case BoundaryMapKey.StringNewtype n -> codecOf(loader, n.name(), "decoder");
-            case BoundaryMapKey.UnitEnum e -> codecOf(loader, e.name(), "decoder");
-            case BoundaryMapKey.Text _ -> text();
-            case BoundaryMapKey.Date _ -> text().date();
-            case BoundaryMapKey.DateTime _ -> text().dateTime();
+        return switch (key.representation()) {
+            case MapKeyRepresentation.StringNewtype n -> codecOf(loader, n.name(), "decoder");
+            case MapKeyRepresentation.UnitEnum e -> codecOf(loader, e.name(), "decoder");
+            case MapKeyRepresentation.Text _ -> text();
+            case MapKeyRepresentation.Date _ -> text().date();
+            case MapKeyRepresentation.DateTime _ -> text().dateTime();
         };
     }
 
@@ -572,9 +573,16 @@ public final class Runner {
     private static final String DUPLICATE_KEY = "duplicate_key";
     private static final String DUPLICATE_KEY_MESSAGE = "two keys are the same key once decoded";
 
-    /** The named static decoder factory of a generated class — {@code jsonDecoder} for a value read
-     *  from JSON, {@code decoder} for a map key, which is read from the string the object carried.
-     *  Either erases at the reflection boundary. */
+    /**
+     * The named static decoder factory of a generated class — {@code jsonDecoder} for a value read
+     * from JSON, {@code decoder} for a map key, which is read from the string the object carried.
+     * Either erases at the reflection boundary.
+     *
+     * <p>The name came out of the witness, so it is one a model declared and one this compilation
+     * generated a class for, and that class carries both factories. There is nothing here to report:
+     * a reflective failure would mean the class this run emitted is not the class it emitted, which
+     * is not something a reader of the boundary can say anything useful about.
+     */
     private static <I> Decoder<I, ?> codecOf(MemoryClassLoader loader, TypeName type, String factory) {
         try {
             @SuppressWarnings("unchecked")
@@ -582,9 +590,7 @@ public final class Runner {
                     loader.loadClass(type.qualified()).getMethod(factory).invoke(null);
             return decoder;
         } catch (ReflectiveOperationException e) {
-            throw fail("run.decode.nodecoder",
-                    "cannot obtain a decoder for `" + type.name() + "`: " + e,
-                    type.name(), e.toString());
+            throw new IllegalStateException("`" + type.qualified() + "` has no `" + factory + "()`", e);
         }
     }
 
@@ -646,12 +652,12 @@ public final class Runner {
                 yield Representations.sortedObject(encoded);
             }
             case BoundaryOutput.Nominal n ->
-                    encodeThrough(loader, n.name().qualified(), n.name().name(), result);
+                    encodeThrough(loader, n.name().qualified(), result);
             // A union nobody named is generated as the behavior's result type, which is where its
             // encoder is (spec 19.8). It is the only output with no name in the source, so it is the
             // behavior that says which class to reach for.
             case BoundaryOutput.Cases c -> encodeThrough(loader,
-                    pkg + "." + Backend.behaviorResultClass(behavior), Type.show(c.type()), result);
+                    pkg + "." + Backend.behaviorResultClass(behavior), result);
         };
     }
 
@@ -661,19 +667,21 @@ public final class Runner {
      * case name — and which kind it is travelled here rather than being asked again.
      */
     private static String encodeKey(MemoryClassLoader loader, BoundaryMapKey key, Object value) {
-        return (String) switch (key) {
-            case BoundaryMapKey.Text _ -> encodeLeaf(LeafScalar.STRING, value);
-            case BoundaryMapKey.Date _ -> encodeLeaf(LeafScalar.DATE, value);
-            case BoundaryMapKey.DateTime _ -> encodeLeaf(LeafScalar.DATETIME, value);
-            case BoundaryMapKey.StringNewtype n ->
-                    encodeThrough(loader, n.name().qualified(), n.name().name(), value);
-            case BoundaryMapKey.UnitEnum e ->
-                    encodeThrough(loader, e.name().qualified(), e.name().name(), value);
+        return (String) switch (key.representation()) {
+            case MapKeyRepresentation.Text _ -> encodeLeaf(LeafScalar.STRING, value);
+            case MapKeyRepresentation.Date _ -> encodeLeaf(LeafScalar.DATE, value);
+            case MapKeyRepresentation.DateTime _ -> encodeLeaf(LeafScalar.DATETIME, value);
+            case MapKeyRepresentation.StringNewtype n ->
+                    encodeThrough(loader, n.name().qualified(), value);
+            case MapKeyRepresentation.UnitEnum e ->
+                    encodeThrough(loader, e.name().qualified(), value);
         };
     }
 
-    /** {@code result} through the derived {@code encoder()} of the named generated class. */
-    private static Object encodeThrough(MemoryClassLoader loader, String className, String shown,
+    /** {@code result} through the derived {@code encoder()} of the named generated class. Every type
+     *  a witness names has one, and so does the class a behavior's anonymous answer is generated as,
+     *  so this reads what was emitted rather than asking whether it was. */
+    private static Object encodeThrough(MemoryClassLoader loader, String className,
                                         Object result) {
         try {
             @SuppressWarnings("unchecked")   // the generated class's encoder() erases at the reflection boundary
@@ -681,8 +689,7 @@ public final class Runner {
                     loader.loadClass(className).getMethod("encoder").invoke(null);
             return encoder.encode(result);
         } catch (ReflectiveOperationException e) {
-            throw fail("run.encode.noencoder",
-                    "cannot obtain an encoder for the output `" + shown + "`: " + e, shown, e.toString());
+            throw new IllegalStateException("`" + className + "` has no `encoder()`", e);
         }
     }
 

@@ -1,9 +1,10 @@
 package souther.compiler;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.types.BoundaryInput;
-import souther.compiler.types.BoundaryOutput;
+import souther.compiler.check.BoundaryInput;
+import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -166,14 +167,13 @@ public sealed interface FixtureShape {
     }
 
     /** A key a boundary map carries, as the position a fixture writes it at. */
-    private static FixtureShape key(souther.compiler.types.BoundaryMapKey key) {
-        return switch (key) {
-            case souther.compiler.types.BoundaryMapKey.Text _ -> new Scalar(LeafScalar.STRING);
-            case souther.compiler.types.BoundaryMapKey.Date _ -> new Scalar(LeafScalar.DATE);
-            case souther.compiler.types.BoundaryMapKey.DateTime _ ->
-                    new Scalar(LeafScalar.DATETIME);
-            case souther.compiler.types.BoundaryMapKey.StringNewtype n -> new Nominal(n.name());
-            case souther.compiler.types.BoundaryMapKey.UnitEnum e -> new Nominal(e.name());
+    private static FixtureShape key(souther.compiler.check.BoundaryMapKey key) {
+        return switch (key.representation()) {
+            case MapKeyRepresentation.Text _ -> new Scalar(LeafScalar.STRING);
+            case MapKeyRepresentation.Date _ -> new Scalar(LeafScalar.DATE);
+            case MapKeyRepresentation.DateTime _ -> new Scalar(LeafScalar.DATETIME);
+            case MapKeyRepresentation.StringNewtype n -> new Nominal(n.name());
+            case MapKeyRepresentation.UnitEnum e -> new Nominal(e.name());
         };
     }
 

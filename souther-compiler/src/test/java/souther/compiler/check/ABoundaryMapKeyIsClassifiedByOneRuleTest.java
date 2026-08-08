@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.frontend.CstFrontend;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
@@ -47,7 +47,7 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
         return Resolve.module(parsed, Symbols.of(parsed));
     }
 
-    private BoundaryMapKey classify(Type key) {
+    private MapKeyRepresentation classify(Type key) {
         return TypeOps.classifyConcreteMapKey(key, symbols);
     }
 
@@ -57,13 +57,13 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
 
     @Test
     void aStringKeyIsText() {
-        assertEquals(new BoundaryMapKey.Text(), classify(Type.STRING));
+        assertEquals(new MapKeyRepresentation.Text(), classify(Type.STRING));
     }
 
     @Test
     void aTemporalKeyIsItsOwnRepresentation() {
-        assertEquals(new BoundaryMapKey.Date(), classify(Type.DATE));
-        assertEquals(new BoundaryMapKey.DateTime(), classify(Type.DATETIME));
+        assertEquals(new MapKeyRepresentation.Date(), classify(Type.DATE));
+        assertEquals(new MapKeyRepresentation.DateTime(), classify(Type.DATETIME));
     }
 
     /** The base a newtype wraps is in the case rather than beside it. Every reader of a named key
@@ -72,13 +72,13 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
      *  is a case of its own, and reaches every reader as one. */
     @Test
     void aStringBackedNewtypeIsItsOwnCase() {
-        assertEquals(new BoundaryMapKey.StringNewtype(symbols.own("ProductId")),
+        assertEquals(new MapKeyRepresentation.StringNewtype(symbols.own("ProductId")),
                 classify(named("ProductId")));
     }
 
     @Test
     void anEnumerationIsNamedApartFromANewtype() {
-        assertEquals(new BoundaryMapKey.UnitEnum(symbols.own("Outcome")), classify(named("Outcome")));
+        assertEquals(new MapKeyRepresentation.UnitEnum(symbols.own("Outcome")), classify(named("Outcome")));
     }
 
     /** Which bases a newtype key may wrap is the rule's, and the refusal is the classifier's —

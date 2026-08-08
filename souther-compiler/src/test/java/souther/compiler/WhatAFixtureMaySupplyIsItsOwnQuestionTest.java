@@ -3,7 +3,7 @@ package souther.compiler;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Compilation;
-import souther.compiler.types.BoundaryInput;
+import souther.compiler.check.BoundaryInput;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;

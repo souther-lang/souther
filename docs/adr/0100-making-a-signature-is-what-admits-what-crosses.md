@@ -108,6 +108,51 @@ could hold the reserved type, which left `Runner.leafDecoder` with a `RAW` arm a
 `run.decode.raw` and `run.encode.raw`. `BoundaryScalar` has six cases and one way in, and the arms
 and their messages are gone with it.
 
+**A name the boundary carries is closed the same way, and by where the witness lives.** `Nominal`,
+`Cases` and the two `BoundaryMapKey` cases that name a type hold names, and a public canonical
+constructor would let a refused one be assembled into a witness every reader takes for one the
+compiler stands behind. A record cannot be closed — its canonical constructor is as accessible as
+the record — so each is written out as a final class with a package-private constructor, and
+`BoundaryInput`, `BoundaryOutput` and `BoundaryMapKey` sit beside the walk that admits a name rather
+than in `types`, which is what makes admission the only way in.
+
+Closing them is a choice between two readings of what a witness is worth, and the two cannot both
+hold. Either a signature is the capability — shapes may be assembled by anyone, and what the closed
+`Sig` constructor guarantees is that no forged one is ever *raised* to a signature — or a witness is
+itself the evidence, and holding one means the name in it was admitted. The first would make closing
+these cases pointless; the second is what the runner's guards were removed on the strength of, and it
+is what `BoundaryScalar` already was, having six cases and no way to name `Raw`. This takes the
+second, and takes it everywhere: a reader is handed a case of a union, an element of a list or a
+map's key at least as often as it is handed a whole signature, so a guarantee that held only of the
+signature would not be the guarantee the readers rest on.
+
+**Classifying a key and admitting one are separate types, because they are separate questions.**
+Closing a constructor is not enough where a public function hands the value out: `classifyConcreteMapKey`
+answered a witness, and what it looked at was whether the type *has* a representation — which a name
+of the language's own has as much as a model's. `SignatureBoundary` proved the gap by re-asking
+`declaredByAModel` of the classified name. So the classification is `MapKeyRepresentation`, a fact
+about a type that anything may work out, and `BoundaryMapKey` holds one and is made only where a key
+position admitted the name.
+
+The split is also what #462 says in the general form: a key position is established by a behavior's
+boundary, by a data's field and by a fixture, and they do not admit alike, while the representation
+is what all three share. It removes a package cycle as a side effect — `Ast` carries the
+representation in its codec IR, which is a fact about a type and belongs in `types`, where `Ast`
+could already reach.
+
+Of the two questions a key position asks, only the first has an example in today's library: a name
+with no representation at all is refused as that (`E1314`), and there is no type the language
+declares of its own that a key *could* be classified as. The second obligation is the position's
+whether or not anything can reach it now, which is why it is written where the position is.
+
+With that, the runner's last two reflective guards go — `run.decode.nodecoder` and
+`run.encode.noencoder`, which asked whether the class a name denotes has the factory being reached
+for. Measured over every shape a witness has a name in, in both directions, neither is reachable: the
+name came out of the witness, so a model declared it, and this compilation generated its class with
+both factories. `CodecGen.jsonCompatible` goes with them, being what could once have withheld a
+`jsonDecoder()` — its rule was stated as "no temporal anywhere in the shape" and had stopped being
+implemented, so it answered yes to everything while the runner still guarded against a no.
+
 **Every signature is one, whatever its origin.** A composition's answer is a type nobody wrote — the
 last stage's, merged with the cases that left the main line — and it is admitted where it is made; a
 declaration read back from a jar travels as source and is admitted by the same walk when the
@@ -163,21 +208,21 @@ The runner is a consumer with no fallback arm: both of its switches are total ov
 handed. `FixtureReader` and `CodecGen.flatMember` are not, and each is its own change, because each
 needs something this decision does not settle.
 
-`FixtureReader.decoderFor` serves helper-parameter positions as well as boundary ones — a helper may
-take an optional or a tuple, which is exactly what a boundary may not — so making it a consumer means
-telling the two apart at every caller first, including the stand-in path, which today rebuilds a
-dependency's parameter types from the AST rather than reading its signature. Until then it still asks
-`classifyConcreteMapKey` of a `Type`, which is the one place where "three consumers, one answer" is
-still two.
+`FixtureReader.decoderFor` served helper-parameter positions as well as boundary ones — a helper may
+take an optional or a tuple, which is exactly what a boundary may not — so it asked
+`classifyConcreteMapKey` of a `Type`, borrowing the boundary's rule for positions the boundary never
+established. #462 gave those positions a rule of their own, and the reader stopped borrowing.
 
 `CodecGen` reads a union's *leaf* members, and the witness does not carry them: `BoundaryOutput.Cases`
 holds the members as written, so that `outputType()` reconstructs the type it was built from.
 Expanding a named sum inside the witness would change what the signature's type is, so what that
 reader needs is leaf-expansion carried beside the members rather than instead of them.
 
-`BoundaryNominal` waits on the second of those. A name carrying its resolved codec descriptor — a
-data's, a sum's, a unit's, a newtype's — has exactly one reader that would branch on it,
-`CodecGen.flatMember`, and adding it first would be a witness nobody reads.
+`BoundaryNominal` was to be a name carrying its resolved codec descriptor — a data's, a sum's, a
+unit's, a newtype's — for `CodecGen.flatMember` to branch on. Measuring it for #463 refuted the
+premise: a newtype's answer depends on what it wraps, so four kinds cannot state it, and the question
+that reader was really asking belonged to codec derivation rather than to the boundary. What was left
+of the case is the name itself, and closing it needed no descriptor.
 
 One widening, in the one rule that was asked of the written form rather than of the type: a parameter
 written `A | A` has the type `A` and is now taken. The rule reads the type at every position, which
