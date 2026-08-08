@@ -257,13 +257,13 @@ public final class InvariantChecker {
                              Map<String, BigDecimal> settled) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
-        Map<String, BindingId> bindings = c.clauses.bindingsOf(data);
+        Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
         Denotations at = Denotations.none().locations(bindings.values());
         Known k = Known.top();
         boolean read = true;
         try {
             for (Ast.InvariantClause clause : c.clauses.of(named, data)) {
-                Core stated = c.clauses.typed(clause.expr(), data);
+                Core stated = c.clauses.typed(clause.expr(), named, data);
                 if (stated == null) {
                     read = false;
                     continue;
@@ -376,7 +376,7 @@ public final class InvariantChecker {
             }
         } else {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-                if (capabilityOf(clause.expr(), clause.pos(), data, symbols).kind()
+                if (capabilityOf(clause.expr(), clause.pos(), named, data, symbols).kind()
                         != ClauseDischarge.Kind.DERIVABLE) {
                     return false;
                 }

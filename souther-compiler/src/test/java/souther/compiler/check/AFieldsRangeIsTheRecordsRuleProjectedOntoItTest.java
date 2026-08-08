@@ -267,13 +267,10 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
      *
      * <p>The discharge reading of an imported type has already been settled into the folds its
      * operations are, so a classifier working off that reading calls every imported bound a rule it
-     * could not read — and every edge of every imported number stops being one a row is owed. What
-     * decides it is the reader that gave the position its bounds, which works off the declaration as
-     * written and answers the same either side of a module boundary.
-     *
-     * <p>The seeding still takes nothing from such a type, so an imported position keeps the bounds
-     * its own type gives it and nothing relates it to a sibling. That is a narrowing missed and not
-     * an edge invented, which is the direction to miss in.
+     * could not read — and every edge of every imported number stops being one a row is owed. Held
+     * because two things have to line up for it: the bindings a declaration's fields are computed
+     * under, which are the declaring module's wherever the declaration is read (#466), and the reader
+     * that classifies its rules, which works off the declaration as written.
      */
     @Test
     void anImportedBoundIsReadLikeADeclaredOne() {
@@ -297,10 +294,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertTrue(domains.allRulesRead(),
                 "the rule is `value >= 0.0m` wherever it is declared");
-        assertNull(domains.at("total"),
-                "the seeding reads an imported type in the settled form and takes no bound from it,"
-                        + " so the position keeps the one its own type gives it and nothing relates"
-                        + " it to a sibling across a module boundary");
+        assertEquals(0, BigDecimal.ZERO.compareTo(domains.at("total").min()),
+                "and it reaches the domain from there too");
     }
 
     /**
@@ -333,15 +328,15 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
     }
 
     /**
-     * A relation is a projection only where both ends brought their ranges.
+     * A relation narrows the same either side of a module boundary.
      *
-     * <p>An imported type's own invariant cannot be re-elaborated by the module reading it (#464), so
-     * the ordering arrives and the ranges do not. Nothing narrows, the derivation puts each type's
-     * own edges back, and those are values no pair holds. Said while that stands, and unreachable
-     * once it is fixed.
+     * <p>A relation is a projection only where both ends brought their ranges. An imported type's own
+     * invariant could not be re-elaborated by the module reading it (#464/#466), so the ordering
+     * arrived and the ranges did not — nothing narrowed, the derivation put each type's own edges
+     * back, and those are values no pair holds.
      */
     @Test
-    void aRelationOverATypeWhoseRangeNeverArrivedIsNotAProjection() {
+    void aRelationNarrowsTheSameAcrossAModuleBoundary() {
         Compilation compilation = Compilation.ofSources(List.of("""
                 module example.money exposing ( Amount )
 
@@ -429,6 +424,45 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertBounds(domains.at("n"), 0, 10);
         assertTrue(domains.allRulesRead(),
                 "a Root with no note and no others is a Root, and the pattern never runs");
+    }
+
+    /**
+     * And the same where the reader has a declaration of that spelling itself.
+     *
+     * <p>Four ways reach another module's declaration and the bindings were wrong for all of them
+     * (#466). This is the one that would survive any repair answering from a bare name: two
+     * declarations of one spelling sharing a binding is a field standing for two values.
+     */
+    @Test
+    void aRelationNarrowsWhereTheReaderHasThatSpellingToo() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module example.money exposing ( Amount )
+
+                data Amount = Int
+                    invariant within = value >= 0 && value <= 10
+                """, """
+                module example.report
+
+                import example.money as M
+
+                data Amount = String
+                    invariant named = String.length(value) >= 1
+
+                data Pair =
+                    { a: M.Amount
+                    , b: M.Amount
+                    }
+                    invariant ordered = a < b
+                """), souther.compiler.meta.ModulePath.EMPTY);
+        compilation.answerEverything();
+        Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
+        TypeName named = new TypeName("example.report", "Pair");
+        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+
+        assertBounds(domains.at("a"), 0, 9);
+        assertBounds(domains.at("b"), 1, 10);
+        assertTrue(domains.allRulesRead(),
+                "a local `Amount` of another shape says nothing about the one these fields are");
     }
 
     /** A newtype has no siblings, so there is nothing here to project. */
