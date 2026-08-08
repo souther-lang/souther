@@ -1146,7 +1146,7 @@ public final class InvariantChecker {
         // assigns that name its own form, and an assignment drops what was known of what it assigns
         // to — the bound on it would be lost to the copy. A location is always this; a term is where
         // the form is that term's own atom.
-        if (what instanceof Denotes.Term term && terms.isNumeric(li.value().type())) {
+        if (what instanceof Denotes.Term term && terms.affineScalarBase(li.value().type()) != null) {
             LinearForm vf = terms.affineOf(li.value(), at, k);
             if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
                 out = out.assigning(term.key(), vf,
