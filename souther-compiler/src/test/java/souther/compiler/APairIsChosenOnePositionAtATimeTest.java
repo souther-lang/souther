@@ -88,15 +88,17 @@ class APairIsChosenOnePositionAtATimeTest {
     }
 
     /**
-     * A dense strict bound is a different gap.
+     * A dense strict bound is reached by a value off the end, and not by the order of choosing.
      *
      * <p>Choosing {@code low} first leaves {@code high} at zero and above, because {@code low < high}
-     * over the decimals is recorded as {@code low - high <= 0} — so the one value the rule refuses is
-     * the one the projection offers. No amount of choosing in order reaches past that, which is why
-     * the openness of an end is tracked separately (#483).
+     * over the decimals is recorded as {@code low - high <= 0} — so the end the projection offers is
+     * the one value the rule refuses. What gets past it is a second value inside the range, and the
+     * ends themselves stay where they were: the report still cannot say that a {@code high} of zero
+     * is impossible rather than untried, because the bound it would have to read that off is the
+     * weakened one (#483).
      */
     @Test
-    void aStrictBoundOverDecimalsIsNotClosedByChoosingInOrder() throws Exception {
+    void aStrictBoundOverDecimalsIsReachedOffTheEnd() throws Exception {
         String model = """
                 module example.band
 
@@ -122,13 +124,16 @@ class APairIsChosenOnePositionAtATimeTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
         try {
-            Main.main(new String[] {"examples", "--generate", file.toString()});
+            Main.main(new String[] {"examples", "--generate", "--boundaries", file.toString()});
         } finally {
             System.setOut(was);
         }
         String rows = out.toString(StandardCharsets.UTF_8);
 
-        assertTrue(rows.contains("every value tried was refused"),
-                () -> "still nothing here, and it is the bound that is approximate:\n" + rows);
+        assertTrue(rows.contains("high = Ratio(0.5m)"),
+                () -> "a value between the ends, which the range names and an epsilon would not:\n"
+                        + rows);
+        assertTrue(rows.contains("no row for `band.high = 0`"),
+                () -> "and the end itself is still where nothing can be written:\n" + rows);
     }
 }

@@ -721,7 +721,7 @@ public final class Generator {
                 : FieldDomains.NONE;
         String under = position.path().equals(at.toString()) ? null
                 : position.path().substring(at.toString().length() + 1);
-        return Partitions.representativesOf(position.type(), subject.symbols(),
+        return Partitions.displacedRepresentativesOf(position.type(), subject.symbols(),
                 under == null ? null : left.at(under));
     }
 

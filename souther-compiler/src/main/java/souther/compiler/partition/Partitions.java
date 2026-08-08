@@ -650,6 +650,64 @@ public final class Partitions {
     }
 
     /**
+     * The same, with a second value offered at a numeric position.
+     *
+     * <p>One value is enough only where the rules that decide it are the rules the projection holds.
+     * A disequality is a hole no range keeps, a strict bound over the decimals is recorded as the
+     * non-strict one, and a form that is neither an interval nor a difference is not recorded at all —
+     * so the end a projection names can be the one value the rules refuse, and a position offering
+     * only that has nothing left to try.
+     *
+     * <p>Displaced and not invented. A whole number has a next one; a decimal between two ends has a
+     * midpoint, and where it has no second end it gets no second value, because an epsilon is a value
+     * the type does not name. A candidate is a proposal the decoder answers — it carries no promise
+     * that the value is writable, which is what separates this from a boundary a person is asked to
+     * write.
+     */
+    static List<FixtureTemplate> displacedRepresentativesOf(Type type, Symbols symbols,
+                                                            NumericDomain.Bounds within) {
+        List<FixtureTemplate> base = representativesOf(type, symbols, within);
+        Type numeric = TypeOps.numericBase(type, symbols);
+        if (numeric == null) {
+            return base;
+        }
+        NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), within);
+        BigDecimal step = displaced(range, numeric == Type.INT);
+        if (step == null) {
+            return base;
+        }
+        FixtureTemplate bare = numeric == Type.DECIMAL ? FixtureTemplate.decimal(step)
+                : FixtureTemplate.integer(step.longValueExact());
+        FixtureTemplate value = type instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()
+                ? FixtureTemplate.newtype(ref.name(), bare) : bare;
+        if (base.stream().anyMatch(each -> each.text().equals(value.text()))) {
+            return base;
+        }
+        List<FixtureTemplate> out = new ArrayList<>(base);
+        out.add(value);
+        return List.copyOf(out);
+    }
+
+    /** A second number of a range, or null where the type has none to give. */
+    private static BigDecimal displaced(NumericDomain.Bounds range, boolean whole) {
+        BigDecimal from = admissible(range, whole);
+        BigDecimal min = range == null ? null : range.min();
+        BigDecimal max = range == null ? null : range.max();
+        if (!whole) {
+            // No smallest step, so the only second value a range names is one inside both its ends.
+            return min == null || max == null || min.compareTo(max) >= 0 ? null
+                    : min.add(max).divide(BigDecimal.valueOf(2));
+        }
+        BigDecimal up = from.add(BigDecimal.ONE);
+        if (max == null || up.compareTo(max) <= 0) {
+            return up;
+        }
+        BigDecimal down = from.subtract(BigDecimal.ONE);
+        return min == null || down.compareTo(min) >= 0 ? down : null;
+    }
+
+    /**
      * What a newtype wraps: every value for it this can think of, in the order to try them.
      *
      * <p>Candidates, not an answer. Whether a newtype accepts a value is decided by its own
