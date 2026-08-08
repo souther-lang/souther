@@ -220,7 +220,12 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             String written = GeneratedRows.of(module, generated, true);
             assertFalse(written.contains("example "),
                     module + " offers a row that may already be written: " + written);
-            assertTrue(written.contains("generation stopped"),
+            // Either word, because the two models get here differently: one has rows nothing read
+            // and the generation never began, and the other read its rows and could not place a
+            // value at any position it had. What is held to is that neither writes nothing in
+            // silence.
+            assertTrue(written.contains("generation stopped")
+                            || written.contains("no rows offered at"),
                     module + " says nothing about why it wrote nothing: " + written);
         }
     }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.Partitions;
 
@@ -21,19 +22,26 @@ import java.util.Set;
  * @param omitted      positions dropped for being past the axis limit, with what dropping each
  *                     one cost — a position that was carrying a boundary leaves the rows there
  *                     unmeasured rather than covered
+ * @param whyUnclassified why the rows counted in {@link AxisCoverage#unclassifiedRows} could not be
+ *                     placed. The count is the measurement and this is what it came out of, which
+ *                     is why they are two things and not one wider count. Not a report's list of
+ *                     reasons: these are what classification observed, and joining them to
+ *                     everything else a module could not read happens where that list is built
  */
 public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryAssessment> boundaries,
                                 PairSpace pairs, List<String> notDerivable,
-                                List<Partitions.OmittedAxis> omitted) {
+                                List<Partitions.OmittedAxis> omitted,
+                                List<Incompleteness> whyUnclassified) {
 
     public static final PartitionEvidence NONE = new PartitionEvidence(List.of(), List.of(),
-            PairSpace.NONE, List.of(), List.of());
+            PairSpace.NONE, List.of(), List.of(), List.of());
 
     public PartitionEvidence {
         axes = List.copyOf(axes);
         boundaries = List.copyOf(boundaries);
         notDerivable = List.copyOf(notDerivable);
         omitted = List.copyOf(omitted);
+        whyUnclassified = List.copyOf(whyUnclassified);
     }
 
     /**

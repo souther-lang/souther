@@ -12,16 +12,16 @@ import java.util.Optional;
  * measurement carries a code and the subject it is about. A free-text reason reads well once and
  * cannot be counted, filtered, or matched against the next run.
  *
- * @param code    what happened
- * @param scope   what {@link #subject} names, so that a reader does not have to work it out. Every
- *                reader of these has to know whether a reason is about one behavior or about
- *                everything in a source — and while that was a guess from the shape of a string, three
- *                readers guessed differently and each was found separately
- * @param subject what it happened to — a behavior, a source, the module, or a position in a value
- * @param at      where, when there is a source to point at; empty for something with no position of
- *                its own, such as an invariant that arrived from a module compiled elsewhere
+ * @param code   what happened
+ * @param target what it happened to — a behavior, a source, the module, or a position in a value —
+ *               held as that thing rather than as a name beside a word for what kind of name it is.
+ *               Every reader has to know whether a reason is about one behavior or about everything
+ *               in a source, and while that was a guess from the shape of a string, three readers
+ *               guessed differently and each was found separately
+ * @param at     where, when there is a source to point at; empty for something with no position of
+ *               its own, such as an invariant that arrived from a module compiled elsewhere
  */
-public record Incompleteness(Code code, Scope scope, String subject, Optional<SourceRef> at) {
+public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
 
     /** What a reason is about, and so who it counts against. */
     public enum Scope {
@@ -31,14 +31,8 @@ public record Incompleteness(Code code, Scope scope, String subject, Optional<So
         SOURCE,
         /** The module, and so everything in it. */
         MODULE,
-        /** A position inside a value — an axis path, a field chain. */
-        POSITION;
-
-        /** Whether this is about one behavior in particular, as against something larger holding it.
-         * A reason about something larger is a reason about every behavior inside it. */
-        public boolean isOneBehavior() {
-            return this == BEHAVIOR;
-        }
+        /** A position inside a value — an axis path, a field chain — and so inside one behavior. */
+        POSITION
     }
 
     public enum Code {
@@ -59,51 +53,83 @@ public record Incompleteness(Code code, Scope scope, String subject, Optional<So
          * different version of what it calls. Nothing here can tell them apart, so nothing here
          * says which.
          *
-         * <p>And nothing here says what did not happen next. Three places write it: an example that
-         * would not run, a fill that could not put its candidates through the decoder, and a
-         * boundary that could not build one. Only the first is rows that did not run — the other
-         * two happen after the rows were read — so a reader of the code alone knows the linking
-         * failed and no more than that.
+         * <p>One place writes it: an example whose evaluation raised one, where nothing was
+         * observed and so its rows did not run. It had three, and the other two — a fill that could
+         * not put its candidates through the decoder, a boundary that could not build one — are the
+         * generator's to report and say so in the generator's own words. What a reader of this code
+         * knows is the linking failed and that the rows behind it did not run.
          */
         LINKAGE_FAILED,
         /** Nothing was observed from here, so what its rows cover is unknown. */
         OBSERVATION_ABSENT,
         /**
-         * The instrumented classes could not be made, so the arms went unread.
+         * The classes an arm-measuring evaluation needs were not made.
          *
-         * <p>Wider than the name. Its one producer writes it wherever the classes an arm-measuring
-         * evaluation needs are absent — a backend that failed on them, inputs that were not there —
-         * and a probe whose mapping was lost is one way to arrive at that rather than the whole of
-         * it. The name is left alone here and read against the rest of the vocabulary at once.
+         * <p>Named for the absence and not for any of the things that cause it — a backend that
+         * failed on them, inputs that were not there — because its one producer cannot tell them
+         * apart and neither can a reader of the code. A probe whose mapping was lost is one way to
+         * arrive here rather than the whole of it, which is what the earlier name claimed.
+         *
+         * <p>Its one producer takes this branch only where arm coverage was asked for, and returns
+         * no rows with it. So the request and the empty result are both part of what this says.
          */
-        PROBE_MAPPING_LOST,
-        /** A search gave up before it could decide. */
-        SEARCH_LIMIT,
-        /** An axis was dropped because the axis limit was reached. */
-        AXIS_OMITTED
+        INSTRUMENTATION_ABSENT
     }
 
     public Incompleteness {
         at = at == null ? Optional.empty() : at;
     }
 
+    /** Which kind of name {@link #subject} is. Derived, so it cannot disagree with what it names. */
+    public Scope scope() {
+        return target.scope();
+    }
+
+    /** What it happened to, as a report prints it. */
+    public String subject() {
+        return target.subject();
+    }
+
     public static Incompleteness of(Code code, Scope scope, String subject) {
-        return new Incompleteness(code, scope, subject, Optional.empty());
+        return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
     }
 
     public static Incompleteness at(Code code, Scope scope, String subject, SourceRef where) {
-        return new Incompleteness(code, scope, subject, Optional.ofNullable(where));
+        return new Incompleteness(code, Target.of(scope, subject), Optional.ofNullable(where));
     }
 
-    /** Whether this counts against {@code behavior} — either by naming it, or by being about
-     * something larger that holds it. */
+    /** A position, which takes the behavior it sits in as well as the path. Both, because whose
+     * measurement it counts against is the behavior and not the path. */
+    public static Incompleteness atPosition(Code code, String behavior, String path) {
+        return new Incompleteness(code, new Target.AtPosition(behavior, path), Optional.empty());
+    }
+
+    /** The behavior this is about, where it is about exactly one. Empty for anything larger. */
+    public Optional<String> behavior() {
+        return target.onlyBehavior();
+    }
+
+    /**
+     * Whether this counts against {@code behavior}, and so whether its measures stop being answers.
+     *
+     * <p>A reason that names one behavior answers for itself. The rest are answered here and not by
+     * the target, because what a target names and what holds a behavior are two things: a module
+     * holds every behavior in it by what a module is, and whether a source holds one is a fact
+     * about the compilation that a source id does not carry.
+     *
+     * <p>A source answers yes, and that is a reading of the two places that write one. Both are a
+     * source that was not evaluated at all, where which behaviors it wrote rows for is exactly what
+     * could not be read — so every one of them is missing rows it may have held. A {@code SOURCE}
+     * whose contents were known would need the compilation to answer and would not belong here.
+     * Nothing writes one, and this is the claim to re-read if something does.
+     */
     public boolean countsAgainst(String behavior) {
-        return scope.isOneBehavior() ? subject.equals(behavior) : true;
+        return behavior().map(behavior::equals).orElse(true);
     }
 
     /** What makes two of these the same reason. A module's classes failing to be instrumented is one
      * fact however many sources went looking for them. */
     public Object identity() {
-        return List.of(code, scope, subject);
+        return List.of(code, target);
     }
 }

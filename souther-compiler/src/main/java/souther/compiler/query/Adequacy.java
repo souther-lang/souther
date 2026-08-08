@@ -768,7 +768,7 @@ public final class Adequacy {
          */
         public boolean armsUnseen() {
             return incompleteness.stream()
-                    .anyMatch(gap -> gap.code() == Incompleteness.Code.PROBE_MAPPING_LOST);
+                    .anyMatch(gap -> gap.code() == Incompleteness.Code.INSTRUMENTATION_ABSENT);
         }
 
         /**
@@ -825,10 +825,11 @@ public final class Adequacy {
                 rows.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
             }
             for (Incompleteness gap : observed.incompleteness()) {
-                if (gap.scope().isOneBehavior()) {
-                    stopped.computeIfAbsent(gap.subject(), _ -> new ArrayList<>()).add(gap);
+                Optional<String> one = gap.behavior();
+                if (one.isPresent()) {
+                    stopped.computeIfAbsent(one.get(), _ -> new ArrayList<>()).add(gap);
                 } else {
-                    everywhere.add(gap);   // about the module or the source, so about all of them
+                    everywhere.add(gap);   // larger than a behavior, so about all of them
                 }
             }
         }
@@ -902,7 +903,7 @@ public final class Adequacy {
         public static final Filling NONE =
                 new Filling(Generator.GenerationResult.NONE, Generator.GenerationResult.NONE);
 
-        static Filling stopped(Incompleteness why) {
+        static Filling stopped(souther.compiler.partition.GenerationReason why) {
             return new Filling(new Generator.GenerationResult(List.of(), List.of(), List.of(why)),
                     Generator.GenerationResult.NONE);
         }
@@ -961,8 +962,9 @@ public final class Adequacy {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
-                    out.put(spec.name(), Filling.stopped(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                            Incompleteness.Scope.BEHAVIOR, spec.name())));
+                    out.put(spec.name(), Filling.stopped(
+                            new souther.compiler.partition.GenerationReason.NothingToBuildAgainst(
+                                    spec.name())));
                 }
             }
             // In the order the module declares them, because the block printed from this is read
@@ -983,7 +985,7 @@ public final class Adequacy {
                                                           List<BoundaryAssessment> boundaries) {
             List<Generator.GeneratedRow> rows = new ArrayList<>();
             List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
-            List<Incompleteness> stopped = new ArrayList<>();
+            List<souther.compiler.partition.GenerationReason> stopped = new ArrayList<>();
             for (BoundaryAssessment each : boundaries) {
                 switch (each.attempt()) {
                     case BoundaryAssessment.Attempt.Built built -> rows.add(built.row());
@@ -1003,13 +1005,14 @@ public final class Adequacy {
                         if (absent.reason() == BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED
                                 || absent.reason()
                                         == BoundaryAssessment.Attempt.Reason.NO_CLASSES) {
-                            stopped.add(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                                    Incompleteness.Scope.BEHAVIOR, behavior));
+                            stopped.add(new souther.compiler.partition.GenerationReason
+                                    .NothingToBuildAgainst(behavior));
                         }
                     }
                 }
             }
-            return new Generator.GenerationResult(rows, unresolved, distinct(stopped));
+            return new Generator.GenerationResult(rows, unresolved,
+                    stopped.stream().distinct().toList());
         }
 
         private static Generator.GenerationResult pairsFor(
@@ -1021,7 +1024,8 @@ public final class Adequacy {
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
                 // which may already be sitting in the file that could not be evaluated.
                 return new Generator.GenerationResult(List.of(), List.of(),
-                        observed.incompleteness());
+                        List.of(new souther.compiler.partition.GenerationReason.RowsNotRead(
+                                spec.name(), observed.incompleteness())));
             }
             List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
@@ -1257,7 +1261,7 @@ public final class Adequacy {
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
                         MeasurementStatus.COMPLETE, behavior.pos(),
-                        List.of(dropped.reason().subject())));
+                        List.of(dropped.axis().toString())));
             }
         }
 

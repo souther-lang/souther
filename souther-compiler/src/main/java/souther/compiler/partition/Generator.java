@@ -5,7 +5,6 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Classification;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
@@ -121,7 +120,7 @@ public final class Generator {
     }
 
     public record GenerationResult(List<GeneratedRow> rows, List<UnresolvedCombination> unresolved,
-                                   List<Incompleteness> incompleteness) {
+                                   List<GenerationReason> reasons) {
 
         public static final GenerationResult NONE =
                 new GenerationResult(List.of(), List.of(), List.of());
@@ -129,7 +128,7 @@ public final class Generator {
         public GenerationResult {
             rows = List.copyOf(rows);
             unresolved = List.copyOf(unresolved);
-            incompleteness = List.copyOf(incompleteness);
+            reasons = List.copyOf(reasons);
         }
 
         /**
@@ -141,7 +140,7 @@ public final class Generator {
          * like.
          */
         public boolean isEmpty() {
-            return rows.isEmpty() && unresolved.isEmpty() && incompleteness.isEmpty();
+            return rows.isEmpty() && unresolved.isEmpty() && reasons.isEmpty();
         }
     }
 
@@ -180,14 +179,13 @@ public final class Generator {
         // A row generated for a class there may be a row that is already written, and telling an
         // author to write one is worse than saying nothing: it is a specific piece of work that is
         // already done.
-        List<Incompleteness> undecided = new ArrayList<>();
+        List<GenerationReason> undecided = new ArrayList<>();
         List<Axis> axes = new ArrayList<>();
         for (Axis axis : ordered) {
             if (readEverywhere(axis, existing)) {
                 axes.add(axis);
             } else {
-                undecided.add(Incompleteness.of(Incompleteness.Code.VALUE_UNREADABLE,
-                        Incompleteness.Scope.POSITION, axis.path().toString()));
+                undecided.add(new GenerationReason.PositionWithheld(axis.id()));
             }
         }
         if (axes.isEmpty()) {
@@ -204,12 +202,11 @@ public final class Generator {
 
         List<GeneratedRow> rows = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
-        List<Incompleteness> incompleteness = new ArrayList<>(undecided);
+        List<GenerationReason> reasons = new ArrayList<>(undecided);
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
                 int left = pairs.size() + singles.size();
-                incompleteness.add(Incompleteness.of(Incompleteness.Code.SEARCH_LIMIT, Incompleteness.Scope.MODULE,
-                        left + " combinations past the row limit"));
+                reasons.add(new GenerationReason.SearchLimit(axes.get(0).id().behavior(), left));
                 // Both sets: the count above is of both, and reporting one of them would promise
                 // more than it names.
                 for (Set<Pair> remaining : List.of(pairs, singles)) {
@@ -244,7 +241,7 @@ public final class Generator {
                         built.detail()));
             }
         }
-        return new GenerationResult(rows, unresolved, incompleteness);
+        return new GenerationResult(rows, unresolved, reasons);
     }
 
     /**

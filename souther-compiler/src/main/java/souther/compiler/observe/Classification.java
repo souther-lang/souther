@@ -19,9 +19,8 @@ public sealed interface Classification {
         return new Classified(classId);
     }
 
-    static Classification unreadable(Incompleteness.Code code, String subject) {
-        return new Unclassified(Incompleteness.of(code, Incompleteness.Scope.POSITION,
-                subject));
+    static Classification unreadable(Incompleteness.Code code, String behavior, String path) {
+        return new Unclassified(Incompleteness.atPosition(code, behavior, path));
     }
 
     default boolean isClassified() {

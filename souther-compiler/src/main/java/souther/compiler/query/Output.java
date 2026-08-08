@@ -874,7 +874,7 @@ public final class Output {
                 return coverage == CoverageMode.NONE ? Answer.absent()
                         : Answer.of(new Of(List.of(), List.of(
                                 souther.compiler.observe.Incompleteness.of(
-                                        souther.compiler.observe.Incompleteness.Code.PROBE_MAPPING_LOST,
+                                        souther.compiler.observe.Incompleteness.Code.INSTRUMENTATION_ABSENT,
                                         souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
             Ast.Module rows = written(db, name, sourceId, prepared.value());

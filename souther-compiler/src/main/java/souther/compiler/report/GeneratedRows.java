@@ -3,6 +3,7 @@ package souther.compiler.report;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.FixtureTemplate;
+import souther.compiler.partition.GenerationReason;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -169,6 +170,11 @@ public final class GeneratedRows {
      * One that printed a line per combination would say the same thing hundreds of times: a position
      * nothing can write a value for makes every combination it takes part in unfillable, and the
      * position is the fact while the combinations are arithmetic on it.
+     *
+     * <p>A generation that ended and one that carried on without a position are said apart. This
+     * printed {@code generation stopped} over whatever it was given, which is a claim about the run
+     * taken from the presence of a reason — and where some positions were read and others were not,
+     * the rows it was offering were printed two lines above the line saying it had stopped.
      */
     private static void notes(StringBuilder out, String behavior,
                               Generator.GenerationResult result) {
@@ -180,9 +186,31 @@ public final class GeneratedRows {
                 out.append(line);
             }
         }
-        for (Incompleteness stopped : result.incompleteness()) {
-            out.append(String.format("// generation stopped for `%s`: %s%n", behavior,
-                    Reasons.said(stopped)));
+        for (GenerationReason why : result.reasons()) {
+            out.append(switch (why) {
+                case GenerationReason.PositionWithheld withheld -> String.format(
+                        "// no rows offered at `%s`: a row's value there could not be read, so a"
+                                + " row written for it may be one that is already here%n",
+                        withheld.axis());
+                case GenerationReason.SearchLimit limit -> String.format(
+                        "// generation stopped for `%s`: %d %s past the row limit%n",
+                        limit.behavior(), limit.combinations(),
+                        limit.combinations() == 1 ? "combination" : "combinations");
+                case GenerationReason.NothingToBuildAgainst none -> String.format(
+                        "// generation stopped for `%s`: there was nothing to build a candidate"
+                                + " against%n", none.behavior());
+                // The reasons it rests on rather than a word of its own. What was not read is a
+                // measurement's answer and is already said in those words; saying it again in the
+                // generator's would be the same fact under two spellings, read side by side.
+                case GenerationReason.RowsNotRead unread -> {
+                    StringBuilder lines = new StringBuilder();
+                    for (Incompleteness because : unread.because()) {
+                        lines.append(String.format("// generation stopped for `%s`: %s%n",
+                                unread.behavior(), Reasons.said(because)));
+                    }
+                    yield lines.toString();
+                }
+            });
         }
     }
 

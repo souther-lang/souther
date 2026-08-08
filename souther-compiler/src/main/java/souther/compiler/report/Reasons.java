@@ -2,8 +2,6 @@ package souther.compiler.report;
 
 import souther.compiler.observe.Incompleteness;
 
-import java.util.Locale;
-
 /**
  * What a reason reads as to a person.
  *
@@ -32,29 +30,48 @@ final class Reasons {
     /**
      * What happened, said as what happened — and no further than every producer agrees.
      *
-     * <p>The three below have been read against theirs. {@code ROW_UNDECIDED} has one producer;
-     * {@code OBSERVATION_ABSENT} has two and they mean the same thing; {@code LINKAGE_FAILED} has
-     * three — an example that would not run, a fill that could not build its candidates, and a
-     * boundary that could not build one — which agree that the classes would not link and disagree
-     * about what did not happen next, so that is where the sentence stops.
+     * <p>Each has been read against its own. {@code ROW_UNDECIDED} has one producer;
+     * {@code OBSERVATION_ABSENT} has two and they mean the same thing; {@code INSTRUMENTATION_ABSENT}
+     * has one, on a branch taken only where arm coverage was asked for and returning no rows, so
+     * the sentence may name the request and the empty result both.
+     *
+     * <p>{@code LINKAGE_FAILED} has one now and had three. The other two were a fill and a boundary
+     * that could not build a candidate, and both were things the generator did rather than things a
+     * measurement could not read; they say so in the generator's own vocabulary now. What is left
+     * is an example whose evaluation raised one, where nothing was observed — so the sentence may
+     * say the rows did not run, which it could not while three producers disagreed about it.
      *
      * <p>The rest keep the shape they had, which asserts nothing the code does not already say.
-     * Writing sentences for those wants the same walk done for each, and it turns up more than it
-     * looks like it will: the subject of a search limit is a count and a phrase rather than a name,
-     * and the code for a lost probe mapping is written wherever the instrumented classes could not
-     * be made, which is a good deal wider than a mapping that was lost.
+     * The two value codes have been read as well. {@code VALUE_TRUNCATED} has one producer;
+     * {@code VALUE_UNREADABLE} has five — a parameter that is not there, a field chain that leads
+     * nowhere, a value the observer could not read, a value in none of the classes, and a position
+     * some row could not be placed at — which agree that the value could not be read and say
+     * nothing about why, so that is where the sentence stops. The two are apart because what an
+     * author does about them is: one goes away if the fixture is written smaller and the other
+     * does not.
+     *
+     * <p>Every code has one now, which is what it means for this enum to be the vocabulary a report
+     * is written in. What the generator has to say about its own run is said in its own words, by
+     * the block that prints it: a position it left out and a search that ended are things it did,
+     * not things a measurement could not read.
      */
     static String said(Incompleteness gap) {
         return switch (gap.code()) {
             case OBSERVATION_ABSENT -> String.format(
                     "no rows were read from `%s`, so what they cover is unknown", gap.subject());
-            case LINKAGE_FAILED -> String.format("the classes for `%s` would not link",
-                    gap.subject());
+            case LINKAGE_FAILED -> String.format(
+                    "the classes for `%s` would not link, so its rows did not run", gap.subject());
             case ROW_UNDECIDED -> String.format(
                     "a row of `%s` did not come back, so what it covers is unknown", gap.subject());
-            case VALUE_UNREADABLE, VALUE_TRUNCATED, PROBE_MAPPING_LOST, SEARCH_LIMIT, AXIS_OMITTED ->
-                    String.format("%s (%s)", gap.subject(),
-                            gap.code().name().toLowerCase(Locale.ROOT));
+            case INSTRUMENTATION_ABSENT -> String.format(
+                    "the classes `%s` needed for arm coverage could not be made, so none of its"
+                            + " rows were read", gap.subject());
+            case VALUE_UNREADABLE -> String.format(
+                    "a row's value at `%s` could not be read, so which class it is in is unknown",
+                    gap.subject());
+            case VALUE_TRUNCATED -> String.format(
+                    "the observation at `%s` was stopped by a limit, so which class it is in is"
+                            + " unknown", gap.subject());
         };
     }
 

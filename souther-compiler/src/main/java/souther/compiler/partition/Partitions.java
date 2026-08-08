@@ -8,7 +8,6 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.InvariantBound;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -51,10 +50,10 @@ public final class Partitions {
      * read back afterwards: neither leaves a boundary behind, and a position nobody measured looks
      * exactly like one the rows cover.
      *
-     * @param reason              what to say about it, which is the same either way
+     * @param axis                which position was dropped
      * @param carriedAnObligation whether a rule had drawn a line on this position
      */
-    public record OmittedAxis(Incompleteness reason, boolean carriedAnObligation) {}
+    public record OmittedAxis(AxisId axis, boolean carriedAnObligation) {}
 
     /**
      * @param axes    the positions this behavior is measured at, in parameter order
@@ -121,9 +120,7 @@ public final class Partitions {
                 // the ones a `guard` would have drawn — so what it has now is what it had. A position
                 // that could take a threshold and has no cut yet is not measurable at all and is kept;
                 // one with classes and no cuts is a sum or a `Bool`, which no comparison divides.
-                omitted.add(new OmittedAxis(Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
-                        Incompleteness.Scope.POSITION, axis.id().toString()),
-                        !axis.cuts().isEmpty()));
+                omitted.add(new OmittedAxis(axis.id(), !axis.cuts().isEmpty()));
             }
         }
         return new Partitioning(kept, omitted, domains, uncertain);

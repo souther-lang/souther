@@ -3,7 +3,6 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Symbols;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 
@@ -77,7 +76,6 @@ class ObservedValuesTest {
         String long_ = "x".repeat(50);
         ObservedValue.Truncated t = assertInstanceOf(ObservedValue.Truncated.class,
                 observe(long_, new Limits(16, 10_000, 64, 10)));
-        assertEquals(Incompleteness.Code.VALUE_TRUNCATED, t.reason());
         assertEquals(50, t.observedSize());
     }
 

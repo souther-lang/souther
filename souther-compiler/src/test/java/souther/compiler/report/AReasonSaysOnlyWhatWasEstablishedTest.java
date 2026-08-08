@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,51 +39,61 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     }
 
     /**
-     * And it stops where its producers stop agreeing.
+     * And it says what did not happen next, now that one producer is left to say it.
      *
-     * <p>Three places write it: an example whose classes would not load, a fill that could not put
+     * <p>Three places wrote it: an example whose classes would not load, a fill that could not put
      * its candidates through the decoder, and a boundary that could not build one. Only the first
-     * of those is rows that did not run — the other two happen after the rows were read, and what
-     * failed is the building of something new. A sentence keyed on the code cannot tell which, so
-     * it says the one thing all three agree on.
+     * was rows that did not run — the other two happen after the rows were read — so the sentence
+     * stopped where the three stopped agreeing. The other two are the generator's now and report in
+     * its vocabulary, which leaves the example, where nothing was observed.
      *
-     * <p>This holds the wording and not the producers. Which places write a code is not something
-     * a unit of this size can walk; it is read by hand, and the reading is what the sentence above
-     * rests on.
+     * <p>This holds the wording and not the producers. Which places write a code is not something a
+     * unit of this size can walk; it is read by hand, and the reading is what the sentence rests
+     * on — so it is re-read whenever a producer is added or taken away, as one was here.
      */
     @Test
-    void aLinkageFailureDoesNotSayWhatDidNotHappenNext() {
+    void aLinkageFailureSaysWhatItsOneProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
                 Incompleteness.Scope.BEHAVIOR, "submit"));
 
-        assertEquals("the classes for `submit` would not link", said);
-        assertFalse(said.contains("did not run"),
-                "true where an example was running and not where a candidate was built: " + said);
+        assertEquals("the classes for `submit` would not link, so its rows did not run", said);
     }
 
     /**
-     * A code whose producers have not been read is left as it was.
+     * A code with one producer says what that producer establishes, and that can be more than the
+     * code alone.
      *
-     * <p>{@code PROBE_MAPPING_LOST} is written wherever the instrumented classes could not be made
-     * — a backend that failed, inputs that were not there — which is wider than a probe whose
-     * mapping was lost, and its subject at that one producer is a module rather than a behavior. A
-     * sentence about arms would be a claim neither the code nor the producer supports.
+     * <p>{@code INSTRUMENTATION_ABSENT} is written at one place, on a branch taken only where arm
+     * coverage was asked for, and it returns no rows with it. Both are part of what the sentence may
+     * say. What it may not say is which of the things that stop those classes being made happened —
+     * a backend that failed, inputs that were not there — because nothing there can tell them apart.
      */
     @Test
-    void aCodeWhoseProducersAreUnreadIsNotTurnedIntoAClaim() {
-        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.PROBE_MAPPING_LOST,
+    void oneProducerLetsTheSentenceSayWhatThatProducerEstablishes() {
+        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
                 Incompleteness.Scope.MODULE, "example.trip"));
 
-        assertFalse(said.contains("arms"), "nothing here has established that: " + said);
-        assertEquals("example.trip (probe_mapping_lost)", said);
+        assertEquals("the classes `example.trip` needed for arm coverage could not be made,"
+                + " so none of its rows were read", said);
     }
 
-    /** And a subject that is a phrase rather than a name is not quoted as one. */
+    /**
+     * Every code says something now, and none of them says its own name back.
+     *
+     * <p>A reason reading {@code submit (value_unreadable)} is the data printed as though it were a
+     * sentence: it tells a reader what the code was and nothing about what happened. Every code left
+     * here is one a report is written in, and one whose producers have been read far enough to say
+     * so in words.
+     */
     @Test
-    void aSearchLimitKeepsItsOwnWords() {
-        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.SEARCH_LIMIT,
-                Incompleteness.Scope.MODULE, "12 combinations past the row limit"));
+    void noCodeIsPrintedAsItsOwnName() {
+        for (Incompleteness.Code code : Incompleteness.Code.values()) {
+            String said = Reasons.said(Incompleteness.of(code,
+                    Incompleteness.Scope.BEHAVIOR, "submit"));
 
-        assertEquals("12 combinations past the row limit (search_limit)", said);
+            assertNotEquals("submit (" + code.name().toLowerCase(java.util.Locale.ROOT) + ")", said,
+                    code + " is printed as itself");
+            assertTrue(said.contains("submit"), code + " does not say what it is about: " + said);
+        }
     }
 }

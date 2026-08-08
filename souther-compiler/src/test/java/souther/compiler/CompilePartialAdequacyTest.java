@@ -246,12 +246,14 @@ class CompilePartialAdequacyTest {
 
         assertEquals(List.of(), generated.get("take").pairs().rows(),
                 "the flag's classes are undecided, so nothing is written for them");
-        assertFalse(generated.get("take").pairs().incompleteness().isEmpty(),
+        assertFalse(generated.get("take").pairs().reasons().isEmpty(),
                 "and the position that could not be read is named");
         String written = GeneratedRows.of("example.budget", generated, true);
         assertFalse(written.contains("example take"), "no row is offered: " + written);
-        assertTrue(written.contains("generation stopped"),
+        assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
+        assertFalse(written.contains("generation stopped"),
+                "and it did not stop — every position it had was one it could not read: " + written);
     }
 
     /**
@@ -445,21 +447,38 @@ class CompilePartialAdequacyTest {
     // --- what the status above a measure says -----------------------------------------------------
 
     /**
-     * A measure that could not be made shows in the status over it.
+     * A measure that could not be made shows in the status over it, and says why.
      *
-     * <p>Here nothing is recorded as a reason at all: the truncation is inside the value a row wrote,
-     * and the measure that reads it is where it becomes visible. A report opening with `complete` over
-     * a line reading `undecided` is the confusion this field exists to prevent.
+     * <p>The truncation is inside the value a row wrote, and the measure that reads it is where it
+     * becomes visible — as a count of rows it could not place. The count says how many and the
+     * reason says what happened, and an author reading only the count cannot tell an observation a
+     * limit stopped from a value that could not be read at all. The first goes away if the fixture
+     * is written smaller and the second does not.
+     *
+     * <p>Here it is the collection ahead of it that spent the budget, so the value at the position
+     * named is the number the invariant's lower bound names. Which is why the sentence says the
+     * observation was stopped and not that the value was large.
+     *
+     * <p>The statuses are what they were before the reason was carried. Nothing here is a new
+     * finding: the measure had already come back partial, and what is new is that it can be
+     * explained.
      */
     @Test
-    void aPartialMeasureMakesTheStatusAboveItPartial() {
+    void aPartialMeasureMakesTheStatusAboveItPartialAndSaysWhy() {
         AdequacyReport report = AdequacyReport.of(measured(budgetSpent("")));
 
         assertEquals(MeasurementStatus.PARTIAL, report.status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
-        assertEquals(List.of(), report.modules().get(0).incompleteness(),
-                "and it is not because something was reported as a reason");
+
+        List<souther.compiler.observe.Incompleteness> why =
+                report.modules().get(0).incompleteness();
+        assertEquals(1, why.size(), why.toString());
+        assertEquals(souther.compiler.observe.Incompleteness.Code.VALUE_TRUNCATED,
+                why.get(0).code());
+        assertEquals(java.util.Optional.of("take"), why.get(0).behavior(),
+                "a position is inside one behavior");
+        assertTrue(report.human().contains("the observation at"), report.human());
     }
 
     /**

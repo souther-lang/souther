@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The words the shipped schema allows are the words the compiler writes.
+ * Every word the shipped schema allows is one somebody accounted for.
  *
  * <p>Every enumerated field of {@code adequacy-schema-1.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
@@ -42,8 +42,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * mistake: renaming a constant is a decision about the compiler, and widening what a consumer must
  * handle is a decision about the contract. This makes the second decision impossible to take by
  * accident, and leaves both deliberate.
+ *
+ * <p>Which is why a word may outlive the constant it spelled. A version says what its documents may
+ * carry, and a report written before a rename carries the old word for as long as anyone keeps it. So
+ * the schema is what the compiler writes now together with what it wrote then, and the second half is
+ * named here — a word that quietly stopped being emitted still fails, and one kept on purpose is one
+ * somebody wrote down.
+ *
+ * <p>The correspondence was an equality until a code was renamed after the field it sits in had
+ * reached a published report. Before that every word taken out had never been emitted, so there was
+ * nothing for a document to be holding, and the schema was corrected rather than versioned.
  */
-class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
+class EverySchemaWordIsAccountedForTest {
 
     private static final String SCHEMA = "/souther/adequacy-schema-1.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -53,7 +63,20 @@ class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
      *
      * @param at the field, as the keys leading to it from the root of the schema
      */
-    private record Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source) {}
+    private record Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source,
+                              Set<String> retired) {
+
+        Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source) {
+            this(label, at, source, Set.of());
+        }
+
+        /** Every word a document of this version may carry: what is written now, and what was. */
+        Set<String> allowed() {
+            Set<String> out = new LinkedHashSet<>(wordsOf(source));
+            out.addAll(retired);
+            return out;
+        }
+    }
 
     /**
      * Every enumerated field the schema has.
@@ -93,15 +116,19 @@ class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
             new Vocabulary("incompleteness.scope",
                     List.of("$defs", "incompleteness", "properties", "scope"),
                     Incompleteness.Scope.class),
+            // `probe_mapping_lost` is what `instrumentation_absent` was called. It is retired
+            // rather than gone: reports of this version were written carrying it, and a version
+            // says what its documents may carry. Naming it here is what keeps that a decision about
+            // the contract — a word that stops being emitted and is not written down still fails.
             new Vocabulary("incompleteness.code",
                     List.of("$defs", "incompleteness", "properties", "code"),
-                    Incompleteness.Code.class));
+                    Incompleteness.Code.class, Set.of("probe_mapping_lost")));
 
     @Test
-    void everyEnumeratedFieldSpellsTheEnumItComesFrom() {
+    void everyEnumeratedFieldNamesCurrentOrRetiredWords() {
         JsonNode schema = schema();
         for (Vocabulary each : VOCABULARIES) {
-            assertEquals(wordsOf(each.source()), allowedAt(schema, each.at()),
+            assertEquals(each.allowed(), allowedAt(schema, each.at()),
                     each.label() + ": the schema and " + each.source().getSimpleName()
                             + " name different words");
         }

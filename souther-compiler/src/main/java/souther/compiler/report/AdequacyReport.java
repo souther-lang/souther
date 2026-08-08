@@ -177,6 +177,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
         Map<String, PartitionEvidence> partitions =
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
+        // Why the rows a position could not place could not be placed. The count is the axis's and
+        // says how much; this says what happened, and joining the two lists is this report's job
+        // rather than the coverage's — one of them is a measurement and the other is a reason.
+        if (partitions != null) {
+            for (PartitionEvidence partition : partitions.values()) {
+                for (Incompleteness gap : partition.whyUnclassified()) {
+                    if (incompleteness.stream().noneMatch(had -> had.identity().equals(gap.identity()))) {
+                        incompleteness.add(gap);
+                    }
+                }
+            }
+        }
         Map<String, Adequacy.BranchEvidence> branches =
                 compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
         // The lines this report prints and the warnings a build is given are the same list, asked for
@@ -238,8 +250,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             List<Incompleteness> gaps = behavior == null ? m.incompleteness()
                     : m.incompleteness().stream()
-                            .filter(gap -> !gap.scope().isOneBehavior()
-                                    || shown.contains(gap.subject()))
+                            .filter(gap -> gap.behavior().map(shown::contains).orElse(true))
                             .toList();
             MeasurementStatus status = gaps.isEmpty()
                     ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
@@ -361,10 +372,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 signature(out, behavior);
                 partition(out, behavior);
                 branch(out, behavior);
+                // Under the behavior it names, because a reason printed at the module's foot is
+                // read as belonging to whichever behavior came last. That was survivable while the
+                // only reasons naming one were rare; a position that could not be read is not.
+                said(out, module.incompleteness().stream()
+                        .filter(gap -> gap.behavior().map(behavior.name()::equals).orElse(false))
+                        .toList());
             }
-            for (Incompleteness gap : module.incompleteness()) {
-                out.append(String.format("    · %s%n", Reasons.said(gap)));
-            }
+            said(out, module.incompleteness().stream()
+                    .filter(gap -> gap.behavior().isEmpty()).toList());
         }
         int total = implemented + injected;
         out.append(String.format("%n%d %s: %d implemented, %d injected; %d %s waiting for a `let`.%n",
@@ -375,6 +391,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         out.append(String.format("adequacy: %s%n",
                 adequacy().name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ')));
         return out.toString();
+    }
+
+    /** The reasons, in the one shape a reason is printed in wherever it sits. */
+    private static void said(StringBuilder out, List<Incompleteness> gaps) {
+        for (Incompleteness gap : gaps) {
+            out.append(String.format("    · %s%n", Reasons.said(gap)));
+        }
     }
 
     /**
@@ -775,7 +798,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         measured(pairs, partition.pairs().status(), partition.pairs().reason());
         partition.notDerivable().forEach(out.putArray("notDerivable")::add);
         ArrayNode omitted = out.putArray("omitted");
-        partition.omitted().forEach(o -> omitted.add(o.reason().subject()));
+        partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
     }
 
     private static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch) {

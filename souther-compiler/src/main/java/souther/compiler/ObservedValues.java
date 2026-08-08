@@ -2,7 +2,6 @@ package souther.compiler;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Symbols;
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeName;
@@ -21,9 +20,11 @@ import java.util.Map;
  * one {@link NeutralForm#of} makes in the other direction: that one produces the form a decoder reads,
  * this one produces the form a measure reads.
  *
- * <p>The walk never fails. A value it cannot read becomes {@link ObservedValue.Unknown} and a value
- * larger than {@link Limits} becomes {@link ObservedValue.Truncated}, both carrying why, because a
- * measure that cannot classify a row has to say so rather than count the row as covering nothing.
+ * <p>The walk never fails. A value it cannot read becomes {@link ObservedValue.Unknown} and an
+ * observation {@link Limits} stopped becomes {@link ObservedValue.Truncated}, both carrying why,
+ * because a measure that cannot classify a row has to say so rather than count the row as covering
+ * nothing. The second is not the same as a large value: the node budget is one for the whole walk,
+ * so a small value observed after a large sibling is truncated as well.
  */
 final class ObservedValues {
 
@@ -47,11 +48,10 @@ final class ObservedValues {
 
     private ObservedValue walk(Object live, int depth) {
         if (budget-- <= 0) {
-            return new ObservedValue.Truncated(Incompleteness.Code.VALUE_TRUNCATED, -1, "node-limit");
+            return new ObservedValue.Truncated(-1, "node-limit");
         }
         if (depth > limits.maxDepth()) {
-            return new ObservedValue.Truncated(Incompleteness.Code.VALUE_TRUNCATED, -1,
-                    "depth-limit:" + NeutralForm.simpleName(live));
+            return new ObservedValue.Truncated(-1, "depth-limit:" + NeutralForm.simpleName(live));
         }
         return switch (live) {
             case null -> new ObservedValue.Unknown("a null reached the observer");
@@ -71,7 +71,7 @@ final class ObservedValues {
     private ObservedValue text(String s) {
         return s.length() <= limits.maxText()
                 ? new ObservedValue.Text(s)
-                : new ObservedValue.Truncated(Incompleteness.Code.VALUE_TRUNCATED, s.length(),
+                : new ObservedValue.Truncated(s.length(),
                         java.lang.Integer.toHexString(s.hashCode()));
     }
 
@@ -81,8 +81,7 @@ final class ObservedValues {
         List<ObservedValue> out = new ArrayList<>();
         for (Object e : it) {
             if (out.size() >= limits.maxElements()) {
-                return new ObservedValue.Truncated(Incompleteness.Code.VALUE_TRUNCATED, size(it),
-                        "elements");
+                return new ObservedValue.Truncated(size(it), "elements");
             }
             out.add(walk(e, depth + 1));
         }
@@ -91,7 +90,7 @@ final class ObservedValues {
 
     private ObservedValue mapping(Map<?, ?> m, int depth) {
         if (m.size() > limits.maxElements()) {
-            return new ObservedValue.Truncated(Incompleteness.Code.VALUE_TRUNCATED, m.size(), "entries");
+            return new ObservedValue.Truncated(m.size(), "entries");
         }
         List<ObservedValue.Entry> out = new ArrayList<>(m.size());
         for (Map.Entry<?, ?> e : m.entrySet()) {

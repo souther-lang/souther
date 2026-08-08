@@ -2,7 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.Partitions;
@@ -245,22 +244,22 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
-                verdictOf(partition(met, dropped("weigh/w.flag", false))),
+                verdictOf(partition(met, dropped("weigh", "w.flag", false))),
                 "a dropped axis that was only classifying");
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
-                verdictOf(partition(met, dropped("weigh/w.m", true))),
+                verdictOf(partition(met, dropped("weigh", "w.m", true))),
                 "a dropped axis that was carrying a boundary");
     }
 
-    private static Partitions.OmittedAxis dropped(String position, boolean carriedAnObligation) {
-        return new Partitions.OmittedAxis(Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
-                Incompleteness.Scope.POSITION, position), carriedAnObligation);
+    private static Partitions.OmittedAxis dropped(String behavior, String path,
+                                                  boolean carriedAnObligation) {
+        return new Partitions.OmittedAxis(new AxisId(behavior, path), carriedAnObligation);
     }
 
     private static PartitionEvidence partition(BoundaryAssessment boundary,
                                                Partitions.OmittedAxis... omitted) {
         return new PartitionEvidence(List.of(), List.of(boundary), PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(omitted));
+                List.of(), List.of(omitted), List.of());
     }
 
     /** What one behavior's partition makes of the whole report, with nothing else asked about. */
