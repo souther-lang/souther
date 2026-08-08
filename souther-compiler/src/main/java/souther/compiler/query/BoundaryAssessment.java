@@ -139,8 +139,10 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
             NOT_MEASURED,
             /** The module's classes were not there to build against. */
             NO_CLASSES,
-            /** The runtime is not on this host's classpath, so the decoders could not be reached. */
-            RUNTIME_ABSENT
+            /** The generated classes would not link, so the decoders could not be reached. What
+             * the JVM raised is a {@code LinkageError}, and which of its causes it was is not
+             * something this can tell. */
+            LINKAGE_FAILED
         }
     }
 

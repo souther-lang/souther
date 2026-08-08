@@ -49,9 +49,33 @@ public record Incompleteness(Code code, Scope scope, String subject, Optional<So
         /** A row could not be decided — it spent its budget, or the evaluation did not answer — so
          * what it would have covered is unknown. */
         ROW_UNDECIDED,
-        /** The runtime is not on this host's classpath, so no row could run. */
-        RUNTIME_ABSENT,
-        /** A branch probe could not be tied back to the node it belongs to. */
+        /**
+         * The generated classes would not link.
+         *
+         * <p>Named for what is caught, which is a {@code LinkageError} and not one of the things
+         * that raise it. The case this exists for is the runtime being off the host's classpath —
+         * it is {@code provided}, like CTFE — and the JVM raises the same error for a class that
+         * will not verify, one whose format it does not accept, and one compiled against a
+         * different version of what it calls. Nothing here can tell them apart, so nothing here
+         * says which.
+         *
+         * <p>And nothing here says what did not happen next. Three places write it: an example that
+         * would not run, a fill that could not put its candidates through the decoder, and a
+         * boundary that could not build one. Only the first is rows that did not run — the other
+         * two happen after the rows were read — so a reader of the code alone knows the linking
+         * failed and no more than that.
+         */
+        LINKAGE_FAILED,
+        /** Nothing was observed from here, so what its rows cover is unknown. */
+        OBSERVATION_ABSENT,
+        /**
+         * The instrumented classes could not be made, so the arms went unread.
+         *
+         * <p>Wider than the name. Its one producer writes it wherever the classes an arm-measuring
+         * evaluation needs are absent — a backend that failed on them, inputs that were not there —
+         * and a probe whose mapping was lost is one way to arrive at that rather than the whole of
+         * it. The name is left alone here and read against the rest of the vocabulary at once.
+         */
         PROBE_MAPPING_LOST,
         /** A search gave up before it could decide. */
         SEARCH_LIMIT,

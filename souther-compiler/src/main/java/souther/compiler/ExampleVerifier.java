@@ -99,11 +99,14 @@ public final class ExampleVerifier {
             try {
                 v.checkExample(ex, failures, rows);
             } catch (LinkageError _) {
-                // The runtime is not on this host's classpath (it is `provided`, like CTFE), so the
-                // generated classes cannot be loaded to evaluate here; the build-time pass, where the
-                // runtime is present, still checks this example. Nothing was observed, and a measure
-                // that read the empty result as "no row covers this" would report a gap nobody left.
-                incompleteness.add(Incompleteness.at(Incompleteness.Code.RUNTIME_ABSENT,
+                // The generated classes would not link, so nothing could be evaluated here. The
+                // case this was written for is the runtime being off the classpath (it is
+                // `provided`, like CTFE), where the build-time pass still checks this example — but
+                // a `LinkageError` is also what a class that will not verify raises, so what is
+                // recorded is that the linking failed and not which of its causes it was. Nothing
+                // was observed, and a measure that read the empty result as "no row covers this"
+                // would report a gap nobody left.
+                incompleteness.add(Incompleteness.at(Incompleteness.Code.LINKAGE_FAILED,
                         Incompleteness.Scope.BEHAVIOR, ex.target(),
                         new SourceRef(sourceId, ex.pos())));
             }

@@ -313,7 +313,7 @@ final class Coverages {
         souther.compiler.partition.Generator.BoundaryAttempt made = probe.attempt(obligation);
         return switch (made) {
             case null -> new BoundaryAssessment.Attempt.NotAttempted(
-                    BoundaryAssessment.Attempt.Reason.RUNTIME_ABSENT);
+                    BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED);
             case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
                     new BoundaryAssessment.Attempt.Built(built.row());
             case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->

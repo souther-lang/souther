@@ -295,7 +295,7 @@ class AMeasureWithNoNumberSaysWhyTest {
                 .filter(b -> b.name().equals("elsewhere")).findFirst().orElseThrow();
         assertEquals(0, reported.rows(), "nothing was read");
         assertTrue(AdequacyReport.of(compilation).modules().get(0).incompleteness().stream()
-                        .anyMatch(gap -> gap.code() == Incompleteness.Code.RUNTIME_ABSENT),
+                        .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT),
                 "and there may well have been something to read");
 
         Adequacy.BranchEvidence branch = compilation.db()

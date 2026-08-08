@@ -1,0 +1,88 @@
+package souther.compiler.report;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.observe.Incompleteness;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A sentence about a reason is a claim about every place that writes it.
+ *
+ * <p>Turning the codes into sentences is how the report stops handing a reader an enum's name. It
+ * is also how a reader gets told what happened on the authority of a name that may be wider than
+ * the sentence — which is the defect this whole change is about, made once more one level up. So a
+ * code is written out in words only where its producers have been read.
+ */
+class AReasonSaysOnlyWhatWasEstablishedTest {
+
+    @Test
+    void aSourceWithNoObservationSaysThatAndNotWhyItHadNone() {
+        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
+                Incompleteness.Scope.SOURCE, "1"));
+
+        assertEquals("no rows were read from `1`, so what they cover is unknown", said);
+    }
+
+    /** Named for the error that was caught, and it says no more than that. The runtime being off
+     * the classpath is the case it was written for and not the only one the JVM raises it for. */
+    @Test
+    void aLinkageFailureDoesNotClaimTheRuntimeIsMissing() {
+        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
+                Incompleteness.Scope.BEHAVIOR, "submit"));
+
+        assertFalse(said.contains("runtime"), said);
+        assertTrue(said.contains("would not link"), said);
+    }
+
+    /**
+     * And it stops where its producers stop agreeing.
+     *
+     * <p>Three places write it: an example whose classes would not load, a fill that could not put
+     * its candidates through the decoder, and a boundary that could not build one. Only the first
+     * of those is rows that did not run — the other two happen after the rows were read, and what
+     * failed is the building of something new. A sentence keyed on the code cannot tell which, so
+     * it says the one thing all three agree on.
+     *
+     * <p>This holds the wording and not the producers. Which places write a code is not something
+     * a unit of this size can walk; it is read by hand, and the reading is what the sentence above
+     * rests on.
+     */
+    @Test
+    void aLinkageFailureDoesNotSayWhatDidNotHappenNext() {
+        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
+                Incompleteness.Scope.BEHAVIOR, "submit"));
+
+        assertEquals("the classes for `submit` would not link", said);
+        assertFalse(said.contains("did not run"),
+                "true where an example was running and not where a candidate was built: " + said);
+    }
+
+    /**
+     * A code whose producers have not been read is left as it was.
+     *
+     * <p>{@code PROBE_MAPPING_LOST} is written wherever the instrumented classes could not be made
+     * — a backend that failed, inputs that were not there — which is wider than a probe whose
+     * mapping was lost, and its subject at that one producer is a module rather than a behavior. A
+     * sentence about arms would be a claim neither the code nor the producer supports.
+     */
+    @Test
+    void aCodeWhoseProducersAreUnreadIsNotTurnedIntoAClaim() {
+        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.PROBE_MAPPING_LOST,
+                Incompleteness.Scope.MODULE, "example.trip"));
+
+        assertFalse(said.contains("arms"), "nothing here has established that: " + said);
+        assertEquals("example.trip (probe_mapping_lost)", said);
+    }
+
+    /** And a subject that is a phrase rather than a name is not quoted as one. */
+    @Test
+    void aSearchLimitKeepsItsOwnWords() {
+        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.SEARCH_LIMIT,
+                Incompleteness.Scope.MODULE, "12 combinations past the row limit"));
+
+        assertEquals("12 combinations past the row limit (search_limit)", said);
+    }
+}

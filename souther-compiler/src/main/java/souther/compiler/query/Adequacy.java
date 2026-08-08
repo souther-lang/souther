@@ -388,7 +388,7 @@ public final class Adequacy {
                 try {
                     return Generator.probe(subject, obligation, check);
                 } catch (LinkageError _) {
-                    // The runtime is not on this host's classpath, so nothing can be built to find out
+                    // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Nothing was tried, which is not the same as everything
                     // tried being refused, and neither of them says the edge cannot be written.
                     return null;
@@ -611,12 +611,15 @@ public final class Adequacy {
          * evaluated leaves no row to find — the rows it holds may cover anything, and a measure over
          * the rows that remain is a measure over some of them with nothing in it to say so.
          *
-         * <p>{@code RUNTIME_ABSENT} is exactly that case, from either place it arises — an example
-         * block whose classes would not load, and a source whose evaluation has no answer at all.
+         * <p>Two codes say it, and they are the two ways rows go unobserved: a source that produced
+         * no observation at all, and an example block whose classes would not load. What this asks is
+         * the state and not the cause, so it reads both rather than one standing in for the other —
+         * which is what it did while one code carried them both.
          */
         public boolean someRowsUnseen() {
             return incompleteness.stream()
-                    .anyMatch(gap -> gap.code() == Incompleteness.Code.RUNTIME_ABSENT);
+                    .anyMatch(gap -> gap.code() == Incompleteness.Code.OBSERVATION_ABSENT
+                            || gap.code() == Incompleteness.Code.LINKAGE_FAILED);
         }
 
         /** The status a measure over these rows takes before its own reading is considered. */
@@ -645,7 +648,7 @@ public final class Adequacy {
             if (observed == null) {
                 // The source was not evaluated at all. Which behaviors it wrote rows for is exactly
                 // what cannot be read, so it counts against every one of them.
-                everywhere.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                everywhere.add(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
                         Incompleteness.Scope.SOURCE, sourceId));
                 continue;
             }
@@ -786,10 +789,10 @@ public final class Adequacy {
                                     : excluded.getOrDefault(spec.name(), Exclusions.NONE)),
                             atEdges));
                 } catch (LinkageError _) {
-                    // The runtime is not on this host's classpath, so nothing can be built to find out
+                    // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
-                    out.put(spec.name(), Filling.stopped(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                    out.put(spec.name(), Filling.stopped(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
                             Incompleteness.Scope.BEHAVIOR, spec.name())));
                 }
             }
@@ -816,17 +819,22 @@ public final class Adequacy {
                 switch (each.attempt()) {
                     case BoundaryAssessment.Attempt.Built built -> rows.add(built.row());
                     case BoundaryAssessment.Attempt.Unresolved why -> unresolved.add(why.why());
-                    // Nothing was tried. Two of the reasons are news — the decoders could not be
+                    // Nothing was tried. One of the reasons is news — the decoders could not be
                     // reached, so this block is short of rows it would otherwise have offered — and
-                    // the other two are boundaries nobody is owed a row at, where saying so would be
-                    // noise. The two that are said arrive under one code, which is as fine a
-                    // distinction as the report has: a module that failed to generate and a runtime
-                    // that is not on the classpath are different, and nothing downstream can say so.
+                    // two are boundaries nobody is owed a row at, where saying so would be noise.
+                    //
+                    // NO_CLASSES is here for completeness and does not arrive: the evaluation is
+                    // asked only of a module that checked, so a module with no classes has no rows
+                    // either, and a boundary with no rows behind it is undecided rather than missed.
+                    // Reaching it takes the backend failing on a module that checked, which is a
+                    // defect in the backend rather than a state of the source. It says the same
+                    // thing as the reason beside it — nothing could be built against — and that is
+                    // what is said.
                     case BoundaryAssessment.Attempt.NotAttempted absent -> {
-                        if (absent.reason() == BoundaryAssessment.Attempt.Reason.RUNTIME_ABSENT
+                        if (absent.reason() == BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED
                                 || absent.reason()
                                         == BoundaryAssessment.Attempt.Reason.NO_CLASSES) {
-                            stopped.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                            stopped.add(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
                                     Incompleteness.Scope.BEHAVIOR, behavior));
                         }
                     }

@@ -248,7 +248,10 @@ class CompilePartialAdequacyTest {
                 "the flag's classes are undecided, so nothing is written for them");
         assertFalse(generated.get("take").pairs().incompleteness().isEmpty(),
                 "and the position that could not be read is named");
-        assertEquals("", GeneratedRows.of("example.budget", generated, true));
+        String written = GeneratedRows.of("example.budget", generated, true);
+        assertFalse(written.contains("example take"), "no row is offered: " + written);
+        assertTrue(written.contains("generation stopped"),
+                "the position it could not read is what there is to say: " + written);
     }
 
     /**
@@ -401,7 +404,11 @@ class CompilePartialAdequacyTest {
 
         assertEquals(List.of(), generated.get("take").pairs().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());
-        assertEquals("", GeneratedRows.of("example.split", generated, true));
+        String written = GeneratedRows.of("example.split", generated, true);
+        assertFalse(written.contains("example take"),
+                "the row may be sitting in the file that could not be read: " + written);
+        assertTrue(written.contains("generation stopped"),
+                "and an author who asked what to write is told why there is nothing: " + written);
     }
 
     /**
@@ -417,7 +424,7 @@ class CompilePartialAdequacyTest {
 
         assertEquals(MeasurementStatus.PARTIAL, one.status());
         assertEquals(1, one.modules().get(0).incompleteness().size());
-        assertEquals(souther.compiler.observe.Incompleteness.Code.RUNTIME_ABSENT,
+        assertEquals(souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
                 one.modules().get(0).incompleteness().get(0).code());
     }
 
@@ -656,7 +663,7 @@ class CompilePartialAdequacyTest {
                         souther.compiler.observe.Incompleteness.Scope.BEHAVIOR, "submit");
         souther.compiler.observe.Incompleteness aboutTheSource =
                 souther.compiler.observe.Incompleteness.of(
-                        souther.compiler.observe.Incompleteness.Code.RUNTIME_ABSENT,
+                        souther.compiler.observe.Incompleteness.Code.OBSERVATION_ABSENT,
                         souther.compiler.observe.Incompleteness.Scope.SOURCE, "3");
 
         assertTrue(aboutOne.countsAgainst("submit"));
