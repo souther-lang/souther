@@ -28,15 +28,30 @@ import java.util.function.BooleanSupplier;
 public final class FieldDomains {
 
     /** Nothing known of any field. */
-    public static final FieldDomains NONE = new FieldDomains(Map.of(), () -> true);
+    public static final FieldDomains NONE = new FieldDomains(Map.of(), false, () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
+    private final boolean infeasible;
     private final BooleanSupplier deriving;
-    private Boolean exact;
+    private volatile Boolean exact;
 
-    private FieldDomains(Map<String, NumericDomain.Bounds> byField, BooleanSupplier deriving) {
+    private FieldDomains(Map<String, NumericDomain.Bounds> byField, boolean infeasible,
+                         BooleanSupplier deriving) {
         this.byField = byField;
+        this.infeasible = infeasible;
         this.deriving = deriving;
+    }
+
+    /**
+     * Whether the rules contradict, so that no value of this type exists at all.
+     *
+     * <p>A separate answer from a field nothing bounds. Both leave no bounds to read, and one of them
+     * means every position here holds anything while the other means none of them holds anything: a
+     * report that took the second for the first would ask for rows at edges of a value nobody can
+     * build.
+     */
+    public boolean infeasible() {
+        return infeasible;
     }
 
     /** What {@code data}, declared as {@code named}, leaves its fields able to hold. */
@@ -67,14 +82,21 @@ public final class FieldDomains {
         });
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
-        return new FieldDomains(Map.copyOf(out),
+        return new FieldDomains(Map.copyOf(out), seeded.numbers().isBottom(),
                 () -> seeded.everyClauseRead() && seeded.numbers().projectionIsLossless()
                         && InvariantChecker.everyRuleIsDerivable(named, data, symbols));
     }
 
-    /** What {@code field} can hold, or {@code null} where nothing bounds it either way. */
-    public NumericDomain.Bounds at(String field) {
-        return byField.get(field);
+    /**
+     * What the position at {@code path} can hold, or {@code null} where nothing bounds it either way.
+     *
+     * <p>{@code path} is read from the value these are of: {@code startsAt} for a field, and
+     * {@code interval.startsAt} for a field of a field. A clause on the outer record relates
+     * positions at any depth it can name, so what it leaves them is read at the depth it left it at
+     * rather than at the record each of them happens to sit in.
+     */
+    public NumericDomain.Bounds at(String path) {
+        return byField.get(path);
     }
 
     /**

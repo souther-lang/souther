@@ -160,6 +160,57 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "the class of the afternoon is as writable as its edge:\n" + report);
     }
 
+    /**
+     * A rule on the outer record reaches a field of a field.
+     *
+     * <p>The reading is of the parameter and not of each record met on the way down. Rebuilt at the
+     * inner record it has never seen the outer clause, and `interval.startsAt` goes back to the top
+     * of its own type — the whole of #427, one level in.
+     */
+    @Test
+    void aRuleOnTheOuterRecordReachesAFieldOfAField() throws Exception {
+        String nested = """
+                module example.nested
+
+                data Minute = Int
+                    invariant withinDay = value >= 0 && value <= 1440
+
+                data Interval =
+                    { startsAt: Minute
+                    , endsAt: Minute
+                    }
+
+                data Input =
+                    { interval: Interval
+                    , cap: Minute
+                    }
+                    invariant capped = interval.startsAt < cap
+
+                data Yes
+                data No
+
+                behavior classify : (input: Input) -> Yes | No
+                    constructs Yes, No
+
+                let classify (input) = if input.interval.startsAt.value >= 100 then Yes else No
+
+                example classify
+                    | "a" : (Input { interval = Interval { startsAt = Minute(10),
+                        endsAt = Minute(20) }, cap = Minute(30) }) -> No
+                """;
+        List<String> asked = boundariesOf(nested);
+
+        assertTrue(asked.stream().anyMatch(l ->
+                        l.contains("input.interval.startsAt = 1439")
+                                && l.contains("within Input")),
+                () -> "cap stops at 1440, so a start of 1440 has nothing to be under: " + asked);
+        assertFalse(asked.stream().anyMatch(l -> l.contains("input.interval.startsAt = 1440")),
+                () -> "asked for " + asked);
+        assertFalse(reportOn(nested, "--generate", "--boundaries")
+                        .contains("every value tried was refused"),
+                "and each of them is a row that builds");
+    }
+
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test

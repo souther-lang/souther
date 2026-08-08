@@ -287,21 +287,18 @@ public final class InvariantChecker {
             return new Seeded(NumericDomain.top(), Map.of(), false);
         }
         Map<String, String> atoms = new LinkedHashMap<>();
+        Map<String, Type> typeAt = new LinkedHashMap<>();
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
-            if (type == null) {
-                continue;
-            }
-            String atom = c.terms.atomOf(
-                    new Core.Read(field.getKey(), field.getValue(), type, NOWHERE), at, k);
-            if (atom != null) {
-                atoms.put(field.getKey(), atom);
+            if (type != null) {
+                c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                        field.getKey(), type, at, k, symbols, 1, atoms, typeAt);
             }
         }
         NumericDomain numbers = k.numbers();
         for (Map.Entry<String, BigDecimal> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
-            Type type = fields.get(each.getKey());
+            Type type = typeAt.get(each.getKey());
             if (atom == null || type == null) {
                 continue;
             }
@@ -312,6 +309,32 @@ public final class InvariantChecker {
                     Map.of(atom, c.terms.granularityOf(type)));
         }
         return new Seeded(numbers, atoms, read);
+    }
+
+    /**
+     * The atom each position under {@code value} is named by, keyed by the path it is reached at.
+     *
+     * <p>The walk {@link #seedAt} took, over the same reads, so a position the seeding put a bound on
+     * is a position this can name. Two levels down as well as one: a clause on a record relates a
+     * field of a field to something, and the bound that leaves on it is read at the path it sits at
+     * rather than at the record it happens to be inside.
+     */
+    private void name(Core value, String path, Type type, Denotations at, Known k, Symbols symbols,
+                      int depth, Map<String, String> atoms, Map<String, Type> typeAt) {
+        String atom = terms.atomOf(value, at, k);
+        if (atom != null) {
+            atoms.put(path, atom);
+            typeAt.put(path, type);
+        }
+        if (depth > FIELDS_SEEDED || !(type instanceof Type.Ref ref)
+                || !(symbols.get(ref.name()) instanceof Ast.Data data) || data.newtype()) {
+            return;
+        }
+        for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
+            name(new Core.FieldAccess(value, field.getKey(), field.getValue(), NOWHERE),
+                    path + "." + field.getKey(), field.getValue(), at, k, symbols, depth + 1,
+                    atoms, typeAt);
+        }
     }
 
     /**

@@ -80,8 +80,13 @@ public final class Partitions {
         List<Axis> found = new ArrayList<>();
         Map<String, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
-            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()),
-                    sig.inputTypes().get(i), 0, symbols, found, null, domains);
+            // One reading per parameter, not one per record met on the way down. A clause on the
+            // outer record relates positions at any depth it can name, and rebuilding the reading at
+            // each record is how `interval.startsAt < cap` stopped reaching `interval.startsAt`.
+            Type type = sig.inputTypes().get(i);
+            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
+                    0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
+                    domains);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -223,30 +228,44 @@ public final class Partitions {
         AxisId id = AxisId.of(behavior, path);
         List<PartitionClass> classes = classesOf(type, symbols);
         Bounds own = boundsOf(type, symbols);
-        Bounds here = narrowed(own, placed == null ? null : placed.bounds());
+        // A value whose rules contradict has no positions to cover: every edge of every field of it
+        // is a row nobody can write, which is not the same answer as a field nothing bounds.
+        boolean nothingExists = placed != null && placed.domains().infeasible();
+        Bounds here = nothingExists ? null : narrowed(own, placed == null ? null : placed.at(path));
         if (here != null && !here.isEmpty()) {
             domains.put(path.toString(), new NumericDomain.Bounds(here.min(), here.max()));
         }
-        List<Cut> cuts = cutsOf(type, here, own, placed == null ? null : placed.record());
+        List<Cut> cuts = nothingExists ? List.of()
+                : cutsOf(type, here, own, placed == null ? null : placed.value());
         if (!classes.isEmpty() || !cuts.isEmpty()) {
             out.add(new Axis(id, path, type, classes, cuts));
             return;
         }
         Map<String, Type> fields = productFields(type, symbols);
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
-            TypeName named = ((Type.Ref) type).name();
-            FieldDomains record = fieldDomainsOf(type, symbols);
             for (Map.Entry<String, Type> field : fields.entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
-                        new Placed(named, record.at(field.getKey())), domains);
+                        placed, domains);
             }
             return;
         }
         out.add(Axis.notDerivable(id, path, type));
     }
 
-    /** Where a field sits: the record holding it, and what that record leaves it able to hold. */
-    private record Placed(TypeName record, NumericDomain.Bounds bounds) {}
+    /** The value a position is inside: what it is called, and what its rules leave each position of
+     * it able to hold. */
+    private record Placed(TypeName value, FieldDomains domains) {
+
+        /** What is left for the position at {@code path}, which is read from the value this is of. */
+        NumericDomain.Bounds at(TermPath path) {
+            return path.fields().isEmpty() ? null
+                    : domains.at(String.join(".", path.fields()));
+        }
+    }
+
+    private static TypeName nameOf(Type type) {
+        return type instanceof Type.Ref ref ? ref.name() : null;
+    }
 
     /** What the record a field sits in leaves each of its fields able to hold. */
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {

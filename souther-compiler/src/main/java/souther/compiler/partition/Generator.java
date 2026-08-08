@@ -629,16 +629,37 @@ public final class Generator {
                                      Map<String, BigDecimal> settled) {
         List<String> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
-        String missing = choicesUnder(type, at, symbols, 0, paths, values, settled, null);
+        // One reading of the parameter, not one per record inside it. A clause on the outer record
+        // says what is left for a position two levels down, and a reading rebuilt at the inner record
+        // has never seen it.
+        FieldDomains left = type instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
+                ? FieldDomains.of(ref.name(), data, symbols, under(at, settled)) : FieldDomains.NONE;
+        String missing = choicesUnder(type, at, symbols, 0, paths, values, left, at);
         return missing != null ? Choices.missing(missing) : new Choices(paths, values, null);
+    }
+
+    /** The settled positions of one parameter, named the way the reading of that parameter names
+     * them: from the value itself, with the parameter dropped. */
+    private static Map<String, BigDecimal> under(TermPath root, Map<String, BigDecimal> settled) {
+        if (settled.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, BigDecimal> out = new LinkedHashMap<>();
+        String prefix = root + ".";
+        settled.forEach((path, number) -> {
+            if (path.startsWith(prefix)) {
+                out.put(path.substring(prefix.length()), number);
+            }
+        });
+        return out;
     }
 
     /** The positions under one parameter, appended in the order they are composed. Returns the path
      * nothing can be written at, where there is one. */
     private static String choicesUnder(Type type, TermPath at, Symbols symbols, int depth,
                                        List<String> paths, List<List<FixtureTemplate>> values,
-                                       Map<String, BigDecimal> settled,
-                                       souther.compiler.numeric.NumericDomain.Bounds within) {
+                                       FieldDomains left, TermPath root) {
         if (paths.contains(at.toString())) {
             return null;   // an axis decides here
         }
@@ -646,11 +667,9 @@ public final class Generator {
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
             Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
             if (!fields.isEmpty()) {
-                FieldDomains left = FieldDomains.of(ref.name(), data, symbols,
-                        settledUnder(at, fields.keySet(), settled));
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
                     String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
-                            depth + 1, paths, values, settled, left.at(field.getKey()));
+                            depth + 1, paths, values, left, root);
                     if (missing != null) {
                         return missing;
                     }
@@ -658,7 +677,8 @@ public final class Generator {
                 return null;
             }
         }
-        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols, within);
+        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols,
+                at.fields().isEmpty() ? null : left.at(String.join(".", at.fields())));
         if (stands.isEmpty()) {
             // Nothing could be written at all: a position of a type nothing stands for. Which is not
             // the same as a value that was written and refused, and reporting it as one sends the
@@ -668,22 +688,6 @@ public final class Generator {
         paths.add(at.toString());
         values.add(stands);
         return null;
-    }
-
-    /** The fields of the record at {@code at} that the caller has already fixed a number at. */
-    private static Map<String, BigDecimal> settledUnder(TermPath at, Set<String> fields,
-                                                        Map<String, BigDecimal> settled) {
-        if (settled.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, BigDecimal> out = new LinkedHashMap<>();
-        for (String field : fields) {
-            BigDecimal number = settled.get(at.then(field).toString());
-            if (number != null) {
-                out.put(field, number);
-            }
-        }
-        return out;
     }
 
     /** What came of trying the assignments for one parameter: its value, or why there is none. */
