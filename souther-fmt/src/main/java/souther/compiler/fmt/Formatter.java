@@ -1267,8 +1267,6 @@ public final class Formatter {
         }
         if (next == null) {
             add(out.atEnd(), file, comment);          // nothing follows: it closes the file
-        } else if (isChainHead(next)) {
-            out.aboveCase().computeIfAbsent(next.start(), _ -> new ArrayList<>()).add(comment);
         } else if (isBareMember(next)) {
             // A clause keyword opens the line its first name is on, the way a bracket does, so a
             // comment above that name is above the clause rather than between the two.
@@ -1324,6 +1322,18 @@ public final class Formatter {
         boolean moreOfTheLineFollows = slot.parent() != null
                 && slot.parent().kind() == SyntaxKind.PIPE_BEHAVIOR
                 && slot.end() != slot.parent().end();
+        // The construct the slot ends together with may itself sit in the middle of a line — a
+        // `with` clause ends where its last binding does and the row goes on to its expected value.
+        SyntaxToken slotEnd = lastCodeTokenOf(slot);
+        SyntaxNode ends = slotEnd == null ? slot : endingAt(slotEnd);
+        if (ends.parent() != null && ends.parent().parent() != null
+                && ends.end() != ends.parent().end()
+                && !takesALineOf(ends.parent().kind(), ends.kind())
+                && !isSpine(ends.parent())   // a run's parts are its lines, not the run's
+                && slotOf(ends.parent()) != null) {
+            add(out.after(), slotOf(ends.parent()), comment);
+            return;
+        }
         if ((slot.end() != code.end() || moreOfTheLineFollows) && !endsAWrittenLine(code)) {
             SyntaxToken last = lastCodeTokenOf(moreOfTheLineFollows ? slot.parent() : slot);
             if (last != null && last.end() != code.end()) {
