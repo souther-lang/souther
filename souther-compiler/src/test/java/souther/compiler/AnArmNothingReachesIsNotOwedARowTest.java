@@ -1,0 +1,149 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.partition.GuardEdge;
+import souther.compiler.partition.GuardReachability;
+import souther.compiler.partition.TermPath;
+import souther.compiler.query.Adequacy;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * An arm the model's own rules prove nothing reaches is not a row anybody is owed.
+ *
+ * <p>The cap on {@code b} is written on the record, so {@code Count} alone says nothing about it and a
+ * guard at 50 sits outside what any pair can hold. What a position is divided into and which lines are
+ * owed a row already knew that; the arms did not, and a report asking for a row through an arm nothing
+ * can reach is asking for work nobody can do.
+ *
+ * <p>Instrumented is not the same as owed. The probe on that arm stays, because a probe is the only
+ * thing that could show the reachability wrong.
+ */
+class AnArmNothingReachesIsNotOwedARowTest {
+
+    private static final String CAPPED = """
+            module example.capped
+
+            data Count = Int
+                invariant lower = value >= 0
+
+            data Pair =
+                { a: Count
+                , b: Count
+                }
+                invariant cap = b <= 10
+                invariant ordered = a < b
+
+            data Small
+            data Big
+
+            behavior classify : (pair: Pair) -> Small | Big
+                constructs Small, Big
+
+            let classify (pair) =
+                if pair.b.value >= 50
+                    then Big
+                    else Small
+
+            example classify
+                | "small" : (Pair { a = Count(0), b = Count(1) }) -> Small
+            """;
+
+    private static String reportOn(String model) throws Exception {
+        Path file = Files.createTempDirectory("souther-arms").resolve("model.sou");
+        Files.writeString(file, model);
+        PrintStream was = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[] {"examples", "--boundaries", file.toString()});
+        } finally {
+            System.setOut(was);
+        }
+        return out.toString(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void anArmBeyondTheRecordsCapIsNotCounted() throws Exception {
+        String report = reportOn(CAPPED);
+
+        assertTrue(report.contains("branch      1/1"),
+                () -> "the `else` arm is the only one a pair can take:\n" + report);
+        assertFalse(report.contains("no row goes through"),
+                () -> "and it was taken:\n" + report);
+    }
+
+    /** The same guard one value lower, which a pair can hold. Without this the assertion above would
+     * pass on a measure that had stopped counting arms at all. */
+    @Test
+    void anArmWithinItStillIs() throws Exception {
+        String report = reportOn(CAPPED.replace("pair.b.value >= 50", "pair.b.value >= 5"));
+
+        assertTrue(report.contains("branch      1/2"),
+                () -> "a `b` of 5 is a value some pair holds, so both arms are owed:\n" + report);
+        assertTrue(report.contains("no row goes through `then`"),
+                () -> "and no row went through this one:\n" + report);
+    }
+
+    // --- what happens if the proof is wrong -------------------------------------------------------
+
+    private static CoverageSites.Site arm(int index) {
+        return new CoverageSites.Site("classify", CoverageSites.Site.Kind.THEN, "then", null,
+                index, index, "f" + index);
+    }
+
+    /** A reachability that proves arm 0 unreachable: nothing at or above 50 is a value of [0, 10]. */
+    private static GuardReachability proving() {
+        GuardEdge edge = GuardEdge.above(new CoverageSites.GuardRef("classify", 0, 1, null),
+                0, TermPath.of("pair"), BigDecimal.valueOf(50), true);
+        return GuardReachability.of(List.of(edge),
+                Map.of("pair", new NumericDomain.Bounds(BigDecimal.ZERO, BigDecimal.TEN)));
+    }
+
+    @Test
+    void aProvenArmLeavesTheDenominator() {
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
+                List.of(arm(0), arm(1)), Set.of(1), proving(), MeasurementStatus.COMPLETE);
+
+        assertEquals(List.of(1), measured.all().stream().map(CoverageSites.Site::index).toList());
+        assertEquals(Set.of(1), measured.covered());
+        assertTrue(measured.contradicted().isEmpty());
+        assertTrue(measured.unreached().isEmpty());
+    }
+
+    /**
+     * A row through an arm nothing was supposed to reach.
+     *
+     * <p>Then the model is fine and the proof is not. The arm stays in the denominator and the fact is
+     * kept, because the alternative is a measure that reports {@code 1/1} over a proof it has just been
+     * shown to have broken.
+     */
+    @Test
+    void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
+        Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
+                List.of(arm(0), arm(1)), Set.of(0, 1), proving(), MeasurementStatus.COMPLETE);
+
+        assertEquals(Set.of(0), measured.contradicted(),
+                "arm 0 was proven unreachable and a row went through it");
+        assertEquals(List.of(0, 1),
+                measured.all().stream().map(CoverageSites.Site::index).toList(),
+                "so it is still an arm this behavior has");
+        assertEquals(Set.of(0, 1), measured.covered());
+    }
+}

@@ -369,10 +369,11 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void aMeasureCannotBeBuiltWithoutKeepingThatContract() {
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
-                List.of(), java.util.Set.of(), MeasurementStatus.UNAVAILABLE, null));
+                List.of(), java.util.Set.of(), java.util.Set.of(),
+                MeasurementStatus.UNAVAILABLE, null));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
-                List.of(), java.util.Set.of(), MeasurementStatus.COMPLETE,
-                Adequacy.BranchEvidence.Reason.NO_BODY));
+                List.of(), java.util.Set.of(), java.util.Set.of(),
+                MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY));
         assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
                 "a", "a", List.of(), java.util.Set.of(), List.of(), 0,
                 MeasurementStatus.UNAVAILABLE, null));
