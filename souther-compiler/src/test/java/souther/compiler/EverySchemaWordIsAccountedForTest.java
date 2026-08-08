@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The words the shipped schema allows are the words the compiler writes.
+ * Every word the shipped schema allows is one somebody accounted for.
  *
  * <p>Every enumerated field of {@code adequacy-schema-1.json} is a second spelling of a Java enum.
  * The two are edited in different files by different hands, and until this test nothing noticed when
@@ -53,7 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reached a published report. Before that every word taken out had never been emitted, so there was
  * nothing for a document to be holding, and the schema was corrected rather than versioned.
  */
-class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
+class EverySchemaWordIsAccountedForTest {
 
     private static final String SCHEMA = "/souther/adequacy-schema-1.json";
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -125,7 +125,7 @@ class EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest {
                     Incompleteness.Code.class, Set.of("probe_mapping_lost")));
 
     @Test
-    void everyEnumeratedFieldSpellsTheEnumItComesFrom() {
+    void everyEnumeratedFieldNamesCurrentOrRetiredWords() {
         JsonNode schema = schema();
         for (Vocabulary each : VOCABULARIES) {
             assertEquals(each.allowed(), allowedAt(schema, each.at()),

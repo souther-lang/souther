@@ -177,7 +177,7 @@ class MainExamplesSubcommandTest {
      * <p>Named for what it does. It is not a validation — that would want a library — and the words a
      * field is allowed to take are not checked here at all; a name promising more than that is how a
      * schema came to allow a word the compiler had stopped writing while this went on passing.
-     * {@link EveryWordTheSchemaAllowsIsOneTheCompilerWritesTest} holds the vocabularies.
+     * {@link EverySchemaWordIsAccountedForTest} holds the vocabularies.
      */
     @Test
     void theEmittedJsonHasTheShippedSchemaShape() throws Exception {
