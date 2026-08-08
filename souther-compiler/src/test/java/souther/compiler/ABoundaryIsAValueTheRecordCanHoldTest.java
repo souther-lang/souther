@@ -216,6 +216,40 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     }
 
     /**
+     * A guard at the end of what a position holds is a line, and the step off it is not a row.
+     *
+     * <p>The neighbour is invented rather than read: a guard has values on both sides, so the class
+     * beyond it wants its own edge. Where the guard sits at the end of the range there is no class
+     * beyond it, and the neighbour is a value the type refuses. The line itself stays owed — a row
+     * written at it reaches the comparison, which is what a guard's boundary is about.
+     */
+    @Test
+    void aStepOffTheEndOfTheRangeIsNotABoundary() throws Exception {
+        List<String> asked = boundariesOf("""
+                module example.floor
+
+                data Level = Int
+                    invariant lower = value >= 10
+
+                data Answer = { n: Int }
+
+                behavior classify : (level: Level) -> Answer
+                    constructs Answer
+
+                let classify (level) =
+                    if level.value < 10 then Answer { n = 1 } else Answer { n = 2 }
+
+                example classify
+                    | "twenty" : (Level(20)) -> Answer { n = 2 }
+                """);
+
+        assertTrue(asked.stream().anyMatch(l -> l.contains("level = 10")),
+                () -> "the line is still owed a row: " + asked);
+        assertFalse(asked.stream().anyMatch(l -> l.contains("level = 9")),
+                () -> "and no level is 9, so no row can be written there: " + asked);
+    }
+
+    /**
      * A row filling a class picks the rest of the record beside the value it settled on.
      *
      * <p>The boundary filler and the class filler are two searches over one record, and only one of

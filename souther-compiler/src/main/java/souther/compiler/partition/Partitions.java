@@ -209,7 +209,8 @@ public final class Partitions {
      * the edge is the only row there is to write. A guard's line has values on both sides, so it wants
      * the value and its neighbour — and the neighbour only where the type has one to give.
      */
-    public static List<BoundaryObligation> obligationsOf(Axis axis, Symbols symbols) {
+    public static List<BoundaryObligation> obligationsOf(Axis axis, Symbols symbols,
+                                                         NumericDomain.Bounds within) {
         boolean decimal = TypeOps.base(axis.type(), symbols) == Type.DECIMAL;
         BoundaryDomain domain = decimal ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
         List<BoundaryObligation> out = new ArrayList<>();
@@ -218,13 +219,20 @@ public final class Partitions {
                 out.add(new BoundaryObligation(axis.id(), origin,
                         BoundaryObligation.BoundarySide.AT, cut.value()));
                 if (origin instanceof OriginRef.GuardOrigin guard) {
-                    // The other class's edge is the neighbour on the side the cut value is not on.
+                    // The other class's edge is the neighbour on the side the cut value is not on —
+                    // where that class has values. A guard at the end of what the position can hold
+                    // has nothing on one side of it, and a step off the end is a row nobody can write:
+                    // `value >= 10` under `x < 10` would be owed a 9. The cut itself stays either way,
+                    // because the comparison is still reached by a row written at the line.
                     if (guard.valueBelongsBelow()) {
-                        domain.successor(cut.value()).ifPresent(next -> out.add(new BoundaryObligation(
-                                axis.id(), origin, BoundaryObligation.BoundarySide.ABOVE, next)));
+                        domain.successor(cut.value()).filter(next -> holds(within, next))
+                                .ifPresent(next -> out.add(new BoundaryObligation(
+                                        axis.id(), origin,
+                                        BoundaryObligation.BoundarySide.ABOVE, next)));
                     } else {
-                        domain.predecessor(cut.value()).ifPresent(before ->
-                                out.add(new BoundaryObligation(axis.id(), origin,
+                        domain.predecessor(cut.value()).filter(before -> holds(within, before))
+                                .ifPresent(before -> out.add(new BoundaryObligation(
+                                        axis.id(), origin,
                                         BoundaryObligation.BoundarySide.BELOW, before)));
                     }
                 }
@@ -233,6 +241,22 @@ public final class Partitions {
         return List.copyOf(out);
     }
 
+    /** Whether a value invented one step off a line is one the position can hold. */
+    private static boolean holds(NumericDomain.Bounds within, ObservedValue value) {
+        if (within == null) {
+            return true;
+        }
+        BigDecimal number = switch (value) {
+            case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
+            case ObservedValue.Decimal d -> d.value();
+            case null, default -> null;
+        };
+        if (number == null) {
+            return true;
+        }
+        return (within.min() == null || number.compareTo(within.min()) >= 0)
+                && (within.max() == null || number.compareTo(within.max()) <= 0);
+    }
 
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
      * record, and recorded as not derivable where it is neither. */

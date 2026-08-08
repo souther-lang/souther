@@ -273,10 +273,11 @@ final class Coverages {
      */
     static List<BoundaryAssessment> assess(
             Axis axis, List<String> parameters, souther.compiler.query.Adequacy.Observed observed,
-            Symbols symbols, boolean armsAsked, boolean knownWritable, Probe probe) {
+            Symbols symbols, boolean armsAsked, boolean knownWritable, Probe probe,
+            souther.compiler.numeric.NumericDomain.Bounds within) {
         List<RowOutcome> rows = observed.rows();
         List<BoundaryAssessment> out = new ArrayList<>();
-        for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
+        for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols, within)) {
             BoundaryAssessment.Coverage coverage =
                     coverageOf(each, axis, parameters, observed, armsAsked);
             BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
