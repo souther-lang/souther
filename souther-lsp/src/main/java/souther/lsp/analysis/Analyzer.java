@@ -468,11 +468,10 @@ public final class Analyzer {
                 adequacy.partitions() == null ? null : adequacy.partitions().get(behavior);
         if (partition != null) {
             long measured = partition.boundaries().stream()
-                    .filter(b -> b.status() == souther.compiler.observe.MeasurementStatus.COMPLETE)
-                    .count();
+                    .filter(b -> settled(b.coverage())).count();
             long met = partition.boundaries().stream()
-                    .filter(b -> b.status() == souther.compiler.observe.MeasurementStatus.COMPLETE)
-                    .filter(souther.compiler.query.PartitionEvidence.BoundaryCoverage::hit).count();
+                    .filter(b -> settled(b.coverage()))
+                    .filter(b -> b.coverage().hit()).count();
             if (measured > 0) {
                 parts.add("boundary " + met + "/" + measured);
             }
@@ -484,6 +483,20 @@ public final class Analyzer {
             parts.add("branch " + branch.covered().size() + "/" + branch.all().size());
         }
         return String.join(" · ", parts);
+    }
+
+    /**
+     * Whether a line came to an answer against the rows.
+     *
+     * <p>Hit or missed, and nothing else. A line waiting on the arms has no answer to show beside a
+     * declaration, and one whose value could not be read has no answer either — a lens counting it
+     * would put a number in front of an author that says a row is missing at a value nothing was able
+     * to look at. The report can afford to include such a line because it writes "undecided" beside
+     * the count; one number on one line has nowhere to put that word.
+     */
+    private static boolean settled(souther.compiler.query.BoundaryAssessment.Coverage coverage) {
+        return coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Hit
+                || coverage instanceof souther.compiler.query.BoundaryAssessment.Coverage.Missed;
     }
 
     /** The caret at one position, as a range of no width. */

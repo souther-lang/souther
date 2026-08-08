@@ -8,6 +8,11 @@ import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.partition.AxisId;
+import souther.compiler.partition.OriginRef;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.types.TypeName;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
@@ -18,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -226,9 +232,15 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
      */
     @Test
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
-        PartitionEvidence.BoundaryCoverage met = new PartitionEvidence.BoundaryCoverage(
-                "weigh/w.a", "guard", BoundaryObligation.BoundarySide.AT, "100", true,
-                MeasurementStatus.COMPLETE, null, true);
+        BoundaryAssessment met = new BoundaryAssessment(
+                new BoundaryObligation(new AxisId("weigh", "w.a"),
+                        new OriginRef.InvariantOrigin(Optional.empty(),
+                                new TypeName("example.rate", "Amount"), "value <= 100"),
+                        BoundaryObligation.BoundarySide.AT, new ObservedValue.Integer(100)),
+                new BoundaryAssessment.Coverage.Hit(),
+                new BoundaryAssessment.Writability.WitnessedByRow(),
+                new BoundaryAssessment.Attempt.NotAttempted(
+                        BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");
@@ -245,7 +257,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 Incompleteness.Scope.POSITION, position), carriedAnObligation);
     }
 
-    private static PartitionEvidence partition(PartitionEvidence.BoundaryCoverage boundary,
+    private static PartitionEvidence partition(BoundaryAssessment boundary,
                                                Partitions.OmittedAxis... omitted) {
         return new PartitionEvidence(List.of(), List.of(boundary), PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(omitted));

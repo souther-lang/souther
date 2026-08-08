@@ -20,7 +20,6 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
-import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowClasses;
@@ -254,10 +253,9 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
-            // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
-            // been evaluated, which only the instrumented classes say. Read off the rows rather than
-            // off what was asked for — asking is not evidence that it happened.
-            boolean armsMeasured = levelOf(db).measuresArms();
+            // What every line this module's rules drew came to, asked once and read here. Measuring a
+            // line takes building values, which is not this measure's work and not work to do twice.
+            Map<String, List<BoundaryAssessment>> boundaries = db.ask(new Boundaries(name)).value();
 
             Map<String, PartitionEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -269,11 +267,10 @@ public final class Adequacy {
                     continue;
                 }
                 Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
-                // Asked and readable are handed over apart. A line nobody asked about and one whose
-                // instrumentation was lost are both unmeasured, and only the second is a run that
-                // failed at it; one boolean for the pair leaves the measure unable to say which.
                 out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
-                        plan, seen, armsMeasured,
+                        plan, seen,
+                        boundaries == null ? List.of()
+                                : boundaries.getOrDefault(spec.name(), List.of()),
                         excluded == null ? Exclusions.NONE
                                 : excluded.getOrDefault(spec.name(), Exclusions.NONE)));
             }
@@ -285,6 +282,119 @@ public final class Adequacy {
             return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
         }
 
+    }
+
+    /**
+     * What is known about every line each behavior's rules drew.
+     *
+     * <p>The one authority on a boundary. Whether a row sits at it and whether a row could sit at it
+     * were established in two places under two sets of rules — the report read one, the generator read
+     * the other — and the two disagreed about the same line: a boundary the report declined to name
+     * because a row had gone unread was one the generator handed to an author anyway, and a boundary
+     * the projection could not promise was one the generator had already built a value for and thrown
+     * the answer away.
+     *
+     * <p>Its own key rather than part of the coverage, because it costs what a coverage count does not:
+     * it puts values through this module's own decoders. Not behind the flag that prints rows, though.
+     * Whether a value can be built is evidence, and whether an author is handed the row that proves it
+     * is a separate request — the first decides what the report may count, so tying it to the second
+     * would make one measure's number depend on another flag.
+     */
+    public record Boundaries(String name) implements Key<Map<String, List<BoundaryAssessment>>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, List<BoundaryAssessment>>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.check.TypeChecker.Checked checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked == null ? Map.of() : checked.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.of(
+                            Coverage.sourceIdOf(db, name), bodies);
+            Map<String, Observed> byTarget = rowsOf(db, name);
+            Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            Symbols symbols = scope.value();
+            // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
+            // been evaluated, which only the instrumented classes say.
+            boolean armsAsked = levelOf(db).measuresArms();
+            FixtureReader.Construction building = constructing(db, name, prepared.value(), symbols);
+
+            Map<String, List<BoundaryAssessment>> out = new LinkedHashMap<>();
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+                    continue;   // a composition's inputs are its first stage's, measured there
+                }
+                Sig sig = sigs.value().get(spec.name());
+                if (sig == null) {
+                    continue;
+                }
+                out.put(spec.name(), assess(spec, sig, symbols, bodies.get(spec.name()), plan,
+                        byTarget.getOrDefault(spec.name(), Observed.NONE), armsAsked, building,
+                        excluded == null ? Exclusions.NONE
+                                : excluded.getOrDefault(spec.name(), Exclusions.NONE)));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+
+        /** Every line of one behavior, with what the rows and the decoder say about each. */
+        private static List<BoundaryAssessment> assess(
+                Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
+                souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
+                boolean armsAsked, FixtureReader.Construction building, Exclusions excluded) {
+            List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            souther.compiler.partition.Partitions.Partitioning partitioning =
+                    Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
+            Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
+            List<BoundaryAssessment> out = new ArrayList<>();
+            for (Axis axis : partitioning.axes()) {
+                if (!axis.measurable()) {
+                    continue;
+                }
+                out.addAll(Coverages.assess(axis, parameters, observed, symbols, armsAsked,
+                        partitioning.edgeIsKnownWritable(axis.path().toString()), probe));
+            }
+            return List.copyOf(out);
+        }
+
+        /**
+         * A way to try to build a row at a boundary, or nothing where there is nothing to try against.
+         *
+         * <p>Nothing rather than a check that refuses nothing. A row built without the decoder is a row
+         * nobody has put through anything, and counting one as a witness would turn "the classes are
+         * missing" into "the edge can be written".
+         */
+        private static Coverages.Probe probing(
+                souther.compiler.partition.Partitions.Partitioning partitioning, Sig sig,
+                Symbols symbols, List<String> parameters, FixtureReader.Construction building) {
+            if (building == null) {
+                return null;
+            }
+            Generator.Subject subject = new Generator.Subject(parameters, sig.inputTypes(),
+                    partitioning.axes(), symbols);
+            Generator.CandidateCheck check =
+                    (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
+            return obligation -> {
+                try {
+                    return Generator.probe(subject, obligation, check);
+                } catch (LinkageError _) {
+                    // The runtime is not on this host's classpath, so nothing can be built to find out
+                    // what a model admits. Nothing was tried, which is not the same as everything
+                    // tried being refused, and neither of them says the edge cannot be written.
+                    return null;
+                }
+            };
+        }
     }
 
 
@@ -606,9 +716,10 @@ public final class Adequacy {
     /**
      * Rows that would fill what every behavior of one module has not covered.
      *
-     * <p>Its own key rather than part of the coverage, because it costs what the coverage does not: it
-     * builds values through the derived decoders to find out which of them a model admits. A report
-     * nobody asked to generate rows for should not pay for that.
+     * <p>Its own key rather than part of the coverage, because filling the combinations searches the
+     * pair space, which nobody who only wanted a report should pay for. The rows at the edges are not
+     * that: {@link Boundaries} builds one value per line to find out whether a line can be written at,
+     * and the row that comes of it is read from there rather than searched for again.
      *
      * <p>The two kinds of row stay apart in the answer. Filling a combination and writing a row at an
      * edge are different requests, asked with different flags, and a caller that merged them could not
@@ -651,9 +762,11 @@ public final class Adequacy {
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
             Symbols symbols = scope.value();
 
+            Map<String, List<BoundaryAssessment>> boundaries =
+                    db.ask(new Boundaries(name)).value();
+
             Map<String, Filling> out = new LinkedHashMap<>();
-            FixtureReader.Construction building =
-                    constructing(db, name, prepared.value(), symbols, sigs.value());
+            FixtureReader.Construction building = constructing(db, name, prepared.value(), symbols);
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Ast.SpecBehavior spec)) {
                     continue;
@@ -662,14 +775,16 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
+                Generator.GenerationResult atEdges = offered(spec.name(),
+                        boundaries == null ? List.of()
+                                : boundaries.getOrDefault(spec.name(), List.of()));
                 try {
-                    out.put(spec.name(), rowsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
+                    out.put(spec.name(), new Filling(pairsFor(spec, sig, symbols,
+                            bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
-                            levelOf(db).measuresArms()
-                                    && !byTarget.getOrDefault(spec.name(), Observed.NONE)
-                                            .armsUnseen(),
                             excluded == null ? Exclusions.NONE
-                                    : excluded.getOrDefault(spec.name(), Exclusions.NONE)));
+                                    : excluded.getOrDefault(spec.name(), Exclusions.NONE)),
+                            atEdges));
                 } catch (LinkageError _) {
                     // The runtime is not on this host's classpath, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -683,34 +798,53 @@ public final class Adequacy {
             return Answer.of(Ordered.map(out));
         }
 
-        /** A way to build values against this module's own classes, or nothing where there are none to
-         * build against. */
-        private static FixtureReader.Construction constructing(
-                Db db, String module, Ast.Module written, Symbols symbols, Map<String, Sig> sigs) {
-            Map<String, byte[]> classes = db.ask(new Output.Linked(module)).value();
-            Map<String, List<BehaviorRequirement>> requirements =
-                    db.ask(new Bodies.Requirements(module)).value();
-            if (classes == null || requirements == null) {
-                return null;
+        /**
+         * The rows at the edges, read off what the boundary assessment already tried.
+         *
+         * <p>Nothing is built here, and nothing is worked out from the verdict either. The attempt
+         * says what happened; this prints it. Reading it back off {@link BoundaryAssessment#writability()}
+         * would lose the case that matters most to an author — an edge the projection proves is
+         * writable and the search could not produce a row for — which came out as a verdict of
+         * "provable" with nothing said about the row that never appeared.
+         */
+        private static Generator.GenerationResult offered(String behavior,
+                                                          List<BoundaryAssessment> boundaries) {
+            List<Generator.GeneratedRow> rows = new ArrayList<>();
+            List<Generator.UnresolvedCombination> unresolved = new ArrayList<>();
+            List<Incompleteness> stopped = new ArrayList<>();
+            for (BoundaryAssessment each : boundaries) {
+                switch (each.attempt()) {
+                    case BoundaryAssessment.Attempt.Built built -> rows.add(built.row());
+                    case BoundaryAssessment.Attempt.Unresolved why -> unresolved.add(why.why());
+                    // Nothing was tried. Two of the reasons are news — the decoders could not be
+                    // reached, so this block is short of rows it would otherwise have offered — and
+                    // the other two are boundaries nobody is owed a row at, where saying so would be
+                    // noise. The two that are said arrive under one code, which is as fine a
+                    // distinction as the report has: a module that failed to generate and a runtime
+                    // that is not on the classpath are different, and nothing downstream can say so.
+                    case BoundaryAssessment.Attempt.NotAttempted absent -> {
+                        if (absent.reason() == BoundaryAssessment.Attempt.Reason.RUNTIME_ABSENT
+                                || absent.reason()
+                                        == BoundaryAssessment.Attempt.Reason.NO_CLASSES) {
+                            stopped.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                                    Incompleteness.Scope.BEHAVIOR, behavior));
+                        }
+                    }
+                }
             }
-            Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
-            // `requirements` is asked above as a readiness condition, not as an input: whether a
-            // value builds at this module's boundary is the decoder's answer, and nothing here runs.
-            return FixtureReader.constructing(written, symbols, classes,
-                    Output.loader(db, Map.of()), values == null ? Map.of() : values);
+            return new Generator.GenerationResult(rows, unresolved, distinct(stopped));
         }
 
-        private static Filling rowsFor(
+        private static Generator.GenerationResult pairsFor(
                 Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                FixtureReader.Construction building, boolean armsMeasured, Exclusions excluded) {
+                FixtureReader.Construction building, Exclusions excluded) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
                 // which may already be sitting in the file that could not be evaluated.
-                Generator.GenerationResult stopped = new Generator.GenerationResult(List.of(),
-                        List.of(), observed.incompleteness());
-                return new Filling(stopped, stopped);
+                return new Generator.GenerationResult(List.of(), List.of(),
+                        observed.incompleteness());
             }
             List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
@@ -723,14 +857,34 @@ public final class Adequacy {
 
             List<Map<AxisId, Classification>> existing = rows.stream()
                     .map(row -> RowClasses.of(row, parameters, partitioning.axes())).toList();
-            Generator.GenerationResult pairs = Generator.fill(subject, existing, check);
-
-            List<BoundaryObligation> unmet = new ArrayList<>();
-            for (Axis axis : partitioning.axes()) {
-                unmet.addAll(Coverages.unmet(axis, parameters, rows, symbols, armsMeasured));
-            }
-            return new Filling(pairs, Generator.forBoundaries(subject, unmet, check));
+            return Generator.fill(subject, existing, check);
         }
+    }
+
+    /**
+     * A way to build values against this module's own classes, or nothing where there are none to
+     * build against.
+     *
+     * <p>The classes an evaluation runs against, not a second generation of them. Whether a value
+     * builds is the decoder's answer and the counting an evaluation carries does not change it —
+     * nothing here runs a row, so no budget is installed and the counted entry points count against
+     * nothing. Asking for the uncounted classes instead would generate every one of them again to get
+     * the same answers.
+     */
+    static FixtureReader.Construction constructing(Db db, String module, Ast.Module written,
+                                                   Symbols symbols) {
+        Map<String, byte[]> classes =
+                db.ask(new Output.EvaluationLinked(module, coverageAsked(db))).value();
+        Map<String, List<BehaviorRequirement>> requirements =
+                db.ask(new Bodies.Requirements(module)).value();
+        if (classes == null || requirements == null) {
+            return null;
+        }
+        Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(module)).value();
+        // `requirements` is asked above as a readiness condition, not as an input: whether a
+        // value builds at this module's boundary is the decoder's answer, and nothing here runs.
+        return FixtureReader.constructing(written, symbols, classes,
+                Output.evaluationLoader(db), values == null ? Map.of() : values);
     }
 
     /**
@@ -908,14 +1062,14 @@ public final class Adequacy {
                             behavior.pos(), List.of(missing)));
                 }
             }
-            for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
-                // A boundary nothing promises is writable is not a gap. Every rule reaching the
-                // value it sits in was not read, so this edge is where the reading stopped rather
-                // than where the model does, and a row at it may be one nobody can write.
-                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()
-                        && boundary.knownWritable()) {
-                    out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(), boundary.status(),
-                            behavior.pos(),
+            for (BoundaryAssessment boundary : partition.boundaries()) {
+                // Both halves, asked of the two answers the assessment keeps apart. A line no row was
+                // measured against is not a gap, and neither is one nothing has shown a row can be
+                // written at — that edge is where the reading stopped rather than where the model
+                // does, and a row at it may be one nobody can write.
+                if (boundary.isUnmetGap()) {
+                    out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(),
+                            MeasurementStatus.COMPLETE, behavior.pos(),
                             List.of(boundary.axis(), boundary.value(), boundary.origin())));
                 }
             }

@@ -37,9 +37,10 @@ public final class GeneratedRows {
     /**
      * The block for a finished compile, for the modules and behaviors the caller asked about.
      *
-     * <p>Asked here and not with the rest of a compile's questions, because this one builds values
-     * through the derived decoders to find out which of them the model admits. Nobody who only wanted
-     * the report should pay for that.
+     * <p>Asked here and not with the rest of a compile's questions, because filling the combinations
+     * searches the pair space, and nobody who only wanted the report should pay for that. The rows at
+     * the edges cost nothing here: each was built where the boundary was measured, and this reads what
+     * that attempt produced.
      */
     public static String of(Compilation compilation, String module, String behavior,
                             boolean boundaries) {

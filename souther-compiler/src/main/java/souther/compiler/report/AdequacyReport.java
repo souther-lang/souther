@@ -10,6 +10,7 @@ import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.PartitionEvidence;
@@ -493,26 +494,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                         ruled.classId(), why(ruled)));
             }
         }
-        List<PartitionEvidence.BoundaryCoverage> measured = partition.boundaries().stream()
-                .filter(b -> b.status() != MeasurementStatus.UNAVAILABLE)
-                .filter(PartitionEvidence.BoundaryCoverage::knownWritable).toList();
-        List<PartitionEvidence.BoundaryCoverage> unpromised = partition.boundaries().stream()
-                .filter(b -> !b.knownWritable()).toList();
-        long met = measured.stream().filter(PartitionEvidence.BoundaryCoverage::hit).count();
+        // Counted where both questions have an answer: the line was measured against the rows, and
+        // something has shown a row can be written at it. The two are separate observations and are
+        // filtered separately — a line nobody measured and a line nothing promises are not the same
+        // absence, and printing them under one sentence said "not known to be writable" about
+        // behaviors whose only problem was that nobody had written a row yet.
+        List<BoundaryAssessment> measured = partition.boundaries().stream()
+                .filter(b -> !(b.coverage() instanceof BoundaryAssessment.Coverage.NotMeasured))
+                .filter(b -> b.writability().known()).toList();
+        List<BoundaryAssessment> unpromised = partition.boundaries().stream()
+                .filter(b -> !b.writability().known()).toList();
+        long met = measured.stream().filter(b -> b.coverage().hit()).count();
         long undecided = measured.stream()
-                .filter(b -> b.status() == MeasurementStatus.PARTIAL).filter(b -> !b.hit()).count();
+                .filter(b -> b.coverage() instanceof BoundaryAssessment.Coverage.Undecided).count();
         out.append(String.format("    boundary    %d/%d%s%s%n", met, measured.size(),
-                notes(partition.boundaries(), b -> b.status() == MeasurementStatus.UNAVAILABLE,
-                        b -> whyNoBoundary(b.reason())),
+                notes(partition.boundaries(),
+                        b -> b.coverage() instanceof BoundaryAssessment.Coverage.NotMeasured,
+                        b -> whyNoBoundary(b.coverage())),
                 undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
             out.append(String.format("      · no row is at %s = %s (%s)%n",
                     f.args().get(0), f.args().get(1), f.args().get(2)));
         }
-        // Said and not counted. The edge is where the rules this could read stop, and a rule it
-        // could not read can refuse that value as readily as the one beyond it — so it is not a row
-        // anybody is owed, and it is still the only thing there is to say about this position.
-        for (PartitionEvidence.BoundaryCoverage b : unpromised) {
+        // Said and not counted. Nothing has shown a row can be written at these — the projection
+        // could not read every rule of the value, and nothing built one either — so they are not
+        // rows anybody is owed, and they are still the only thing there is to say about the
+        // position.
+        for (BoundaryAssessment b : unpromised) {
             out.append(String.format("      · not known to be writable: %s = %s (%s)%n",
                     b.axis(), b.value(), b.origin()));
         }
@@ -621,8 +629,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
-    private static String whyNoBoundary(PartitionEvidence.BoundaryCoverage.Reason reason) {
-        return switch (reason) {
+    private static String whyNoBoundary(BoundaryAssessment.Coverage coverage) {
+        if (!(coverage instanceof BoundaryAssessment.Coverage.NotMeasured absent)) {
+            return "";
+        }
+        return switch (absent.reason()) {
             case ARMS_NOT_ASKED -> "the arms were not asked for";
             case ARMS_UNREADABLE -> "the arms could not be measured";
             case NO_ROWS -> "no row names this behavior";
@@ -717,14 +728,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             measured(a, axis.status(), axis.reason());
         }
         ArrayNode boundaries = out.putArray("boundaries");
-        for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
+        for (BoundaryAssessment boundary : partition.boundaries()) {
             ObjectNode b = boundaries.addObject();
             b.put("axis", boundary.axis());
             b.put("origin", boundary.origin());
             b.put("side", boundary.side().name().toLowerCase(java.util.Locale.ROOT));
             b.put("value", boundary.value());
-            b.put("hit", boundary.hit());
-            b.put("knownWritable", boundary.knownWritable());
+            // The shape a published schema promises, read off the assessment rather than stored
+            // beside it. What each of these says is unchanged; where it comes from is one answer now
+            // instead of two kept in step. Naming which evidence made a line writable is worth
+            // emitting and would be a different schema, so it waits for one.
+            b.put("hit", boundary.coverage().hit());
+            b.put("knownWritable", boundary.writability().known());
             measured(b, boundary.status(), boundary.reason());
         }
         ObjectNode pairs = out.putObject("pairs");
