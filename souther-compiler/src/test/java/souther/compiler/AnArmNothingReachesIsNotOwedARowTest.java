@@ -192,6 +192,49 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 () -> "and here a row can take the arm that answers it:\n" + live);
     }
 
+    /**
+     * The cases left are named in the order they were declared in.
+     *
+     * <p>A report is read against the declaration it came from, so the list has to run the way that
+     * declaration does. Taking a case out of the middle is where the order is easiest to lose: what
+     * is left is a new set, and a set that keeps the values is not one that keeps their order.
+     */
+    @Test
+    void whatIsLeftKeepsTheOrderItWasDeclaredIn() throws Exception {
+        String report = reportOn("""
+                module example.order
+
+                data N = Int
+                    invariant cap = value <= 10
+
+                data Alpha
+                data Beta
+                data Gamma
+                data Delta
+                data Epsilon
+                data Zeta
+                data Kind = Alpha | Beta | Gamma | Delta | Epsilon | Zeta
+
+                behavior f : (n: N) -> Kind
+                    constructs Alpha, Beta
+
+                let f (n) =
+                    if n.value > 100 then Beta else Alpha
+
+                example f
+                    | "one" : (N(1)) -> Alpha
+                """);
+
+        assertTrue(report.contains("out specified 1/5"),
+                () -> "`Beta` is answered only where nothing reaches:\n" + report);
+        List<String> named = report.lines().map(String::trim)
+                .filter(line -> line.startsWith("· no row expects"))
+                .map(line -> line.substring(line.indexOf('`') + 1, line.lastIndexOf('`')))
+                .toList();
+        assertEquals(List.of("Gamma", "Delta", "Epsilon", "Zeta"), named,
+                () -> "the order `Kind` lists them in:\n" + report);
+    }
+
     // --- what happens if the proof is wrong -------------------------------------------------------
 
     private static CoverageSites.Site arm(int index) {

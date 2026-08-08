@@ -57,7 +57,10 @@ public final class ProducedCases {
         Set<TypeName> out = new LinkedHashSet<>(declared);
         seen.behindAProvenArm.stream().filter(each -> !seen.reachable.contains(each)).toList()
                 .forEach(out::remove);
-        return Set.copyOf(out);
+        // The order the cases were declared in, which is the order they are named in. `Set.copyOf`
+        // keeps the values and not the order, so a case taken out here would have reordered the ones
+        // left — and what a report lists is read against the declaration it came from.
+        return java.util.Collections.unmodifiableSet(out);
     }
 
     /** Where a case was answered with, which is what decides whether it can be answered at all. */
