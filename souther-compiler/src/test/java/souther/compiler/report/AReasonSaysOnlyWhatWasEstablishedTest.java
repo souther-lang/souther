@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.observe.Incompleteness;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -78,12 +79,23 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
                 + " so none of its rows were read", said);
     }
 
-    /** And a subject that is a phrase rather than a name is not quoted as one. */
+    /**
+     * Every code says something now, and none of them says its own name back.
+     *
+     * <p>A reason reading {@code submit (value_unreadable)} is the data printed as though it were a
+     * sentence: it tells a reader what the code was and nothing about what happened. Every code left
+     * here is one a report is written in, and one whose producers have been read far enough to say
+     * so in words.
+     */
     @Test
-    void aSearchLimitKeepsItsOwnWords() {
-        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.SEARCH_LIMIT,
-                Incompleteness.Scope.MODULE, "12 combinations past the row limit"));
+    void noCodeIsPrintedAsItsOwnName() {
+        for (Incompleteness.Code code : Incompleteness.Code.values()) {
+            String said = Reasons.said(Incompleteness.of(code,
+                    Incompleteness.Scope.BEHAVIOR, "submit"));
 
-        assertEquals("12 combinations past the row limit (search_limit)", said);
+            assertNotEquals("submit (" + code.name().toLowerCase(java.util.Locale.ROOT) + ")", said,
+                    code + " is printed as itself");
+            assertTrue(said.contains("submit"), code + " does not say what it is about: " + said);
+        }
     }
 }

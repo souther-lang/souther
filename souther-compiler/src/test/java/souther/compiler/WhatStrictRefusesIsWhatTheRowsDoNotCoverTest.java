@@ -259,7 +259,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     private static PartitionEvidence partition(BoundaryAssessment boundary,
                                                Partitions.OmittedAxis... omitted) {
         return new PartitionEvidence(List.of(), List.of(boundary), PartitionEvidence.PairSpace.NONE,
-                List.of(), List.of(omitted));
+                List.of(), List.of(omitted), List.of());
     }
 
     /** What one behavior's partition makes of the whole report, with nothing else asked about. */

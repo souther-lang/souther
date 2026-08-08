@@ -6,6 +6,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Classification;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
@@ -20,6 +21,7 @@ import souther.compiler.partition.Partitions;
 import souther.compiler.partition.RowClasses;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -85,7 +87,33 @@ final class Coverages {
             }
         }
         return new PartitionEvidence(axes, boundaries, pairsOf(divided, readings),
-                notDerivable, partitioning.omitted());
+                notDerivable, partitioning.omitted(),
+                whyUnclassified(readings.byRow(),
+                        partitioning.axes().stream().map(Axis::id).toList()));
+    }
+
+    /**
+     * Why the rows that could not be placed could not be placed — one reason per kind per position.
+     *
+     * <p>Not one per row. A hundred rows too large at the same position are one thing to say about
+     * that position, and how many there were is the axis's count. Carrying the number here as well
+     * would be the same fact under two names, and the two would be read side by side.
+     *
+     * <p>Walked in the order of {@code order} rather than of a row's own map, which is built with
+     * {@code Map.copyOf} and so iterates in an order that changes between runs. A report that
+     * changes between runs cannot be compared between runs.
+     */
+    static List<Incompleteness> whyUnclassified(List<Map<AxisId, Classification>> byRow,
+                                                List<AxisId> order) {
+        Map<Object, Incompleteness> byKind = new LinkedHashMap<>();
+        for (Map<AxisId, Classification> where : byRow) {
+            for (AxisId axis : order) {
+                if (where.get(axis) instanceof Classification.Unclassified could) {
+                    byKind.putIfAbsent(could.reason().identity(), could.reason());
+                }
+            }
+        }
+        return List.copyOf(byKind.values());
     }
 
     /**

@@ -73,9 +73,7 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
          * <p>Its one producer takes this branch only where arm coverage was asked for, and returns
          * no rows with it. So the request and the empty result are both part of what this says.
          */
-        INSTRUMENTATION_ABSENT,
-        /** A search gave up before it could decide. */
-        SEARCH_LIMIT
+        INSTRUMENTATION_ABSENT
     }
 
     public Incompleteness {

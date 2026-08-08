@@ -447,21 +447,34 @@ class CompilePartialAdequacyTest {
     // --- what the status above a measure says -----------------------------------------------------
 
     /**
-     * A measure that could not be made shows in the status over it.
+     * A measure that could not be made shows in the status over it, and says why.
      *
-     * <p>Here nothing is recorded as a reason at all: the truncation is inside the value a row wrote,
-     * and the measure that reads it is where it becomes visible. A report opening with `complete` over
-     * a line reading `undecided` is the confusion this field exists to prevent.
+     * <p>The truncation is inside the value a row wrote, and the measure that reads it is where it
+     * becomes visible — as a count of rows it could not place. The count says how many and the
+     * reason says what happened, and an author reading only the count cannot tell a value that was
+     * too large to keep from one that could not be read at all. The first goes away if the fixture
+     * is written smaller and the second does not.
+     *
+     * <p>The statuses are what they were before the reason was carried. Nothing here is a new
+     * finding: the measure had already come back partial, and what is new is that it can be
+     * explained.
      */
     @Test
-    void aPartialMeasureMakesTheStatusAboveItPartial() {
+    void aPartialMeasureMakesTheStatusAboveItPartialAndSaysWhy() {
         AdequacyReport report = AdequacyReport.of(measured(budgetSpent("")));
 
         assertEquals(MeasurementStatus.PARTIAL, report.status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
         assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
-        assertEquals(List.of(), report.modules().get(0).incompleteness(),
-                "and it is not because something was reported as a reason");
+
+        List<souther.compiler.observe.Incompleteness> why =
+                report.modules().get(0).incompleteness();
+        assertEquals(1, why.size(), why.toString());
+        assertEquals(souther.compiler.observe.Incompleteness.Code.VALUE_TRUNCATED,
+                why.get(0).code());
+        assertEquals(java.util.Optional.of("take"), why.get(0).behavior(),
+                "a position is inside one behavior");
+        assertTrue(report.human().contains("larger than an observation keeps"), report.human());
     }
 
     /**
