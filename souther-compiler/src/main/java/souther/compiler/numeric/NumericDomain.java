@@ -72,16 +72,16 @@ public final class NumericDomain {
     private record Asserted(LinearForm f, boolean strict) {}
 
     private final boolean bottom;                              // an infeasible path (guards contradict)
-    private final Map<String, BigDecimal> lo;                  // atom -> lower bound (null key absent = -inf)
-    private final Map<String, BigDecimal> hi;                  // atom -> upper bound (absent = +inf)
-    private final Map<String, Map<String, BigDecimal>> diff;   // diff[a][b] = tightest known (a - b)
+    private final Map<String, Endpoint> lo;                    // atom -> lower bound (absent = -inf)
+    private final Map<String, Endpoint> hi;                    // atom -> upper bound (absent = +inf)
+    private final Map<String, Map<String, Endpoint>> diff;     // diff[a][b] = tightest known (a - b)
     private final List<Asserted> kept;                         // forms outside both shapes, as written
     private final Map<String, Granularity> kinds;              // atom -> how its values are spaced
     private final Map<String, Set<Loss>> losses;               // atom -> what was not recorded of it
-    private Map<String, Map<String, BigDecimal>> closed;       // diff closed transitively, on first ask
+    private Map<String, Map<String, Endpoint>> closed;         // diff closed transitively, on first ask
 
-    private NumericDomain(boolean bottom, Map<String, BigDecimal> lo, Map<String, BigDecimal> hi,
-                          Map<String, Map<String, BigDecimal>> diff, List<Asserted> kept,
+    private NumericDomain(boolean bottom, Map<String, Endpoint> lo, Map<String, Endpoint> hi,
+                          Map<String, Map<String, Endpoint>> diff, List<Asserted> kept,
                           Map<String, Granularity> kinds, Map<String, Set<Loss>> losses) {
         this.bottom = bottom;
         this.lo = lo;
@@ -105,11 +105,6 @@ public final class NumericDomain {
      * rules stop and not merely where this stopped reading them.
      */
     public enum Loss {
-
-        /** A strict bound on an atom with no smallest step. {@code x < 1} over the decimals admits
-         * everything under 1 and no largest of them, so the bound recorded is {@code x <= 1} and the
-         * edge it names is a value the rule refuses. */
-        WEAKENED_STRICT,
 
         /** A disequality. {@code x /= 0} is a hole in a range, and a range is all this holds. */
         DROPPED_DISEQUALITY,
@@ -189,9 +184,9 @@ public final class NumericDomain {
      *
      * <p>What strictness is worth depends on what the atoms are made of. Over whole numbers there is
      * a next value to step to, so {@code a < 3} is {@code a <= 2} and {@code a - b < 0} is
-     * {@code a - b <= -1}; over decimals there is not, and a strict bound is recorded as the
-     * non-strict one, which is weaker and therefore still sound. A form of neither shape keeps its
-     * strictness as written.
+     * {@code a - b <= -1}, and the end that lands there is one the rule admits. Over decimals there
+     * is no step, and the end stays where the constraint put it and says that the value is not its
+     * own. A form of neither shape keeps its strictness as written.
      */
     private NumericDomain addLe(LinearForm g, boolean strict) {
         Map<String, BigDecimal> c = g.coefs();
@@ -211,28 +206,22 @@ public final class NumericDomain {
             java.math.MathContext mc = new java.math.MathContext(
                     34, upper ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR);
             BigDecimal bound = g.constant().negate().divide(k, mc);
-            NumericDomain into = this;
-            if (kinds.get(a) == Granularity.DISCRETE) {
-                bound = whole(bound, upper, strict);
-            } else if (strict) {
-                into = losing(Loss.WEAKENED_STRICT, Set.of(a));
-            }
-            return upper ? into.withHi(a, bound) : into.withLo(a, bound);
+            Endpoint end = kinds.get(a) == Granularity.DISCRETE
+                    ? Endpoint.inclusive(whole(bound, upper, strict))
+                    : new Endpoint(bound, !strict);
+            return upper ? withHi(a, end) : withLo(a, end);
         }
         String[] ab = unitDiffAtoms(c);
         if (ab != null) {
             // a - b <= -const. A difference of two whole numbers is a whole number, and only then:
             // one dense atom on either side leaves the difference with no smallest step, so the
-            // bound stays where the constant put it.
+            // bound stays where the constant put it and says the value is outside it.
             BigDecimal bound = g.constant().negate();
-            NumericDomain into = this;
-            if (kinds.get(ab[0]) == Granularity.DISCRETE
-                    && kinds.get(ab[1]) == Granularity.DISCRETE) {
-                bound = whole(bound, true, strict);
-            } else if (strict) {
-                into = losing(Loss.WEAKENED_STRICT, Set.of(ab[0], ab[1]));
-            }
-            return into.withDiff(ab[0], ab[1], bound);
+            Endpoint end = kinds.get(ab[0]) == Granularity.DISCRETE
+                    && kinds.get(ab[1]) == Granularity.DISCRETE
+                    ? Endpoint.inclusive(whole(bound, true, strict))
+                    : new Endpoint(bound, !strict);
+            return withDiff(ab[0], ab[1], end);
         }
         // Neither shape holds it — a sum of two lengths, say. Keeping the form as written is what lets
         // a guard restating an invariant discharge it, which is the promise the flagging rests on.
@@ -326,20 +315,22 @@ public final class NumericDomain {
 
     /** Whether {@code g <= 0} (or {@code g < 0} when strict) follows from the domain. */
     private boolean proveLe(LinearForm g, boolean strict) {
-        BigDecimal hiG = upperBound(g);
+        Endpoint hiG = upperBound(g);
         if (hiG != null) {
-            int s = hiG.signum();
-            if (strict ? s < 0 : s <= 0) {
+            int s = hiG.value().signum();
+            // An end at zero the form's own bounds do not reach proves the strict form: nothing the
+            // domain admits gets there, which is what `g < 0` asks.
+            if (s < 0 || (s == 0 && (!strict || !hiG.inclusive()))) {
                 return true;
             }
         }
         String[] ab = unitDiffAtoms(g.coefs());
         if (ab != null) {
-            BigDecimal diffBound = closedDiff(ab[0], ab[1]);   // proven upper bound on (a - b)
+            Endpoint diffBound = closedDiff(ab[0], ab[1]);     // proven upper bound on (a - b)
             if (diffBound != null) {
                 BigDecimal bound = g.constant().negate();      // want a - b <= -const
-                int s = diffBound.compareTo(bound);
-                if (s < 0 || (!strict && s == 0)) {
+                int s = diffBound.value().compareTo(bound);
+                if (s < 0 || (s == 0 && (!strict || !diffBound.inclusive()))) {
                     return true;
                 }
             }
@@ -359,53 +350,62 @@ public final class NumericDomain {
         return false;
     }
 
-    /** The interval upper bound of {@code f}, or {@code null} if unbounded above. */
-    private BigDecimal upperBound(LinearForm f) {
+    /**
+     * The interval upper bound of {@code f}, or {@code null} if unbounded above.
+     *
+     * <p>The end is the form's own only where every end it was added from is. One term that cannot
+     * reach its edge is one the sum cannot reach either, so a single exclusive contribution makes the
+     * total exclusive.
+     */
+    private Endpoint upperBound(LinearForm f) {
         BigDecimal acc = f.constant();
+        boolean inclusive = true;
         for (Map.Entry<String, BigDecimal> e : f.coefs().entrySet()) {
             BigDecimal k = e.getValue();
-            BigDecimal b = k.signum() > 0 ? bestHi(e.getKey()) : bestLo(e.getKey());
+            Endpoint b = k.signum() > 0 ? bestHi(e.getKey()) : bestLo(e.getKey());
             if (b == null) {
                 return null;   // unbounded in the contributing direction
             }
-            acc = acc.add(k.multiply(b));
+            acc = acc.add(k.multiply(b.value()));
+            inclusive &= b.inclusive();
         }
-        return acc;
+        return new Endpoint(acc, inclusive);
     }
 
     /** The tightest upper bound on an atom: its own, or one reached through a difference —
      * {@code a - b <= d} and {@code b <= c} give {@code a <= c + d}, which is what relates the size of
-     * a filtered list to a bound on the list it came from. */
-    private BigDecimal bestHi(String a) {
-        BigDecimal best = hi.get(a);
-        for (Map.Entry<String, BigDecimal> b : hi.entrySet()) {
+     * a filtered list to a bound on the list it came from. A value at the end reached that way needs
+     * every end on the way to be reachable, so the derived end is its own only where both are. */
+    private Endpoint bestHi(String a) {
+        Endpoint best = hi.get(a);
+        for (Map.Entry<String, Endpoint> b : hi.entrySet()) {
             if (b.getKey().equals(a)) {
                 continue;
             }
-            BigDecimal d = closedDiff(a, b.getKey());
+            Endpoint d = closedDiff(a, b.getKey());
             if (d == null) {
                 continue;
             }
-            BigDecimal through = b.getValue().add(d);
-            best = best == null ? through : min(best, through);
+            best = Endpoint.upper(best, new Endpoint(b.getValue().value().add(d.value()),
+                    b.getValue().inclusive() && d.inclusive()));
         }
         return best;
     }
 
     /** The tightest lower bound on an atom, the same way: {@code b - a <= d} and {@code b >= c} give
      * {@code a >= c - d}. */
-    private BigDecimal bestLo(String a) {
-        BigDecimal best = lo.get(a);
-        for (Map.Entry<String, BigDecimal> b : lo.entrySet()) {
+    private Endpoint bestLo(String a) {
+        Endpoint best = lo.get(a);
+        for (Map.Entry<String, Endpoint> b : lo.entrySet()) {
             if (b.getKey().equals(a)) {
                 continue;
             }
-            BigDecimal d = closedDiff(b.getKey(), a);
+            Endpoint d = closedDiff(b.getKey(), a);
             if (d == null) {
                 continue;
             }
-            BigDecimal through = b.getValue().subtract(d);
-            best = best == null ? through : max(best, through);
+            best = Endpoint.lower(best, new Endpoint(b.getValue().value().subtract(d.value()),
+                    b.getValue().inclusive() && d.inclusive()));
         }
         return best;
     }
@@ -424,10 +424,17 @@ public final class NumericDomain {
     }
 
     /** What an atom's values are known to lie between. A {@code null} end is unbounded there. */
-    public record Bounds(BigDecimal min, BigDecimal max) {
+    public record Bounds(Endpoint min, Endpoint max) {
 
         public boolean isEmpty() {
             return min == null && max == null;
+        }
+
+        /** Whether {@code value} is inside both ends — asked of the ends, because whether an end is
+         * one of the values is what the number alone does not say. */
+        public boolean admits(BigDecimal value) {
+            return (min == null || Endpoint.someValueLiesBetween(min, Endpoint.inclusive(value)))
+                    && (max == null || Endpoint.someValueLiesBetween(Endpoint.inclusive(value), max));
         }
     }
 
@@ -494,8 +501,8 @@ public final class NumericDomain {
             return known;
         }
         NumericDomain d = known.forget(atom);
-        BigDecimal up = d.upperBound(f);
-        BigDecimal down = negOrNull(d.upperBound(f.negate()));
+        Endpoint up = d.upperBound(f);
+        Endpoint down = negOrNull(d.upperBound(f.negate()));
         NumericDomain r = d;
         if (up != null) {
             r = r.withHi(atom, up);
@@ -506,8 +513,10 @@ public final class NumericDomain {
         return r;
     }
 
-    private static BigDecimal negOrNull(BigDecimal v) {
-        return v == null ? null : v.negate();
+    /** An upper bound on {@code -f} read as a lower bound on {@code f}. Turning it around moves the
+     * value and not whether it is reached. */
+    private static Endpoint negOrNull(Endpoint v) {
+        return v == null ? null : new Endpoint(v.value().negate(), v.inclusive());
     }
 
     /** The domain with every fact about {@code atom} dropped — what an assignment leaves behind of
@@ -516,14 +525,14 @@ public final class NumericDomain {
         if (bottom) {
             return this;
         }
-        Map<String, BigDecimal> nlo = new HashMap<>(lo);
-        Map<String, BigDecimal> nhi = new HashMap<>(hi);
+        Map<String, Endpoint> nlo = new HashMap<>(lo);
+        Map<String, Endpoint> nhi = new HashMap<>(hi);
         nlo.remove(atom);
         nhi.remove(atom);
-        Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
+        Map<String, Map<String, Endpoint>> nd = new HashMap<>();
         diff.forEach((a, row) -> {
             if (!a.equals(atom)) {
-                Map<String, BigDecimal> nr = new HashMap<>(row);
+                Map<String, Endpoint> nr = new HashMap<>(row);
                 nr.remove(atom);
                 if (!nr.isEmpty()) {
                     nd.put(a, nr);
@@ -541,24 +550,24 @@ public final class NumericDomain {
         return new NumericDomain(true, Map.of(), Map.of(), Map.of(), List.of(), kinds, losses);
     }
 
-    private NumericDomain withHi(String a, BigDecimal bound) {
-        Map<String, BigDecimal> nhi = new HashMap<>(hi);
-        nhi.merge(a, bound, NumericDomain::min);
+    private NumericDomain withHi(String a, Endpoint bound) {
+        Map<String, Endpoint> nhi = new HashMap<>(hi);
+        nhi.merge(a, bound, Endpoint::upper);
         NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
-    private NumericDomain withLo(String a, BigDecimal bound) {
-        Map<String, BigDecimal> nlo = new HashMap<>(lo);
-        nlo.merge(a, bound, NumericDomain::max);
+    private NumericDomain withLo(String a, Endpoint bound) {
+        Map<String, Endpoint> nlo = new HashMap<>(lo);
+        nlo.merge(a, bound, Endpoint::lower);
         NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
 
-    private NumericDomain withDiff(String a, String b, BigDecimal bound) {
-        Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
+    private NumericDomain withDiff(String a, String b, Endpoint bound) {
+        Map<String, Map<String, Endpoint>> nd = new HashMap<>();
         diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
-        nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, NumericDomain::min);
+        nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, Endpoint::upper);
         NumericDomain d = new NumericDomain(false, lo, hi, nd, kept, kinds, losses);
         return d.feasible() ? d : bottom();
     }
@@ -575,16 +584,17 @@ public final class NumericDomain {
      * about {@code a} — so both are asked here rather than at the atom the assertion happened to name.
      */
     private boolean feasible() {
-        for (Map.Entry<String, Map<String, BigDecimal>> row : closed().entrySet()) {
-            BigDecimal cycle = row.getValue().get(row.getKey());
-            if (cycle != null && cycle.signum() < 0) {
+        for (Map.Entry<String, Map<String, Endpoint>> row : closed().entrySet()) {
+            Endpoint cycle = row.getValue().get(row.getKey());
+            // `a - a` is zero, so a cycle bounding it below zero is a contradiction — and so is one
+            // bounding it at zero without admitting it.
+            if (cycle != null && (cycle.value().signum() < 0
+                    || (cycle.value().signum() == 0 && !cycle.inclusive()))) {
                 return false;
             }
         }
         for (String a : lo.keySet()) {
-            BigDecimal l = bestLo(a);
-            BigDecimal h = bestHi(a);
-            if (l != null && h != null && l.compareTo(h) > 0) {
+            if (!Endpoint.someValueLiesBetween(bestLo(a), bestHi(a))) {
                 return false;
             }
         }
@@ -592,47 +602,50 @@ public final class NumericDomain {
     }
 
     /** The tightest proven upper bound on {@code a - b}, or {@code null} if none is known. */
-    private BigDecimal closedDiff(String a, String b) {
+    private Endpoint closedDiff(String a, String b) {
         if (a.equals(b)) {
-            return BigDecimal.ZERO;
+            return Endpoint.inclusive(BigDecimal.ZERO);
         }
-        Map<String, BigDecimal> row = closed().get(a);
+        Map<String, Endpoint> row = closed().get(a);
         return row == null ? null : row.get(b);
     }
 
     /** The difference facts closed transitively — {@code a - b <= c} with {@code b - d <= e} gives
      * {@code a - d <= c + e} — computed once for the domain and read by every query it answers, since
      * a bound on one atom is derived through the differences to every other. */
-    private Map<String, Map<String, BigDecimal>> closed() {
+    private Map<String, Map<String, Endpoint>> closed() {
         if (closed == null) {
             closed = close(diff);
         }
         return closed;
     }
 
-    private static Map<String, Map<String, BigDecimal>> close(Map<String, Map<String, BigDecimal>> diff) {
+    private static Map<String, Map<String, Endpoint>> close(Map<String, Map<String, Endpoint>> diff) {
         Set<String> atoms = new HashSet<>(diff.keySet());
         diff.values().forEach(r -> atoms.addAll(r.keySet()));
-        Map<String, Map<String, BigDecimal>> d = new HashMap<>();
+        Map<String, Map<String, Endpoint>> d = new HashMap<>();
         diff.forEach((a, row) -> d.put(a, new HashMap<>(row)));
         for (String through : atoms) {
-            Map<String, BigDecimal> from = d.get(through);
+            Map<String, Endpoint> from = d.get(through);
             if (from == null) {
                 continue;
             }
-            List<Map.Entry<String, BigDecimal>> hops = List.copyOf(from.entrySet());
+            List<Map.Entry<String, Endpoint>> hops = List.copyOf(from.entrySet());
             for (String a : atoms) {
                 if (a.equals(through)) {
                     continue;   // a hop from an atom to itself only repeats a cycle already recorded
                 }
-                BigDecimal toThrough = edge(d, a, through);
+                Endpoint toThrough = edge(d, a, through);
                 if (toThrough == null) {
                     continue;
                 }
-                for (Map.Entry<String, BigDecimal> hop : hops) {
-                    BigDecimal candidate = toThrough.add(hop.getValue());
-                    BigDecimal known = edge(d, a, hop.getKey());
-                    if (known == null || candidate.compareTo(known) < 0) {
+                for (Map.Entry<String, Endpoint> hop : hops) {
+                    // A path reaches its end only where every hop on it does.
+                    Endpoint candidate = new Endpoint(
+                            toThrough.value().add(hop.getValue().value()),
+                            toThrough.inclusive() && hop.getValue().inclusive());
+                    Endpoint known = edge(d, a, hop.getKey());
+                    if (known == null || Endpoint.upper(known, candidate) == candidate) {
                         d.computeIfAbsent(a, k -> new HashMap<>()).put(hop.getKey(), candidate);
                     }
                 }
@@ -641,16 +654,8 @@ public final class NumericDomain {
         return d;
     }
 
-    private static BigDecimal edge(Map<String, Map<String, BigDecimal>> d, String a, String b) {
-        Map<String, BigDecimal> row = d.get(a);
+    private static Endpoint edge(Map<String, Map<String, Endpoint>> d, String a, String b) {
+        Map<String, Endpoint> row = d.get(a);
         return row == null ? null : row.get(b);
-    }
-
-    private static BigDecimal min(BigDecimal x, BigDecimal y) {
-        return x.compareTo(y) <= 0 ? x : y;
-    }
-
-    private static BigDecimal max(BigDecimal x, BigDecimal y) {
-        return x.compareTo(y) >= 0 ? x : y;
     }
 }

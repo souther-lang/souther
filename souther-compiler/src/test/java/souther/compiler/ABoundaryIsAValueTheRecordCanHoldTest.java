@@ -319,28 +319,26 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
     }
 
     /**
-     * An edge nothing promises is writable is reported and not counted.
+     * An edge a rule refuses is not a row anybody is owed.
      *
-     * <p>Over decimals a strict rule takes nothing off either end — there is no next value to step to
-     * — so both ends read `[0, 1]` while the true ranges are `[0, 1)` and `(0, 1]`. The edge is where
-     * the reading stopped and not where the model does. Falling back to the type's own edge is no
-     * better: the rule that could not be read refuses that value just as readily. So it is said and
-     * owed to nobody, which is the account ADR-0091 already gives a combination nothing has settled.
+     * <p>`low < high` under a shared `[0, 1]` leaves `low` in `[0, 1)` and `high` in `(0, 1]`. The
+     * line at 1 is one `Ratio` draws and both fields carry, and only one of them reaches it: a `low`
+     * of 1 would need a `high` above 1, which `Ratio` has no room for. The two edges of one rule come
+     * out differently because the record says so, and asking for the other is asking for a row nobody
+     * can write.
      */
     @Test
-    void anEdgeNothingPromisesIsSaidAndNotCounted() throws Exception {
-        String report = reportOn(BAND);
-
+    void anEdgeThePositionCannotReachIsNotOwedARow() throws Exception {
         List<String> owed = boundariesOf(BAND);
 
-        assertTrue(report.contains("not known to be writable: classify/band.low = 1"), () -> report);
-        assertFalse(owed.stream().anyMatch(l -> l.contains("classify/band.low = 1")),
-                () -> "and nobody is owed a row at it: " + owed);
-        // The other end of the same rule, which the projection could not promise either. A value at
-        // it was built, so it is owed — the two edges are told apart by what something managed to
-        // construct and not by how far one reading of the rules got.
+        assertTrue(owed.stream().anyMatch(l -> l.contains("classify/band.low = 0")),
+                () -> "the bottom of the lower field is its own: " + owed);
         assertTrue(owed.stream().anyMatch(l -> l.contains("classify/band.high = 1")),
-                () -> "a row at the top of the upper field builds: " + owed);
+                () -> "and the top of the upper field is: " + owed);
+        assertFalse(owed.stream().anyMatch(l -> l.contains("classify/band.low = 1")),
+                () -> "a low of 1 leaves no room for a high above it: " + owed);
+        assertFalse(owed.stream().anyMatch(l -> l.contains("classify/band.high = 0")),
+                () -> "and a high of 0 leaves none for a low below it: " + owed);
     }
 
     /**

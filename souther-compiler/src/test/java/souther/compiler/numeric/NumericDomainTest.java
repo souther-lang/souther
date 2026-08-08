@@ -141,6 +141,20 @@ class NumericDomainTest {
         assertFalse(provesAtLeast(d, A, 5), "a = 4 satisfies it");
     }
 
+    /**
+     * {@code a > 0} over a dense atom stops at zero without admitting it.
+     *
+     * <p>The value is where the rule stops and is not one of the values it leaves. Reading the number
+     * alone cannot tell that from {@code a >= 0}, and a caller turning a bound into a value somebody
+     * has to write needs the difference: zero is what the rule refuses.
+     */
+    @Test
+    void aStrictLowerBoundOnADenseAtomKeepsTheValueOutOfItsOwnRange() {
+        NumericDomain d = NumericDomain.top().assume(atom(A), Rel.GT, dense(A));
+
+        assertEquals(Endpoint.exclusive(BigDecimal.ZERO), d.boundsOf(A).min());
+    }
+
     // --- strictness on a difference, which is the part a record's invariant writes -----------------
 
     /**
@@ -243,26 +257,25 @@ class NumericDomainTest {
         assertFalse(d.projectionIsLossless(), "and the domain is not all of what it was told");
     }
 
-    /** A strict bound over decimals is recorded as the non-strict one, so the edge it names is a
-     * value the rule refuses. Sound as a bound, and not an edge anybody can write. */
+    /** A strict bound over decimals is kept as an end the range stops at without reaching, which is
+     * the whole of what was asserted and so no loss. */
     @Test
-    void aStrictBoundOnADenseAtomIsRecordedAsALoss() {
+    void aStrictBoundOnADenseAtomIsKeptAsAnEndTheRangeDoesNotReach() {
         NumericDomain interval = NumericDomain.top()
                 .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
-        NumericDomain difference = NumericDomain.top()
-                .assume(atom(A).minus(atom(B)), Rel.LT, dense(A, B));
 
-        assertFalse(interval.projectionIsLossless());
-        assertEquals(Set.of(NumericDomain.Loss.WEAKENED_STRICT), interval.lossesAt(A));
-        assertEquals(Set.of(A, B), difference.lossyAtoms(),
-                "a difference is a rule about both of its ends");
+        assertEquals(Endpoint.exclusive(BigDecimal.valueOf(3)), interval.boundsOf(A).max());
+        assertTrue(interval.projectionIsLossless());
     }
 
-    /** The same over whole numbers keeps everything: there the strictness became a step. */
+    /** The same over whole numbers keeps everything too: there the strictness became a step, and the
+     * value it steps onto is one the rule admits. */
     @Test
     void aStrictBoundOnAWholeNumberIsNoLoss() {
-        assertTrue(NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, whole(A))
-                .projectionIsLossless());
+        NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
+
+        assertEquals(Endpoint.inclusive(BigDecimal.valueOf(2)), d.boundsOf(A).max());
+        assertTrue(d.projectionIsLossless());
     }
 
     /** A disequality is a hole in a range, and a range is all this holds. */

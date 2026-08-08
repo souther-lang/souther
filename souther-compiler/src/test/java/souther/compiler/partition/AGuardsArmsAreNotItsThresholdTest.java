@@ -7,6 +7,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -153,8 +154,9 @@ class AGuardsArmsAreNotItsThresholdTest {
     }
 
     private static NumericDomain.Bounds holds(Long min, Long max) {
-        return new NumericDomain.Bounds(min == null ? null : BigDecimal.valueOf(min),
-                max == null ? null : BigDecimal.valueOf(max));
+        return new NumericDomain.Bounds(
+                min == null ? null : Endpoint.inclusive(BigDecimal.valueOf(min)),
+                max == null ? null : Endpoint.inclusive(BigDecimal.valueOf(max)));
     }
 
     @Test

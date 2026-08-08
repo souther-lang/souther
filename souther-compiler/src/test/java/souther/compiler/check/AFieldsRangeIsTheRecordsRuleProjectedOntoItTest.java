@@ -41,8 +41,10 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
     private static void assertBounds(NumericDomain.Bounds bounds, long min, long max) {
         assertNotNull(bounds, "nothing bounds this field");
-        assertEquals(0, BigDecimal.valueOf(min).compareTo(bounds.min()), "min was " + bounds.min());
-        assertEquals(0, BigDecimal.valueOf(max).compareTo(bounds.max()), "max was " + bounds.max());
+        assertEquals(0, BigDecimal.valueOf(min).compareTo(bounds.min().value()),
+                "min was " + bounds.min());
+        assertEquals(0, BigDecimal.valueOf(max).compareTo(bounds.max().value()),
+                "max was " + bounds.max());
     }
 
     private static final String TIMESHEET = """
@@ -108,9 +110,16 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertBounds(domains.at("lateNight"), 0, 24);
     }
 
-    /** Over decimals there is no next value, so a strict rule takes nothing off either end. */
+    /**
+     * Over decimals a strict rule moves no end and takes the value at one of them away.
+     *
+     * <p>There is no next value to step onto, so both ends stay where {@code Ratio} put them. What
+     * {@code low < high} does is leave {@code low} everything up to 1 without 1 itself, and
+     * {@code high} everything from 0 without 0 — which is the whole of the rule and not an
+     * approximation of it.
+     */
     @Test
-    void aStrictRuleOverDecimalsNarrowsNothing() {
+    void aStrictRuleOverDecimalsLeavesTheEndsWhereTheyAreAndOutsideTheRange() {
         FieldDomains domains = domainsIn("""
                 module example.band
 
@@ -126,9 +135,11 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("low"), 0, 1);
         assertBounds(domains.at("high"), 0, 1);
-        assertFalse(domains.allRulesRead(),
-                "the true ranges are open at one end, which these bounds cannot hold, so neither 1"
-                        + " nor 0 is promised to be writable");
+        assertTrue(domains.at("low").min().inclusive(), "a low of 0 needs no room under it");
+        assertFalse(domains.at("low").max().inclusive(), "a low of 1 leaves no room above it");
+        assertFalse(domains.at("high").min().inclusive(), "nor a high of 0 below it");
+        assertTrue(domains.at("high").max().inclusive(), "and a high of 1 needs none");
+        assertTrue(domains.allRulesRead(), "and every rule of the record was taken into these");
     }
 
     /** A rule that skips a value is a hole in a range, and a range is all the domain holds. The bound
@@ -291,7 +302,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertTrue(domains.allRulesRead(),
                 "the rule is `value >= 0.0m` wherever it is declared");
-        assertEquals(0, BigDecimal.ZERO.compareTo(domains.at("total").min()),
+        assertEquals(0, BigDecimal.ZERO.compareTo(domains.at("total").min().value()),
                 "and it reaches the domain from there too");
     }
 

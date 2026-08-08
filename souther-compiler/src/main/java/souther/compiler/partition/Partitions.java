@@ -8,6 +8,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -148,8 +149,8 @@ public final class Partitions {
             // the record it sits in says about it. Reading the type again here would put a threshold
             // back inside a range the record has no values in.
             NumericDomain.Bounds domain = base.domains().get(axis.path().toString());
-            BigDecimal min = domain == null ? null : domain.min();
-            BigDecimal max = domain == null ? null : domain.max();
+            BigDecimal min = domain == null || domain.min() == null ? null : domain.min().value();
+            BigDecimal max = domain == null || domain.max() == null ? null : domain.max().value();
             // Filtered once, and both answers read the filtered list. A line outside what the
             // position holds divides nothing, and it is not a boundary either: leaving it in the
             // cuts while the intervals dropped it asks for a row at a value the record refuses,
@@ -215,9 +216,16 @@ public final class Partitions {
         BoundaryDomain domain = decimal ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
         List<BoundaryObligation> out = new ArrayList<>();
         for (Cut cut : axis.cuts()) {
+            // A line the position does not reach. The rule that drew it did so about the type, and
+            // what is left of the type here may stop short of it or leave the value out — `low < high`
+            // under one `[0, 1]` leaves `low` every value up to 1 and not 1 itself. Writing the value
+            // is how an edge is met, so where the value is refused there is nothing to write.
+            boolean reachable = holds(within, cut.value());
             for (OriginRef origin : cut.origins()) {
-                out.add(new BoundaryObligation(axis.id(), origin,
-                        BoundaryObligation.BoundarySide.AT, cut.value()));
+                if (reachable) {
+                    out.add(new BoundaryObligation(axis.id(), origin,
+                            BoundaryObligation.BoundarySide.AT, cut.value()));
+                }
                 if (origin instanceof OriginRef.GuardOrigin guard) {
                     // The other class's edge is the neighbour on the side the cut value is not on —
                     // where that class has values. A guard at the end of what the position can hold
@@ -254,8 +262,7 @@ public final class Partitions {
         if (number == null) {
             return true;
         }
-        return (within.min() == null || number.compareTo(within.min()) >= 0)
-                && (within.max() == null || number.compareTo(within.max()) <= 0);
+        return within.admits(number);
     }
 
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
@@ -343,9 +350,11 @@ public final class Partitions {
         // from the rule that put one there, and which record did the narrowing is said beside it.
         return new Bounds(
                 own.min() == null ? null
-                        : new End(highest(own.min().value(), projected.min()), own.min().from()),
+                        : new End(highest(own.min().value(), valueOf(projected.min())),
+                                own.min().from()),
                 own.max() == null ? null
-                        : new End(lowest(own.max().value(), projected.max()), own.max().from()),
+                        : new End(lowest(own.max().value(), valueOf(projected.max())),
+                                own.max().from()),
                 own.decimal());
     }
 
@@ -365,11 +374,16 @@ public final class Partitions {
         if (own == null) {
             return null;   // not a number, so nothing bounds it either way
         }
-        BigDecimal min = own.min() == null ? null : own.min().value();
-        BigDecimal max = own.max() == null ? null : own.max().value();
+        Endpoint min = own.min() == null ? null : Endpoint.inclusive(own.min().value());
+        Endpoint max = own.max() == null ? null : Endpoint.inclusive(own.max().value());
         return projected == null ? new NumericDomain.Bounds(min, max)
-                : new NumericDomain.Bounds(highest(min, projected.min()),
-                        lowest(max, projected.max()));
+                : new NumericDomain.Bounds(Endpoint.lower(min, projected.min()),
+                        Endpoint.upper(max, projected.max()));
+    }
+
+    /** An end's number, or null where there is no end. */
+    private static BigDecimal valueOf(Endpoint end) {
+        return end == null ? null : end.value();
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -699,8 +713,8 @@ public final class Partitions {
     /** A second number of a range, or null where the type has none to give. */
     private static BigDecimal displaced(NumericDomain.Bounds range, boolean whole) {
         BigDecimal from = admissible(range, whole);
-        BigDecimal min = range == null ? null : range.min();
-        BigDecimal max = range == null ? null : range.max();
+        BigDecimal min = range == null ? null : valueOf(range.min());
+        BigDecimal max = range == null ? null : valueOf(range.max());
         if (!whole) {
             // No smallest step, so the only second value a range names is one inside both its ends.
             return min == null || max == null || min.compareTo(max) >= 0 ? null
@@ -781,10 +795,12 @@ public final class Partitions {
             return BigDecimal.ZERO;
         }
         if (within.min() != null) {
-            return whole ? within.min().setScale(0, java.math.RoundingMode.CEILING) : within.min();
+            BigDecimal min = within.min().value();
+            return whole ? min.setScale(0, java.math.RoundingMode.CEILING) : min;
         }
         if (within.max() != null) {
-            return whole ? within.max().setScale(0, java.math.RoundingMode.FLOOR) : within.max();
+            BigDecimal max = within.max().value();
+            return whole ? max.setScale(0, java.math.RoundingMode.FLOOR) : max;
         }
         return BigDecimal.ZERO;
     }
@@ -792,8 +808,8 @@ public final class Partitions {
     /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
      * there is, and it is the value a boundary wants written anyway. */
     private static BigDecimal inside(NumericDomain.Bounds bounds) {
-        return bounds.min() != null ? bounds.min()
-                : bounds.max() != null ? bounds.max() : BigDecimal.ZERO;
+        return bounds.min() != null ? bounds.min().value()
+                : bounds.max() != null ? bounds.max().value() : BigDecimal.ZERO;
     }
 
     /**
@@ -820,10 +836,10 @@ public final class Partitions {
         Bounds own = boundsOf(type, symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
         if (bounds == null || bounds.min() == null || bounds.max() == null
-                || bounds.max().compareTo(bounds.min()) == 0) {
+                || bounds.max().value().compareTo(bounds.min().value()) == 0) {
             return List.of();
         }
-        BigDecimal far = bounds.max();
+        BigDecimal far = bounds.max().value();
         FixtureTemplate held = FixtureTemplate.newtype(ref.name(), own.decimal()
                 ? FixtureTemplate.decimal(far) : FixtureTemplate.integer(far.longValueExact()));
         // Nothing already on offer: a range whose far edge is the number the base type stands for

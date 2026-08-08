@@ -181,17 +181,16 @@ class APairIsChosenOnePositionAtATimeTest {
     }
 
     /**
-     * A dense strict bound is reached by a value off the end, and not by the order of choosing.
+     * A dense strict relation leaves each field an end it does not reach, and no row is asked for
+     * there.
      *
-     * <p>Choosing {@code low} first leaves {@code high} at zero and above, because {@code low < high}
-     * over the decimals is recorded as {@code low - high <= 0} — so the end the projection offers is
-     * the one value the rule refuses. What gets past it is a second value from the range, and the
-     * ends themselves stay where they were: the report still cannot say that a {@code high} of zero
-     * is impossible rather than untried, because the bound it would have to read that off is the
-     * weakened one (#483).
+     * <p>{@code low < high} under one {@code [0, 1]} leaves {@code low} up to 1 without 1 and
+     * {@code high} from 0 without 0. Two of the four edges the type draws are values the record
+     * refuses, and what the report says about them is nothing at all — an edge nobody can write is
+     * not a gap, and calling it untried would send an author looking for a row that does not exist.
      */
     @Test
-    void aStrictBoundOverDecimalsIsReachedOffTheEnd() throws Exception {
+    void aStrictRelationOverDecimalsAsksForNoRowAtTheEndItRefuses() throws Exception {
         String model = """
                 module example.band
 
@@ -223,9 +222,13 @@ class APairIsChosenOnePositionAtATimeTest {
         }
         String rows = out.toString(StandardCharsets.UTF_8);
 
-        assertTrue(rows.contains("high = Ratio(1m)"),
-                () -> "the far end of what `high` can hold, which the range names:\n" + rows);
-        assertTrue(rows.contains("no row for `band.high = 0`"),
-                () -> "and the end itself is still where nothing can be written:\n" + rows);
+        assertTrue(rows.contains("\"band.low = 0\""),
+                () -> "the bottom of `low` is a row it can write:\n" + rows);
+        assertTrue(rows.contains("\"band.high = 1\""),
+                () -> "and so is the top of `high`:\n" + rows);
+        assertFalse(rows.contains("band.high = 0"),
+                () -> "a high of zero is refused by the record, so nothing is owed there:\n" + rows);
+        assertFalse(rows.contains("band.low = 1"),
+                () -> "nor at a low of one:\n" + rows);
     }
 }

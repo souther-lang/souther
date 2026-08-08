@@ -59,13 +59,13 @@ public record GuardEdge(CoverageSites.GuardRef guard, int site, TermPath path,
             return false;
         }
         if (low != null && admissible.max() != null) {
-            int order = low.compareTo(admissible.max());
+            int order = low.compareTo(admissible.max().value());
             if (order > 0 || (order == 0 && !lowInclusive)) {
                 return true;
             }
         }
         if (high != null && admissible.min() != null) {
-            int order = high.compareTo(admissible.min());
+            int order = high.compareTo(admissible.min().value());
             if (order < 0 || (order == 0 && !highInclusive)) {
                 return true;
             }
