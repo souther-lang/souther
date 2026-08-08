@@ -291,8 +291,10 @@ class WhatGoesBetweenTwoTokensOnALineTest {
     }
 
     /** Every adjacency in the canonical form of every source, excluding the pairs a break separated,
-     * which are the other rules' business. */
-    private static List<Adjacency> adjacencies() {
+     * which are the other rules' business. Read by
+     * {@link TheSpacingRuleAgreesWithTheCanonicalFormTest} as well: what is measured — the rendered
+     * text — is the same, and what each of the two holds it against is not. */
+    static List<Adjacency> adjacencies() {
         List<Adjacency> out = new ArrayList<>();
         for (String source : corpus()) {
             String canonical = Formatter.format(source);
