@@ -155,16 +155,30 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
 
     @Test
     void aProbeOnALineOfItsOwnComesBackExactlyOnce() {
-        sweep(true);
+        sweep(true, 245);
     }
 
     @Test
     void aProbeAtTheEndOfALineComesBackExactlyOnce() {
-        sweep(false);
+        sweep(false, 293);
     }
 
-    private static void sweep(boolean onItsOwnLine) {
+    /**
+     * {@code travelled} is how many of the boundaries are inside a construct the layout gives no
+     * line of its own. A comment written there cannot stay: the rest of that line would be written
+     * inside it, so it goes to the nearest construct that has a line. Which construct that is, is
+     * measured rather than listed — the probe's neighbour is an index into the code tokens, and
+     * those are required to come back unchanged, so an index that moved says the comment left the
+     * code it was written next to.
+     *
+     * <p>The number goes down as constructs are given lines of their own, and each time it does, a
+     * comment that used to travel now stays. It going up is a comment that stopped staying, which
+     * nothing else here would report: the comment is still there and the code around it is
+     * unchanged, and only what it is next to has changed.
+     */
+    private static void sweep(boolean onItsOwnLine, int travelled) {
         List<String> lost = new ArrayList<>();
+        List<String> moved = new ArrayList<>();
         List<String> rewritten = new ArrayList<>();
         List<String> refused = new ArrayList<>();
         int checked = 0;
@@ -192,6 +206,11 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                             + CstParser.parse(formatted).errors());
                     continue;
                 }
+                int was = neighbour(variant, onItsOwnLine);
+                int now = neighbour(formatted, onItsOwnLine);
+                if (was != now) {
+                    moved.add(context(variant) + "  from " + was + " to " + now);
+                }
                 List<String> got = commentsOf(formatted);
                 got.sort(null);
                 if (!want.equals(got)) {
@@ -209,6 +228,10 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
                     "a fixture contributed only " + e.getValue() + " variants; it is not being swept");
         }
         assertTrue(checked > 150, "only " + checked + " variants parsed; the sweep found nothing");
+        assertTrue(moved.size() <= travelled,
+                moved.size() + " of " + checked + " probes left the code they were written next to,"
+                        + " where " + travelled + " have no line to stay on:\n"
+                        + String.join("\n", moved));
         assertTrue(lost.isEmpty() && rewritten.isEmpty() && refused.isEmpty(),
                 "of " + checked + " swept, " + lost.size() + " came back with the comments changed,"
                         + " " + rewritten.size() + " with the code changed and " + refused.size()
@@ -240,6 +263,34 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
             }
         }
         return out;
+    }
+
+    /**
+     * Where the probe sits in {@code source}, as an index into the code tokens: the one before it
+     * for a comment that ends a line, the one after it for a comment on a line of its own. The code
+     * tokens themselves are required to come back unchanged, so the index names the same token
+     * before and after — which makes it an answer to what the comment is next to that needs no
+     * oracle and no classifier.
+     */
+    private static int neighbour(String source, boolean onItsOwnLine) {
+        int code = 0;
+        int before = -1;
+        boolean seen = false;
+        for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
+            if (t.kind() == SyntaxKind.LINE_COMMENT && t.text().stripTrailing().equals(PROBE)) {
+                if (!onItsOwnLine) {
+                    return before;
+                }
+                seen = true;
+            } else if (!t.isTrivia()) {
+                if (seen) {
+                    return code;
+                }
+                before = code;
+                code++;
+            }
+        }
+        return -1;
     }
 
     /**

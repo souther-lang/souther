@@ -1153,7 +1153,7 @@ public final class Formatter {
     private static boolean separates(SyntaxToken t) {
         return switch (t.kind()) {
             case COMMA, PIPE, PIPEFWD, VPIPE -> true;
-            default -> false;
+            default -> isBinaryOperator(t.kind());
         };
     }
 
@@ -1171,7 +1171,9 @@ public final class Formatter {
     private static SyntaxToken nextCode(List<SyntaxToken> all, int i) {
         for (int j = i + 1; j < all.size(); j++) {
             SyntaxToken t = all.get(j);
-            if (t.isTrivia() || separates(t)) {
+            // what closes a construct is asked about before what separates its members, because a
+            // type's `>` is both: it is the angle bracket here and the comparison everywhere else
+            if (t.isTrivia() || (separates(t) && !closes(t))) {
                 continue;
             }
             return t.kind() == SyntaxKind.EOF ? null : t;
@@ -1182,7 +1184,7 @@ public final class Formatter {
     /** The code a comment was written after. */
     private static SyntaxToken lastCode(List<SyntaxToken> code) {
         for (int i = code.size() - 1; i >= 0; i--) {
-            if (!separates(code.get(i))) {
+            if (!separates(code.get(i)) || closes(code.get(i))) {
                 return code.get(i);
             }
         }
@@ -1419,8 +1421,11 @@ public final class Formatter {
     /** Whether {@code t} is what closes a construct whose members take a line each — the place a
      * comment written under the last member goes. */
     private static boolean closes(SyntaxToken t) {
+        if (t.end() != t.parent().end() || !holdsLines(t.parent().kind())) {
+            return false;   // a bracket in the middle of a construct closes nothing
+        }
         return switch (t.kind()) {
-            case RBRACE, RPAREN, RBRACKET -> holdsLines(t.parent().kind());
+            case RBRACE, RPAREN, RBRACKET, GT -> true;
             default -> false;
         };
     }
@@ -1438,45 +1443,52 @@ public final class Formatter {
         return null;
     }
 
-    /** Whether a {@code child} of {@code parent} is written on a line of its own. These are the
-     * places a construct is asked for its comments; one added to a list here without being asked is
-     * what counting the comments consumed against the comments the tree holds is there to catch. */
+    /** Whether a {@code child} of {@code parent} is written on a line of its own. */
     private static boolean takesALineOf(SyntaxKind parent, SyntaxKind child) {
-        return switch (parent) {
-            case SOURCE_FILE -> isTopLevel(child);
-            case PRODUCT_BODY, NEW_DATA_EXPR ->
-                    child == SyntaxKind.FIELD || child == SyntaxKind.FIELD_INIT
-                            || child == SyntaxKind.SPREAD_MEMBER;
-            case MATCH_EXPR -> child == SyntaxKind.MATCH_CASE;
-            case EXAMPLE_DEF -> child == SyntaxKind.EXAMPLE_ROW;
-            case FAKE_DEF -> child == SyntaxKind.FAKE_ROW;
-            case EXPOSING_CLAUSE -> child == SyntaxKind.EXPOSED_ENTRY;
-            case PARAM_LIST -> child == SyntaxKind.PARAM;
-            case FN_PARAM_LIST -> child == SyntaxKind.FN_PARAM;
-            case WITH_CLAUSE -> child == SyntaxKind.WITH_BINDING;
-            case ELSE_ARMS -> child == SyntaxKind.ELSE_ARM;
-            case PIPE_BEHAVIOR -> child == SyntaxKind.STAGE;
-            case DATA_DEF -> child == SyntaxKind.INVARIANT_CLAUSE
-                    || child == SyntaxKind.NEWTYPE_BODY;
-            case BEHAVIOR_SIG -> child == SyntaxKind.CONSTRUCTS_CLAUSE
-                    || child == SyntaxKind.DEPENDS_CLAUSE || child == SyntaxKind.RET_TYPE;
-            case RET_TYPE, TYPE_ARGS, TUPLE_TYPE -> isTypeNode(child);
-            case FN_TYPE -> child == SyntaxKind.RET_TYPE;
-            case BINARY_EXPR -> isExprKind(child) && child != SyntaxKind.BINARY_EXPR;
-            case BLOCK_EXPR -> true;
-            case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> isExprKind(child);
-            case PIPE_EXPR -> isExprKind(child) && child != SyntaxKind.PIPE_EXPR;
-            default -> false;
-        };
+        java.util.function.Predicate<SyntaxKind> children = linesOf(parent);
+        return children != null && children.test(child);
     }
 
-    /** Whether a construct writes its members one to a line, so that its closer opens a line a
-     * comment can be written on. */
-    private static boolean holdsLines(SyntaxKind k) {
-        return switch (k) {
-            case PRODUCT_BODY, NEW_DATA_EXPR, EXPOSING_CLAUSE, PARAM_LIST, FN_PARAM_LIST, ARG_LIST,
-                 LIST_EXPR, TUPLE_EXPR, LIST_COMP, BLOCK_EXPR -> true;
-            default -> false;
+    /** Whether {@code parent} writes any of its children on lines of their own, so that what closes
+     * it opens a line too. Read from the same table as {@link #takesALineOf}: a construct that holds
+     * lines and a construct whose members can be written above are the same construct, and keeping
+     * two lists of them is how a type argument came to have somewhere to put the comment under it
+     * while nothing put one there. */
+    private static boolean holdsLines(SyntaxKind parent) {
+        return linesOf(parent) != null;
+    }
+
+    /**
+     * Which children of {@code parent} are written on lines of their own, or null where none are.
+     * These are the places a construct is asked for its comments; one added here without being asked
+     * is what counting the comments consumed against the comments the tree holds is there to catch.
+     */
+    private static java.util.function.Predicate<SyntaxKind> linesOf(SyntaxKind parent) {
+        return switch (parent) {
+            case SOURCE_FILE -> Formatter::isTopLevel;
+            case PRODUCT_BODY, NEW_DATA_EXPR ->
+                    k -> k == SyntaxKind.FIELD || k == SyntaxKind.FIELD_INIT
+                            || k == SyntaxKind.SPREAD_MEMBER;
+            case MATCH_EXPR -> k -> k == SyntaxKind.MATCH_CASE;
+            case EXAMPLE_DEF -> k -> k == SyntaxKind.EXAMPLE_ROW;
+            case FAKE_DEF -> k -> k == SyntaxKind.FAKE_ROW;
+            case EXPOSING_CLAUSE -> k -> k == SyntaxKind.EXPOSED_ENTRY;
+            case PARAM_LIST -> k -> k == SyntaxKind.PARAM;
+            case FN_PARAM_LIST -> k -> k == SyntaxKind.FN_PARAM;
+            case WITH_CLAUSE -> k -> k == SyntaxKind.WITH_BINDING;
+            case ELSE_ARMS -> k -> k == SyntaxKind.ELSE_ARM;
+            case PIPE_BEHAVIOR -> k -> k == SyntaxKind.STAGE;
+            case DATA_DEF -> k -> k == SyntaxKind.INVARIANT_CLAUSE
+                    || k == SyntaxKind.NEWTYPE_BODY;
+            case BEHAVIOR_SIG -> k -> k == SyntaxKind.CONSTRUCTS_CLAUSE
+                    || k == SyntaxKind.DEPENDS_CLAUSE || k == SyntaxKind.RET_TYPE;
+            case RET_TYPE, TYPE_ARGS, TUPLE_TYPE -> Formatter::isTypeNode;
+            case FN_TYPE -> k -> k == SyntaxKind.RET_TYPE;
+            case BINARY_EXPR -> k -> isExprKind(k) && k != SyntaxKind.BINARY_EXPR;
+            case BLOCK_EXPR -> _ -> true;
+            case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> Formatter::isExprKind;
+            case PIPE_EXPR -> k -> isExprKind(k) && k != SyntaxKind.PIPE_EXPR;
+            default -> null;
         };
     }
 

@@ -303,6 +303,52 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
+    /** The other side of an operator run: what is written above a segment rather than at the end of
+     * one. The two are separate paths and only the first had been asked for. */
+    @Test
+    void andAboveASegmentOfAnOperatorRun() {
+        assertEquals("""
+                module m
+
+                let value =
+                    1
+                        // about the second term
+                        + 2
+                        + 3
+                """, Formatter.format("""
+                module m
+                let value = 1
+                    // about the second term
+                    + 2
+                    + 3
+                """));
+    }
+
+    /** Under the last member of a nested bracketed construct. What closes a type's arguments is the
+     * same angle bracket the grammar compares with, so it had to be read as the closer it is here
+     * before it was read as the operator it is elsewhere. */
+    @Test
+    void underTheLastMemberOfNestedBrackets() {
+        assertEquals("""
+                module m
+
+                data D =
+                    { xs: List<
+                        Int
+                        // why Int is allowed
+                    >
+                    }
+                """, Formatter.format("""
+                module m
+                data D =
+                    { xs: List<
+                        Int
+                        // why Int is allowed
+                      >
+                    }
+                """));
+    }
+
     /** No member to be about: the comment was written above the construct, and stays above it rather
      * than moving inside where the construct's own end comments go. */
     @Test
