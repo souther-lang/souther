@@ -518,4 +518,22 @@ public final class Compilation {
         }
         return warnings;
     }
+
+    /**
+     * The errors among {@code found}, tagged as {@link #warnings} tags a warning.
+     *
+     * <p>All of them, where {@link #firstError} answers with one. A caller that stops at the first
+     * error wants the first; one that goes on to say something about the whole compilation has
+     * already read past it, and showing a reader one error beside an account of everything else
+     * would leave them to wonder what the rest of the errors were.
+     */
+    public List<Located> errors(List<Db.Found> found) {
+        List<Located> errors = new ArrayList<>();
+        for (Db.Found f : found) {
+            if (f.report().isError()) {
+                errors.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
+            }
+        }
+        return errors;
+    }
 }
