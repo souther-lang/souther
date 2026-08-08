@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -96,72 +97,135 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
         }
     }
 
+    /** What a client must read under a capability's key to be told the method is offered. */
+    private sealed interface Told {
+
+        /**
+         * A field of the capabilities object, and what its value has to say.
+         *
+         * <p>Which value to send is this server's to choose — a bare {@code true} and an options
+         * object are both legitimate answers, and copying the one we chose would witness nothing.
+         * Whether the value offers the method is not a choice: {@code hoverProvider: false} and
+         * {@code semanticTokensProvider: { full: false }} are well-formed capabilities that decline
+         * the very request behind them, and a server sending one while answering that request is
+         * back to answering what it did not advertise.
+         */
+        record Capability(String key, Predicate<JsonNode> offers, String offering) implements Told {
+        }
+
+        /** Announced after the handshake by {@code client/registerCapability}. */
+        record Registration() implements Told {
+        }
+
+        /** Announced by nothing, for the reason given. */
+        record Nothing(Advertisement.Reason reason) implements Told {
+        }
+    }
+
+    /** One method as the protocol defines it: the name a client sends, and how it is told. */
+    private record Protocol(LspMethod method, String wire, Told told) {
+    }
+
+    /** {@code true}, or an options object; {@code false} or an absent field declines the request. */
+    private static final Predicate<JsonNode> TRUE_OR_OPTIONS =
+            value -> (value.isBoolean() && value.booleanValue()) || value.isObject();
+
+    /** A sync kind other than {@code None}, or options saying which notifications are wanted. */
+    private static final Predicate<JsonNode> SYNCING =
+            value -> value.isObject() || (value.isNumber() && value.intValue() != 0);
+
+    /** Semantic tokens for a whole document are behind the options' own {@code full}. */
+    private static final Predicate<JsonNode> FULL_DOCUMENT_TOKENS = value -> {
+        JsonNode full = value.isObject() ? value.get("full") : null;
+        return full != null && (full.isObject() || (full.isBoolean() && full.booleanValue()));
+    };
+
+    private static Protocol offered(LspMethod method, String wire, String key) {
+        return new Protocol(method, wire,
+                new Told.Capability(key, TRUE_OR_OPTIONS, "true or an options object"));
+    }
+
+    private static Protocol lifecycle(LspMethod method, String wire) {
+        return new Protocol(method, wire, new Told.Nothing(Advertisement.Reason.LIFECYCLE));
+    }
+
+    private static Protocol protocolNotification(LspMethod method, String wire) {
+        return new Protocol(method, wire,
+                new Told.Nothing(Advertisement.Reason.UNADVERTISED_PROTOCOL_METHOD));
+    }
+
     /**
-     * How each method is announced, written from the protocol rather than read from the server.
+     * The protocol, written out rather than read from the server.
      *
-     * <p>A capability key is what the protocol says a client reads before sending that method. The
-     * value under the key is not here: whether a provider is spelled {@code true} or an options
-     * object is this server's to decide, and repeating it would copy a decision rather than witness
-     * an agreement.
+     * <p>Every method has a row, so a method added to {@link LspMethod} is one this file has to say
+     * something about. What a row says is what the specification says: the name a client sends, and
+     * what a client reads to know it may send it.
      */
+    private static final List<Protocol> PROTOCOL = List.of(
+            lifecycle(LspMethod.INITIALIZE, "initialize"),
+            lifecycle(LspMethod.INITIALIZED, "initialized"),
+            lifecycle(LspMethod.SHUTDOWN, "shutdown"),
+            lifecycle(LspMethod.EXIT, "exit"),
+            protocolNotification(LspMethod.SET_TRACE, "$/setTrace"),
+            protocolNotification(LspMethod.DID_CHANGE_CONFIGURATION,
+                    "workspace/didChangeConfiguration"),
+            new Protocol(LspMethod.DID_OPEN, "textDocument/didOpen",
+                    new Told.Capability("textDocumentSync", SYNCING, "a sync kind other than None")),
+            new Protocol(LspMethod.DID_CHANGE, "textDocument/didChange",
+                    new Told.Capability("textDocumentSync", SYNCING, "a sync kind other than None")),
+            new Protocol(LspMethod.DID_CLOSE, "textDocument/didClose",
+                    new Told.Capability("textDocumentSync", SYNCING, "a sync kind other than None")),
+            new Protocol(LspMethod.DID_CHANGE_WATCHED_FILES, "workspace/didChangeWatchedFiles",
+                    new Told.Registration()),
+            offered(LspMethod.DOCUMENT_SYMBOL, "textDocument/documentSymbol",
+                    "documentSymbolProvider"),
+            new Protocol(LspMethod.SEMANTIC_TOKENS_FULL, "textDocument/semanticTokens/full",
+                    new Told.Capability("semanticTokensProvider", FULL_DOCUMENT_TOKENS,
+                            "options whose `full` offers whole-document tokens")),
+            offered(LspMethod.HOVER, "textDocument/hover", "hoverProvider"),
+            offered(LspMethod.DEFINITION, "textDocument/definition", "definitionProvider"),
+            offered(LspMethod.REFERENCES, "textDocument/references", "referencesProvider"),
+            offered(LspMethod.COMPLETION, "textDocument/completion", "completionProvider"),
+            offered(LspMethod.CODE_ACTION, "textDocument/codeAction", "codeActionProvider"),
+            offered(LspMethod.CODE_LENS, "textDocument/codeLens", "codeLensProvider"),
+            offered(LspMethod.RENAME, "textDocument/rename", "renameProvider"),
+            offered(LspMethod.FORMATTING, "textDocument/formatting", "documentFormattingProvider"));
+
     @Test
     void everyMethodIsAnnouncedTheWayTheProtocolSaysItIs() {
-        Map<LspMethod, String> byCapability = new LinkedHashMap<>();
-        byCapability.put(LspMethod.DID_OPEN, "textDocumentSync");
-        byCapability.put(LspMethod.DID_CHANGE, "textDocumentSync");
-        byCapability.put(LspMethod.DID_CLOSE, "textDocumentSync");
-        byCapability.put(LspMethod.DOCUMENT_SYMBOL, "documentSymbolProvider");
-        byCapability.put(LspMethod.SEMANTIC_TOKENS_FULL, "semanticTokensProvider");
-        byCapability.put(LspMethod.HOVER, "hoverProvider");
-        byCapability.put(LspMethod.DEFINITION, "definitionProvider");
-        byCapability.put(LspMethod.REFERENCES, "referencesProvider");
-        byCapability.put(LspMethod.COMPLETION, "completionProvider");
-        byCapability.put(LspMethod.CODE_ACTION, "codeActionProvider");
-        byCapability.put(LspMethod.CODE_LENS, "codeLensProvider");
-        byCapability.put(LspMethod.RENAME, "renameProvider");
-        byCapability.put(LspMethod.FORMATTING, "documentFormattingProvider");
-
-        Set<LspMethod> registeredAfterTheHandshake = EnumSet.of(LspMethod.DID_CHANGE_WATCHED_FILES);
-
-        Map<LspMethod, Advertisement.Reason> announcedByNothing = new LinkedHashMap<>();
-        announcedByNothing.put(LspMethod.INITIALIZE, Advertisement.Reason.LIFECYCLE);
-        announcedByNothing.put(LspMethod.INITIALIZED, Advertisement.Reason.LIFECYCLE);
-        announcedByNothing.put(LspMethod.SHUTDOWN, Advertisement.Reason.LIFECYCLE);
-        announcedByNothing.put(LspMethod.EXIT, Advertisement.Reason.LIFECYCLE);
-        announcedByNothing.put(LspMethod.SET_TRACE,
-                Advertisement.Reason.UNADVERTISED_PROTOCOL_METHOD);
-        announcedByNothing.put(LspMethod.DID_CHANGE_CONFIGURATION,
-                Advertisement.Reason.UNADVERTISED_PROTOCOL_METHOD);
+        JsonNode capabilities = responseFor(
+                exchange(message(1, "initialize", Map.of())), 1).get("capabilities");
 
         Set<LspMethod> written = EnumSet.noneOf(LspMethod.class);
-        for (LspMethod method : byCapability.keySet()) {
-            assertTrue(written.add(method), method + " is written more than once");
-        }
-        for (LspMethod method : registeredAfterTheHandshake) {
-            assertTrue(written.add(method), method + " is written more than once");
-        }
-        for (LspMethod method : announcedByNothing.keySet()) {
-            assertTrue(written.add(method), method + " is written more than once");
+        for (Protocol row : PROTOCOL) {
+            assertTrue(written.add(row.method()), row.method() + " is written more than once");
+            assertEquals(row.wire(), row.method().wire(),
+                    "the name a client sends for " + row.method());
+            switch (row.told()) {
+                case Told.Capability told -> {
+                    Advertisement.StaticCapability declared = assertInstanceOf(
+                            Advertisement.StaticCapability.class, row.method().advertisement(),
+                            row.method() + " is announced by a capability");
+                    assertEquals(told.key(), declared.key(),
+                            "the capability a client reads before sending " + row.wire());
+                    JsonNode sent = capabilities.get(told.key());
+                    assertNotNull(sent, told.key() + " is in the handshake");
+                    assertTrue(told.offers().test(sent), told.key() + " has to be "
+                            + told.offering() + " to offer " + row.wire() + ", and is " + sent);
+                }
+                case Told.Registration _ -> assertInstanceOf(
+                        Advertisement.DynamicRegistration.class, row.method().advertisement(),
+                        row.method() + " is registered rather than carried by a capability");
+                case Told.Nothing told -> {
+                    Advertisement.None none = assertInstanceOf(Advertisement.None.class,
+                            row.method().advertisement(), row.method() + " is announced by nothing");
+                    assertEquals(told.reason(), none.reason(),
+                            "why " + row.method() + " is not announced");
+                }
+            }
         }
         assertEquals(EnumSet.allOf(LspMethod.class), written,
                 "every method the server answers says here how a client hears about it");
-
-        for (Map.Entry<LspMethod, String> row : byCapability.entrySet()) {
-            Advertisement.StaticCapability capability = assertInstanceOf(
-                    Advertisement.StaticCapability.class, row.getKey().advertisement(),
-                    row.getKey() + " is announced by a capability");
-            assertEquals(row.getValue(), capability.key(),
-                    "the capability a client reads before sending " + row.getKey().wire());
-        }
-        for (LspMethod method : registeredAfterTheHandshake) {
-            assertInstanceOf(Advertisement.DynamicRegistration.class, method.advertisement(),
-                    method + " is registered rather than carried by a capability");
-        }
-        for (Map.Entry<LspMethod, Advertisement.Reason> row : announcedByNothing.entrySet()) {
-            Advertisement.None none = assertInstanceOf(Advertisement.None.class,
-                    row.getKey().advertisement(), row.getKey() + " is announced by nothing");
-            assertEquals(row.getValue(), none.reason(), "why " + row.getKey() + " is not announced");
-        }
     }
 
     @Test
