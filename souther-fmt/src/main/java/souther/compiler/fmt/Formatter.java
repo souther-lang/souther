@@ -960,6 +960,21 @@ public final class Formatter {
                 afterToken(n.token(SyntaxKind.WITH_KW)), nest(INDENT, concat(cases)));
     }
 
+    /**
+     * What goes between two tokens of a match arm's pattern. The grammar writes such a pattern as a
+     * run of tokens rather than as a node, so this is the one place the formatter joins two tokens
+     * itself instead of a construct writing what goes between them. It answers as the constructs
+     * that write the same syntax do — a newtype opened by its constructor is {@code X(inner)} in a
+     * {@code let} and has to read as {@code X(inner)} here, and a record's fields are written
+     * {@code { f = v, g }} in both.
+     */
+    private static boolean spaceBetween(SyntaxKind left, SyntaxKind right) {
+        return left != SyntaxKind.DOT && right != SyntaxKind.DOT       // a qualified name is one name
+                && right != SyntaxKind.COMMA
+                && right != SyntaxKind.LPAREN                          // what is opened, not a call
+                && left != SyntaxKind.LPAREN && right != SyntaxKind.RPAREN;
+    }
+
     private Doc matchCase(SyntaxNode n) {
         StringBuilder pattern = new StringBuilder();
         SyntaxNode body = null;
@@ -975,10 +990,7 @@ public final class Formatter {
                     afterArrow = true;
                     continue;
                 }
-                // a qualified case name is one name: no space around its dots
-                boolean joined = pattern.length() > 0
-                        && (t.kind() == SyntaxKind.DOT || pattern.charAt(pattern.length() - 1) == '.');
-                if (pattern.length() > 0 && t.kind() != SyntaxKind.COMMA && !joined) {
+                if (patternEnd != null && spaceBetween(patternEnd.kind(), t.kind())) {
                     pattern.append(' ');
                 }
                 pattern.append(t.text());

@@ -125,6 +125,19 @@ class WhatSeparatesTwoItemsComesFromBothOfThemTest {
         return blanks;
     }
 
+    /**
+     * The pair is one the grammar admits, read from the parser rather than from the model above that
+     * generated it. `Formatter.format` assumes a clean parse and does not check, so without this a
+     * row whose source the grammar refuses would be formatted from a tree with an error token in it
+     * and answer about something else.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("pairs")
+    void theGrammarAdmitsThisPair(Pair pair) {
+        assertEquals(List.of(), CstParser.parse(pair.source()).errors(),
+                pair + ": the grammar refuses this, so it is not a row of the table");
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("pairs")
     void whatGoesBetweenThem(Pair pair) {

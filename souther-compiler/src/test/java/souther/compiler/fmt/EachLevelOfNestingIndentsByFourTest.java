@@ -100,13 +100,22 @@ class EachLevelOfNestingIndentsByFourTest {
                         2));
     }
 
-    /** The indents the formatted source uses, in increasing order. */
+    /**
+     * The indents the formatted source uses, in increasing order — counted in spaces, and asserting
+     * that spaces are what they are made of. Measuring the width of whatever leading whitespace a
+     * line has would let a formatter indent each level with four tabs and answer four; if canonical
+     * surface syntax is ever normative, a tab and four spaces are different text however they read.
+     */
     private static List<Integer> indentsOf(String formatted) {
         TreeSet<Integer> seen = new TreeSet<>();
         for (String line : formatted.split("\n", -1)) {
-            if (!line.isBlank()) {
-                seen.add(line.length() - line.stripLeading().length());
+            if (line.isBlank()) {
+                continue;
             }
+            int indent = line.length() - line.stripLeading().length();
+            assertEquals(" ".repeat(indent), line.substring(0, indent),
+                    "a line is indented with something other than spaces: " + line);
+            seen.add(indent);
         }
         return new ArrayList<>(seen);
     }
