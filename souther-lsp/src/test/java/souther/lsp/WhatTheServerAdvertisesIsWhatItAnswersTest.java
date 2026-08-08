@@ -130,9 +130,47 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
     private static final Predicate<JsonNode> TRUE_OR_OPTIONS =
             value -> (value.isBoolean() && value.booleanValue()) || value.isObject();
 
-    /** A sync kind other than {@code None}, or options saying which notifications are wanted. */
-    private static final Predicate<JsonNode> SYNCING =
-            value -> value.isObject() || (value.isNumber() && value.intValue() != 0);
+    /** An options object and nothing else — these two capabilities have no boolean form. */
+    private static final Predicate<JsonNode> OPTIONS = JsonNode::isObject;
+
+    /**
+     * The shorthand form of {@code textDocumentSync}, when it says documents are synced at all.
+     *
+     * <p>{@code TextDocumentSyncKind} is {@code None}, {@code Full} or {@code Incremental}, so a
+     * number outside those three says nothing rather than something permissive.
+     */
+    private static boolean syncedByKind(JsonNode value) {
+        return value.isNumber() && (value.intValue() == 1 || value.intValue() == 2);
+    }
+
+    /**
+     * Opening and closing a document, which the options form puts behind its own {@code openClose}.
+     *
+     * <p>The shorthand carries it; the long form does not unless it says so, and a client reading
+     * options without {@code openClose} sends neither notification.
+     */
+    private static final Predicate<JsonNode> OPEN_CLOSE_SYNC = value -> {
+        if (syncedByKind(value)) {
+            return true;
+        }
+        JsonNode openClose = value.isObject() ? value.get("openClose") : null;
+        return openClose != null && openClose.isBoolean() && openClose.booleanValue();
+    };
+
+    /**
+     * Changing a document, which the options form puts behind its own {@code change}.
+     *
+     * <p>A sync that opens and closes documents is not one that reports edits: {@code change} is
+     * absent or {@code None} in options that say nothing about them, and either way no
+     * {@code didChange} arrives.
+     */
+    private static final Predicate<JsonNode> CHANGE_SYNC = value -> {
+        if (syncedByKind(value)) {
+            return true;
+        }
+        JsonNode change = value.isObject() ? value.get("change") : null;
+        return change != null && syncedByKind(change);
+    };
 
     /** Semantic tokens for a whole document are behind the options' own {@code full}. */
     private static final Predicate<JsonNode> FULL_DOCUMENT_TOKENS = value -> {
@@ -170,11 +208,14 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
             protocolNotification(LspMethod.DID_CHANGE_CONFIGURATION,
                     "workspace/didChangeConfiguration"),
             new Protocol(LspMethod.DID_OPEN, "textDocument/didOpen",
-                    new Told.Capability("textDocumentSync", SYNCING, "a sync kind other than None")),
+                    new Told.Capability("textDocumentSync", OPEN_CLOSE_SYNC,
+                            "a sync kind that syncs, or options whose `openClose` is on")),
             new Protocol(LspMethod.DID_CHANGE, "textDocument/didChange",
-                    new Told.Capability("textDocumentSync", SYNCING, "a sync kind other than None")),
+                    new Told.Capability("textDocumentSync", CHANGE_SYNC,
+                            "a sync kind that syncs, or options whose `change` is not None")),
             new Protocol(LspMethod.DID_CLOSE, "textDocument/didClose",
-                    new Told.Capability("textDocumentSync", SYNCING, "a sync kind other than None")),
+                    new Told.Capability("textDocumentSync", OPEN_CLOSE_SYNC,
+                            "a sync kind that syncs, or options whose `openClose` is on")),
             new Protocol(LspMethod.DID_CHANGE_WATCHED_FILES, "workspace/didChangeWatchedFiles",
                     new Told.Registration()),
             offered(LspMethod.DOCUMENT_SYMBOL, "textDocument/documentSymbol",
@@ -185,9 +226,11 @@ class WhatTheServerAdvertisesIsWhatItAnswersTest {
             offered(LspMethod.HOVER, "textDocument/hover", "hoverProvider"),
             offered(LspMethod.DEFINITION, "textDocument/definition", "definitionProvider"),
             offered(LspMethod.REFERENCES, "textDocument/references", "referencesProvider"),
-            offered(LspMethod.COMPLETION, "textDocument/completion", "completionProvider"),
+            new Protocol(LspMethod.COMPLETION, "textDocument/completion",
+                    new Told.Capability("completionProvider", OPTIONS, "an options object")),
             offered(LspMethod.CODE_ACTION, "textDocument/codeAction", "codeActionProvider"),
-            offered(LspMethod.CODE_LENS, "textDocument/codeLens", "codeLensProvider"),
+            new Protocol(LspMethod.CODE_LENS, "textDocument/codeLens",
+                    new Told.Capability("codeLensProvider", OPTIONS, "an options object")),
             offered(LspMethod.RENAME, "textDocument/rename", "renameProvider"),
             offered(LspMethod.FORMATTING, "textDocument/formatting", "documentFormattingProvider"));
 
