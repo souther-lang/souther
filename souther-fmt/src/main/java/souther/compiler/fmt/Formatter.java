@@ -1296,7 +1296,10 @@ public final class Formatter {
         }
         // A bare member is only its own line's owner while something follows it. The last case of a
         // sum ends where the declaration does, and what ends on that line is the declaration.
-        if (isBareMember(code) && code.end() != code.parent().end()) {
+        // Measured from the end of the whole name, not from the identifier the comment happens to
+        // follow: a comment inside `other.mod.Thing` and one after it are about the same member, and
+        // the last member of a run ends where the run does, which is the run's line and not its own.
+        if (isBareMember(code) && nameEnd(code) != code.parent().end()) {
             out.afterCase().computeIfAbsent(nameEnd(code), _ -> new ArrayList<>()).add(comment);
             return;
         }
@@ -1310,6 +1313,25 @@ public final class Formatter {
         SyntaxNode slot = slotOf(endingAt(code));
         if (slot == null) {
             return;
+        }
+        // A comment after a token in the middle of a construct ends no construct's line. It ends
+        // the line that construct is on, and what ends that line is whatever ends where the
+        // construct does — which is where the same comment would go if it had been written after
+        // the construct's last token instead. Reading the two the same way is what makes the answer
+        // survive a second formatting.
+        // A pipeline's declared output is written after its last stage and on that stage's line, so
+        // the stage is not what ends the line: what ends it is the declaration.
+        boolean moreOfTheLineFollows = slot.parent() != null
+                && slot.parent().kind() == SyntaxKind.PIPE_BEHAVIOR
+                && slot.end() != slot.parent().end();
+        if ((slot.end() != code.end() || moreOfTheLineFollows) && !endsAWrittenLine(code)) {
+            SyntaxToken last = lastCodeTokenOf(moreOfTheLineFollows ? slot.parent() : slot);
+            if (last != null && last.end() != code.end()) {
+                SyntaxNode wider = slotOf(endingAt(last));
+                if (wider != null) {
+                    slot = wider;
+                }
+            }
         }
         if (slot.end() != code.end() && endsAWrittenLine(code)) {
             out.afterCase().computeIfAbsent(code.end(), _ -> new ArrayList<>()).add(comment);
@@ -1327,7 +1349,7 @@ public final class Formatter {
      * rather than about what the comment was written about.
      */
     private static void place(Attachments out, SyntaxNode owner, SyntaxToken comment, boolean above) {
-        SyntaxNode slot = slotOf(owner);
+        SyntaxNode slot = slotOf(owner, above);
         if (slot != null) {
             add(above ? out.above() : out.after(), slot, comment);
         }
@@ -1356,6 +1378,24 @@ public final class Formatter {
         };
     }
 
+    /** {@code n}'s first child node, whether or not the layout gives it a line. */
+    private static SyntaxNode firstChildOf(SyntaxNode n) {
+        for (SyntaxNode c : n.childNodes()) {
+            return c;
+        }
+        return null;
+    }
+
+    private static SyntaxToken lastCodeTokenOf(SyntaxNode n) {
+        SyntaxToken last = null;
+        for (SyntaxToken t : tokens(n)) {
+            if (!t.isTrivia()) {
+                last = t;
+            }
+        }
+        return last;
+    }
+
     private static SyntaxToken lastIdentOf(SyntaxNode n) {
         SyntaxToken last = null;
         for (SyntaxElement e : n.children()) {
@@ -1367,7 +1407,51 @@ public final class Formatter {
     }
 
     /** The construct that owns the line {@code owner} is written on. */
+    /**
+     * Whether {@code child} opens a line of {@code parent} as well as ending one. A construct the
+     * parent writes a prefix in front of — a newtype's body after the {@code =}, a signature's
+     * return type after the {@code ->} — ends the line it is on and does not begin it, since the
+     * prefix is already there. A comment above it goes above the line the prefix opens, which
+     * belongs to whatever wrote the prefix.
+     */
+    private static boolean opensALine(SyntaxNode c) {
+        if (!takesALineOf(c.parent().kind(), c.kind())) {
+            return false;
+        }
+        SyntaxKind parent = c.parent().kind();
+        if (parent == SyntaxKind.DATA_DEF && c.kind() == SyntaxKind.NEWTYPE_BODY) {
+            return false;
+        }
+        if (parent == SyntaxKind.BEHAVIOR_SIG && c.kind() == SyntaxKind.RET_TYPE) {
+            return false;
+        }
+        // The first of a run is written after whatever opens it and the rest after a break, so only
+        // the rest have a line of their own to be written above. The head of a chain is the first of
+        // its run, and so is the first binding of a `with`.
+        return !isFirstOfItsRun(c);
+    }
+
+    /** Whether {@code c} is the first member of a run the layout opens with text of its own rather
+     * than with a break — the left of a chain, an example row's input where no description precedes
+     * it, the first binding after a {@code with}. */
+    private static boolean isFirstOfItsRun(SyntaxNode c) {
+        SyntaxNode parent = c.parent();
+        return switch (parent.kind()) {
+            // the left of a run, which is the run's own left where the run nests: `a |> b |> c` is
+            // read as `(a |> b) |> c`, and the part that opens the line is `a`
+            case BINARY_EXPR, PIPE_EXPR, RET_TYPE, WITH_CLAUSE, LIST_COMP -> firstChildOf(parent) == c;
+            case EXAMPLE_ROW -> c.kind() == SyntaxKind.ARG_LIST
+                    && parent.token(SyntaxKind.STRING_LIT).isEmpty();
+            case FAKE_ROW -> c.kind() == SyntaxKind.ARG_LIST;
+            default -> false;
+        };
+    }
+
     private static SyntaxNode slotOf(SyntaxNode owner) {
+        return slotOf(owner, false);
+    }
+
+    private static SyntaxNode slotOf(SyntaxNode owner, boolean above) {
         SyntaxNode from = owner;
         // A run the layout flattens is written as segments, and a part of the spine ends where its
         // own segment does rather than where the whole run does. Only inside the run, though: the
@@ -1377,7 +1461,7 @@ public final class Formatter {
             from = lastSegmentOf(from);
         }
         for (SyntaxNode c = from; c != null && c.parent() != null; c = c.parent()) {
-            if (takesALineOf(c.parent().kind(), c.kind())) {
+            if (above ? opensALine(c) : takesALineOf(c.parent().kind(), c.kind())) {
                 return c;
             }
         }
