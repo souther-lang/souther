@@ -496,6 +496,44 @@ class CompileExampleGenerateTest {
     }
 
     /**
+     * A value held in reserve does not push aside the assignments already being tried.
+     *
+     * <p>The search walks the product of what the positions offer, and it is bounded — so a value
+     * added to one position moves every assignment past it further back, and enough positions
+     * carrying one more value each puts an assignment that used to be reached past the bound. Here
+     * six fields refuse both edges of their type and take the value between them, which is the
+     * sixty-fourth assignment out of sixty-four while each position offers two values and the last
+     * of seven hundred and twenty-nine while each offers three. So a value offered for the case
+     * where the ordinary ones are refused is tried after all of them, and not as one of them.
+     */
+    @Test
+    void aValueHeldInReserveDoesNotDisplaceTheAssignmentsAlreadyTried() {
+        String source = """
+                module example.reserve
+
+                data N = Decimal
+                    invariant bounded = value >= -1.0m && value <= 1.0m
+                    invariant notLow = value /= -1.0m
+                    invariant notHigh = value /= 1.0m
+
+                data R = { a: N, b: N, c: N, d: N, e: N, f: N }
+
+                data Ok = { n: Int }
+
+                behavior take : (request: R, flag: Bool) -> Ok
+                    constructs Ok
+
+                let take (request, flag) = Ok { n = 0 }
+                """;
+
+        Generator.GenerationResult filled = generated(source).get("take").pairs();
+
+        assertEquals(List.of(), filled.unresolved(),
+                () -> "the value between the edges builds: " + filled.unresolved());
+        assertFalse(filled.rows().isEmpty(), "so there are rows");
+    }
+
+    /**
      * A search that stopped says so, rather than saying everything was refused.
      *
      * <p>The choices multiply, so a row is tried at a bounded number of assignments. Past that bound

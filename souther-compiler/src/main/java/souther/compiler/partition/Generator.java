@@ -41,9 +41,10 @@ public final class Generator {
      * and pastes, and a model that wants more than this has axes it should be measured at fewer of. */
     static final int MAX_ROWS = 200;
 
-    /** How many assignments of values one parameter is tried at. The choices multiply, so this is a
-     * bound on the search and not on any one position — and reaching it is reported as the search
-     * having stopped, which is a different thing from every assignment having been refused. */
+    /** How many assignments of values one parameter is tried at in one pass. The choices multiply, so
+     * this is a bound on the search and not on any one position — and reaching it is reported as the
+     * search having stopped, which is a different thing from every assignment having been refused. A
+     * parameter with something held in reserve is walked twice, each pass under this bound. */
     private static final int MAX_TUPLES = 256;
 
     /** How deep a record is built. Past this a value stops being anything an author recognises as one
@@ -614,13 +615,34 @@ public final class Generator {
      *
      * @param at        the paths, so that an assignment can be read back as which value went where
      * @param values    what each of those positions can take, never empty
+     * @param reserves  what each holds back for the case where everything above was refused, which is
+     *                  usually nothing. Kept apart rather than appended: the search is over the
+     *                  product of {@code values} and is bounded, so a value added to one position
+     *                  moves the assignments past it further back — and a row that was being reached
+     *                  would stop being reached over a widening at a position it does not involve
      * @param missingAt the position nothing at all can be written at, where there is one — which is
      *                  not a choice to make but a reason there is no row
      */
-    private record Choices(List<String> at, List<List<FixtureTemplate>> values, String missingAt) {
+    private record Choices(List<String> at, List<List<FixtureTemplate>> values,
+                           List<List<FixtureTemplate>> reserves, String missingAt) {
 
         static Choices missing(String at) {
-            return new Choices(List.of(), List.of(), at);
+            return new Choices(List.of(), List.of(), List.of(), at);
+        }
+
+        boolean anythingHeldBack() {
+            return reserves.stream().anyMatch(each -> !each.isEmpty());
+        }
+
+        /** The same positions, each offering what it held back as well. */
+        List<List<FixtureTemplate>> widened() {
+            List<List<FixtureTemplate>> out = new ArrayList<>();
+            for (int i = 0; i < values.size(); i++) {
+                List<FixtureTemplate> here = new ArrayList<>(values.get(i));
+                here.addAll(reserves.get(i));
+                out.add(List.copyOf(here));
+            }
+            return List.copyOf(out);
         }
     }
 
@@ -640,14 +662,18 @@ public final class Generator {
                                      Map<String, BigDecimal> settled) {
         List<String> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
+        // A position the caller fixed holds nothing back: it was given the value it is to take.
+        List<List<FixtureTemplate>> reserves = new ArrayList<>(
+                java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
         // One reading of the parameter, not one per record inside it. A clause on the outer record
         // says what is left for a position two levels down, and a reading rebuilt at the inner record
         // has never seen it.
         FieldDomains left = type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
                 ? FieldDomains.of(ref.name(), data, symbols, under(at, settled)) : FieldDomains.NONE;
-        String missing = choicesUnder(type, at, symbols, 0, paths, values, left, at);
-        return missing != null ? Choices.missing(missing) : new Choices(paths, values, null);
+        String missing = choicesUnder(type, at, symbols, 0, paths, values, reserves, left, at);
+        return missing != null ? Choices.missing(missing)
+                : new Choices(paths, values, reserves, null);
     }
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
@@ -670,6 +696,7 @@ public final class Generator {
      * nothing can be written at, where there is one. */
     private static String choicesUnder(Type type, TermPath at, Symbols symbols, int depth,
                                        List<String> paths, List<List<FixtureTemplate>> values,
+                                       List<List<FixtureTemplate>> reserves,
                                        FieldDomains left, TermPath root) {
         if (paths.contains(at.toString())) {
             return null;   // an axis decides here
@@ -680,7 +707,7 @@ public final class Generator {
             if (!fields.isEmpty()) {
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
                     String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
-                            depth + 1, paths, values, left, root);
+                            depth + 1, paths, values, reserves, left, root);
                     if (missing != null) {
                         return missing;
                     }
@@ -688,8 +715,9 @@ public final class Generator {
                 return null;
             }
         }
-        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols,
-                at.fields().isEmpty() ? null : left.at(String.join(".", at.fields())));
+        souther.compiler.numeric.NumericDomain.Bounds here =
+                at.fields().isEmpty() ? null : left.at(String.join(".", at.fields()));
+        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols, here);
         if (stands.isEmpty()) {
             // Nothing could be written at all: a position of a type nothing stands for. Which is not
             // the same as a value that was written and refused, and reporting it as one sends the
@@ -698,6 +726,7 @@ public final class Generator {
         }
         paths.add(at.toString());
         values.add(stands);
+        reserves.add(Partitions.inReserve(type, symbols, here));
         return null;
     }
 
@@ -712,9 +741,31 @@ public final class Generator {
      * then every assignment one step from one already tried. Deterministic, because the order the
      * positions were collected in is the order their steps are taken in, and a row is compared against
      * the last run's to see what changed.
+     *
+     * <p>Twice where a position held something back, and the second pass runs only after the first ran
+     * out. What the positions offer ordinarily is searched whole before anything held in reserve is
+     * offered at all, so a row the first pass reaches is reached at the assignment it always was: a
+     * wider set of choices is a longer walk to every assignment in it, and a widening meant for one
+     * position would otherwise take rows away from the rest.
      */
     private static Outcome walk(Subject subject, int p, Choices choices, CandidateCheck check) {
-        int positions = choices.at().size();
+        Outcome tried = over(subject, p, choices.at(), choices.values(), check);
+        // Only where the ordinary assignments ran out. A search that stopped at the bound has not
+        // tried them all, and starting a wider one in front of the ones it never reached would spend
+        // what is left on assignments further from what the model says the row is about, while the
+        // nearer ones stay untried.
+        if (tried.value() != null || !choices.anythingHeldBack()
+                || tried.reason() != UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
+            return tried;
+        }
+        return over(subject, p, choices.at(), choices.widened(), check);
+    }
+
+    /** One pass over one set of choices, from the assignment where every position takes its first
+     * value outward. */
+    private static Outcome over(Subject subject, int p, List<String> at,
+                                List<List<FixtureTemplate>> values, CandidateCheck check) {
+        int positions = at.size();
         ArrayDeque<int[]> next = new ArrayDeque<>();
         Set<String> seen = new LinkedHashSet<>();
         int[] first = new int[positions];
@@ -727,7 +778,7 @@ public final class Generator {
             tried++;
             Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
             for (int i = 0; i < positions; i++) {
-                chosen.put(choices.at().get(i), choices.values().get(i).get(assignment[i]));
+                chosen.put(at.get(i), values.get(i).get(assignment[i]));
             }
             FixtureTemplate built = compose(subject.types().get(p),
                     TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0);
@@ -735,7 +786,7 @@ public final class Generator {
                 return new Outcome(built, null, null);
             }
             for (int i = 0; i < positions; i++) {
-                if (assignment[i] + 1 >= choices.values().get(i).size()) {
+                if (assignment[i] + 1 >= values.get(i).size()) {
                     continue;
                 }
                 int[] stepped = assignment.clone();
