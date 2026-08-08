@@ -108,14 +108,25 @@ could hold the reserved type, which left `Runner.leafDecoder` with a `RAW` arm a
 `run.decode.raw` and `run.encode.raw`. `BoundaryScalar` has six cases and one way in, and the arms
 and their messages are gone with it.
 
-**A name the boundary carries is closed the same way, and by where the witness lives.** `Nominal` and
-`Cases` hold names, and a public canonical constructor would let a refused one be assembled into a
-witness every reader takes for one the compiler stands behind. A record cannot be closed — its
-canonical constructor is as accessible as the record — so the two are written out as final classes
-with package-private constructors, and `BoundaryInput` and `BoundaryOutput` sit beside
-`SignatureBoundary` rather than in `types`, which is what makes admission the only way in. The cases
-carrying no name stay records: a scalar is a closed set, and a list, a set or a map can only be built
-out of witnesses already admitted.
+**A name the boundary carries is closed the same way, and by where the witness lives.** `Nominal`,
+`Cases` and the two `BoundaryMapKey` cases that name a type hold names, and a public canonical
+constructor would let a refused one be assembled into a witness every reader takes for one the
+compiler stands behind. A record cannot be closed — its canonical constructor is as accessible as
+the record — so each is written out as a final class with a package-private constructor, and
+`BoundaryInput`, `BoundaryOutput` and `BoundaryMapKey` sit beside the walk that admits a name rather
+than in `types`, which is what makes admission the only way in.
+
+Closing them is a choice between two readings of what a witness is worth, and the two cannot both
+hold. Either a signature is the capability — shapes may be assembled by anyone, and what the closed
+`Sig` constructor guarantees is that no forged one is ever *raised* to a signature — or a witness is
+itself the evidence, and holding one means the name in it was admitted. The first would make closing
+these cases pointless; the second is what the runner's guards were removed on the strength of, and it
+is what `BoundaryScalar` already was, having six cases and no way to name `Raw`. This takes the
+second, and takes it everywhere: a reader is handed a case of a union, an element of a list or a
+map's key at least as often as it is handed a whole signature, so a guarantee that held only of the
+signature would not be the guarantee the readers rest on. The cases that name no type stay records —
+each stands for a representation the boundary always admits, so there is no refused state to
+assemble.
 
 With that, the runner's last two reflective guards go — `run.decode.nodecoder` and
 `run.encode.noencoder`, which asked whether the class a name denotes has the factory being reached

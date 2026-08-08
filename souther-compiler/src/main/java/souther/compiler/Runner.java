@@ -4,7 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.TypeOps;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;

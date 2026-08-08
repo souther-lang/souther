@@ -3,7 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;

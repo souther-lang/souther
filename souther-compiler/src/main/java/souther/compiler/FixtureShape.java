@@ -166,14 +166,14 @@ public sealed interface FixtureShape {
     }
 
     /** A key a boundary map carries, as the position a fixture writes it at. */
-    private static FixtureShape key(souther.compiler.types.BoundaryMapKey key) {
+    private static FixtureShape key(souther.compiler.check.BoundaryMapKey key) {
         return switch (key) {
-            case souther.compiler.types.BoundaryMapKey.Text _ -> new Scalar(LeafScalar.STRING);
-            case souther.compiler.types.BoundaryMapKey.Date _ -> new Scalar(LeafScalar.DATE);
-            case souther.compiler.types.BoundaryMapKey.DateTime _ ->
+            case souther.compiler.check.BoundaryMapKey.Text _ -> new Scalar(LeafScalar.STRING);
+            case souther.compiler.check.BoundaryMapKey.Date _ -> new Scalar(LeafScalar.DATE);
+            case souther.compiler.check.BoundaryMapKey.DateTime _ ->
                     new Scalar(LeafScalar.DATETIME);
-            case souther.compiler.types.BoundaryMapKey.StringNewtype n -> new Nominal(n.name());
-            case souther.compiler.types.BoundaryMapKey.UnitEnum e -> new Nominal(e.name());
+            case souther.compiler.check.BoundaryMapKey.StringNewtype n -> new Nominal(n.name());
+            case souther.compiler.check.BoundaryMapKey.UnitEnum e -> new Nominal(e.name());
         };
     }
 

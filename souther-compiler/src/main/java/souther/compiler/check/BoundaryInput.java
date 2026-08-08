@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -21,8 +20,9 @@ import java.util.Objects;
  *
  * <p>It lives beside {@link SignatureBoundary} because {@link Nominal} is closed to it: a name is a
  * thing the boundary either admits or refuses, and a case that could be assembled with a refused one
- * would be a witness of nothing. The cases that carry no name stay records — a scalar is a closed
- * set, and a list, a set or a map can only be built out of witnesses that were already admitted.
+ * would be a witness of nothing. The cases that carry no name stay records, and hold: a scalar is a
+ * closed set with no {@code Raw} in it, a key is a {@link BoundaryMapKey} whose own naming cases are
+ * closed the same way, and a list, a set or a map is built out of those.
  *
  * <p>There is no case for an anonymous union. A parameter names a single type, so an input cannot be
  * one — which is why an input and an output are separate types here rather than one with an arm each

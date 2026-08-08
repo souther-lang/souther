@@ -2,7 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.frontend.CstFrontend;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;

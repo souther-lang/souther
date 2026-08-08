@@ -8,7 +8,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.LeafScalar;
-import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.types.Type;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;

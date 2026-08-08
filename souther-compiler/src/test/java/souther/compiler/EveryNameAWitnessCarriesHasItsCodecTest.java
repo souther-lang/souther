@@ -23,13 +23,16 @@ class EveryNameAWitnessCarriesHasItsCodecTest {
     Path dir;
 
     private static final String MODEL = """
-            module demo exposing ( Sku, Empty, Stage, Note, Keyed, nominal, newtype, unit, sum, keys, answer )
+            module demo exposing ( Sku, Empty, Stage, Decision, Note, Keyed, nominal, newtype, unit, enumeration, sum, keys, answer )
 
             data Sku = String
             data Empty
             data Won
             data Lost
             data Stage = Won | Lost
+            data Approved = { id: Int }
+            data Rejected = { why: String }
+            data Decision = Approved | Rejected
             data Note = { at: DateTime, sku: Sku }
             data Keyed = { by: Map<Sku, Int>, at: Map<Stage, Int> }
 
@@ -42,8 +45,11 @@ class EveryNameAWitnessCarriesHasItsCodecTest {
             behavior unit : (e: Empty) -> Empty
             let unit (e) = e
 
-            behavior sum : (s: Stage) -> Stage
-            let sum (s) = s
+            behavior enumeration : (s: Stage) -> Stage
+            let enumeration (s) = s
+
+            behavior sum : (d: Decision) -> Decision
+            let sum (d) = d
 
             behavior keys : (k: Keyed) -> Keyed
             let keys (k) = k
@@ -82,7 +88,17 @@ class EveryNameAWitnessCarriesHasItsCodecTest {
 
     @Test
     void anEnumerationCarriesItsNameInBothDirections() throws Exception {
-        assertEquals("\"Won\"", run("sum", "\"Won\""));
+        assertEquals("\"Won\"", run("enumeration", "\"Won\""));
+    }
+
+    /** A sum with a field-bearing case is generated down a different path than an enumeration —
+     *  a discriminated object rather than a bare name — so it is the shape the other test does not
+     *  reach, whatever the sum's cases are called. */
+    @Test
+    void aSumWithAFieldBearingCaseCarriesItsNameInBothDirections() throws Exception {
+        assertEquals("{\"id\":1,\"type\":\"Approved\"}", run("sum", "{\"id\":1,\"type\":\"Approved\"}"));
+        assertEquals("{\"why\":\"no\",\"type\":\"Rejected\"}",
+                run("sum", "{\"why\":\"no\",\"type\":\"Rejected\"}"));
     }
 
     @Test
