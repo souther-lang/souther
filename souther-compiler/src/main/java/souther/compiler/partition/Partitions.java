@@ -247,7 +247,9 @@ public final class Partitions {
         boolean nothingExists = placed != null && placed.domains().infeasible();
         Bounds here = nothingExists ? null : narrowed(own, placed == null ? null : placed.at(path));
         if (here != null && !here.isEmpty()) {
-            domains.put(path.toString(), new NumericDomain.Bounds(here.min(), here.max()));
+            domains.put(path.toString(), new NumericDomain.Bounds(
+                    here.min() == null ? null : here.min().value(),
+                    here.max() == null ? null : here.max().value()));
         }
         List<Cut> cuts = nothingExists ? List.of()
                 : cutsOf(type, here, own, placed == null ? null : placed.value());
@@ -305,10 +307,14 @@ public final class Partitions {
         if (own == null || projected == null) {
             return own;
         }
-        return new Bounds(own.min() == null ? null : highest(own.min(), projected.min()),
-                own.minFrom(),
-                own.max() == null ? null : lowest(own.max(), projected.max()),
-                own.maxFrom(), own.decimal());
+        // The value moves and the names do not: a record narrowing an edge does not take it away
+        // from the rule that put one there, and which record did the narrowing is said beside it.
+        return new Bounds(
+                own.min() == null ? null
+                        : new End(highest(own.min().value(), projected.min()), own.min().from()),
+                own.max() == null ? null
+                        : new End(lowest(own.max().value(), projected.max()), own.max().from()),
+                own.decimal());
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -385,14 +391,40 @@ public final class Partitions {
 
     /** What a newtype's invariant says about the range of its value. */
     /**
+     * One end of a range, and every name that put it there.
+     *
+     * <p>Names, plural. Two layers can state the same bound — a wrapper repeating what it wraps — and
+     * they are two rules a row could be owed to, which is the accounting a cut already keeps. Holding
+     * one would drop an obligation rather than a line of text.
+     */
+    private record End(BigDecimal value, List<TypeName> from) {
+
+        /** This end, or {@code other} where it is the stronger, or both where they agree. */
+        static End tighter(End had, End one, boolean upper) {
+            if (one == null) {
+                return had;
+            }
+            if (had == null) {
+                return one;
+            }
+            int order = one.value().compareTo(had.value());
+            if (order == 0) {
+                List<TypeName> both = new ArrayList<>(had.from());
+                one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
+                return new End(had.value(), List.copyOf(both));
+            }
+            return (upper ? order < 0 : order > 0) ? one : had;
+        }
+    }
+
+    /**
      * What a newtype's rules leave the value between, and which of the names it wears said so.
      *
      * <p>The layer is kept because a boundary is reported by the rule that drew it, and a value
      * wearing two names is bounded by rules written on either. Read off the outermost name, an edge
      * that `Minute` drew would be reported as `StartMinute`'s.
      */
-    private record Bounds(BigDecimal min, TypeName minFrom, BigDecimal max, TypeName maxFrom,
-                          boolean decimal) {
+    private record Bounds(End min, End max, boolean decimal) {
 
         boolean isEmpty() {
             return min == null && max == null;
@@ -405,33 +437,31 @@ public final class Partitions {
         if (base == null) {
             return null;
         }
-        BigDecimal min = null;
-        BigDecimal max = null;
-        TypeName minFrom = null;
-        TypeName maxFrom = null;
+        End min = null;
+        End max = null;
         // Every name the value wears, not the outermost one. A rule written on the type a newtype
         // wraps bounds the value as much as one written on the newtype does, and the two intersect:
         // `Inner: value >= 0` under `Outer: value <= 10` is a range of `[0, 10]`, and neither layer
         // alone says so. How far that reaches is asked of `TypeOps` rather than walked again here,
-        // and which layer each end came from is kept, because that is the rule a report names.
+        // and every layer that put an end where it is is kept, because each is a rule a row is owed.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                    BigDecimal low = lowerOf(InvariantConstraints.of(each, base).orElse(null));
-                    BigDecimal high = upperOf(InvariantConstraints.of(each, base).orElse(null));
-                    if (low != null && (min == null || low.compareTo(min) > 0)) {
-                        min = low;
-                        minFrom = layer.named();
-                    }
-                    if (high != null && (max == null || high.compareTo(max) < 0)) {
-                        max = high;
-                        maxFrom = layer.named();
-                    }
+                    InvariantConstraints.Constraint read =
+                            InvariantConstraints.of(each, base).orElse(null);
+                    min = End.tighter(min, endOf(lowerOf(read), layer), false);
+                    max = End.tighter(max, endOf(upperOf(read), layer), true);
                 }
             }
         }
-        return new Bounds(min, minFrom, max, maxFrom, base == Type.DECIMAL);
+        return new Bounds(min, max, base == Type.DECIMAL);
     }
+
+    private static End endOf(BigDecimal value, TypeOps.Layer layer) {
+        return value == null ? null : new End(value, List.of(layer.named()));
+    }
+
+
 
     /** The lower bound a constraint states, or null where it states none. */
     private static BigDecimal lowerOf(InvariantConstraints.Constraint read) {
@@ -464,19 +494,25 @@ public final class Partitions {
      * @param within the record, or null at a position that is not a field of one
      */
     private static List<Cut> cutsOf(Type type, Bounds bounds, Bounds own, TypeName within) {
-        if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref ref)) {
+        if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref)) {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
-        if (bounds.min != null) {
-            put(byValue, numeric(bounds.min, bounds.decimal), bounds.minFrom(), "min",
-                    moved(own == null ? null : own.min(), bounds.min) ? within : null);
-        }
-        if (bounds.max != null) {
-            put(byValue, numeric(bounds.max, bounds.decimal), bounds.maxFrom(), "max",
-                    moved(own == null ? null : own.max(), bounds.max) ? within : null);
-        }
+        cut(byValue, bounds.min(), own == null ? null : own.min(), "min", bounds.decimal(), within);
+        cut(byValue, bounds.max(), own == null ? null : own.max(), "max", bounds.decimal(), within);
         return List.copyOf(byValue.values());
+    }
+
+    /** One end as a cut, owed once to each rule that put it there. */
+    private static void cut(Map<String, Cut> into, End end, End own, String clause, boolean decimal,
+                            TypeName within) {
+        if (end == null) {
+            return;
+        }
+        boolean moved = own != null && own.value().compareTo(end.value()) != 0;
+        for (TypeName from : end.from()) {
+            put(into, numeric(end.value(), decimal), from, clause, moved ? within : null);
+        }
     }
 
     /** Whether an end is somewhere other than where the type's own rule left it. */
@@ -611,8 +647,8 @@ public final class Partitions {
     /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
      * there is, and it is the value a boundary wants written anyway. */
     private static BigDecimal inside(Bounds bounds) {
-        return bounds.min() != null ? bounds.min()
-                : bounds.max() != null ? bounds.max() : BigDecimal.ZERO;
+        return bounds.min() != null ? bounds.min().value()
+                : bounds.max() != null ? bounds.max().value() : BigDecimal.ZERO;
     }
 
     private static boolean isBool(ObservedValue v, boolean expected) {

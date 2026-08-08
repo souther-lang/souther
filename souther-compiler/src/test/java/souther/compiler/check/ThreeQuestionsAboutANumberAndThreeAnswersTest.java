@@ -13,11 +13,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 /**
  * What a number is, asked three ways, of the same six types.
  *
- * <p>They read alike and they are not one question. Arithmetic is closed only over a newtype directly
- * over a number, which the language states and means (spec §newtype-arithmetic). Being an ordered
- * number reaches the recursive base, which is what a comparison reads (ADR-0047). Whether the affine
- * domain can carry a value is the analyser's own capability, and answering it with the first is how a
- * comparison the language accepts stopped reaching the reasoning (#461).
+ * <p>They read alike and they are not one question. The first is what gives a <em>newtype</em> closed
+ * arithmetic, which the language grants only for one directly over a number and means to (spec
+ * §newtype-arithmetic) — it is not "arithmetic works here", which is also true of a bare `Int`, and
+ * the column is named for what it measures so the table does not repeat the confusion it is about.
+ * Being an ordered number reaches the recursive base, which is what a comparison reads (ADR-0047).
+ * Whether the affine domain can carry a value is the analyser's own capability, and answering it with
+ * the first is how a comparison the language accepts stopped reaching the reasoning (#461).
  *
  * <p>Held as a table because the three coincide on most types and part on exactly the ones that
  * matter. A change to any of them shows here as a cell, and which cell says whether the language's
@@ -38,7 +40,7 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
             data Tag = Label
             """;
 
-    private record Answers(Type arithmetic, Type ordered, Type affine) {}
+    private record Answers(Type directNewtypeArithmetic, Type ordered, Type affine) {}
 
     private static Answers of(String type) {
         Compilation compilation = Compilation.ofSource(TYPES, "Main");
@@ -58,8 +60,8 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
                 new Terms(symbols).affineScalarBase(t));
     }
 
-    /** A primitive is not a newtype, so arithmetic answers nothing about it as one; it is a number
-     * either way. */
+    /** A primitive is no newtype, so the first column has nothing to say about it; it is a number to
+     * the other two. */
     @Test
     void aPrimitiveIsANumberWithoutBeingANewtypeOverOne() {
         assertEquals(new Answers(null, Type.INT, Type.INT), of("Int"));
@@ -74,11 +76,11 @@ class ThreeQuestionsAboutANumberAndThreeAnswersTest {
     }
 
     /**
-     * Two layers: arithmetic says no and means it, and the other two say yes.
+     * Two layers: no newtype arithmetic, and a number to the other two.
      *
      * <p>This is the row the three questions part on, and the row #461 was. The language compares
      * such a value because comparison reaches the base; the analyser carries it for the same reason,
-     * and used to refuse it by answering with the arithmetic column.
+     * and used to refuse it by answering with the first column.
      */
     @Test
     void aNewtypeOverANewtypeIsNoArithmeticAndStillANumber() {

@@ -1289,18 +1289,45 @@ public final class TypeOps {
         return owners;
     }
 
-    /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —
+    /**
+     * The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —
      * the base of its {@code value} type, recursively (so {@code 管理職 = レベル = Int} bases to Int).
-     * A newtype's value is what its comparison and equality read. */
+     * A newtype's value is what its comparison and equality read.
+     */
     public static Type base(Type t, Symbols symbols) {
-        if (isSingleValueNewtype(t, symbols)) {
-            Type inner = fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
-            if (inner != null) {
-                return base(inner, symbols);
-            }
-        }
-        return t;
+        return newtypeSpine(t, symbols).terminal();
     }
+
+    /**
+     * The names wrapped round a value and what is left when they are off.
+     *
+     * <p>The one walk. How far a newtype reaches is a fact about the declarations and not about who
+     * is asking, and two readers deciding it apart is what #461 was: a comparison reaching the base
+     * while the range beside it stopped at the first name. Everything that needs to know derives from
+     * here — what a value is carried as, which declarations' rules apply to it, whether it is a
+     * number at all.
+     *
+     * <p>Stops on a name already worn, so a declaration reachable from itself ends the walk rather
+     * than repeating it, and stops where a newtype's {@code value} is not declared.
+     */
+    public static NewtypeSpine newtypeSpine(Type t, Symbols symbols) {
+        List<Layer> layers = new ArrayList<>();
+        Set<TypeName> worn = new LinkedHashSet<>();
+        Type at = t;
+        while (isSingleValueNewtype(at, symbols) && worn.add(((Type.Ref) at).name())) {
+            Ast.Data data = (Ast.Data) symbols.get(((Type.Ref) at).name());
+            layers.add(new Layer(((Type.Ref) at).name(), data));
+            Type inner = fieldTypes(data, symbols).get("value");
+            if (inner == null) {
+                break;
+            }
+            at = inner;
+        }
+        return new NewtypeSpine(List.copyOf(layers), at);
+    }
+
+    /** The names a value wears, and the type underneath them. */
+    public record NewtypeSpine(List<Layer> layers, Type terminal) {}
 
     /**
      * One name a value wears, and the declaration it is written by.
@@ -1323,15 +1350,7 @@ public final class TypeOps {
      * than repeating it. A type that is not a newtype has one layer or none.
      */
     public static List<Layer> newtypeChain(Type t, Symbols symbols) {
-        List<Layer> layers = new ArrayList<>();
-        Set<TypeName> worn = new LinkedHashSet<>();
-        Type at = t;
-        while (at instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
-                && data.newtype() && worn.add(ref.name())) {
-            layers.add(new Layer(ref.name(), data));
-            at = fieldTypes(data, symbols).get("value");
-        }
-        return List.copyOf(layers);
+        return newtypeSpine(t, symbols).layers();
     }
 
     /**
@@ -1343,7 +1362,7 @@ public final class TypeOps {
      * {@link #directNumericNewtypeBase} and stops at one layer, which the language means.
      */
     public static Type numericBase(Type t, Symbols symbols) {
-        Type carried = base(t, symbols);
+        Type carried = newtypeSpine(t, symbols).terminal();
         return carried == Type.INT || carried == Type.DECIMAL ? carried : null;
     }
 
