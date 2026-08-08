@@ -58,6 +58,22 @@ public final class GuardReachability {
         return out.isEmpty() ? NONE : new GuardReachability(Set.copyOf(out));
     }
 
+    /**
+     * The same, with these arms no longer proven.
+     *
+     * <p>What takes a proof away is a row that went through the arm. Nothing about the model is wrong
+     * then — the proof is — and a caller reading this afterwards has to be told the same thing every
+     * other caller is, or the arm leaves one denominator and stays out of another.
+     */
+    public GuardReachability without(Set<Integer> sites) {
+        if (sites.isEmpty() || unreachable.isEmpty()) {
+            return this;
+        }
+        Set<Integer> left = new LinkedHashSet<>(unreachable);
+        left.removeAll(sites);
+        return left.isEmpty() ? NONE : new GuardReachability(Set.copyOf(left));
+    }
+
     /** Whether nothing reaches the arm with this probe number. */
     public boolean provenUnreachable(int site) {
         return unreachable.contains(site);

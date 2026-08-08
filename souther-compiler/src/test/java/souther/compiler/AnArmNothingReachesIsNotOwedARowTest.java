@@ -169,7 +169,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
     @Test
     void aProvenArmLeavesTheDenominator() {
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
-                List.of(arm(0), arm(1)), Set.of(1), proving(), MeasurementStatus.COMPLETE);
+                List.of(arm(0), arm(1)), Set.of(1),
+                new Adequacy.Effective(proving(), Set.of()), MeasurementStatus.COMPLETE);
 
         assertEquals(List.of(1), measured.all().stream().map(CoverageSites.Site::index).toList());
         assertEquals(Set.of(1), measured.covered());
@@ -180,14 +181,17 @@ class AnArmNothingReachesIsNotOwedARowTest {
     /**
      * A row through an arm nothing was supposed to reach.
      *
-     * <p>Then the model is fine and the proof is not. The arm stays in the denominator and the fact is
-     * kept, because the alternative is a measure that reports {@code 1/1} over a proof it has just been
-     * shown to have broken.
+     * <p>Then the model is fine and the proof is not. The arm is back in the denominator before this
+     * measure sees it, and what is left to do here is to refuse to report a complete measurement over
+     * a proof already known to be wrong.
      */
     @Test
     void anArmObservedAgainstTheProofIsKeptAndSaidSo() {
+        GuardReachability proven = proving();
+        Adequacy.Effective effective = new Adequacy.Effective(
+                proven.without(Set.of(0)), Set.of(0));
         Adequacy.BranchEvidence measured = Adequacy.BranchEvidence.measured(
-                List.of(arm(0), arm(1)), Set.of(0, 1), proving(), MeasurementStatus.COMPLETE);
+                List.of(arm(0), arm(1)), Set.of(0, 1), effective, MeasurementStatus.COMPLETE);
 
         assertEquals(Set.of(0), measured.contradicted(),
                 "arm 0 was proven unreachable and a row went through it");
@@ -195,5 +199,20 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 measured.all().stream().map(CoverageSites.Site::index).toList(),
                 "so it is still an arm this behavior has");
         assertEquals(Set.of(0, 1), measured.covered());
+        assertEquals(MeasurementStatus.PARTIAL, measured.status(),
+                "and no number here is given as though nothing had happened");
+    }
+
+    /** The same fact both measures read. Taking the arm back for one of them and not the other is how
+     * the case behind it would stay unowed over a proof already disproved. */
+    @Test
+    void theSameArmIsBackForEveryMeasure() {
+        Adequacy.Effective effective = new Adequacy.Effective(
+                proving().without(Set.of(0)), Set.of(0));
+
+        assertFalse(effective.reachable().provenUnreachable(0),
+                "a row went through it, so nothing about it is proven any more");
+        assertTrue(effective.reachable().isEmpty(),
+                "and what the signature reads is the same set the arms are counted by");
     }
 }
