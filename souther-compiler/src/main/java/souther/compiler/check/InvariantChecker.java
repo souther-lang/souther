@@ -2,7 +2,9 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Combinators.Handed;
-import souther.compiler.check.NumericDomain.LinearForm;
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -12,10 +14,12 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -64,7 +68,35 @@ import java.util.Set;
  */
 public final class InvariantChecker {
 
-    record Findings(List<CompileException> errors, List<Diagnostic> warnings) {}
+    /**
+     * What one analysis came to.
+     *
+     * <p>{@code status} is not about the model. It says whether the findings are all of the findings
+     * there were: this check is fail-open, so an analysis that fell over produces exactly what an
+     * analysis that finished and found nothing produces, and a consumer reading only the two lists
+     * cannot tell them apart. Production does not need to — the run-time check is the backstop
+     * either way — but a test asserting that a construction is discharged is asserting something
+     * about an analysis that ran, and without this it would pass just as well on one that did not.
+     */
+    record Findings(List<CompileException> errors, List<Diagnostic> warnings, Status status) {}
+
+    /** Whether an analysis produced all of the findings there were. {@code ABANDONED} covers both a
+     * walk that fell over and a body there was none of: neither ran to the end, and the findings are
+     * as complete in one case as in the other, which is not at all. */
+    enum Status { COMPLETE, ABANDONED }
+
+    /** One analysis that fell over, and what it fell over on. */
+    record GaveUp(String where, RuntimeException why) {}
+
+    /**
+     * Where a test in this package reads the analyses that fell over, and null everywhere else.
+     *
+     * <p>Beside {@link #WATCHING} and for the same reason. Falling over is silent by design: the
+     * catch that makes this check unable to reject a valid program also makes it unable to say it
+     * stopped. A body with no discharge to run is not recorded here — there was nothing to fall over
+     * on — so what lands here is only what the analysis could not get through.
+     */
+    static List<GaveUp> GAVE_UP;
 
     /** One construction and how this check came out on it. */
     record Said(String type, SourcePos pos, Verdict verdict) {}
@@ -139,8 +171,12 @@ public final class InvariantChecker {
         try {
             owed = stated == null ? Predicates.Owed.UNREADABLE
                     : c.predicates.obligations(stated, Known.top(), fields, false);
-        } catch (RuntimeException _) {
-            owed = Predicates.Owed.UNREADABLE;   // fail-open, as the walk is
+        } catch (RuntimeException why) {
+            // Fail-open, as the walk is — and recorded, because a clause this could not read and an
+            // analysis that fell over reading it both come out `runtimeOnly`, and only one of them
+            // is something the model says.
+            gaveUp("capabilityOf " + data.name(), why);
+            owed = Predicates.Owed.UNREADABLE;
         }
         // A clause owing nothing is answered here as one nothing can be asked of. What it is instead
         // — a clause that holds wherever it is built — is a fourth answer this classification does
@@ -189,6 +225,199 @@ public final class InvariantChecker {
     }
 
     /**
+     * What the invariants reaching a value of {@code data} leave each of its fields able to hold, and
+     * the atom each field is named by.
+     *
+     * <p>The same seeding a parameter of that type gets ({@link #seedAt}), read for its numbers
+     * instead of for what it discharges. A record's own clause relates its fields; each field's type
+     * bounds that field on its own; and both land in one domain over the same atoms, which is what
+     * lets a bound reach one field through another.
+     *
+     * @param everyClauseRead whether every clause of the declaration was taken into the domain. False
+     *                        where one could not be typed or held nothing this reads — the bounds are
+     *                        then weaker than what the declaration actually says, and a caller
+     *                        turning one into an obligation has to know that
+     */
+    record Seeded(NumericDomain numbers, Map<String, String> atoms, boolean everyClauseRead) {}
+
+    /** {@link Seeded} for one declaration. Never throws: a declaration this cannot read is one whose
+     * fields it says nothing about, which is the same answer as a declaration with no rules. */
+    static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols) {
+        return seedFields(named, data, symbols, Map.of());
+    }
+
+    /**
+     * {@link Seeded} with some of the fields already settled at a value.
+     *
+     * <p>What is left for the others, given those. The same domain and the same closure — settling a
+     * field is one more assertion into it — so what comes back is the range each remaining field can
+     * still take, which is where a row completing that assignment has to look.
+     */
+    static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
+                             Map<String, BigDecimal> settled) {
+        InvariantChecker c = new InvariantChecker(symbols, Map.of());
+        Map<String, Type> fields = c.clauses.fieldsOf(data);
+        Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
+        Denotations at = Denotations.none().locations(bindings.values());
+        Known k = Known.top();
+        boolean read = true;
+        try {
+            for (Ast.InvariantClause clause : c.clauses.of(named, data)) {
+                Core stated = c.clauses.typed(clause.expr(), named, data);
+                if (stated == null) {
+                    read = false;
+                    continue;
+                }
+                Predicates.Owed owed = c.predicates.obligations(stated, k, at, false);
+                read &= !owed.unreadable();
+                k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
+            }
+            // And what each field's own type says of it, at the field's own location. A depth of one
+            // is already spent on the record, so this reaches the field's newtype and stops where the
+            // seeding of a parameter would.
+            for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
+                Type type = fields.get(field.getKey());
+                if (type != null) {
+                    // No depth limit here: this is the reading a boundary is derived from, and a
+                    // rule the construction must satisfy is a rule wherever in the value it sits.
+                    k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                            k, at, 1, Integer.MAX_VALUE, new HashSet<>());
+                }
+            }
+        } catch (RuntimeException why) {
+            gaveUp("seedFields " + named.name(), why);
+            return new Seeded(NumericDomain.top(), Map.of(), false);
+        }
+        Map<String, String> atoms = new LinkedHashMap<>();
+        Map<String, Type> typeAt = new LinkedHashMap<>();
+        for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
+            Type type = fields.get(field.getKey());
+            if (type != null) {
+                c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
+                        field.getKey(), type, at, k, symbols, 1, atoms, typeAt);
+            }
+        }
+        NumericDomain numbers = k.numbers();
+        for (Map.Entry<String, BigDecimal> each : settled.entrySet()) {
+            String atom = atoms.get(each.getKey());
+            Type type = typeAt.get(each.getKey());
+            if (atom == null || type == null) {
+                continue;
+            }
+            numbers = numbers.assume(
+                    NumericDomain.LinearForm.atom(atom)
+                            .minus(NumericDomain.LinearForm.constant(each.getValue())),
+                    NumericDomain.Rel.EQ,
+                    Map.of(atom, c.terms.granularityOf(type)));
+        }
+        return new Seeded(numbers, atoms, read);
+    }
+
+    /**
+     * The atom each position under {@code value} is named by, keyed by the path it is reached at.
+     *
+     * <p>The walk {@link #seedAt} took, over the same reads, so a position the seeding put a bound on
+     * is a position this can name. Two levels down as well as one: a clause on a record relates a
+     * field of a field to something, and the bound that leaves on it is read at the path it sits at
+     * rather than at the record it happens to be inside.
+     */
+    private void name(Core value, String path, Type type, Denotations at, Known k, Symbols symbols,
+                      int depth, Map<String, String> atoms, Map<String, Type> typeAt) {
+        String atom = terms.atomOf(value, at, k);
+        if (atom != null) {
+            atoms.put(path, atom);
+            typeAt.put(path, type);
+        }
+        if (depth > FIELDS_SEEDED || !(type instanceof Type.Ref ref)
+                || !(symbols.get(ref.name()) instanceof Ast.Data data) || data.newtype()) {
+            return;
+        }
+        for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
+            name(new Core.FieldAccess(value, field.getKey(), field.getValue(), NOWHERE),
+                    path + "." + field.getKey(), field.getValue(), at, k, symbols, depth + 1,
+                    atoms, typeAt);
+        }
+    }
+
+    /**
+     * Whether every rule reaching a value of {@code data} is one the numeric domain reasons over.
+     *
+     * <p>{@link ClauseDischarge.Kind#DERIVABLE} is the same classification a construction is judged
+     * by, asked here of the declaration rather than of a site. A clause that is only nameable — a
+     * pattern, a membership — narrows no bound, and a clause outside the fragment narrows none
+     * either; both leave a way the record refuses a value that the bounds do not express.
+     *
+     * <p>The same reach the seeding has, so what this classifies is what that took in.
+     */
+    /**
+     * Whether every rule that can refuse a value of {@code data} was read as a bound.
+     *
+     * <p>Asked over the values a construction has to produce, which is not the depth a report takes a
+     * value apart to. {@code FIELDS_SEEDED} and {@code MAX_DEPTH} are limits on how far a measurement
+     * is worth carrying; a rule four records down refuses the outermost construction exactly as one
+     * on its own fields does, so a bound at the top is promised by nothing while that rule is unread.
+     *
+     * <p>Down the required chain only. A field that is optional or a collection can be absent or
+     * empty, so a rule inside it is a rule about a value the construction need not make. A type
+     * already met is not entered again, which is what stops a record that holds itself.
+     */
+    static boolean everyRuleRead(TypeName named, Ast.Data data, Symbols symbols) {
+        return everyRuleRead(named, data, symbols, new HashSet<>());
+    }
+
+    private static boolean everyRuleRead(TypeName named, Ast.Data data, Symbols symbols,
+                                         Set<TypeName> seen) {
+        if (!seen.add(named)) {
+            return true;
+        }
+        if (data.newtype()) {
+            if (!everyRuleBecameABound(data, symbols)) {
+                return false;
+            }
+        } else {
+            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                if (capabilityOf(clause.expr(), clause.pos(), named, data, symbols).kind()
+                        != ClauseDischarge.Kind.DERIVABLE) {
+                    return false;
+                }
+            }
+        }
+        for (Type type : TypeOps.fieldTypes(data, symbols).values()) {
+            if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data inner
+                    && !everyRuleRead(ref.name(), inner, symbols, seen)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether every rule on a newtype became one of the constraints its bounds are read from.
+     *
+     * <p>The same reader, so the same answer: a conjunct that gave the position a bound was read, and
+     * one that gave none — {@code isOdd(value)} beside {@code value >= 0} — is a way the type refuses
+     * a value that the bounds do not express.
+     */
+    private static boolean everyRuleBecameABound(Ast.Data data, Symbols symbols) {
+        Type base = TypeOps.newtypeInner(new TypeName("", data.name()), symbols);
+        if (base == null) {
+            base = TypeOps.fieldTypes(data, symbols).get("value");
+        }
+        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+            for (Ast.Expr each
+                    : souther.compiler.codegen.InvariantConstraints.clauses(clause.expr())) {
+                if (souther.compiler.codegen.InvariantConstraints.of(each, base).isEmpty()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** A position read from no source, for the reads this makes to stand at. */
+    private static final SourcePos NOWHERE = new SourcePos(0, 0);
+
+    /**
      * Analyzes one behavior body against the bindings its inputs are. Never throws. A {@code null}
      * body is one the analysis representation could not be built or typed for, and is not analyzed at
      * all.
@@ -197,7 +426,7 @@ public final class InvariantChecker {
                             Scope params, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, invariants);
         if (body == null) {
-            return new Findings(c.errors, c.warnings);
+            return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
         try {
             Entered in = new Entered(Known.top(), Denotations.none());
@@ -206,10 +435,20 @@ public final class InvariantChecker {
                         body.pos()), in.known(), in.at());
             }
             c.walk(body, in.known(), in.at(), 0);
-        } catch (RuntimeException _) {
+        } catch (RuntimeException why) {
             // fail-open: the run-time invariant check remains the backstop
+            gaveUp("analyze", why);
+            return new Findings(c.errors, c.warnings, Status.ABANDONED);
         }
-        return new Findings(c.errors, c.warnings);
+        return new Findings(c.errors, c.warnings, Status.COMPLETE);
+    }
+
+    /** Records an analysis that fell over, for a test in this package to read. */
+    private static void gaveUp(String where, RuntimeException why) {
+        List<GaveUp> watching = GAVE_UP;
+        if (watching != null) {
+            watching.add(new GaveUp(where, why));
+        }
     }
 
     // --- the walk ------------------------------------------------------------------------------
@@ -506,8 +745,9 @@ public final class InvariantChecker {
         NumericDomain alone = k.unguarded().numbers();
         for (Predicates.Clause c : owed) {
             for (Predicates.Constraint known : c.known()) {
-                dom = dom.assume(known.form(), known.rel());
-                alone = alone.assume(known.form(), known.rel());
+                Map<String, Granularity> kinds = terms.kindsOf(known.form());
+                dom = dom.assume(known.form(), known.rel(), kinds);
+                alone = alone.assume(known.form(), known.rel(), kinds);
             }
         }
         // An invariant is the conjunction of its clauses, so every one of them is read before what
@@ -909,7 +1149,8 @@ public final class InvariantChecker {
         if (what instanceof Denotes.Term term && terms.isNumeric(li.value().type())) {
             LinearForm vf = terms.affineOf(li.value(), at, k);
             if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
-                out = out.assigning(term.key(), vf);
+                out = out.assigning(term.key(), vf,
+                        terms.kindsOf(vf, term.key(), li.value().type()));
             }
         }
         return new Entered(out, at.binding(li.binder().id(), li.value(), what));
@@ -953,9 +1194,28 @@ public final class InvariantChecker {
      * clause is the declaration's either way, and where it is established and where it is owed differ
      * only in direction.
      */
-    private Known seedAt(Core root, Known k, Denotations at, int depth) {
-        if (depth > FIELDS_SEEDED || !(root.type() instanceof Type.Ref ref)
-                || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
+    Known seedAt(Core root, Known k, Denotations at, int depth) {
+        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>());
+    }
+
+    /**
+     * The same, as far as {@code limit} levels down, with the types on the way recorded.
+     *
+     * <p>How far to seed is not one number. What a walk over a body can afford to read of a
+     * parameter is a cost bound and stops at {@code FIELDS_SEEDED}; what a construction has to
+     * satisfy has no depth at all, since a rule four records down refuses the outermost value
+     * exactly as one on the top does. A projection that stopped at two and was then classified by a
+     * walk that did not would call a bound complete that a rule below it moves.
+     *
+     * <p>{@code onPath} is the types entered on the way here, so a record that holds another of its
+     * own kind stops rather than descending for ever. Kept per path and not for the whole walk: two
+     * fields of one type are two positions and both are seeded.
+     */
+    private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
+                         Set<TypeName> onPath) {
+        if (depth > limit || !(root.type() instanceof Type.Ref ref)
+                || !(symbols.get(ref.name()) instanceof Ast.Data data)
+                || !onPath.add(ref.name())) {
             return k;
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
@@ -979,11 +1239,13 @@ public final class InvariantChecker {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
             Core value = given.get(bindings.get("value"));
-            return value == null ? out : seedAt(value, out, at, depth + 1);
+            out = value == null ? out : seedAt(value, out, at, depth + 1, limit, onPath);
+        } else {
+            for (Core value : given.values()) {
+                out = seedAt(value, out, at, depth + 1, limit, onPath);
+            }
         }
-        for (Core value : given.values()) {
-            out = seedAt(value, out, at, depth + 1);
-        }
+        onPath.remove(ref.name());
         return out;
     }
 

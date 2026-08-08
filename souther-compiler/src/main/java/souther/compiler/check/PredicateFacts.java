@@ -7,7 +7,7 @@ import java.util.Set;
  * The predicates the guards have settled on the current path, each keyed by a canonical rendering of
  * the call that states it (see {@link InvariantChecker}). A predicate that is not a comparison —
  * {@code List.allDistinctBy}, {@code List.contains}, {@code String.matches} — holds no numeric relation
- * and so has nowhere to live in {@link NumericDomain}; this is where it lives instead.
+ * and so has nowhere to live in {@link souther.compiler.numeric.NumericDomain}; this is where it lives instead.
  *
  * <p>Nothing here reasons: two predicates relate only by being the same key. What that buys is the
  * guarantee the discharge check needs — a construction whose invariant states a predicate is

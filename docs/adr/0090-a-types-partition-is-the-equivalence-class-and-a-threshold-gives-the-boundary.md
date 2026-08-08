@@ -1,6 +1,8 @@
 # ADR-0090: A type's partition is the equivalence class, and a threshold gives the boundary
 
 Status: Accepted. Fixes what the compiler may derive as an equivalence class, and what it may not.
+Revised in place for #427: what a threshold is intersected with is what the *position* admits, which
+is the field's type read under the rules of the record holding it.
 
 ## Context
 
@@ -30,8 +32,40 @@ report names it as *not derivable* rather than dividing it.
 A type states classes: `Bool` is two, an optional is two, a sum is its leaf cases. A record is not a
 class — it is taken apart field by field, two levels deep. A threshold states where one class ends:
 an invariant bounds what can exist, and a `guard`'s comparison against a constant divides what a row
-can write. Thresholds at one position merge into one partition and are intersected with what the type
-admits.
+can write. Thresholds at one position merge into one partition and are intersected with what the
+position admits.
+
+What a position admits is not what its type admits. A field's type says which values exist of that
+type; the record holding it may relate that field to another, and the position admits that rule read
+at this field — `startsAt < endsAt` over minutes of a day leaves `startsAt` stopping at 1439. Read off
+the type alone the position offers 1440, which no row can be written at, and the report cannot tell
+that gap from one worth closing.
+
+A record's rule takes an edge in and does not put one there. A position its own type leaves open stays
+one the model draws no line through: a rule between two fields is not a partition of one of them, and
+treating it as one would divide an `Int` the author never bounded. What is read of such a rule is an
+ordering of numbers and nothing else; a rule of another shape leaves the position where its type left
+it, which is the safe direction — an edge too far out is a row nobody can write, and an edge never
+moved is not one either.
+
+An edge whose rules were not all read is not a gap. Both answers were wrong: counting it asks for a
+row that may be impossible, and falling back to the type's own edge is no better, since the rule that
+could not be read refuses that value as readily as the one beyond it. So it is reported, left out of
+the denominator, and refuses no build — which is what ADR-0091 already does with a combination nothing
+has settled, for the same reason. What settles it is a witness rather than an argument: a row at the
+value went through the decoder, and from then on the edge is counted like any other.
+
+Whether the rules were all read is asked of the value and not of the position. A bound is about one
+position; a row at its edge is a whole value with that edge in it, and a rule about any other position
+can refuse to be part of one. A pattern on a label narrows no minute and still leaves every minute
+beside it with edges nothing has shown reachable — the two labels a record cannot both carry are as
+good a reason for that as a rule about the minutes themselves.
+
+That question reaches as far as the construction it can refuse and no further. Down the fields a value
+must have, at any depth, since a rule four records down refuses the outermost construction exactly as
+one on the top does; and not into what a construction need not make, because a rule inside an optional
+or a collection is a rule about a value that can be left out. The depth a report takes an input apart
+to is a limit on what is worth measuring and cannot stand in for this.
 
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both
@@ -41,7 +75,9 @@ one.
 Only a comparison that is the whole of a `guard`'s condition is read. A condition built with `&&`,
 `||` or `!` contributes no threshold.
 
-A cut keeps every rule that drew it. One value can be an obligation several times over.
+A cut keeps every rule that drew it. One value can be an obligation several times over — but a rule
+that took a line in is not a second line. The bound and the record that narrowed it settled one edge
+together and are one obligation, named by both.
 
 ## Consequences
 

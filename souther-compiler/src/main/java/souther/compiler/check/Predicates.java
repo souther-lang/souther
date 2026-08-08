@@ -7,8 +7,9 @@ import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.check.DischargeRules.Shape;
 import souther.compiler.check.DischargeRules.Source;
-import souther.compiler.check.NumericDomain.LinearForm;
-import souther.compiler.check.NumericDomain.Rel;
+import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.NumericDomain.LinearForm;
+import souther.compiler.numeric.NumericDomain.Rel;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -312,7 +313,7 @@ final class Predicates {
         for (Constraint c : known) {
             // A size is never negative whether or not the condition holds, so this holds of the value
             // and not of the path — the condition is only where the container got named.
-            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE);
+            out = out.taking(c.form(), c.rel(), Known.Held.OF_THE_VALUE, terms.kindsOf(c.form()));
         }
         if (cond instanceof Core.Binary b) {
             Rel rel = relOf(b.op());
@@ -320,7 +321,8 @@ final class Predicates {
             LinearForm la = eff == null ? null : terms.affineOf(b.left(), at, out);
             LinearForm ra = eff == null ? null : terms.affineOf(b.right(), at, out);
             if (la != null && ra != null) {
-                out = out.taking(la.minus(ra), eff, Known.Held.ON_THE_PATH);
+                LinearForm compared = la.minus(ra);
+                out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
@@ -409,10 +411,12 @@ final class Predicates {
             for (Constraint known : c.known()) {
                 // What is known of a size holds of the container itself, whatever established the
                 // clause it was read out of.
-                out = out.taking(known.form(), known.rel(), Known.Held.OF_THE_VALUE);
+                out = out.taking(known.form(), known.rel(), Known.Held.OF_THE_VALUE,
+                        terms.kindsOf(known.form()));
             }
             if (c.numeric() != null) {
-                out = out.taking(c.numeric().form(), c.numeric().rel(), held);
+                out = out.taking(c.numeric().form(), c.numeric().rel(), held,
+                        terms.kindsOf(c.numeric().form()));
             }
             if (c.fact() != null) {
                 // What is guaranteed is guaranteed of the term as written; a container built from it
@@ -440,7 +444,7 @@ final class Predicates {
         }
         Core container = DischargeRules.sizeArgOf(call);
         if (container != null) {
-            String atom = Terms.sizeAtom(call, arg -> terms.bodyKey(arg, at));
+            String atom = terms.sizeAtomOf(call, arg -> terms.bodyKey(arg, at));
             if (atom != null) {
                 out.add(new Constraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
                 bounds(call.operation(), DischargeRules.sizeSource(container), at, out);
@@ -483,8 +487,8 @@ final class Predicates {
             return;
         }
         out.add(new Constraint(
-                LinearForm.atom(Terms.sizeKey(sizeCall, here))
-                        .minus(LinearForm.atom(Terms.sizeKey(sizeCall, there))),
+                LinearForm.atom(terms.sizeKeyOf(sizeCall, here))
+                        .minus(LinearForm.atom(terms.sizeKeyOf(sizeCall, there))),
                 rel));
         bounds(sizeCall, source, at, out);
     }

@@ -4,9 +4,11 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.FieldDomains;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Incompleteness;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -57,10 +59,24 @@ public final class Partitions {
      *                nobody can name is not an axis, and folding several into one would put a class
      *                nothing can classify into the denominator
      */
-    public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted) {
+    public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
+                               Map<String, NumericDomain.Bounds> domains,
+                               java.util.Set<String> uncertain) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
+            domains = Map.copyOf(domains);
+            uncertain = java.util.Set.copyOf(uncertain);
+        }
+
+        /** Whether an edge of this position is a value some row could carry.
+         *
+         * <p>False where a rule reaching the value this position sits in was not read in full. Every
+         * edge here is then where the rules this could read stop, and a rule it could not read can
+         * refuse that value as easily as the one beyond it — so the edge is not known to be writable
+         * and asking for a row at it is asking for work nobody may be able to do. */
+        public boolean edgeIsKnownWritable(String path) {
+            return !uncertain.contains(path);
         }
 
         /** Only the positions the model actually divides. */
@@ -74,9 +90,16 @@ public final class Partitions {
     public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
+        Map<String, NumericDomain.Bounds> domains = new LinkedHashMap<>();
+        java.util.Set<String> uncertain = new java.util.LinkedHashSet<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
-            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), sig.inputTypes().get(i),
-                    0, symbols, found);
+            // One reading per parameter, not one per record met on the way down. A clause on the
+            // outer record relates positions at any depth it can name, and rebuilding the reading at
+            // each record is how `interval.startsAt < cap` stopped reaching `interval.startsAt`.
+            Type type = sig.inputTypes().get(i);
+            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
+                    0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
+                    domains, uncertain);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -100,7 +123,7 @@ public final class Partitions {
                         !axis.cuts().isEmpty()));
             }
         }
-        return new Partitioning(kept, omitted);
+        return new Partitioning(kept, omitted, domains, uncertain);
     }
 
     /**
@@ -121,11 +144,22 @@ public final class Partitions {
                 out.add(axis);
                 continue;
             }
-            Bounds domain = boundsOf(axis.type(), symbols);
+            // What this position can hold, which is the type's bound already narrowed by whatever
+            // the record it sits in says about it. Reading the type again here would put a threshold
+            // back inside a range the record has no values in.
+            NumericDomain.Bounds domain = base.domains().get(axis.path().toString());
             BigDecimal min = domain == null ? null : domain.min();
             BigDecimal max = domain == null ? null : domain.max();
+            // Filtered once, and both answers read the filtered list. A line outside what the
+            // position holds divides nothing, and it is not a boundary either: leaving it in the
+            // cuts while the intervals dropped it asks for a row at a value the record refuses,
+            // which is the thing being fixed here happening again one field over.
+            List<Threshold> reachable = here.stream()
+                    .filter(t -> (min == null || t.value().compareTo(min) >= 0)
+                            && (max == null || t.value().compareTo(max) <= 0))
+                    .toList();
             List<PartitionClass> classes = Intervals.classesOf(
-                    Intervals.of(here, min, max), axis.path(), axis.type(), symbols);
+                    Intervals.of(reachable, min, max), axis.path(), axis.type(), symbols);
             // What the position is, not what an invariant said about it. There is a bound to read
             // only where the type is a newtype carrying one, and a plain `Decimal` has none — read
             // off the bound, every such position would be called an integer and a threshold of
@@ -135,9 +169,9 @@ public final class Partitions {
             // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), axis.path(), axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), here, decimal)).excluding(axis.excluded()));
+                    merged(axis.cuts(), reachable, decimal)).excluding(axis.excluded()));
         }
-        return new Partitioning(out, base.omitted());
+        return new Partitioning(out, base.omitted(), base.domains(), base.uncertain());
     }
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
@@ -202,10 +236,27 @@ public final class Partitions {
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
-                             List<Axis> out) {
+                             List<Axis> out, Placed placed,
+                             Map<String, NumericDomain.Bounds> domains,
+                             java.util.Set<String> uncertain) {
         AxisId id = AxisId.of(behavior, path);
         List<PartitionClass> classes = classesOf(type, symbols);
-        List<Cut> cuts = cutsOf(type, symbols);
+        Bounds own = boundsOf(type, symbols);
+        // A value whose rules contradict has no positions to cover: every edge of every field of it
+        // is a row nobody can write, which is not the same answer as a field nothing bounds.
+        boolean nothingExists = placed != null && placed.domains().infeasible();
+        Bounds here = nothingExists ? null : narrowed(own, placed == null ? null : placed.at(path));
+        if (here != null && !here.isEmpty()) {
+            domains.put(path.toString(), new NumericDomain.Bounds(here.min(), here.max()));
+        }
+        List<Cut> cuts = nothingExists ? List.of()
+                : cutsOf(type, here, own, placed == null ? null : placed.value());
+        // Whether a row can be written at an edge is a question about the whole value the position
+        // sits in, so it is answered once for the parameter. A rule this could not read is a way that
+        // value can be refused, wherever in it the rule is written.
+        if (!cuts.isEmpty() && placed != null && !placed.domains().allRulesRead()) {
+            uncertain.add(path.toString());
+        }
         if (!classes.isEmpty() || !cuts.isEmpty()) {
             out.add(new Axis(id, path, type, classes, cuts));
             return;
@@ -213,11 +264,50 @@ public final class Partitions {
         Map<String, Type> fields = productFields(type, symbols);
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
             for (Map.Entry<String, Type> field : fields.entrySet()) {
-                walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out);
+                walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
+                        placed, domains, uncertain);
             }
             return;
         }
         out.add(Axis.notDerivable(id, path, type));
+    }
+
+    /** The value a position is inside: what it is called, and what its rules leave each position of
+     * it able to hold. */
+    private record Placed(TypeName value, FieldDomains domains) {
+
+        /** What is left for the position at {@code path}, which is read from the value this is of. */
+        NumericDomain.Bounds at(TermPath path) {
+            return path.fields().isEmpty() ? null
+                    : domains.at(String.join(".", path.fields()));
+        }
+    }
+
+    private static TypeName nameOf(Type type) {
+        return type instanceof Type.Ref ref ? ref.name() : null;
+    }
+
+    /** What the record a field sits in leaves each of its fields able to hold. */
+    private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
+        return type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
+                ? FieldDomains.of(ref.name(), data, symbols) : FieldDomains.NONE;
+    }
+
+    /**
+     * The type's own bound, taken in to where the record it sits in stops.
+     *
+     * <p>Only taken in. A record's rule moves an edge the type already has; it does not put one on a
+     * position the type left open. An {@code Int} nobody bounded stays a position the model draws no
+     * line through, which is what a report says of it (ADR-0090) — giving it an edge here would make
+     * a rule relating two fields into a partition of one of them.
+     */
+    private static Bounds narrowed(Bounds own, NumericDomain.Bounds projected) {
+        if (own == null || projected == null) {
+            return own;
+        }
+        return new Bounds(own.min() == null ? null : highest(own.min(), projected.min()),
+                own.max() == null ? null : lowest(own.max(), projected.max()),
+                own.decimal());
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -338,24 +428,42 @@ public final class Partitions {
     }
 
     /** The cuts of a position, each carrying the rule that drew it. */
-    static List<Cut> cutsOf(Type type, Symbols symbols) {
-        Bounds bounds = boundsOf(type, symbols);
+    /**
+     * The cuts of a position whose range is already settled.
+     *
+     * @param bounds where the position stops, the record it sits in taken into account
+     * @param own    where its own type stops, so that an end the record moved can say so
+     * @param within the record, or null at a position that is not a field of one
+     */
+    private static List<Cut> cutsOf(Type type, Bounds bounds, Bounds own, TypeName within) {
         if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref ref)) {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
         if (bounds.min != null) {
-            put(byValue, numeric(bounds.min, bounds.decimal), ref.name(), "min");
+            put(byValue, numeric(bounds.min, bounds.decimal), ref.name(), "min",
+                    moved(own == null ? null : own.min(), bounds.min) ? within : null);
         }
         if (bounds.max != null) {
-            put(byValue, numeric(bounds.max, bounds.decimal), ref.name(), "max");
+            put(byValue, numeric(bounds.max, bounds.decimal), ref.name(), "max",
+                    moved(own == null ? null : own.max(), bounds.max) ? within : null);
         }
         return List.copyOf(byValue.values());
     }
 
-    private static void put(Map<String, Cut> into, ObservedValue value, TypeName type, String clause) {
+    /** Whether an end is somewhere other than where the type's own rule left it. */
+    private static boolean moved(BigDecimal own, BigDecimal effective) {
+        return own != null && own.compareTo(effective) != 0;
+    }
+
+    private static void put(Map<String, Cut> into, ObservedValue value, TypeName type, String clause,
+                            TypeName narrowedBy) {
         OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
-        into.merge(String.valueOf(value), Cut.at(value, origin), (had, _) -> had.and(origin));
+        if (narrowedBy != null) {
+            origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
+        }
+        OriginRef each = origin;
+        into.merge(String.valueOf(value), Cut.at(value, origin), (had, _) -> had.and(each));
     }
 
     // --- small helpers ----------------------------------------------------------------------------
@@ -364,6 +472,18 @@ public final class Partitions {
      * inner value of a newtype, a field no axis divides. A record is not one of these: its fields are
      * composed, which is the generator's work and not a value this can hand over. */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols) {
+        return representativesOf(type, symbols, null);
+    }
+
+    /**
+     * The same, for a position the record it sits in has already narrowed.
+     *
+     * <p>{@code within} is what is left of the position once the rest of the assignment is settled:
+     * an {@code endsAt} beside a {@code startsAt} of 1439 can only be 1440, and the value this offers
+     * has to come from there rather than from the bottom of the type's own range.
+     */
+    static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
+                                                   NumericDomain.Bounds within) {
         if (type == null) {
             return List.of();
         }
@@ -404,7 +524,7 @@ public final class Partitions {
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
                 && data.newtype()) {
-            return insideTheNewtype(ref.name(), symbols).stream()
+            return insideTheNewtype(ref.name(), symbols, within).stream()
                     .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
@@ -426,10 +546,15 @@ public final class Partitions {
      * other.
      */
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
+        return insideTheNewtype(newtype, symbols, null);
+    }
+
+    private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols,
+                                                          NumericDomain.Bounds within) {
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
-        Bounds bounds = boundsOf(new Type.Ref(newtype), symbols);
+        Bounds bounds = narrowed(boundsOf(new Type.Ref(newtype), symbols), within);
         if (bounds != null && !bounds.isEmpty()) {
             candidates.add(bounds.decimal()
                     ? FixtureTemplate.decimal(inside(bounds))
@@ -471,11 +596,19 @@ public final class Partitions {
                 : new ObservedValue.Integer(value.longValueExact());
     }
 
+    /** The higher of two bounds, where a null is no bound at all and so never the higher. */
     private static BigDecimal highest(BigDecimal had, BigDecimal one) {
+        if (one == null) {
+            return had;
+        }
         return had == null || one.compareTo(had) > 0 ? one : had;
     }
 
+    /** The lower of two, the same way. */
     private static BigDecimal lowest(BigDecimal had, BigDecimal one) {
+        if (one == null) {
+            return had;
+        }
         return had == null || one.compareTo(had) < 0 ? one : had;
     }
 

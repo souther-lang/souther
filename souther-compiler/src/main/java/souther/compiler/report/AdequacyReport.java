@@ -494,7 +494,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             }
         }
         List<PartitionEvidence.BoundaryCoverage> measured = partition.boundaries().stream()
-                .filter(b -> b.status() != MeasurementStatus.UNAVAILABLE).toList();
+                .filter(b -> b.status() != MeasurementStatus.UNAVAILABLE)
+                .filter(PartitionEvidence.BoundaryCoverage::knownWritable).toList();
+        List<PartitionEvidence.BoundaryCoverage> unpromised = partition.boundaries().stream()
+                .filter(b -> !b.knownWritable()).toList();
         long met = measured.stream().filter(PartitionEvidence.BoundaryCoverage::hit).count();
         long undecided = measured.stream()
                 .filter(b -> b.status() == MeasurementStatus.PARTIAL).filter(b -> !b.hit()).count();
@@ -505,6 +508,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
             out.append(String.format("      · no row is at %s = %s (%s)%n",
                     f.args().get(0), f.args().get(1), f.args().get(2)));
+        }
+        // Said and not counted. The edge is where the rules this could read stop, and a rule it
+        // could not read can refuse that value as readily as the one beyond it — so it is not a row
+        // anybody is owed, and it is still the only thing there is to say about this position.
+        for (PartitionEvidence.BoundaryCoverage b : unpromised) {
+            out.append(String.format("      · not known to be writable: %s = %s (%s)%n",
+                    b.axis(), b.value(), b.origin()));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
             out.append(String.format("      · not derivable: %s%n", f.args().get(0)));
@@ -714,6 +724,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             b.put("side", boundary.side().name().toLowerCase(java.util.Locale.ROOT));
             b.put("value", boundary.value());
             b.put("hit", boundary.hit());
+            b.put("knownWritable", boundary.knownWritable());
             measured(b, boundary.status(), boundary.reason());
         }
         ObjectNode pairs = out.putObject("pairs");

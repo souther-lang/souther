@@ -152,7 +152,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["axis", "origin", "side", "value", "hit", "status"],
+            "required": ["axis", "origin", "side", "value", "hit", "knownWritable", "status"],
             "additionalProperties": false,
             "properties": {
               "axis": { "type": "string" },
@@ -160,6 +160,10 @@
               "side": { "enum": ["below", "at", "above"] },
               "value": { "type": "string" },
               "hit": { "type": "boolean" },
+              "knownWritable": {
+                "type": "boolean",
+                "description": "Whether some row could carry this value. False where a rule reaching the value this position sits in was not read in full — a pattern, a disequality, a strict bound on a decimal — so the edge is where the reading stopped rather than where the model does. Such a line is reported and not counted, and no build is refused over it."
+              },
               "status": { "$ref": "#/$defs/status" },
               "reason": {
                 "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a guard's line only, which is met by reaching the comparison rather than by writing the value; an invariant's line is met by writing it and is never waiting on the arms.",
