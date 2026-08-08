@@ -133,14 +133,15 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
     }
 
     /**
-     * A decimal gets a second value only between two ends.
+     * A decimal open at its only end is offered a value from inside it.
      *
-     * <p>A whole number has a next one. A decimal does not, and an epsilon is a value the type does
-     * not name — inventing one would propose a row against a rule the model never stated. Between two
-     * ends there is an ordinary decimal, and that is the only second value there is to give.
+     * <p>`low < high` with both at zero and above leaves `high` starting at zero without holding it,
+     * and a dense order has no next value to move onto. What the position offers is a value the range
+     * admits rather than the number it stops at — chosen the same way every time and carrying no claim
+     * to be the nearest one, which is what a candidate is for.
      */
     @Test
-    void aDecimalWithOneEndKeepsTheOneValueItHas() throws Exception {
+    void aDecimalOpenAtItsOnlyEndOffersAValueInsideIt() throws Exception {
         String model = """
                 module example.halfopen
 
@@ -172,7 +173,9 @@ class APositionOffersASecondValueWhereItsRangeIsApproximateTest {
         }
         String rows = out.toString(StandardCharsets.UTF_8);
 
-        assertTrue(rows.contains("every value tried was refused"),
-                () -> "nothing above zero is named by a range that only starts there:\n" + rows);
+        assertTrue(rows.contains("Pair { low = Rate(0m), high = Rate(1m) }"),
+                () -> "`low` reaches its end and `high` starts a step past it:\n" + rows);
+        assertFalse(rows.contains("every value tried was refused"),
+                () -> "and nothing had to be refused to get there:\n" + rows);
     }
 }

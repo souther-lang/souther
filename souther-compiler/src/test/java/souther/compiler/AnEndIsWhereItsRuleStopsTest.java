@@ -99,6 +99,49 @@ class AnEndIsWhereItsRuleStopsTest {
     }
 
     /**
+     * A value offered for an open end is one inside it.
+     *
+     * <p>Over the decimals there is no value beside the end to step onto, so what a position can
+     * offer is a value from inside the range and not one next to its edge — a midpoint where both
+     * ends are known, and a step where only one is. Nothing about the choice is the nearest value
+     * the rule admits, because over a dense order there is no such thing; what it has to be is one
+     * the rule admits at all, decided the same way every time.
+     */
+    @Test
+    void aPositionOpenAtAnEndOffersAValueFromInsideIt() throws Exception {
+        String rows = reportOn("""
+                module example.probe
+
+                data AboveFive = Decimal
+                    invariant above = value > 5.0m
+
+                data UnderOne = Decimal
+                    invariant under = value < 1.0m
+
+                data Between = Decimal
+                    invariant between = value > 5.0m && value < 6.0m
+
+                data Holder = { a: AboveFive, u: UnderOne, b: Between, flag: Bool }
+
+                data Ok
+
+                behavior take : (h: Holder) -> Ok
+                    constructs Ok
+
+                let take (h) = Ok
+                """, "--generate");
+
+        assertTrue(rows.contains("a = AboveFive(6m)"),
+                () -> "a step up from an end nothing sits on:\n" + rows);
+        assertTrue(rows.contains("u = UnderOne(0m)"),
+                () -> "and a step down from the other:\n" + rows);
+        assertTrue(rows.contains("b = Between(5.5m)"),
+                () -> "and between two of them, the value between them:\n" + rows);
+        assertFalse(rows.contains("every value tried was refused"),
+                () -> "none of which the rules refuse:\n" + rows);
+    }
+
+    /**
      * A comparison against a value the position cannot hold divides nothing.
      *
      * <p>A guard draws a line and both sides of it ordinarily hold values a row can write. Where the

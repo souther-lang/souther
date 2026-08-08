@@ -705,8 +705,7 @@ public final class Partitions {
         BigDecimal max = range == null ? null : valueOf(range.max());
         if (!whole) {
             // No smallest step, so the only second value a range names is one inside both its ends.
-            return min == null || max == null || min.compareTo(max) >= 0 ? null
-                    : min.add(max).divide(BigDecimal.valueOf(2));
+            return min == null || max == null ? null : midpoint(min, max);
         }
         BigDecimal up = from.add(BigDecimal.ONE);
         if (max == null || up.compareTo(max) <= 0) {
@@ -793,11 +792,33 @@ public final class Partitions {
         return BigDecimal.ZERO;
     }
 
-    /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
-     * there is, and it is the value a boundary wants written anyway. */
+    /**
+     * A number the bound admits.
+     *
+     * <p>An edge the range holds is the value taken, because it is inside whatever other edge there
+     * is and it is the value a boundary wants written anyway. An edge the range stops short of is not
+     * one, and over a dense order there is no value beside it to take instead — so what is taken is a
+     * value from inside: between the two ends where both are known, and a step in from the only one
+     * where there is only one. Nothing about that step is the nearest admitted value; it is one the
+     * rules admit, chosen the same way every time, which is all a candidate has to be.
+     */
     private static BigDecimal inside(NumericDomain.Bounds bounds) {
-        return bounds.min() != null ? bounds.min().value()
-                : bounds.max() != null ? bounds.max().value() : BigDecimal.ZERO;
+        Endpoint min = bounds.min();
+        Endpoint max = bounds.max();
+        if (min != null && min.inclusive()) {
+            return min.value();
+        }
+        if (min == null) {
+            return max == null ? BigDecimal.ZERO
+                    : max.inclusive() ? max.value() : max.value().subtract(BigDecimal.ONE);
+        }
+        BigDecimal between = max == null ? null : midpoint(min.value(), max.value());
+        return between != null ? between : min.value().add(BigDecimal.ONE);
+    }
+
+    /** The value halfway between two, which every decimal range with two ends has. */
+    private static BigDecimal midpoint(BigDecimal min, BigDecimal max) {
+        return min.compareTo(max) >= 0 ? null : min.add(max).divide(BigDecimal.valueOf(2));
     }
 
     /**
