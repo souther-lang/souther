@@ -243,6 +243,11 @@ class WhatGoesBetweenTwoTokensOnALineTest {
 
             let parenArg (a: Int): Int = f(a, (a))
 
+            let annotated (a: Int): Int = {
+                let x: Int = 1
+                x
+            }
+
             let opened (a: Int): Int = call(({ a }) -> a)
             """,
             """
@@ -418,7 +423,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
         // A type ascribed to a name is written tight against it; a signature is spaced from its name.
         out.put("IDENT COLON", row(
                 "BEHAVIOR_DEF", " ", "EXPOSED_ENTRY", " ",
-                "FIELD", "", "FN_DEF", "", "FN_PARAM", "", "PARAM", ""));
+                "FIELD", "", "FN_DEF", "", "FN_PARAM", "", "LET_STMT", "", "PARAM", ""));
         // `<` and `>` are a type's brackets or a comparison's operator.
         out.put("IDENT LT", row("TYPE_REF", "", "BINARY_EXPR", " "));
         out.put("LT IDENT", row("TYPE_ARGS", "", "BINARY_EXPR", " "));

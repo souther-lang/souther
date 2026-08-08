@@ -119,6 +119,7 @@ final class Spacing {
             IDENT COLON    FIELD            tight
             IDENT COLON    FN_DEF           tight
             IDENT COLON    FN_PARAM         tight
+            IDENT COLON    LET_STMT         tight
             IDENT COLON    PARAM            tight
             # `<` and `>` are a type's brackets or a comparison's operator.
             IDENT LT       TYPE_REF         tight
@@ -217,6 +218,7 @@ final class Spacing {
             ASSIGN LBRACE
             ASSIGN LBRACKET
             ASSIGN LPAREN
+            ASSIGN MATCH_KW
             ASSIGN MINUS
             ASSIGN STRING_LIT
             ASSIGN TRUE_KW
