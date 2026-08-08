@@ -68,6 +68,30 @@ sealed interface TokenDoc {
 
     record MustBreak() implements TokenDoc {}
 
+    /**
+     * Text a construct spelled for itself, with whatever it put between the tokens in it. Every one
+     * of these is a place the rule cannot reach, which is the arrangement issue #476 is moving away
+     * from; it is here so that the move can be made a construct at a time, and the last commit of it
+     * deletes this and the way to build one.
+     */
+    record Raw(String s) implements TokenDoc {}
+
+    /**
+     * A boundary a construct chose the unbroken form of, which is the same thing in the other of the
+     * two ways it is spelled today. It goes the same way as {@link Raw} and for the same reason.
+     */
+    record RawLine(String flat) implements TokenDoc {}
+
+    /** A space where it is not broken — today's {@code Doc.LINE}. */
+    TokenDoc RAW_LINE = new RawLine(" ");
+
+    /** Nothing where it is not broken — today's {@code Doc.SOFTLINE}. */
+    TokenDoc RAW_SOFTLINE = new RawLine("");
+
+    static TokenDoc raw(String s) {
+        return new Raw(s);
+    }
+
     static TokenDoc token(SyntaxKind kind, String lexeme) {
         return new Token(kind, lexeme);
     }
@@ -98,6 +122,18 @@ sealed interface TokenDoc {
 
     static TokenDoc group(TokenDoc doc) {
         return new Group(doc);
+    }
+
+    /** Joins {@code parts} with {@code sep} between each. */
+    static TokenDoc join(TokenDoc sep, List<TokenDoc> parts) {
+        List<TokenDoc> out = new java.util.ArrayList<>();
+        for (int i = 0; i < parts.size(); i++) {
+            if (i > 0) {
+                out.add(sep);
+            }
+            out.add(parts.get(i));
+        }
+        return new Concat(out);
     }
 
     /**
