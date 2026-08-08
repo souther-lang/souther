@@ -21,9 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The formatter's contract: it is idempotent, it changes only whitespace (the non-trivia token
- * stream and the comments survive), and its output re-parses without error. Verified over the real
- * example and prelude corpus, plus a pinned snapshot of the canonical form.
+ * The formatter's contract: it is idempotent, its output re-parses without error, the comments
+ * survive, and the non-trivia token stream survives — over this corpus. The last of those does not
+ * hold of the language: the canonical form removes a trailing comma, writes the bar in front of a
+ * match's first arm, and moves a definition's lambda parameters to the left of its `=`. See
+ * {@link ACanonicalFormCanRewriteCodeTokensTest}, which is where those are written down.
+ * Verified over the real example and prelude corpus, plus a pinned snapshot of the canonical form.
  */
 class FormatterTest {
 
@@ -50,8 +53,9 @@ class FormatterTest {
         }
     }
 
-    /** The non-trivia token stream (kind + text), which must be identical before and after — the
-     * proof that formatting rewrote only whitespace, never code. */
+    /** The non-trivia token stream (kind + text), identical before and after for every source here:
+     * none of them writes a trailing comma, an unbarred first match arm, or a lambda on the right of
+     * a definition, which are what the canonical form rewrites. */
     private static List<String> code(String source) {
         List<String> out = new ArrayList<>();
         for (GreenToken t : CstLexer.lex(source).tokens()) {

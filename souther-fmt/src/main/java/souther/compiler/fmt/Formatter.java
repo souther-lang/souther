@@ -166,6 +166,14 @@ public final class Formatter {
      * {@link Doc#SOFTLINE} where it does not ({@code f(a, b)}, {@code [a, b]}).
      */
     private static Doc delimited(String open, Doc boundary, List<Member> members, String close) {
+        if (members.isEmpty()) {
+            // Brackets with nothing between them are written with nothing between them. Written here
+            // rather than left to the boundary: laid out flat, the two boundaries are what would go
+            // between the brackets, so a construct written open would put two spaces there and no
+            // rule would have said so. A construct holding only comments is not empty — the comments
+            // stand where a member would, and `withEndComments` hands them over as one.
+            return text(open + close);
+        }
         return group(concat(text(open),
                 nest(INDENT, concat(boundary, separated(members))),
                 boundary, text(close)));
@@ -223,12 +231,12 @@ public final class Formatter {
         return new Member(concat(aboveOf(owner), doc), afterOf(owner));
     }
 
+    /** The same for a head the grammar writes as a token — an example row's description, a match
+     * arm's pattern. Nothing is read above it: a comment written above one of those, or between the
+     * {@code |} and the token itself, is about the row, and the row writes it above its own line. So
+     * this head carries only what ends the line it opens. */
     private Member head(SyntaxToken owner, Doc doc) {
-        List<Doc> lead = new ArrayList<>();
-        for (Doc c : aboveCase(owner)) {
-            lead.add(concat(c, HARDLINE));
-        }
-        return new Member(concat(concat(lead), doc), afterCase(owner));
+        return new Member(doc, afterCase(owner));
     }
 
     /** A head the source has nothing at — a `fake` row's default `_`. */
@@ -274,7 +282,10 @@ public final class Formatter {
         return !header;
     }
 
-    private static boolean isTopLevel(SyntaxKind k) {
+    /** The kinds {@link #file} writes as items of the file, and so the kinds the separation between
+     * two items is a function of. Reachable from a test so that the table of what goes between two
+     * of them can be asked whether it covers every pair rather than the pairs someone thought of. */
+    static boolean isTopLevel(SyntaxKind k) {
         return k == SyntaxKind.MODULE_HEADER || k == SyntaxKind.IMPORT_DECL
                 || k == SyntaxKind.DATA_DEF || k == SyntaxKind.BEHAVIOR_DEF || k == SyntaxKind.FN_DEF
                 || k == SyntaxKind.EXAMPLE_DEF || k == SyntaxKind.EXAMPLES_FILE_HEADER
@@ -434,6 +445,11 @@ public final class Formatter {
 
         var product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
+            if (isEmptyProduct(product.get())) {
+                return concat(text("data "), text(name), text(" = {}"),
+                        afterToken(n.token(SyntaxKind.ASSIGN)),
+                        nest(INDENT, concat(invariants)));
+            }
             return concat(text("data "), text(name), text(" ="),
                     afterToken(n.token(SyntaxKind.ASSIGN)),
                     nest(INDENT, concat(concat(HARDLINE, productBody(product.get())), concat(invariants))));
@@ -477,7 +493,9 @@ public final class Formatter {
         return concat(text("data "), text(name));   // unit
     }
 
-    /** The leading-comma product block: {@code { f1: T1\n, f2: T2\n}}. Always multi-line. */
+    /** The leading-comma product block: {@code { f1: T1\n, f2: T2\n}}. Multi-line wherever it holds
+     * anything: the block writes its opening brace on the first member's line, so a body with no
+     * members has no line to write one on, and it is written as the empty brackets it is. */
     private Doc productBody(SyntaxNode body) {
         List<Doc> lines = new ArrayList<>();
         for (SyntaxNode m : body.childNodes()) {
@@ -497,9 +515,31 @@ public final class Formatter {
                     afterOf(m));
             lines.add(first ? line : concat(HARDLINE, line));
         }
+        if (lines.isEmpty()) {
+            // No member wrote the opening brace, so the block writes it on a line of its own. This
+            // is the body that holds only comments: `dataDef` writes a body holding nothing at all
+            // as `{}` and never reaches here.
+            lines.add(text("{"));
+        }
         lines.add(endOf(body));
         lines.add(concat(HARDLINE, text("}")));
         return concat(lines);
+    }
+
+    /**
+     * Whether {@code body} has nothing for the block to write a line for. A body holding only
+     * comments is not empty: they are written where a member would be, so the block keeps its lines.
+     *
+     * <p>Asked of the attachments rather than through {@link #endLines}, which takes the comments it
+     * reports. A question about what is there has to leave it there for whoever writes it.
+     */
+    private boolean isEmptyProduct(SyntaxNode body) {
+        for (SyntaxNode m : body.childNodes()) {
+            if (m.kind() == SyntaxKind.FIELD || m.kind() == SyntaxKind.SPREAD_MEMBER) {
+                return false;
+            }
+        }
+        return comments.atEnd().getOrDefault(body, List.of()).isEmpty();
     }
 
     private Doc field(SyntaxNode n) {
@@ -957,6 +997,37 @@ public final class Formatter {
                 afterToken(n.token(SyntaxKind.WITH_KW)), nest(INDENT, concat(cases)));
     }
 
+    /**
+     * What goes between two tokens of a match arm's pattern. The grammar writes such a pattern as a
+     * run of tokens rather than as a node, so this is the one place the formatter joins two tokens
+     * itself instead of a construct writing what goes between them. It answers as the constructs
+     * that write the same syntax do — a newtype opened by its constructor is {@code X(inner)} in a
+     * {@code let} and has to read as {@code X(inner)} here, and a record's fields are written
+     * {@code { f = v, g }} in both.
+     */
+    private static boolean spaceBetween(SyntaxKind left, SyntaxKind right) {
+        if (isOpeningBracket(left) && isClosingBracket(right)) {
+            // Brackets with nothing between them are written with nothing between them, which is the
+            // rule `delimited` states for a construct built as a document. A pattern is built as a
+            // run of tokens instead, so the rule has to be written on both paths; both are asked
+            // about it by AllOfABracketedConstructsCardinalitiesAreSweptTest.
+            return false;
+        }
+        return left != SyntaxKind.DOT && right != SyntaxKind.DOT       // a qualified name is one name
+                && right != SyntaxKind.COMMA
+                && right != SyntaxKind.LPAREN                          // what is opened, not a call
+                && left != SyntaxKind.LPAREN && right != SyntaxKind.RPAREN;
+    }
+
+    /** The brackets a construct is written between. One place knows which they are. */
+    static boolean isOpeningBracket(SyntaxKind k) {
+        return k == SyntaxKind.LPAREN || k == SyntaxKind.LBRACKET || k == SyntaxKind.LBRACE;
+    }
+
+    static boolean isClosingBracket(SyntaxKind k) {
+        return k == SyntaxKind.RPAREN || k == SyntaxKind.RBRACKET || k == SyntaxKind.RBRACE;
+    }
+
     private Doc matchCase(SyntaxNode n) {
         StringBuilder pattern = new StringBuilder();
         SyntaxNode body = null;
@@ -972,10 +1043,7 @@ public final class Formatter {
                     afterArrow = true;
                     continue;
                 }
-                // a qualified case name is one name: no space around its dots
-                boolean joined = pattern.length() > 0
-                        && (t.kind() == SyntaxKind.DOT || pattern.charAt(pattern.length() - 1) == '.');
-                if (pattern.length() > 0 && t.kind() != SyntaxKind.COMMA && !joined) {
+                if (patternEnd != null && spaceBetween(patternEnd.kind(), t.kind())) {
                     pattern.append(' ');
                 }
                 pattern.append(t.text());
@@ -1020,11 +1088,6 @@ public final class Formatter {
             // the enclosing group to break, which is what a literal with a comment in it wants
             // anyway: a `//` on a line the group had collapsed would swallow the rest of it.
             members.add(member(c, member));
-        }
-        if (members.isEmpty()) {
-            List<Member> only = withEndComments(n, List.of());
-            return only.isEmpty() ? concat(text(typeName), text(" {}"))
-                    : concat(text(typeName), text(" "), delimited("{", LINE, only, "}"));
         }
         return concat(text(typeName), text(" "),
                 delimited("{", LINE, withEndComments(n, members), "}"));
@@ -1211,10 +1274,7 @@ public final class Formatter {
      * above the first member rather than above the bracket — which is also what keeps the answer
      * the same on a second formatting, when the bracket has moved onto the member's line. */
     private static boolean opens(SyntaxToken t) {
-        return switch (t.kind()) {
-            case LBRACE, LPAREN, LBRACKET -> true;
-            default -> false;
-        };
+        return isOpeningBracket(t.kind());
     }
 
     /** The code the comment at {@code i} was written above, or null where the file ends first. */
