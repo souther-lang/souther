@@ -63,7 +63,7 @@ class AllOfABracketedConstructsCardinalitiesAreSweptTest {
     }
 
     /** Each matched pair of brackets among a node's own children, and how many members it holds. */
-    private static Map<Site, String> sitesOf(SyntaxNode n) {
+    private static Map<Site, String> bracketsOf(SyntaxNode n) {
         List<SyntaxElement> kids = new ArrayList<>(n.children());
         Deque<Integer> opened = new ArrayDeque<>();
         Map<Site, String> out = new LinkedHashMap<>();
@@ -82,26 +82,41 @@ class AllOfABracketedConstructsCardinalitiesAreSweptTest {
         return out;
     }
 
-    /** None, one, or more than one: the commas at this bracket's own depth, counted between them. */
+    /**
+     * None, one, or more than one member between these brackets. Counted as the commas at this
+     * bracket's own depth, less the one a trailing comma contributes — every comma-separated list may
+     * carry one, and it separates a member from nothing. Reading the count off the commas alone says
+     * {@code g(a,)} holds two, which is what a detector that had only ever seen canonical output
+     * would never find out: the formatter does not write a trailing comma, so it cannot be measured
+     * downstream of one.
+     */
     private static String held(List<SyntaxElement> kids, int from, int to) {
         int commas = 0;
         int depth = 0;
         boolean anything = false;
+        boolean endsWithAComma = false;
         for (int i = from + 1; i < to; i++) {
             if (kids.get(i) instanceof SyntaxNode) {
                 anything = true;
+                endsWithAComma = false;
             } else if (kids.get(i) instanceof SyntaxToken t && !t.isTrivia()) {
                 anything = true;
+                endsWithAComma = false;
                 if (Formatter.isOpeningBracket(t.kind())) {
                     depth++;
                 } else if (Formatter.isClosingBracket(t.kind())) {
                     depth--;
                 } else if (t.kind() == SyntaxKind.COMMA && depth == 0) {
                     commas++;
+                    endsWithAComma = true;
                 }
             }
         }
-        return !anything ? "none" : commas == 0 ? "one" : "many";
+        if (!anything) {
+            return "none";
+        }
+        int members = commas - (endsWithAComma ? 1 : 0) + 1;
+        return members <= 1 ? "one" : "many";
     }
 
     private static void walk(SyntaxNode n, List<SyntaxNode> out) {
@@ -113,16 +128,26 @@ class AllOfABracketedConstructsCardinalitiesAreSweptTest {
         }
     }
 
-    /** Every bracket site in a source's canonical form, against the cardinalities it is written at. */
-    private static Map<Site, Set<String>> sitesIn(String source) {
+    /** Every bracket site of a tree, against the cardinalities it holds them at. */
+    private static Map<Site, Set<String>> sitesOf(SyntaxNode root) {
         Map<Site, Set<String>> out = new TreeMap<>();
         List<SyntaxNode> all = new ArrayList<>();
-        walk(CstParser.parse(Formatter.format(source)).root(), all);
+        walk(root, all);
         for (SyntaxNode n : all) {
-            sitesOf(n).forEach((site, held) ->
+            bracketsOf(n).forEach((site, held) ->
                     out.computeIfAbsent(site, _ -> new TreeSet<>()).add(held));
         }
         return out;
+    }
+
+    /** What the grammar builds from a source, which is a question for the parser alone. */
+    private static Map<Site, Set<String>> sitesWritten(String source) {
+        return sitesOf(CstParser.parse(source).root());
+    }
+
+    /** What the canonical form of a source holds, which is a question about the formatter. */
+    private static Map<Site, Set<String>> sitesInTheCanonicalForm(String source) {
+        return sitesOf(CstParser.parse(Formatter.format(source)).root());
     }
 
     /**
@@ -239,12 +264,17 @@ class AllOfABracketedConstructsCardinalitiesAreSweptTest {
                 cell(SyntaxKind.TUPLE_TYPE, SyntaxKind.LPAREN, "many", AS_A_PARAM.formatted("(Int, Int)"), true));
     }
 
-    /** What the source of a cell actually builds: the site at that cardinality, or not. */
+    /**
+     * What the source of a cell actually builds, read from the tree the parser makes of it. The
+     * formatter is not asked: it is what these rows are about, and a source normalised before being
+     * measured is a source measured against the answer.
+     */
     private static boolean builds(Cell cell) {
         if (!CstParser.parse(cell.source()).errors().isEmpty()) {
             return false;
         }
-        return sitesIn(cell.source()).getOrDefault(cell.site(), Set.of()).contains(cell.cardinality());
+        return sitesWritten(cell.source()).getOrDefault(cell.site(), Set.of())
+                .contains(cell.cardinality());
     }
 
     /**
@@ -296,6 +326,32 @@ class AllOfABracketedConstructsCardinalitiesAreSweptTest {
     }
 
     /**
+     * A trailing comma separates a member from nothing, so it does not add one. Measured on the tree
+     * the parser makes, because the canonical form never has one to measure: a detector that counted
+     * commas would answer "many" for a list of one, and reading it downstream of the formatter would
+     * never show that.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("trailingCommas")
+    void aTrailingCommaSeparatesAMemberFromNothing(Cell cell) {
+        assertEquals(cell.admitted(), builds(cell),
+                "the members between these brackets, counted on the source:\n" + cell.source());
+    }
+
+    static Stream<Cell> trailingCommas() {
+        return Stream.of(
+                cell(SyntaxKind.ARG_LIST, SyntaxKind.LPAREN, "one", AS_A_BODY.formatted("g(a,)"), true),
+                cell(SyntaxKind.ARG_LIST, SyntaxKind.LPAREN, "many", AS_A_BODY.formatted("g(a,)"), false),
+                cell(SyntaxKind.ARG_LIST, SyntaxKind.LPAREN, "many", AS_A_BODY.formatted("g(a, a,)"), true),
+                cell(SyntaxKind.LIST_EXPR, SyntaxKind.LBRACKET, "one", AS_A_BODY.formatted("[a,]"), true),
+                cell(SyntaxKind.LIST_EXPR, SyntaxKind.LBRACKET, "many", AS_A_BODY.formatted("[a,]"), false),
+                cell(SyntaxKind.FN_PARAM_LIST, SyntaxKind.LPAREN, "one",
+                        "module m\n\nlet f (a: Int,): Int = 1\n", true),
+                cell(SyntaxKind.PRODUCT_BODY, SyntaxKind.LBRACE, "one",
+                        "module m\n\ndata R =\n    { a: Int,\n    }\n", true));
+    }
+
+    /**
      * Every bracket site the corpus builds has a row here, and the corpus writes it at every
      * cardinality the rows admit. A construct that starts holding a second pair of brackets — as a
      * match arm holds the parentheses of a constructor and the braces of a record — is a site whose
@@ -305,7 +361,7 @@ class AllOfABracketedConstructsCardinalitiesAreSweptTest {
     void everyBracketSiteInTheCorpusIsSwept() {
         Map<Site, Set<String>> written = new TreeMap<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
-            sitesIn(source).forEach((site, held) ->
+            sitesInTheCanonicalForm(source).forEach((site, held) ->
                     written.computeIfAbsent(site, _ -> new TreeSet<>()).addAll(held));
         }
         Map<Site, Set<String>> claimed = new TreeMap<>();

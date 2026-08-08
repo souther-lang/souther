@@ -21,9 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The formatter's contract: it is idempotent, it changes only whitespace (the non-trivia token
- * stream and the comments survive), and its output re-parses without error. Verified over the real
- * example and prelude corpus, plus a pinned snapshot of the canonical form.
+ * The formatter's contract: it is idempotent, its output re-parses without error, the comments
+ * survive, and the non-trivia token stream survives — over this corpus. The last of those does not
+ * hold of the language: a comma-separated list may carry a trailing comma and the canonical form
+ * writes none, so formatting a source that has one deletes a code token. See
+ * {@link ATrailingCommaIsRemovedAndIsNotWhitespaceTest}, which is where that is written down.
+ * Verified over the real example and prelude corpus, plus a pinned snapshot of the canonical form.
  */
 class FormatterTest {
 
@@ -50,8 +53,8 @@ class FormatterTest {
         }
     }
 
-    /** The non-trivia token stream (kind + text), which must be identical before and after — the
-     * proof that formatting rewrote only whitespace, never code. */
+    /** The non-trivia token stream (kind + text), identical before and after for every source here:
+     * none of them writes a trailing comma, which is the one thing formatting removes. */
     private static List<String> code(String source) {
         List<String> out = new ArrayList<>();
         for (GreenToken t : CstLexer.lex(source).tokens()) {
