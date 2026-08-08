@@ -825,10 +825,11 @@ public final class Adequacy {
                 rows.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
             }
             for (Incompleteness gap : observed.incompleteness()) {
-                if (gap.scope().isOneBehavior()) {
-                    stopped.computeIfAbsent(gap.subject(), _ -> new ArrayList<>()).add(gap);
+                Optional<String> one = gap.behavior();
+                if (one.isPresent()) {
+                    stopped.computeIfAbsent(one.get(), _ -> new ArrayList<>()).add(gap);
                 } else {
-                    everywhere.add(gap);   // about the module or the source, so about all of them
+                    everywhere.add(gap);   // larger than a behavior, so about all of them
                 }
             }
         }

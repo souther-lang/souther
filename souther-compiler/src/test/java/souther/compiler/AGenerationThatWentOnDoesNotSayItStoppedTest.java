@@ -93,9 +93,8 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Axis first = subject.axes().get(0);
         Axis second = subject.axes().get(1);
         Map<AxisId, Classification> row = new LinkedHashMap<>();
-        row.put(first.id(), new Classification.Unclassified(Incompleteness.of(
-                Incompleteness.Code.VALUE_TRUNCATED, Incompleteness.Scope.POSITION,
-                first.id().toString())));
+        row.put(first.id(), new Classification.Unclassified(Incompleteness.atPosition(
+                Incompleteness.Code.VALUE_TRUNCATED, first.id().behavior(), first.id().path())));
         row.put(second.id(), Classification.in(second.classes().get(0).id()));
 
         Generator.GenerationResult filled =

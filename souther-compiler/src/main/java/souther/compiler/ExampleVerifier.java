@@ -116,7 +116,7 @@ public final class ExampleVerifier {
         for (RowOutcome outcome : rows) {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
                 incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_UNDECIDED,
-                        Incompleteness.Scope.BEHAVIOR, outcome.target(),
+                        new souther.compiler.observe.Target.OfBehavior(outcome.target()),
                         java.util.Optional.of(outcome.at())));
             }
         }

@@ -238,8 +238,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             List<Incompleteness> gaps = behavior == null ? m.incompleteness()
                     : m.incompleteness().stream()
-                            .filter(gap -> !gap.scope().isOneBehavior()
-                                    || shown.contains(gap.subject()))
+                            .filter(gap -> gap.behavior().map(shown::contains).orElse(true))
                             .toList();
             MeasurementStatus status = gaps.isEmpty()
                     ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;

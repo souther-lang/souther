@@ -50,20 +50,20 @@ public final class RowClasses {
         int at = parameters.indexOf(axis.path().head());
         if (at < 0 || at >= row.inputs().size()) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                    axis.id().toString());
+                    axis.id().behavior(), axis.id().path());
         }
         ObservedValue value = walk(row.inputs().get(at), axis.path().fields());
         if (value == null) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                    axis.id().toString());
+                    axis.id().behavior(), axis.id().path());
         }
         if (value instanceof ObservedValue.Unknown) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                    axis.id().toString());
+                    axis.id().behavior(), axis.id().path());
         }
         if (value instanceof ObservedValue.Truncated) {
             return Classification.unreadable(Incompleteness.Code.VALUE_TRUNCATED,
-                    axis.id().toString());
+                    axis.id().behavior(), axis.id().path());
         }
         for (PartitionClass each : axis.classes()) {
             if (each.classifier().matches(value)) {
@@ -72,7 +72,8 @@ public final class RowClasses {
         }
         // The classes are exhaustive over the position, so a value in none of them is one this could
         // not read rather than one outside the partition.
-        return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE, axis.id().toString());
+        return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
+                axis.id().behavior(), axis.id().path());
     }
 
     /** The value at the end of a field chain, or null where the chain does not lead anywhere. A
