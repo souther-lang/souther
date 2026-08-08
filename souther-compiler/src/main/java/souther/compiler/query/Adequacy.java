@@ -270,6 +270,16 @@ public final class Adequacy {
             }
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            // What each body can answer with, so that a case only an unreachable arm produces is not
+            // counted. Read from the same reachability the arms are counted by.
+            souther.compiler.check.TypeChecker.Checked checkedBodies =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> producing =
+                    checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan producingPlan =
+                    souther.compiler.coverage.CoverageSites.of(
+                            Coverage.sourceIdOf(db, name), producing);
+            Map<String, souther.compiler.partition.GuardReachability> reachableArms = db.ask(new Reachable(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 Sig sig = sigs.value().get(behavior.name());
@@ -281,7 +291,10 @@ public final class Adequacy {
                         behavior instanceof Ast.SpecBehavior spec ? spec.params().stream()
                                 .map(Ast.Param::name).toList() : List.of(),
                         excluded == null ? Exclusions.NONE
-                                : excluded.getOrDefault(behavior.name(), Exclusions.NONE)));
+                                : excluded.getOrDefault(behavior.name(), Exclusions.NONE),
+                        producing.get(behavior.name()), producingPlan,
+                        reachableArms == null ? souther.compiler.partition.GuardReachability.NONE
+                                : reachableArms.getOrDefault(behavior.name(), souther.compiler.partition.GuardReachability.NONE)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -1315,9 +1328,15 @@ public final class Adequacy {
      *                   at an input position is matched to the position this counts
      */
     static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen,
-                                        List<String> parameters, Exclusions excluded) {
+                                        List<String> parameters, Exclusions excluded,
+                                        souther.compiler.core.Core body,
+                                        souther.compiler.coverage.CoverageSites.Plan plan,
+                                        souther.compiler.partition.GuardReachability reachable) {
         List<RowOutcome> rows = seen.rows();
-        Set<TypeName> declaredOut = coverableCases(sig.outputType(), symbols);
+        // The cases the output type has, less the ones only an arm nothing reaches produces. A case
+        // no reachable producer answers with is not a gap in the rows.
+        Set<TypeName> declaredOut = souther.compiler.partition.ProducedCases.of(
+                body, plan, reachable, coverableCases(sig.outputType(), symbols));
         Set<TypeName> specified = new LinkedHashSet<>();
         Set<TypeName> observed = new LinkedHashSet<>();
         Set<TypeName> verified = new LinkedHashSet<>();

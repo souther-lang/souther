@@ -101,6 +101,56 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 () -> "and no row went through this one:\n" + report);
     }
 
+    // --- the cases behind such an arm -------------------------------------------------------------
+
+    @Test
+    void aCaseOnlyThatArmProducesIsNotOwedEither() throws Exception {
+        String report = reportOn(CAPPED);
+
+        assertTrue(report.contains("out specified 1/1"),
+                () -> "`Big` is answered only where nothing reaches:\n" + report);
+        assertFalse(report.contains("no row expects `Big`"), () -> report);
+        assertTrue(report.contains("adequacy: satisfied"),
+                () -> "and everything left is covered:\n" + report);
+    }
+
+    /** The same case built somewhere a row can get to. One producer proving nothing about the others
+     * is the whole reason this is a union over producers rather than a fact about the case. */
+    @Test
+    void aCaseAReachableArmAlsoProducesStaysOwed() throws Exception {
+        String report = reportOn(CAPPED.replace("        else Small",
+                "        else if pair.a.value >= 1 then Big else Small"));
+
+        assertTrue(report.contains("no row expects `Big`"),
+                () -> "an `a` of 1 is a value some pair holds:\n" + report);
+    }
+
+    /**
+     * A producer this cannot read keeps every case owed.
+     *
+     * <p>The body answers with a name rather than with a value built in a tail position, and what that
+     * name holds is not followed. That is the top of the analysis, and it is where anything unreadable
+     * goes: taking a case away on a guess is how an author stops being asked for a row they could have
+     * written.
+     */
+    @Test
+    void aCaseWhoseProducerCannotBeReadStaysOwed() throws Exception {
+        String report = reportOn(CAPPED.replace("""
+                let classify (pair) =
+                    if pair.b.value >= 50
+                        then Big
+                        else Small
+                """, """
+                let classify (pair) = {
+                    let answer = if pair.b.value >= 50 then Big else Small
+                    answer
+                }
+                """));
+
+        assertTrue(report.contains("no row expects `Big`"),
+                () -> "nothing here says what `answer` holds:\n" + report);
+    }
+
     // --- what happens if the proof is wrong -------------------------------------------------------
 
     private static CoverageSites.Site arm(int index) {
