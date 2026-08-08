@@ -7,7 +7,8 @@ import souther.compiler.types.TypeName;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * What a record leaves each of its fields able to hold.
@@ -28,18 +29,24 @@ import java.util.function.BooleanSupplier;
 public final class FieldDomains {
 
     /** Nothing known of any field. */
-    public static final FieldDomains NONE = new FieldDomains(Map.of(), false, () -> true);
+    public static final FieldDomains NONE =
+            new FieldDomains(Map.of(), false, Map.of(), NumericDomain.top(), () -> Set.of());
 
     private final Map<String, NumericDomain.Bounds> byField;
     private final boolean infeasible;
-    private final BooleanSupplier deriving;
-    private volatile Boolean exact;
+    private final Map<String, String> atoms;
+    private final NumericDomain numbers;
+    private final Supplier<Set<String>> unread;
+    private volatile Set<String> unreadPositions;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField, boolean infeasible,
-                         BooleanSupplier deriving) {
+                         Map<String, String> atoms, NumericDomain numbers,
+                         Supplier<Set<String>> unread) {
         this.byField = byField;
         this.infeasible = infeasible;
-        this.deriving = deriving;
+        this.atoms = atoms;
+        this.numbers = numbers;
+        this.unread = unread;
     }
 
     /**
@@ -83,8 +90,11 @@ public final class FieldDomains {
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
         return new FieldDomains(Map.copyOf(out), seeded.numbers().isBottom(),
-                () -> seeded.everyClauseRead() && seeded.numbers().projectionIsLossless()
-                        && InvariantChecker.everyRuleIsDerivable(named, data, symbols));
+                seeded.atoms(), seeded.numbers(),
+                // Classifying the rules is a second reading of every one of them. Asked when the
+                // answer is, and not before: a caller filling a row wants the bounds and nothing
+                // else.
+                () -> InvariantChecker.positionsWithARuleUnread(named, data, symbols));
     }
 
     /**
@@ -105,10 +115,16 @@ public final class FieldDomains {
      * <p>Where this is false the bounds are an over-approximation: every value they exclude is truly
      * excluded, and a value they admit may still be one nothing can build.
      */
-    public boolean exact() {
-        if (exact == null) {
-            exact = deriving.getAsBoolean();
+    public boolean exact(String path) {
+        String atom = atoms.get(path);
+        if (atom != null && !numbers.projectionIsLosslessAt(atom)) {
+            return false;
         }
-        return exact;
+        Set<String> positions = unreadPositions;
+        if (positions == null) {
+            positions = unread.get();
+            unreadPositions = positions;
+        }
+        return !positions.contains(path);
     }
 }

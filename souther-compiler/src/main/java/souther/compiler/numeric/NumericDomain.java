@@ -77,12 +77,12 @@ public final class NumericDomain {
     private final Map<String, Map<String, BigDecimal>> diff;   // diff[a][b] = tightest known (a - b)
     private final List<Asserted> kept;                         // forms outside both shapes, as written
     private final Map<String, Granularity> kinds;              // atom -> how its values are spaced
-    private final Set<Loss> losses;                            // what was asserted and not recorded
+    private final Map<String, Set<Loss>> losses;               // atom -> what was not recorded of it
     private Map<String, Map<String, BigDecimal>> closed;       // diff closed transitively, on first ask
 
     private NumericDomain(boolean bottom, Map<String, BigDecimal> lo, Map<String, BigDecimal> hi,
                           Map<String, Map<String, BigDecimal>> diff, List<Asserted> kept,
-                          Map<String, Granularity> kinds, Set<Loss> losses) {
+                          Map<String, Granularity> kinds, Map<String, Set<Loss>> losses) {
         this.bottom = bottom;
         this.lo = lo;
         this.hi = hi;
@@ -93,7 +93,7 @@ public final class NumericDomain {
     }
 
     public static NumericDomain top() {
-        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Set.of());
+        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of(), Map.of(), Map.of());
     }
 
     /**
@@ -141,7 +141,8 @@ public final class NumericDomain {
         if (rel == Rel.NE) {
             // `f != 0` is a disjunction, and the domain holds conjunctions of bounds. Nothing to
             // record; what settles such a guard is the fact keyed on the comparison itself.
-            return f.coefs().isEmpty() ? d : d.losing(Loss.DROPPED_DISEQUALITY);
+            return f.coefs().isEmpty() ? d
+                    : d.losing(Loss.DROPPED_DISEQUALITY, f.coefs().keySet());
         }
         if (rel == Rel.EQ) {
             return d.addLe(f, false).addLe(f.negate(), false);
@@ -214,7 +215,7 @@ public final class NumericDomain {
             if (kinds.get(a) == Granularity.DISCRETE) {
                 bound = whole(bound, upper, strict);
             } else if (strict) {
-                into = losing(Loss.WEAKENED_STRICT);
+                into = losing(Loss.WEAKENED_STRICT, Set.of(a));
             }
             return upper ? into.withHi(a, bound) : into.withLo(a, bound);
         }
@@ -229,7 +230,7 @@ public final class NumericDomain {
                     && kinds.get(ab[1]) == Granularity.DISCRETE) {
                 bound = whole(bound, true, strict);
             } else if (strict) {
-                into = losing(Loss.WEAKENED_STRICT);
+                into = losing(Loss.WEAKENED_STRICT, Set.of(ab[0], ab[1]));
             }
             return into.withDiff(ab[0], ab[1], bound);
         }
@@ -238,7 +239,7 @@ public final class NumericDomain {
         List<Asserted> next = new ArrayList<>(kept);
         next.add(new Asserted(g, strict));
         return new NumericDomain(false, lo, hi, diff, List.copyOf(next), kinds,
-                with(Loss.KEPT_UNPROJECTABLE));
+                with(Loss.KEPT_UNPROJECTABLE, c.keySet()));
     }
 
     /**
@@ -441,21 +442,48 @@ public final class NumericDomain {
         return losses.isEmpty();
     }
 
-    /** What was asserted and not recorded, where anything was. */
-    public Set<Loss> losses() {
-        return losses;
+    /**
+     * Whether the bounds on one atom are the whole of what the rules about it say.
+     *
+     * <p>Asked of the atom and not of the domain. A rule this could not hold is a rule about the
+     * positions it names, and a bound on some other atom is as good as it ever was — a pattern on a
+     * name says nothing about how many minutes a day has.
+     */
+    public boolean projectionIsLosslessAt(String atom) {
+        return !losses.containsKey(atom);
     }
 
-    private NumericDomain losing(Loss loss) {
-        return losses.contains(loss) ? this
-                : new NumericDomain(bottom, lo, hi, diff, kept, kinds, with(loss));
+    /** What was asserted about one atom and not recorded. */
+    public Set<Loss> lossesAt(String atom) {
+        return losses.getOrDefault(atom, Set.of());
     }
 
-    private Set<Loss> with(Loss loss) {
-        Set<Loss> next = java.util.EnumSet.noneOf(Loss.class);
-        next.addAll(losses);
-        next.add(loss);
-        return java.util.Collections.unmodifiableSet(next);
+    /** Every atom something was lost about. */
+    public Set<String> lossyAtoms() {
+        return losses.keySet();
+    }
+
+    private NumericDomain losing(Loss loss, Set<String> atoms) {
+        Map<String, Set<Loss>> next = with(loss, atoms);
+        return next == losses ? this
+                : new NumericDomain(bottom, lo, hi, diff, kept, kinds, next);
+    }
+
+    private Map<String, Set<Loss>> with(Loss loss, Set<String> atoms) {
+        Map<String, Set<Loss>> next = null;
+        for (String atom : atoms) {
+            if (losses.getOrDefault(atom, Set.of()).contains(loss)) {
+                continue;
+            }
+            if (next == null) {
+                next = new HashMap<>(losses);
+            }
+            Set<Loss> here = java.util.EnumSet.noneOf(Loss.class);
+            here.addAll(next.getOrDefault(atom, Set.of()));
+            here.add(loss);
+            next.put(atom, java.util.Collections.unmodifiableSet(here));
+        }
+        return next == null ? losses : Map.copyOf(next);
     }
 
     // --- assignment ----------------------------------------------------------------------------

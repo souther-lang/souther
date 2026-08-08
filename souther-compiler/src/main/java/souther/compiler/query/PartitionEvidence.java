@@ -147,7 +147,7 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
      */
     public record BoundaryCoverage(String axis, String origin, BoundaryObligation.BoundarySide side,
                                    String value, boolean hit, MeasurementStatus status,
-                                   Reason reason) {
+                                   Reason reason, boolean knownWritable) {
 
         /** Why a line has no answer. */
         public enum Reason {

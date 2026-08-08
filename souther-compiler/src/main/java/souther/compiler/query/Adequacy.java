@@ -909,7 +909,11 @@ public final class Adequacy {
                 }
             }
             for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
-                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()) {
+                // A boundary nothing promises is writable is not a gap. Every rule reaching the
+                // value it sits in was not read, so this edge is where the reading stopped rather
+                // than where the model does, and a row at it may be one nobody can write.
+                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()
+                        && boundary.knownWritable()) {
                     out.add(new Finding(Kind.BOUNDARY_UNMET, behavior.name(), boundary.status(),
                             behavior.pos(),
                             List.of(boundary.axis(), boundary.value(), boundary.origin())));

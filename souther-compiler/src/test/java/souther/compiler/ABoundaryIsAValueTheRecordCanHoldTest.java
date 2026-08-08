@@ -211,6 +211,48 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 "and each of them is a row that builds");
     }
 
+    /**
+     * An edge nothing promises is writable is reported and not counted.
+     *
+     * <p>Over decimals a strict rule takes nothing off either end — there is no next value to step to
+     * — so both ends read `[0, 1]` while the true ranges are `[0, 1)` and `(0, 1]`. The edge is where
+     * the reading stopped and not where the model does. Falling back to the type's own edge is no
+     * better: the rule that could not be read refuses that value just as readily. So it is said and
+     * owed to nobody, which is the account ADR-0091 already gives a combination nothing has settled.
+     */
+    @Test
+    void anEdgeNothingPromisesIsSaidAndNotCounted() throws Exception {
+        String dense = """
+                module example.band
+
+                data Ratio = Decimal
+                    invariant withinOne = value >= 0.0m && value <= 1.0m
+
+                data Band =
+                    { low: Ratio
+                    , high: Ratio
+                    }
+                    invariant ordered = low < high
+
+                data Ok
+
+                behavior classify : (band: Band) -> Ok
+                    constructs Ok
+
+                let classify (band) = Ok
+
+                example classify
+                    | "a" : (Band { low = Ratio(0.1m), high = Ratio(0.9m) }) -> Ok
+                """;
+        String report = reportOn(dense);
+
+        assertEquals(List.of(), boundariesOf(dense), "none of them is a row anybody is owed");
+        assertTrue(report.contains("boundary    0/0"), () -> report);
+        assertTrue(report.contains("not known to be writable: classify/band.low = 1"), () -> report);
+        assertTrue(report.contains("adequacy: satisfied"),
+                () -> "and no build is refused over it:\n" + report);
+    }
+
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test

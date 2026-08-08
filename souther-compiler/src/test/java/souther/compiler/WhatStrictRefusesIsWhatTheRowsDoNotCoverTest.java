@@ -228,7 +228,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
         PartitionEvidence.BoundaryCoverage met = new PartitionEvidence.BoundaryCoverage(
                 "weigh/w.a", "guard", BoundaryObligation.BoundarySide.AT, "100", true,
-                MeasurementStatus.COMPLETE, null);
+                MeasurementStatus.COMPLETE, null, true);
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, verdictOf(partition(met)),
                 "nothing dropped");

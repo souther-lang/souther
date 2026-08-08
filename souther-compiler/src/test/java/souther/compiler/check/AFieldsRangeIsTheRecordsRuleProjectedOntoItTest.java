@@ -9,6 +9,7 @@ import souther.compiler.types.TypeName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,7 +64,8 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("startsAt"), 0, 1439);
         assertBounds(domains.at("endsAt"), 1, 1440);
-        assertTrue(domains.exact(), "both rules were read, so these are the whole of what is allowed");
+        assertTrue(domains.exact("startsAt"), "both rules were read");
+        assertTrue(domains.exact("endsAt"));
     }
 
     /** Without the sibling rule the field's own type is the whole answer, so nothing moves. Held so
@@ -125,9 +127,10 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertBounds(domains.at("low"), 0, 1);
         assertBounds(domains.at("high"), 0, 1);
-        assertFalse(domains.exact(),
-                "the true range is open at one end, which these bounds cannot hold, so neither 1 nor"
-                        + " 0 is promised to be writable");
+        assertFalse(domains.exact("low"),
+                "the true range is open at one end, which these bounds cannot hold, so 1 is not"
+                        + " promised to be writable");
+        assertFalse(domains.exact("high"));
     }
 
     /** A rule that skips a value is a hole in a range, and a range is all the domain holds. The bound
@@ -147,7 +150,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "R");
 
         assertBounds(domains.at("a"), 0, 10);
-        assertFalse(domains.exact(), "0 is in these bounds and no row can write it");
+        assertFalse(domains.exact("a"), "0 is in these bounds and no row can write it");
     }
 
     /** A length is a whole number like any other, so a rule relating one to a field is in the
@@ -174,7 +177,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 2, 1439);
-        assertTrue(domains.exact(), "both rules are comparisons of whole numbers");
+        assertTrue(domains.exact("startsAt"), "both rules are comparisons of whole numbers");
     }
 
     /** A rule that is not a comparison holds no bound to derive through. It narrows nothing, it is
@@ -200,8 +203,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 """, "WorkInterval");
 
         assertBounds(domains.at("startsAt"), 0, 1439);
-        assertFalse(domains.exact(),
-                "nothing here says a label matching that pattern exists, so 1439 is not promised");
+        assertTrue(domains.exact("startsAt"),
+                "the pattern is a rule about the label and says nothing about the minutes");
+        assertFalse(domains.exact("label"), "and it is the whole of what is known about the label");
     }
 
     /** A field nothing says anything about has no bounds rather than empty ones. */
@@ -255,10 +259,50 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
         assertNull(domains.at("to"));
     }
 
+    /**
+     * A bound is as read where its type comes from another module as where it is declared.
+     *
+     * <p>The discharge reading of an imported type has already been settled into the folds its
+     * operations are, so a classifier working off that reading calls every imported bound a rule it
+     * could not read — and every edge of every imported number stops being one a row is owed. What
+     * decides it is the reader that gave the position its bounds, which works off the declaration as
+     * written and answers the same either side of a module boundary.
+     *
+     * <p>The seeding still takes nothing from such a type, so an imported position keeps the bounds
+     * its own type gives it and nothing relates it to a sibling. That is a narrowing missed and not
+     * an edge invented, which is the direction to miss in.
+     */
+    @Test
+    void anImportedBoundIsReadLikeADeclaredOne() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module example.money exposing ( Amount )
+
+                data Amount = Decimal
+                    invariant value >= 0.0m
+                """, """
+                module example.report
+
+                import example.money ( Amount )
+
+                data Forecast = { total: Amount }
+                """), souther.compiler.meta.ModulePath.EMPTY);
+        compilation.answerEverything();
+        Symbols symbols = compilation.db().ask(new Shapes.Scope("example.report")).value();
+        assertNotNull(symbols, "the model did not compile");
+        TypeName named = new TypeName("example.report", "Forecast");
+        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+
+        assertTrue(domains.exact("total"),
+                "the rule is `value >= 0.0m` wherever it is declared");
+        assertNull(domains.at("total"),
+                "the seeding reads an imported type in the settled form and takes no bound from it,"
+                        + " so the position keeps the one its own type gives it and nothing relates"
+                        + " it to a sibling across a module boundary");
+    }
+
     /** A newtype has no siblings, so there is nothing here to project. */
     @Test
     void aNewtypeHasNothingToProjectOnto() {
-        assertEquals(FieldDomains.NONE.exact(), domainsIn(TIMESHEET, "MinuteOfDay").exact());
         assertNull(domainsIn(TIMESHEET, "MinuteOfDay").at("value"));
     }
 }

@@ -60,11 +60,23 @@ public final class Partitions {
      *                nothing can classify into the denominator
      */
     public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
-                               Map<String, NumericDomain.Bounds> domains) {
+                               Map<String, NumericDomain.Bounds> domains,
+                               java.util.Set<String> uncertain) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
             domains = Map.copyOf(domains);
+            uncertain = java.util.Set.copyOf(uncertain);
+        }
+
+        /** Whether an edge of this position is a value some row could carry.
+         *
+         * <p>False where a rule reaching the value this position sits in was not read in full. Every
+         * edge here is then where the rules this could read stop, and a rule it could not read can
+         * refuse that value as easily as the one beyond it — so the edge is not known to be writable
+         * and asking for a row at it is asking for work nobody may be able to do. */
+        public boolean edgeIsKnownWritable(String path) {
+            return !uncertain.contains(path);
         }
 
         /** Only the positions the model actually divides. */
@@ -79,6 +91,7 @@ public final class Partitions {
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
         Map<String, NumericDomain.Bounds> domains = new LinkedHashMap<>();
+        java.util.Set<String> uncertain = new java.util.LinkedHashSet<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             // One reading per parameter, not one per record met on the way down. A clause on the
             // outer record relates positions at any depth it can name, and rebuilding the reading at
@@ -86,7 +99,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
-                    domains);
+                    domains, uncertain);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -110,7 +123,7 @@ public final class Partitions {
                         !axis.cuts().isEmpty()));
             }
         }
-        return new Partitioning(kept, omitted, domains);
+        return new Partitioning(kept, omitted, domains, uncertain);
     }
 
     /**
@@ -158,7 +171,7 @@ public final class Partitions {
                     classes.isEmpty() ? axis.classes() : classes,
                     merged(axis.cuts(), reachable, decimal)).excluding(axis.excluded()));
         }
-        return new Partitioning(out, base.omitted(), base.domains());
+        return new Partitioning(out, base.omitted(), base.domains(), base.uncertain());
     }
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
@@ -224,7 +237,8 @@ public final class Partitions {
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
                              List<Axis> out, Placed placed,
-                             Map<String, NumericDomain.Bounds> domains) {
+                             Map<String, NumericDomain.Bounds> domains,
+                             java.util.Set<String> uncertain) {
         AxisId id = AxisId.of(behavior, path);
         List<PartitionClass> classes = classesOf(type, symbols);
         Bounds own = boundsOf(type, symbols);
@@ -237,6 +251,10 @@ public final class Partitions {
         }
         List<Cut> cuts = nothingExists ? List.of()
                 : cutsOf(type, here, own, placed == null ? null : placed.value());
+        if (!cuts.isEmpty() && placed != null
+                && !placed.domains().exact(String.join(".", path.fields()))) {
+            uncertain.add(path.toString());
+        }
         if (!classes.isEmpty() || !cuts.isEmpty()) {
             out.add(new Axis(id, path, type, classes, cuts));
             return;
@@ -245,7 +263,7 @@ public final class Partitions {
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
             for (Map.Entry<String, Type> field : fields.entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
-                        placed, domains);
+                        placed, domains, uncertain);
             }
             return;
         }

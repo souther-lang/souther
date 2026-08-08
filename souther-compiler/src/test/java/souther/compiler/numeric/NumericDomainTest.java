@@ -229,7 +229,19 @@ class NumericDomainTest {
                 .assume(atom(B).minus(num(1440)), Rel.LE, whole(B))
                 .assume(atom(A).negate(), Rel.LE, whole(A));
 
-        assertTrue(d.projectionIsLossless(), () -> "lost " + d.losses());
+        assertTrue(d.projectionIsLossless(), () -> "lost " + d.lossyAtoms());
+    }
+
+    /** A loss is about the atoms the rule named and not about the domain. A bound on some other atom
+     * is as good as it ever was. */
+    @Test
+    void aLossIsAboutTheAtomsTheRuleNamed() {
+        NumericDomain d = NumericDomain.top()
+                .assume(atom(A), Rel.NE, whole(A))
+                .assume(atom(B).minus(num(10)), Rel.LE, whole(B));
+
+        assertFalse(d.projectionIsLosslessAt(A));
+        assertTrue(d.projectionIsLosslessAt(B), "nothing was lost about b");
     }
 
     /** A strict bound over decimals is recorded as the non-strict one, so the edge it names is a
@@ -241,9 +253,10 @@ class NumericDomainTest {
         NumericDomain difference = NumericDomain.top()
                 .assume(atom(A).minus(atom(B)), Rel.LT, dense(A, B));
 
-        assertFalse(interval.projectionIsLossless());
-        assertEquals(Set.of(NumericDomain.Loss.WEAKENED_STRICT), interval.losses());
-        assertEquals(Set.of(NumericDomain.Loss.WEAKENED_STRICT), difference.losses());
+        assertFalse(interval.projectionIsLosslessAt(A));
+        assertEquals(Set.of(NumericDomain.Loss.WEAKENED_STRICT), interval.lossesAt(A));
+        assertEquals(Set.of(A, B), difference.lossyAtoms(),
+                "a difference is a rule about both of its ends");
     }
 
     /** The same over whole numbers keeps everything: there the strictness became a step. */
@@ -258,7 +271,7 @@ class NumericDomainTest {
     void aDisequalityIsRecordedAsALoss() {
         NumericDomain d = NumericDomain.top().assume(atom(A), Rel.NE, whole(A));
 
-        assertEquals(Set.of(NumericDomain.Loss.DROPPED_DISEQUALITY), d.losses());
+        assertEquals(Set.of(NumericDomain.Loss.DROPPED_DISEQUALITY), d.lossesAt(A));
     }
 
     /** A form of neither shape proves things and no bound is derived through it. */
@@ -267,7 +280,8 @@ class NumericDomainTest {
         NumericDomain d = NumericDomain.top()
                 .assume(atom(A).plus(atom(B)).minus(num(10)), Rel.LE, whole(A, B));
 
-        assertEquals(Set.of(NumericDomain.Loss.KEPT_UNPROJECTABLE), d.losses());
+        assertEquals(Set.of(A, B), d.lossyAtoms());
+        assertEquals(Set.of(NumericDomain.Loss.KEPT_UNPROJECTABLE), d.lossesAt(A));
         assertTrue(d.entails(atom(A).plus(atom(B)).minus(num(10)), Rel.LE),
                 "still proves what it was told, and holds no bound from it");
     }

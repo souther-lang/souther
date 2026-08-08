@@ -87,7 +87,8 @@ final class Coverages {
             // *missing* hit undecidable and takes nothing away from one that was found: a row that
             // wrote the value and went through the comparison did so whatever else stopped.
             boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
-                    armsAsked, observed.armsUnseen(), observed.someRowsUnseen()));
+                    armsAsked, observed.armsUnseen(), observed.someRowsUnseen(),
+                    partitioning.edgeIsKnownWritable(axis.path().toString())));
         }
         return new PartitionEvidence(axes, boundaries, pairsOf(divided, readings),
                 notDerivable, partitioning.omitted());
@@ -249,7 +250,8 @@ final class Coverages {
      */
     private static List<PartitionEvidence.BoundaryCoverage> boundariesOf(
             Axis axis, List<String> parameters, List<RowOutcome> rows, Symbols symbols,
-            boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen) {
+            boolean armsAsked, boolean armsUnseen, boolean someRowsUnseen,
+            boolean knownWritable) {
         List<PartitionEvidence.BoundaryCoverage> out = new ArrayList<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
             PartitionEvidence.BoundaryCoverage.Reason absent = each.origin() instanceof OriginRef.GuardOrigin
@@ -277,7 +279,7 @@ final class Coverages {
                     met == Met.UNDECIDED ? MeasurementStatus.UNAVAILABLE
                             : met == Met.UNREADABLE ? MeasurementStatus.PARTIAL
                                     : MeasurementStatus.COMPLETE,
-                    met == Met.UNDECIDED ? absent : null));
+                    met == Met.UNDECIDED ? absent : null, knownWritable));
         }
         return out;
     }
