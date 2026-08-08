@@ -7,6 +7,8 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BoundaryInput;
+import souther.compiler.types.BoundaryOutput;
 import souther.compiler.types.BoundaryScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -93,7 +95,7 @@ public final class FixtureReader {
 
         /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
          * the runtime is absent, which is not a fact about the value. */
-        java.util.Optional<String> refuse(Type type, Ast.Expr fixture);
+        java.util.Optional<String> refuse(BoundaryInput at, Ast.Expr fixture);
     }
 
     /** A way to build values against this module's generated classes, without any rows to run. */
@@ -110,8 +112,8 @@ public final class FixtureReader {
         // the loader that is shared, and has to be — it caches the classes it has defined and loaded,
         // and a fake's subclass is generated once.
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        return (type, fixture) -> new FixtureReader(module, symbols, values, loader)
-                .refuse(type, fixture);
+        return (at, fixture) -> new FixtureReader(module, symbols, values, loader)
+                .refuse(at, fixture);
     }
 
     /** The helper this reading is inside, for a budget to name when the reading does not finish. */
@@ -124,8 +126,14 @@ public final class FixtureReader {
         return built(written, FixtureShape.of(type, symbols));
     }
 
-    /** The same, where the position's shape has already been settled — which is what a caller that
-     *  holds one does rather than handing back the type it was admitted from. */
+    /** The same at a position a behavior's boundary established, which carries its own admitted
+     *  answer: it is read rather than the type it was admitted from being put through the walk
+     *  again. */
+    Object built(Ast.Expr written, BoundaryInput in) {
+        return built(written, FixtureShape.of(in));
+    }
+
+    /** The same, where the position's shape has already been settled. */
     Object built(Ast.Expr written, FixtureShape shape) {
         return decode(shape, raw(written, shape.type()));
     }
@@ -141,12 +149,13 @@ public final class FixtureReader {
      * The whole value {@code written} states. Throws where it does not build or does not finish —
      * a fixture is one or the other, and what to make of that is the caller's.
      */
-    BuiltFixture buildFixture(Ast.Expr written, Type outType) {
+    BuiltFixture buildFixture(Ast.Expr written, BoundaryOutput out) {
+        Type outType = out.type();
         // The one builder a written value goes through, whichever side wrote it: it knows a
         // construction from a literal, a collection, and a value a helper answered with — which the
         // decoder route does not, and a stand-in built the other way stated nothing for a fake whose
         // row applies a helper (the shape of issue #214, on the other side).
-        Object value = builtExpected(written, outType);
+        Object value = builtExpected(written, out);
         TypeName was = caseOfValue(value, outType);
         return new BuiltFixture(was != null ? was : constructedCase(written), value);
     }
@@ -209,20 +218,23 @@ public final class FixtureReader {
      * through that case's decoder; a literal is its raw value. Throws {@link FixtureException} when the
      * row's expectation cannot be built — the caller reports that as the fixture error it is, rather
      * than comparing against nothing. */
-    Object builtExpected(Ast.Expr expected, Type outType) {
+    Object builtExpected(Ast.Expr expected, BoundaryOutput out) {
         TypeName asserted = constructedCase(expected);
         if (asserted != null) {
-            return built(expected, Type.ref(asserted));
+            // The case is what the row wrote rather than what the position admitted — a row may name
+            // a case the behavior does not answer with, which is a disagreement to report and not a
+            // shape to read off the answer — so this name goes through the walk.
+            return built(expected, FixtureShape.of(Type.ref(asserted), symbols));
         }
         Object answer = helperAnswer(expected, new LinkedHashSet<>());
         if (answer != null) {
             return answer;
         }
-        // A collection output has no case name to decode against, so the behavior's declared
-        // output type is what says which of `List`/`Set`/`Map` the written list means and what
-        // its elements are — the same decision a collection argument's declared type makes.
-        if (isCollection(outType)) {
-            return built(expected, outType);
+        // A collection output has no case name to decode against, so the behavior's answer is what
+        // says which of `List`/`Set`/`Map` the written list means and what its elements are — the
+        // same decision a collection argument's position makes.
+        if (isCollection(out)) {
+            return built(expected, FixtureShape.of(out));
         }
         return raw(expected);   // a literal expected value
     }
@@ -259,16 +271,17 @@ public final class FixtureReader {
 
     /** As above, for the rendering of a failure, where a value that cannot be built is shown as
      * written rather than reported a second time. */
-    private Object builtExpectedOrNull(Ast.Expr expected, Type outType) {
+    private Object builtExpectedOrNull(Ast.Expr expected, BoundaryOutput out) {
         try {
-            return builtExpected(expected, outType);
+            return builtExpected(expected, out);
         } catch (FixtureException _) {
             return null;
         }
     }
 
-    private static boolean isCollection(Type t) {
-        return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
+    private static boolean isCollection(BoundaryOutput out) {
+        return out instanceof BoundaryOutput.ListOf || out instanceof BoundaryOutput.SetOf
+                || out instanceof BoundaryOutput.MapOf;
     }
 
     /** The arm an expected names, as it was written — what a row that names no case of the target is
@@ -339,13 +352,13 @@ public final class FixtureReader {
     /** The expectation, rendered as the value it stands for: a bare case stays the case name, anything
      * else is its neutral form under the case it constructs ({@code Out { n = 7 }}) — which is what a
      * row naming a value asserts, so that is what the failure shows. */
-    String describeExpected(Ast.Expr expected, Type outType) {
+    String describeExpected(Ast.Expr expected, BoundaryOutput out) {
         String only = caseOnly(expected);
         if (only != null) {
             return only;   // a bare case asserts only that, so there is no value to show
         }
         TypeName asserted = constructedCase(expected);
-        Object built = builtExpectedOrNull(expected, outType);
+        Object built = builtExpectedOrNull(expected, out);
         if (asserted == null) {
             // Nothing here names a case: a literal, a collection, or a value a helper answered with.
             // What was built is a value, so it is shown the way the result is — which is what puts the
@@ -1104,9 +1117,9 @@ public final class FixtureReader {
         }
     }
 
-    java.util.Optional<String> refuse(Type type, Ast.Expr fixture) {
+    java.util.Optional<String> refuse(BoundaryInput at, Ast.Expr fixture) {
         try {
-            built(fixture, type);
+            built(fixture, at);
             return java.util.Optional.empty();
         } catch (FixtureException e) {
             return java.util.Optional.of(e.getMessage());

@@ -4,6 +4,8 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
+import souther.compiler.types.BoundaryInput;
+import souther.compiler.types.BoundaryOutput;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -607,7 +609,7 @@ public final class ExampleVerifier {
     private void checkRowNow(FixtureReader fixtures, ExampleTarget target, Sig sig,
                              Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out,
                              RowState state) {
-        List<Type> ins = sig.inputTypes();
+        List<BoundaryInput> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of(DiagnosticCode.E1903, "check.example.arity")
                     .at(row.pos()).args(target.name(), ins.size(), row.inputs().size()).build());
@@ -652,7 +654,7 @@ public final class ExampleVerifier {
         Object expectedValue;
         try {
             expectedValue = fixtures.caseOnly(row.expected()) != null ? null
-                    : fixtures.builtExpected(row.expected(), sig.outputType());
+                    : fixtures.builtExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
             out.add(Diagnostic.of(DiagnosticCode.E1903, "check.example.expected")
                     .at(row.pos()).args(target.name(), fe.getMessage()).build());
@@ -690,7 +692,7 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
-            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.outputType()),
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
                     "aborted: " + ae.getMessage()));
             state.failed(FailurePhase.INVOCATION);
             return;
@@ -703,7 +705,7 @@ public final class ExampleVerifier {
         state.resultArm = symbols.resolve(NeutralForm.simpleName(result));
         state.stage = Stage.COMPARED;
         if (!matches(fixtures, row.expected(), result, expectedValue)) {
-            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.outputType()),
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
                     fixtures.describeActual(result)));
             state.failed(FailurePhase.COMPARISON);
             return;
@@ -777,7 +779,13 @@ public final class ExampleVerifier {
                     + "` is not an injected behavior of this module"));
             return null;
         }
-        Type outType = TypeOps.successType(dep.ret(), symbols);
+        Sig depSig = sigs.get(depName);
+        if (depSig == null) {
+            out.add(fakeMissingDiag(target, req, row, "`" + depName
+                    + "` has no signature to build a stand-in against"));
+            return null;
+        }
+        BoundaryOutput outType = depSig.out();
         // a value fake given inline on the row: `with dep = value`
         for (Ast.With w : row.withs()) {
             if (w.dep().equals(depName)) {
@@ -796,7 +804,7 @@ public final class ExampleVerifier {
         // a function fake given as a `fake dep | table` declaration
         for (Ast.Fake fk : module.fakes()) {
             if (fk.target().equals(depName)) {
-                return tableProxy(fixtures, fk, dep, outType, out);
+                return tableProxy(fixtures, fk, dep, depSig, out);
             }
         }
         out.add(fakeMissingDiag(target, req, row, "add `with " + depName
@@ -829,18 +837,18 @@ public final class ExampleVerifier {
      * returns a fake instance ({@link #fakeInstance}) matching an actual input tuple by value equality,
      * falling back to the {@code _} default or a miss. Works for any arity: a 0/1-input dep's tuple has
      * 0/1 elements, a 2+-input dep's has one per parameter (issue #57). */
-    private Object tableProxy(FixtureReader fixtures, Ast.Fake fk, Ast.SpecBehavior dep, Type outType,
+    private Object tableProxy(FixtureReader fixtures, Ast.Fake fk, Ast.SpecBehavior dep, Sig depSig,
                               List<Diagnostic> out) {
-        List<Type> paramTypes = new ArrayList<>();
-        for (Ast.Param p : dep.params()) {
-            paramTypes.add(TypeOps.successType(p.type(), symbols));
-        }
+        // The dependency's own signature, which admitted what its boundary carries. Rebuilding the
+        // types from what it declared would put them through that walk a second time, and a
+        // stand-in stands where the behavior does.
+        List<BoundaryInput> paramTypes = depSig.ins();
         // Built the one way a table is built ({@link ExampleStatements#standins}), on this row's own
         // reader, so a row that does not finish inside a table's helper is still inside a helper. What
         // is wrong with the table is said where the fake is written, and said once: this row and every
         // other row reaching the same fake would each repeat the one thing wrong with the one table.
         ExampleStatements.Standins table =
-                ExampleStatements.standins(fixtures, fk, paramTypes, outType, new ArrayList<>());
+                ExampleStatements.standins(fixtures, fk, paramTypes, depSig.out(), new ArrayList<>());
         if (table == null) {
             return null;
         }

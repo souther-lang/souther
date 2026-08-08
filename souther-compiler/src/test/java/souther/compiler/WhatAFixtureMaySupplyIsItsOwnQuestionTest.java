@@ -1,8 +1,14 @@
 package souther.compiler;
 
+import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
+import souther.compiler.query.Compilation;
+import souther.compiler.types.BoundaryInput;
+import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -96,6 +102,38 @@ class WhatAFixtureMaySupplyIsItsOwnQuestionTest {
                   | "r" : (firstOf((1, 2))) -> Out { n = 1 }
                 """);
         assertTrue(e.getMessage().contains("no external representation"), e.getMessage());
+    }
+
+    /**
+     * A position a behavior's boundary established carries its own admitted answer, and the reader
+     * reads it rather than putting the type through this walk a second time. What makes that a
+     * projection rather than a second decision is that every type a boundary admits is one a fixture
+     * admits — so there is nothing in the crossing that can refuse.
+     *
+     * <p>Asked of witnesses a compile produced, not of ones written here: what has to hold is about
+     * the shapes a boundary actually builds.
+     */
+    @Test
+    void everyShapeABoundaryAdmitsIsOneAFixtureAdmits() {
+        Compilation compilation = Compiler.compiled("""
+                module demo
+
+                data UserId = String
+                data Note = { text: String? }
+                data Day = HOLIDAY | WORKDAY
+
+                behavior wide : (n: Int, s: String, b: Bool, d: Decimal, day: Date, at: DateTime,
+                                 note: Note, ids: List<UserId>, seen: Set<String>,
+                                 byName: Map<String, Note>, byId: Map<UserId, Int>,
+                                 byDay: Map<Date, Int>, byKind: Map<Day, Int>) -> Note
+                let wide (n, s, b, d, day, at, note, ids, seen, byName, byId, byDay, byKind) = note
+                """, "demo", new ArrayList<>());
+        Sig sig = compilation.signatures("demo").get("wide");
+
+        for (BoundaryInput in : sig.ins()) {
+            assertDoesNotThrow(() -> FixtureShape.of(in), Type.show(in.type()));
+        }
+        assertDoesNotThrow(() -> FixtureShape.of(sig.out()));
     }
 
     /**

@@ -2,6 +2,8 @@ package souther.compiler;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
+import souther.compiler.types.BoundaryInput;
+import souther.compiler.types.BoundaryOutput;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
@@ -192,7 +194,7 @@ public final class ExampleStatements {
             // built the table of a fake nothing reads, so this is the first thing that would run it.
             Read<List<Diagnostic>> read = v.within(reader -> {
                 List<Diagnostic> wrong = new ArrayList<>();
-                standins(reader, fk, sig.inputTypes(), sig.outputType(), wrong);
+                standins(reader, fk, sig.ins(), sig.out(), wrong);
                 return wrong;
             }, new Deadline.Work.Table(fk.target(), sourceId, fk.pos()));
             switch (read) {
@@ -443,11 +445,11 @@ public final class ExampleStatements {
                 continue;
             }
             Read<RecordedRow> read = within(reader -> {
-                Object[] arguments = builtOrNull(reader, row.inputs(), sig.inputTypes());
+                Object[] arguments = builtOrNull(reader, row.inputs(), sig.ins());
                 if (arguments == null) {
                     return null;
                 }
-                Answered answer = readExpected(reader, row.expected(), sig.outputType(), cases);
+                Answered answer = readExpected(reader, row.expected(), sig.out(), cases);
                 return answer instanceof Answered.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
@@ -475,7 +477,7 @@ public final class ExampleStatements {
         }
         // The whole table, built the one way the proxy builds it.
         Read<Standins> read = within(
-                reader -> standins(reader, fk, sig.inputTypes(), sig.outputType(), new ArrayList<>()),
+                reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
                 new Deadline.Work.Table(fk.target(), origin, fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
@@ -571,7 +573,8 @@ public final class ExampleStatements {
                 // where the example is checked, installing this same value. What did not finish here
                 // did not finish there, and there is where it is said (E1910).
                 Answered constant = within(
-                        reader -> readStandIn(reader, w.value(), depSig.outputType(), outCases(depSig.outputType())),
+                        reader -> readStandIn(reader, w.value(), depSig.out(),
+                                outCases(depSig.outputType())),
                         new Deadline.Work.With(w.dep(), origin, w.value().pos())).orNull();
                 if (constant == null || constant instanceof Answered.Unreadable) {
                     continue;
@@ -617,7 +620,7 @@ public final class ExampleStatements {
      * <em>E1903</em>'s to say where the row is evaluated, and a row whose inputs are not values names
      * no input to hold a stand-in against. */
     private static Object[] builtOrNull(FixtureReader fixtures, List<Ast.Expr> written,
-                                        List<Type> types) {
+                                        List<BoundaryInput> types) {
         Object[] values = new Object[types.size()];
         for (int i = 0; i < types.size(); i++) {
             try {
@@ -804,8 +807,8 @@ public final class ExampleStatements {
      * so a table with an arity slip and a slow or non-terminating output reported the second problem
      * instead of the first, or ran out of time before reporting either.
      */
-    static Standins standins(FixtureReader fixtures, Ast.Fake fk, List<Type> ins,
-                                     Type outType, List<Diagnostic> out) {
+    static Standins standins(FixtureReader fixtures, Ast.Fake fk, List<BoundaryInput> ins,
+                                     BoundaryOutput outType, List<Diagnostic> out) {
         for (Ast.FakeRow r : fk.rows()) {
             if (!r.isDefault() && r.inputs().size() != ins.size()) {
                 out.add(unbuildableFake(r.pos(), fk.target(), "a row has " + r.inputs().size()
@@ -904,8 +907,8 @@ public final class ExampleStatements {
      * What a stand-in stands in with: the whole value, always. Unreadable where it will not build,
      * which is where it stands in for nothing at all — that is reported where the fake is resolved.
      */
-    private static Answered readStandIn(FixtureReader fixtures, Ast.Expr written, Type outType,
-                                        Set<TypeName> cases) {
+    private static Answered readStandIn(FixtureReader fixtures, Ast.Expr written,
+                                        BoundaryOutput outType, Set<TypeName> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
             return new Answered.Unreadable();
         }
@@ -924,8 +927,8 @@ public final class ExampleStatements {
      * the row asserts: a value a helper answered with is that value, not that value read back into
      * the form a fixture is written in and decoded again (issue #214).
      */
-    private static Answered readExpected(FixtureReader fixtures, Ast.Expr written, Type outType,
-                                         Set<TypeName> cases) {
+    private static Answered readExpected(FixtureReader fixtures, Ast.Expr written,
+                                         BoundaryOutput outType, Set<TypeName> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
             return new Answered.Unreadable();
         }

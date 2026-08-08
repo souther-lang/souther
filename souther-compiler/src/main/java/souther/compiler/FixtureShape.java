@@ -1,6 +1,8 @@
 package souther.compiler;
 
 import souther.compiler.check.Symbols;
+import souther.compiler.types.BoundaryInput;
+import souther.compiler.types.BoundaryOutput;
 import souther.compiler.types.BoundaryScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -110,6 +112,53 @@ public sealed interface FixtureShape {
                             + " call can decide it");
             case Type.Nothing _, Type.Never _, Type.Erroneous _ -> throw new FixtureException(
                     "`" + Type.show(t) + "` is not a type a fixture can be built against");
+        };
+    }
+
+    /**
+     * The shape of a position a behavior's boundary established.
+     *
+     * <p>A projection and not a decision: every type a boundary admits is one a fixture admits too —
+     * it admits the same scalars, requires a name a model declared where this requires one whose
+     * codec was derived, and requires a key that renders as text where this takes any key a decoder
+     * reads. So there is nothing here that can refuse, which is the point. The position was admitted
+     * where it was established, and this reads that answer rather than putting the type through the
+     * walk a second time.
+     */
+    static FixtureShape of(BoundaryInput in) {
+        return switch (in) {
+            case BoundaryInput.Scalar s -> new Scalar(s.scalar());
+            case BoundaryInput.Nominal n -> new Nominal(n.name());
+            case BoundaryInput.ListOf l -> new ListOf(of(l.element()));
+            case BoundaryInput.SetOf s -> new SetOf(of(s.element()));
+            case BoundaryInput.MapOf m -> new MapOf(key(m.key()), of(m.value()));
+        };
+    }
+
+    /** The same of what a behavior answers. */
+    static FixtureShape of(BoundaryOutput out) {
+        return switch (out) {
+            case BoundaryOutput.Scalar s -> new Scalar(s.scalar());
+            case BoundaryOutput.Nominal n -> new Nominal(n.name());
+            case BoundaryOutput.ListOf l -> new ListOf(of(l.element()));
+            case BoundaryOutput.SetOf s -> new SetOf(of(s.element()));
+            case BoundaryOutput.MapOf m -> new MapOf(key(m.key()), of(m.value()));
+            // A union nobody named is several types, and a fixture states a value of one of them:
+            // which one is what the row writes, and it is built against that case.
+            case BoundaryOutput.Cases c -> throw new IllegalStateException(
+                    "`" + Type.show(c.type()) + "` names several types; a fixture states one of them");
+        };
+    }
+
+    /** A key a boundary map carries, as the position a fixture writes it at. */
+    private static FixtureShape key(souther.compiler.types.BoundaryMapKey key) {
+        return switch (key) {
+            case souther.compiler.types.BoundaryMapKey.Text _ -> new Scalar(BoundaryScalar.STRING);
+            case souther.compiler.types.BoundaryMapKey.Date _ -> new Scalar(BoundaryScalar.DATE);
+            case souther.compiler.types.BoundaryMapKey.DateTime _ ->
+                    new Scalar(BoundaryScalar.DATETIME);
+            case souther.compiler.types.BoundaryMapKey.StringNewtype n -> new Nominal(n.name());
+            case souther.compiler.types.BoundaryMapKey.UnitEnum e -> new Nominal(e.name());
         };
     }
 
