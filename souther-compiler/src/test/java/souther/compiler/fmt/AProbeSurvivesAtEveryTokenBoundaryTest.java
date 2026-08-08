@@ -118,6 +118,17 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
 
             let empty = Out {}
 
+            let counted = 1 + 2 + 3
+
+            let piped = 1 |> plus |> plus
+
+            let plus (x: Int) = x + 1
+
+            data Held =
+                { xs: List<Int>
+                , pair: (Int, Int)
+                }
+
             let make (n) = {
                 guard Amount(n) as a else
                     | value -> Amount(1)

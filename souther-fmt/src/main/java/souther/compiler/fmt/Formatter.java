@@ -651,7 +651,7 @@ public final class Formatter {
     // --- types ---
 
     private Doc fnType(SyntaxNode n) {
-        List<Doc> params = new ArrayList<>();
+        List<Member> params = new ArrayList<>();
         Doc result = Doc.NIL;
         boolean afterArrow = false;
         for (SyntaxElement e : meaningful(n)) {
@@ -659,13 +659,13 @@ public final class Formatter {
                 afterArrow = true;
             } else if (e instanceof SyntaxNode c && c.kind() == SyntaxKind.RET_TYPE) {
                 if (afterArrow) {
-                    result = retType(c);
+                    result = concat(aboveOf(c), retType(c), afterOf(c));
                 } else {
-                    params.add(retType(c));
+                    params.add(member(c, retType(c)));
                 }
             }
         }
-        return concat(delimited("(", SOFTLINE, plain(params), ")"), text(" -> "), result);
+        return concat(delimited("(", SOFTLINE, params, ")"), text(" -> "), result);
     }
 
     private Doc retType(SyntaxNode n) {
@@ -689,13 +689,13 @@ public final class Formatter {
 
     private Doc typeRef(SyntaxNode n) {
         if (n.kind() == SyntaxKind.TUPLE_TYPE) {
-            List<Doc> elems = new ArrayList<>();
+            List<Member> elems = new ArrayList<>();
             for (SyntaxNode c : n.childNodes()) {
                 if (isTypeNode(c.kind())) {
-                    elems.add(typeTerm(c));
+                    elems.add(member(c, typeTerm(c)));
                 }
             }
-            return delimited("(", SOFTLINE, plain(elems), ")");
+            return delimited("(", SOFTLINE, withEndComments(n, elems), ")");
         }
         var typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
@@ -706,13 +706,13 @@ public final class Formatter {
         if (args.isEmpty()) {
             return name;
         }
-        List<Doc> typeArgs = new ArrayList<>();
+        List<Member> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
             if (isTypeNode(c.kind())) {
-                typeArgs.add(typeTerm(c));
+                typeArgs.add(member(c, typeTerm(c)));
             }
         }
-        return concat(name, delimited("<", SOFTLINE, plain(typeArgs), ">"));
+        return concat(name, delimited("<", SOFTLINE, withEndComments(args.get(), typeArgs), ">"));
     }
 
     private static boolean isTypeNode(SyntaxKind k) {
@@ -800,9 +800,11 @@ public final class Formatter {
         if (left.kind() == SyntaxKind.BINARY_EXPR && ladderLevel(operatorKind(left)) == level) {
             head = collectChain(left, level, segs);
         } else {
-            head = expr(left);
+            head = concat(aboveOf(left), expr(left), afterOf(left));
         }
-        segs.add(new Segment(operatorText(n) + " ", expr(ops.get(1))));
+        SyntaxNode right = ops.get(1);
+        segs.add(new Segment(operatorText(n) + " ", concat(expr(right), afterOf(right)),
+                aboveOf(right)));
         return head;
     }
 
@@ -1251,12 +1253,37 @@ public final class Formatter {
      * rather than about what the comment was written about.
      */
     private static void place(Attachments out, SyntaxNode owner, SyntaxToken comment, boolean above) {
-        for (SyntaxNode c = owner; c != null && c.parent() != null; c = c.parent()) {
+        SyntaxNode from = owner;
+        // A run the layout flattens is written as segments, and a part of the spine ends where its
+        // own segment does rather than where the whole run does. Only inside the run, though: the
+        // last segment of the outermost run is followed by whatever the construct holding it writes
+        // — a `then`, a closing bracket — and a comment there would have that written inside it.
+        while (isSpine(from) && from.parent() != null && from.parent().kind() == from.kind()) {
+            from = lastSegmentOf(from);
+        }
+        for (SyntaxNode c = from; c != null && c.parent() != null; c = c.parent()) {
             if (takesALineOf(c.parent().kind(), c.kind())) {
                 add(above ? out.above() : out.after(), c, comment);
                 return;
             }
         }
+    }
+
+    /** Whether {@code n} is a run the layout writes as one chain of segments rather than as the
+     * nesting the parser read. */
+    private static boolean isSpine(SyntaxNode n) {
+        return n.kind() == SyntaxKind.PIPE_EXPR || n.kind() == SyntaxKind.BINARY_EXPR;
+    }
+
+    /** The part of a flattened run that is written last — the segment whose line the run ends on. */
+    private static SyntaxNode lastSegmentOf(SyntaxNode n) {
+        List<SyntaxNode> parts = new ArrayList<>();
+        for (SyntaxNode c : n.childNodes()) {
+            if (isExprKind(c.kind())) {
+                parts.add(c);
+            }
+        }
+        return parts.get(parts.size() - 1);
     }
 
     /** The outermost construct beginning at {@code t}. */
@@ -1433,7 +1460,9 @@ public final class Formatter {
                     || child == SyntaxKind.NEWTYPE_BODY;
             case BEHAVIOR_SIG -> child == SyntaxKind.CONSTRUCTS_CLAUSE
                     || child == SyntaxKind.DEPENDS_CLAUSE || child == SyntaxKind.RET_TYPE;
-            case RET_TYPE -> isTypeNode(child);
+            case RET_TYPE, TYPE_ARGS, TUPLE_TYPE -> isTypeNode(child);
+            case FN_TYPE -> child == SyntaxKind.RET_TYPE;
+            case BINARY_EXPR -> isExprKind(child) && child != SyntaxKind.BINARY_EXPR;
             case BLOCK_EXPR -> true;
             case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> isExprKind(child);
             case PIPE_EXPR -> isExprKind(child) && child != SyntaxKind.PIPE_EXPR;

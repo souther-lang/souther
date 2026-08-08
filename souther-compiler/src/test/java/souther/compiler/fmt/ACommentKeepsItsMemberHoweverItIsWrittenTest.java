@@ -232,6 +232,77 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
+    /**
+     * Written as part of a run the layout flattens. The parser reads {@code 1 |> b |> c} as nesting
+     * and the layout writes it as one run of segments, so what the comment is about — the inner
+     * {@code 1 |> b} — is not a construct the output has a line for. Its segment is.
+     */
+    @Test
+    void aMemberWrittenAsPartOfAFlattenedRun() {
+        assertEquals("""
+                module m
+
+                let b (x: Int) = x
+
+                let c (x: Int) = x
+
+                let value =
+                    1
+                        |> b // about the b stage
+                        |> c
+                """, Formatter.format("""
+                module m
+                let b (x: Int) = x
+                let c (x: Int) = x
+                let value = 1
+                    |> b   // about the b stage
+                    |> c
+                """));
+    }
+
+    /** An operator run is the same shape, and was the same defect: the segments are what the layout
+     * writes, and only the pipeline had been asked. */
+    @Test
+    void andAnOperatorRunIsTheSameShape() {
+        assertEquals("""
+                module m
+
+                let value =
+                    1
+                        + 2 // about the second term
+                        + 3
+                """, Formatter.format("""
+                module m
+                let value = 1
+                    + 2   // about the second term
+                    + 3
+                """));
+    }
+
+    /** Written as a member of a nested bracketed construct: a type argument. It is a node, like a
+     * field, and unlike a field it was not being read as a member. */
+    @Test
+    void aMemberWrittenInsideNestedBrackets() {
+        assertEquals("""
+                module m
+
+                data D =
+                    { xs: List<
+                        // element type
+                        Int
+                    >
+                    }
+                """, Formatter.format("""
+                module m
+                data D =
+                    { xs: List<
+                        // element type
+                        Int
+                      >
+                    }
+                """));
+    }
+
     /** No member to be about: the comment was written above the construct, and stays above it rather
      * than moving inside where the construct's own end comments go. */
     @Test
