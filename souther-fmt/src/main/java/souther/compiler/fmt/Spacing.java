@@ -142,6 +142,7 @@ final class Spacing {
      * so the pair is the smaller statement.
      */
     private static final String TIGHT_ROWS = """
+            DECIMAL_LIT COMMA
             DOT IDENT
             FALSE_KW COMMA
             GT COMMA
@@ -187,6 +188,7 @@ final class Spacing {
             RPAREN RPAREN
             SPREAD IDENT
             STRING_LIT RPAREN
+            STRING_LIT COMMA
             STRING_LIT RBRACKET
             TRUE_KW RPAREN
             TRUE_KW COMMA
@@ -225,9 +227,13 @@ final class Spacing {
             COLON LPAREN
             COLON TYPEVAR
             COMMA FALSE_KW
+            COMMA DECIMAL_LIT
             COMMA IDENT
+            COMMA LPAREN
+            COMMA MATCH_KW
             COMMA INT_LIT
             COMMA LBRACKET
+            COMMA STRING_LIT
             COMMA TRUE_KW
             COMMA TYPEVAR
             CONSTRUCTS_KW IDENT

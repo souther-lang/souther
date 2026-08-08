@@ -170,10 +170,11 @@ public final class Formatter {
         List<TokenDoc> parts = new ArrayList<>();
         for (int i = 0; i < members.size(); i++) {
             if (i > 0) {
-                parts.add(RAW_LINE);
+                parts.add(TokenDoc.SOFT_GAP);
             }
             parts.add(members.get(i).doc());
             if (i < members.size() - 1) {
+                parts.add(TokenDoc.GAP);
                 parts.add(COMMA);
             }
             parts.add(members.get(i).trailing());
@@ -368,7 +369,8 @@ public final class Formatter {
                         expr(firstExprChildOpt(b).orElseThrow()))));
             }
             input = concat(input, raw(" with "),
-                    group(nest(INDENT, separated(withEndComments(with.get(), binds)))));
+                    TokenDoc.node(with.get().kind(),
+                            group(nest(INDENT, separated(withEndComments(with.get(), binds))))));
         }
 
         List<Segment> segs = new ArrayList<>();
@@ -659,13 +661,13 @@ public final class Formatter {
         if (!current.isEmpty()) {
             names.add(named(clause, current));
         }
-        return group(nest(INDENT, separated(withEndComments(clause, names))));
+        return TokenDoc.node(clause.kind(),
+                group(nest(INDENT, separated(withEndComments(clause, names)))));
     }
 
     /** One name of such a clause, held against where its identifiers are. */
     private Member named(SyntaxNode clause, List<SyntaxToken> idents) {
-        return tokenMember(idents.get(0), idents.get(idents.size() - 1),
-                TokenDoc.node(clause.kind(), dottedName(idents)));
+        return tokenMember(idents.get(0), idents.get(idents.size() - 1), dottedName(idents));
     }
 
     /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
@@ -878,7 +880,8 @@ public final class Formatter {
             case LAMBDA_EXPR -> lambda(n);
             case NEW_DATA_EXPR -> newData(n);
             case BLOCK_EXPR -> block(n);
-            case UNREACHABLE_EXPR -> concat(raw("unreachable "), expr(onlyExpr(n)));
+            case UNREACHABLE_EXPR -> TokenDoc.node(n.kind(), concat(
+                    TokenDoc.token(SyntaxKind.UNREACHABLE_KW, "unreachable"), TokenDoc.GAP, expr(onlyExpr(n))));
             default -> raw(n.text().strip());
         };
     }
@@ -992,19 +995,21 @@ public final class Formatter {
         List<Member> guards = exprs.subList(1, exprs.size());
         // The `|` is the comprehension's and it is on the element's line, so it goes before the
         // comment that ends that line — as a comma does for a member of a list.
-        return group(concat(LBRACKET, element.doc(), raw(" |"), element.trailing(),
-                nest(INDENT, concat(RAW_LINE, separated(guards))), RAW_SOFTLINE, RBRACKET));
+        return TokenDoc.node(n.kind(),
+                group(concat(LBRACKET, element.doc(), raw(" |"), element.trailing(),
+                        nest(INDENT, concat(RAW_LINE, separated(guards))), RAW_SOFTLINE, RBRACKET)));
     }
 
     private TokenDoc ifExpr(SyntaxNode n) {
         List<SyntaxNode> parts = exprChildren(n);
         TokenDoc departures = elseArms(n);
-        return group(concat(raw("if "), expr(parts.get(0)), attemptBinder(n), raw(" then"),
+        return TokenDoc.node(n.kind(), group(concat(TokenDoc.token(SyntaxKind.IF_KW, "if"), TokenDoc.GAP,
+                expr(parts.get(0)), attemptBinder(n), TokenDoc.GAP, TokenDoc.token(SyntaxKind.THEN_KW, "then"),
                 nest(INDENT, concat(RAW_LINE, expr(parts.get(1)))),
                 RAW_LINE, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
                 departures != TokenDoc.NIL
                         ? departures
-                        : nest(INDENT, concat(RAW_LINE, expr(parts.get(2))))));
+                        : nest(INDENT, concat(RAW_LINE, expr(parts.get(2)))))));
     }
 
     /** An attempt's per-clause departures, one to a line under the {@code else}, or nothing where the
@@ -1033,7 +1038,7 @@ public final class Formatter {
             if (t.kind() == SyntaxKind.AS_KW) {
                 afterAs = true;
             } else if (afterAs && t.kind() == SyntaxKind.IDENT) {
-                return raw(" as " + t.text());
+                return concat(TokenDoc.GAP, TokenDoc.token(SyntaxKind.AS_KW, "as"), TokenDoc.GAP, token(t));
             }
         }
         return TokenDoc.NIL;
@@ -1046,8 +1051,9 @@ public final class Formatter {
             cases.add(concat(HARD_GAP, concat(aboveOf(c), matchCase(c)), afterOf(c)));
         }
         cases.add(endOf(n));
-        return concat(raw("match "), expr(scrutinee), raw(" with"),
-                afterToken(n.token(SyntaxKind.WITH_KW)), nest(INDENT, concat(cases)));
+        return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.MATCH_KW, "match"), TokenDoc.GAP, expr(scrutinee),
+                TokenDoc.GAP, TokenDoc.token(SyntaxKind.WITH_KW, "with"),
+                afterToken(n.token(SyntaxKind.WITH_KW)), nest(INDENT, concat(cases))));
     }
 
     /** The brackets a construct is written between. One place knows which they are. */
@@ -1221,11 +1227,11 @@ public final class Formatter {
         List<SyntaxNode> exprs = exprChildren(n);
         TokenDoc departures = elseArms(n);
         if (departures != TokenDoc.NIL) {
-            return concat(raw("guard "), expr(exprs.get(0)), attemptBinder(n), raw(" else"),
-                    departures);
+            return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.GUARD_KW, "guard"), TokenDoc.GAP, expr(exprs.get(0)),
+                    attemptBinder(n), TokenDoc.GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"), departures));
         }
-        return concat(raw("guard "), expr(exprs.get(0)), attemptBinder(n),
-                raw(" else "), expr(exprs.get(1)));
+        return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.GUARD_KW, "guard"), TokenDoc.GAP, expr(exprs.get(0)),
+                attemptBinder(n), TokenDoc.GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"), TokenDoc.GAP, expr(exprs.get(1))));
     }
 
     // --- comments ---

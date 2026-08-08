@@ -239,6 +239,10 @@ class WhatGoesBetweenTwoTokensOnALineTest {
 
             let unflagged (a: Int): R = R { a = false }
 
+            let two (a: Int): Int = f("x", "y")
+
+            let parenArg (a: Int): Int = f(a, (a))
+
             let opened (a: Int): Int = call(({ a }) -> a)
             """,
             """
@@ -476,6 +480,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             RPAREN RBRACKET
             RPAREN RPAREN
             SPREAD IDENT
+            STRING_LIT COMMA
             STRING_LIT RPAREN
             TRUE_KW COMMA
             TYPEVAR COMMA
@@ -513,8 +518,10 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             COLON TYPEVAR
             COMMA FALSE_KW
             COMMA IDENT
+            COMMA LPAREN
             COMMA INT_LIT
             COMMA LBRACKET
+            COMMA STRING_LIT
             COMMA TRUE_KW
             COMMA TYPEVAR
             CONSTRUCTS_KW IDENT
