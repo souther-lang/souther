@@ -430,7 +430,7 @@ public final class Resolve {
      * declaring declaration's, so this is where an editor is answered from either way.
      */
     private void declareFields(Ast.Data d) {
-        Map<String, BindingId> bindings = TypeOps.fieldBindings(d, symbols);
+        Map<String, BindingId> bindings = TypeOps.fieldBindings(symbols.own(d.name()), d, symbols);
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
             if (binding != null) {
@@ -443,7 +443,8 @@ public final class Resolve {
         Bindings bound = Bindings.NONE;
         // which binding each field is is answered in one place, so the pass that emits this
         // invariant reaches the same ones without working them out again
-        for (Map.Entry<String, BindingId> f : TypeOps.fieldBindings(d, symbols).entrySet()) {
+        for (Map.Entry<String, BindingId> f
+                : TypeOps.fieldBindings(symbols.own(d.name()), d, symbols).entrySet()) {
             bound = bound.and(f.getKey(), new ValueName.Local(f.getKey(), f.getValue()));
         }
         return bound;

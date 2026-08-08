@@ -566,14 +566,21 @@ public final class DataChecker {
     }
 
     private static Scope fieldScope(CheckContext ctx) {
-        return fieldScope(ctx.data(), ctx.symbols());
+        return fieldScope(ctx.symbols().own(ctx.data().name()), ctx.data(), ctx.symbols());
     }
 
-    /** The bindings a declaration's own invariant reads: its fields, each as the binding it is. */
-    static Scope fieldScope(Ast.Data data, Symbols symbols) {
+    /**
+     * The bindings a declaration's own invariant reads: its fields, each as the binding it is.
+     *
+     * <p>{@code declared} is which declaration these fields belong to, which is not always the module
+     * asking — the discharge check reads the clauses of types other modules declared. A field is
+     * bound where it was written, so that is what the scope offers, and the clause carried in with the
+     * declaration finds the very bindings it names.
+     */
+    static Scope fieldScope(TypeName declared, Ast.Data data, Symbols symbols) {
         Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
-        TypeOps.fieldBindings(data, symbols).forEach((name, binding) ->
+        TypeOps.fieldBindings(declared, data, symbols).forEach((name, binding) ->
                 bindings.put(binding, new Scope.Binding(name, types.get(name))));
         return Scope.of(bindings);
     }

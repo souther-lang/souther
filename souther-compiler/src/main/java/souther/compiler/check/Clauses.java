@@ -34,8 +34,10 @@ final class Clauses {
     private final Symbols symbols;
     private final Map<TypeName, List<Ast.InvariantClause>> inTheAnalysisRepresentation;
     private final Map<Ast.Data, Map<String, Type>> fields = new HashMap<>();
-    private final Map<Ast.Data, Map<String, BindingId>> bindings = new HashMap<>();
-    private final Map<Ast.Expr, Optional<Core>> typed = new IdentityHashMap<>();
+    private final Map<TypeName, Map<String, BindingId>> bindings = new HashMap<>();
+    /** Remembered per declaration, not per clause: a clause an include brings in is one expression
+     * reached under two names, and what it types to is read against the fields of the one asking. */
+    private final Map<TypeName, Map<Ast.Expr, Optional<Core>>> typed = new HashMap<>();
     private final Map<TypeName, List<Ast.InvariantClause>> effective = new HashMap<>();
     /** Which of a declaration's own fields each typed clause reads — what a construction has to have
      * filled for the clause to be read at all. */
@@ -66,14 +68,20 @@ final class Clauses {
         return fields.computeIfAbsent(data, d -> TypeOps.fieldTypes(d, symbols));
     }
 
-    /** Which binding each of {@code data}'s fields is — what a clause reads, and what a construction
-     * fills. */
-    Map<String, BindingId> bindingsOf(Ast.Data data) {
-        return bindings.computeIfAbsent(data, d -> TypeOps.fieldBindings(d, symbols));
+    /**
+     * Which binding each of {@code named}'s fields is — what a clause reads, and what a construction
+     * fills.
+     *
+     * <p>Keyed by the name and not by the declaration, because that is what the binding is a function
+     * of: two modules may declare one spelling, and a reader with both in sight would otherwise have
+     * them answer alike.
+     */
+    Map<String, BindingId> bindingsOf(TypeName named, Ast.Data data) {
+        return bindings.computeIfAbsent(named, name -> TypeOps.fieldBindings(name, data, symbols));
     }
 
     /**
-     * {@code clause} as the checker types it: over the declaration's own fields, each a binding, in
+     * {@code clause} as the checker types it: over {@code named}'s own fields, each a binding, in
      * the representation this check reads. Asked once per clause, because typing one walks it.
      *
      * <p>Null where the clause is not one this compiler could type there. That is the same answer as
@@ -81,17 +89,18 @@ final class Clauses {
      * an answer rather than a failure because a declaration this check cannot read is not a
      * declaration an author wrote wrongly.
      */
-    Core typed(Ast.Expr clause, Ast.Data data) {
-        return typed.computeIfAbsent(clause, written -> {
-            try {
-                return Optional.ofNullable(Elaborator.elaborate(written,
-                        DataChecker.fieldScope(data, symbols),
-                        CheckContext.of(symbols).forData(data).forDischarge(),
-                        Type.BOOL));
-            } catch (RuntimeException _) {
-                return Optional.empty();
-            }
-        }).orElse(null);
+    Core typed(Ast.Expr clause, TypeName named, Ast.Data data) {
+        return typed.computeIfAbsent(named, _ -> new IdentityHashMap<>())
+                .computeIfAbsent(clause, written -> {
+                    try {
+                        return Optional.ofNullable(Elaborator.elaborate(written,
+                                DataChecker.fieldScope(named, data, symbols),
+                                CheckContext.of(symbols).forData(data).forDischarge(),
+                                Type.BOOL));
+                    } catch (RuntimeException _) {
+                        return Optional.empty();
+                    }
+                }).orElse(null);
     }
 
     /**
@@ -102,13 +111,13 @@ final class Clauses {
      * that is not there, and the clause is left to the run-time check rather than read against
      * nothing.
      */
-    Core statedAt(Ast.Expr clause, Ast.Data data, Map<BindingId, Core> given) {
-        Core stated = typed(clause, data);
+    Core statedAt(Ast.Expr clause, TypeName named, Ast.Data data, Map<BindingId, Core> given) {
+        Core stated = typed(clause, named, data);
         if (stated == null) {
             return null;
         }
-        return given.keySet().containsAll(fieldsRead(stated, data)) ? substituted(stated, given)
-                : null;
+        return given.keySet().containsAll(fieldsRead(stated, named, data))
+                ? substituted(stated, given) : null;
     }
 
     /**
@@ -122,7 +131,7 @@ final class Clauses {
     List<Core> statedAt(TypeName named, Ast.Data data, Map<BindingId, Core> given) {
         List<Core> stated = new ArrayList<>();
         for (Ast.InvariantClause inv : of(named, data)) {
-            Core one = statedAt(inv.expr(), data, given);
+            Core one = statedAt(inv.expr(), named, data, given);
             if (one != null) {
                 stated.add(one);
             }
@@ -132,9 +141,9 @@ final class Clauses {
 
     /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every
      * construction of its type, and what it reads does not change between them. */
-    private Set<BindingId> fieldsRead(Core clause, Ast.Data data) {
+    private Set<BindingId> fieldsRead(Core clause, TypeName named, Ast.Data data) {
         return readsFields.computeIfAbsent(clause, read -> {
-            Set<BindingId> declared = new HashSet<>(bindingsOf(data).values());
+            Set<BindingId> declared = new HashSet<>(bindingsOf(named, data).values());
             Set<BindingId> found = new HashSet<>();
             readsOf(read, binding -> {
                 if (declared.contains(binding)) {

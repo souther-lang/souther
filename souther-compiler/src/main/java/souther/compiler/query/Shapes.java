@@ -334,18 +334,19 @@ public final class Shapes {
                     HelperInliner inliner = HelperInliner.forHelpers(name,
                             HelperInliner.helpersOf(declaring), published, InliningPolicy.DISCHARGE);
                     List<ClauseDischarge> clauses = new ArrayList<>();
+                    TypeName named = new TypeName(name, data.name());
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
                     // discharges each half is what an author needs, and the name is what a caller reads.
                     for (Ast.InvariantClause declared : data.invariants()) {
                         for (Ast.Expr written : HelperInvariants.conjunctsOf(declared.expr())) {
                             clauses.add(InvariantChecker.capabilityOf(
-                                    inliner.inline(written, new BindingOwner.OfData(
-                                            new TypeName(name, data.name()))),
-                                    leftmost(written), data, scope.value()).named(declared.name()));
+                                    inliner.inline(written, new BindingOwner.OfData(named)),
+                                    leftmost(written), named, data, scope.value())
+                                    .named(declared.name()));
                         }
                     }
-                    out.put(new TypeName(name, data.name()), List.copyOf(clauses));
+                    out.put(named, List.copyOf(clauses));
                 }
                 return Answer.of(Map.copyOf(out));
             } catch (CompileException e) {

@@ -119,7 +119,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
                 }
                 TypeName named = new TypeName(module, data.name());
                 for (Ast.InvariantClause clause : clauses.of(named, data)) {
-                    assertNotNull(clauses.typed(clause.expr(), data),
+                    assertNotNull(clauses.typed(clause.expr(), named, data),
                             "`" + data.name() + "` declares a clause this check could not type:\n"
                                     + source);
                     read++;
