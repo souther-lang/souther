@@ -620,10 +620,9 @@ public final class Partitions {
 
         Bounds bounds = narrowed(boundsOf(new Type.Ref(newtype), symbols), within);
         if (bounds != null && !bounds.isEmpty()) {
-            for (BigDecimal edge : edgesOf(bounds)) {
-                candidates.add(bounds.decimal() ? FixtureTemplate.decimal(edge)
-                        : FixtureTemplate.integer(edge.longValueExact()));
-            }
+            candidates.add(bounds.decimal()
+                    ? FixtureTemplate.decimal(inside(bounds))
+                    : FixtureTemplate.integer(inside(bounds).longValueExact()));
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
@@ -645,26 +644,47 @@ public final class Partitions {
         return List.copyOf(once.values());
     }
 
+    /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
+     * there is, and it is the value a boundary wants written anyway. */
+    private static BigDecimal inside(Bounds bounds) {
+        return bounds.min() != null ? bounds.min().value()
+                : bounds.max() != null ? bounds.max().value() : BigDecimal.ZERO;
+    }
+
     /**
-     * The numbers the bound admits that are worth proposing, in the order to try them.
+     * What a position can offer once everything it ordinarily offers has been refused.
      *
-     * <p>The lower edge first: it is inside whatever upper edge there is, and it is the value a
-     * boundary wants written anyway, so an assignment that builds today builds on the same number.
+     * <p>The far edge of a range, for a position that is a bounded number. A rule relating this
+     * position to another is what refuses the near one: `low < high` with `low` already fixed leaves
+     * `high` a range starting at the value `low` took, and over decimals that range starts at the one
+     * number the rule will not accept, because a strict bound there has no next value to step to. The
+     * far edge is not knowing which number the rule wants — it is having a second number to be
+     * refused at, which a range offering one edge does not.
      *
-     * <p>Then the upper one, which is reached only where the first was refused. What refuses it is a
-     * rule relating this position to another: `low < high` with `low` already fixed leaves `high` a
-     * range starting at the value `low` took, and over decimals that range starts at the one number
-     * the rule will not accept. Offering the far end is not knowing which number the rule wants — it
-     * is having a second number to be refused at, which a range with one edge does not.
+     * <p>Held back rather than offered beside the others, because what a row is searched for is the
+     * product of what its positions offer and that search is bounded. A value added to one position
+     * moves every assignment past it further back, so offering this one among the rest would lose
+     * rows that were being reached at positions this has nothing to do with.
      */
-    private static List<BigDecimal> edgesOf(Bounds bounds) {
-        if (bounds.min() == null) {
-            return List.of(bounds.max().value());
+    static List<FixtureTemplate> inReserve(Type type, Symbols symbols,
+                                           NumericDomain.Bounds within) {
+        if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
+                || !data.newtype()) {
+            return List.of();
         }
-        if (bounds.max() == null || bounds.max().value().compareTo(bounds.min().value()) == 0) {
-            return List.of(bounds.min().value());
+        Bounds bounds = narrowed(boundsOf(type, symbols), within);
+        if (bounds == null || bounds.min() == null || bounds.max() == null
+                || bounds.max().value().compareTo(bounds.min().value()) == 0) {
+            return List.of();
         }
-        return List.of(bounds.min().value(), bounds.max().value());
+        BigDecimal far = bounds.max().value();
+        FixtureTemplate held = FixtureTemplate.newtype(ref.name(), bounds.decimal()
+                ? FixtureTemplate.decimal(far) : FixtureTemplate.integer(far.longValueExact()));
+        // Nothing already on offer: a range whose far edge is the number the base type stands for
+        // would otherwise hold the same value twice, once in each tier.
+        return representativesOf(type, symbols, within).stream()
+                .map(FixtureTemplate::text).anyMatch(held.text()::equals)
+                ? List.of() : List.of(held);
     }
 
     private static boolean isBool(ObservedValue v, boolean expected) {
