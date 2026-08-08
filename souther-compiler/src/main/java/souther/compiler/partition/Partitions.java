@@ -607,10 +607,10 @@ public final class Partitions {
             return List.of();
         }
         if (type == Type.INT) {
-            return List.of(FixtureTemplate.integer(0));
+            return List.of(FixtureTemplate.integer(admissible(within, true).longValueExact()));
         }
         if (type == Type.DECIMAL) {
-            return List.of(FixtureTemplate.decimal(BigDecimal.ZERO));
+            return List.of(FixtureTemplate.decimal(admissible(within, false)));
         }
         if (type == Type.STRING) {
             return List.of(FixtureTemplate.string("x"));
@@ -698,6 +698,30 @@ public final class Partitions {
             once.putIfAbsent(each.text(), each);
         }
         return List.copyOf(once.values());
+    }
+
+    /**
+     * A number the position can hold, for a position whose type says nothing about which one.
+     *
+     * <p>The lower end where there is one, the upper where there is only that, and zero where the
+     * position is left open — which is what a type with no rules has always offered here. The same
+     * order a newtype's own candidate is chosen in: the low end is inside whatever high end there is,
+     * so one rule picks a value for both shapes of range.
+     *
+     * <p>{@code whole} takes an end in to the nearest whole number inside it. A projection divides,
+     * so what it leaves an {@code Int} can have a fraction on it that no {@code Int} has.
+     */
+    private static BigDecimal admissible(NumericDomain.Bounds within, boolean whole) {
+        if (within == null) {
+            return BigDecimal.ZERO;
+        }
+        if (within.min() != null) {
+            return whole ? within.min().setScale(0, java.math.RoundingMode.CEILING) : within.min();
+        }
+        if (within.max() != null) {
+            return whole ? within.max().setScale(0, java.math.RoundingMode.FLOOR) : within.max();
+        }
+        return BigDecimal.ZERO;
     }
 
     /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
