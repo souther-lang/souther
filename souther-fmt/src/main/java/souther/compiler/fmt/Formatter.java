@@ -217,7 +217,7 @@ public final class Formatter {
      * part of that line, so the two are written in this order and not the other: a comment placed
      * after the connector leaves the part itself starting a line the connector never opened.
      */
-    private record Segment(String connector, TokenDoc doc, TokenDoc leading) {}
+    private record Segment(TokenDoc connector, TokenDoc doc, TokenDoc leading) {}
 
     /**
      * A part of a chain that something in the source stands for. Every segment of every chain is
@@ -225,7 +225,7 @@ public final class Formatter {
      * was written above and beside it is one whose comments have nowhere to go. {@code owner} is
      * null only where the source has nothing there — an example row with no expected value.
      */
-    private Segment segment(String connector, SyntaxNode owner, TokenDoc doc) {
+    private Segment segment(TokenDoc connector, SyntaxNode owner, TokenDoc doc) {
         return owner == null
                 ? new Segment(connector, doc, TokenDoc.NIL)
                 : new Segment(connector, concat(doc, afterOf(owner)), aboveOf(owner));
@@ -234,7 +234,7 @@ public final class Formatter {
     /** The same for a part the grammar writes as a bare identifier rather than as a node — a sum's
      * cases. It is the only other way a chain's part can stand for something written, so between the
      * two of them nothing else builds a {@link Segment}. */
-    private Segment segment(String connector, SyntaxToken owner, TokenDoc doc) {
+    private Segment segment(TokenDoc connector, SyntaxToken owner, TokenDoc doc) {
         List<TokenDoc> lead = new ArrayList<>();
         for (TokenDoc c : aboveCase(owner)) {
             lead.add(concat(c, HARD_GAP));
@@ -251,7 +251,7 @@ public final class Formatter {
     private static TokenDoc chained(Member head, List<Segment> segments) {
         List<TokenDoc> parts = new ArrayList<>();
         for (Segment s : segments) {
-            parts.add(concat(RAW_LINE, s.leading(), raw(s.connector()), s.doc()));
+            parts.add(concat(SOFT_GAP, s.leading(), s.connector(), GAP, s.doc()));
         }
         return group(concat(head.doc(), head.trailing(), nest(INDENT, concat(parts))));
     }
@@ -384,16 +384,16 @@ public final class Formatter {
         var desc = n.token(SyntaxKind.STRING_LIT);
         Member head;
         if (desc.isPresent()) {
-            head = head(desc.get(), concat(raw("| "), token(desc.get())));
-            segs.add(segment(": ", n.child(SyntaxKind.ARG_LIST).orElse(null), input));
+            head = head(desc.get(), concat(PIPE, GAP, token(desc.get())));
+            segs.add(segment(COLON, n.child(SyntaxKind.ARG_LIST).orElse(null), input));
         } else {
             // with no description the input opens the row, so the row's head carries its comments
             SyntaxNode args = n.child(SyntaxKind.ARG_LIST).orElse(null);
-            head = args == null ? synthetic(concat(raw("| "), input))
-                    : head(args, concat(raw("| "), input));
+            head = args == null ? synthetic(concat(PIPE, GAP, input))
+                    : head(args, concat(PIPE, GAP, input));
         }
         List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
-        segs.add(segment("-> ", expected.isEmpty() ? null : expected.get(0),
+        segs.add(segment(ARROW, expected.isEmpty() ? null : expected.get(0),
                 expected.isEmpty() ? TokenDoc.NIL : expr(expected.get(0))));
         return TokenDoc.node(n.kind(), chained(head, segs));
     }
@@ -420,11 +420,11 @@ public final class Formatter {
         }
         List<SyntaxNode> outs = exprChildren(n);
         // the input opens the row, so the head carries what was written above and beside it
-        Member head = args.map(a -> head(a, concat(raw("| "), input)))
-                .orElse(synthetic(concat(raw("| "), input)));
-        return chained(head,
-                List.of(segment("-> ", outs.isEmpty() ? null : outs.get(0),
-                        outs.isEmpty() ? TokenDoc.NIL : expr(outs.get(0)))));
+        Member head = args.map(a -> head(a, concat(PIPE, GAP, input)))
+                .orElse(synthetic(concat(PIPE, GAP, input)));
+        return TokenDoc.node(n.kind(), chained(head,
+                List.of(segment(ARROW, outs.isEmpty() ? null : outs.get(0),
+                        outs.isEmpty() ? TokenDoc.NIL : expr(outs.get(0))))));
     }
 
     private TokenDoc moduleHeader(SyntaxNode n) {
@@ -512,10 +512,10 @@ public final class Formatter {
                         headComments.add(concat(c, HARD_GAP));
                     }
                 } else {
-                    cases.add(segment("| ", t, token(t)));
+                    cases.add(segment(PIPE, t, token(t)));
                 }
             }
-            TokenDoc chain = chained(synthetic(head), cases);
+            TokenDoc chain = TokenDoc.node(sum.get().kind(), chained(synthetic(head), cases));
             if (headComments.isEmpty()) {
                 return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.DATA_KW, "data"), GAP, ident(name), GAP, ASSIGN, GAP, chain));
             }
@@ -837,10 +837,11 @@ public final class Formatter {
             if (cases.isEmpty()) {
                 cases.add(concat(aboveOf(c), body));
             } else {
-                rest.add(segment("| ", c, typeTerm(c)));
+                rest.add(segment(PIPE, c, typeTerm(c)));
             }
         }
-        TokenDoc d = cases.isEmpty() ? TokenDoc.NIL : chained(synthetic(cases.get(0)), rest);
+        TokenDoc d = cases.isEmpty() ? TokenDoc.NIL
+                : TokenDoc.node(n.kind(), chained(synthetic(cases.get(0)), rest));
         // `T?` in a core signature, the same mark a field carries
         return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, QUESTION) : d;
     }
@@ -939,7 +940,7 @@ public final class Formatter {
     private TokenDoc binary(SyntaxNode n) {
         List<Segment> segs = new ArrayList<>();
         TokenDoc head = collectChain(n, ladderLevel(operatorKind(n)), segs);
-        return chained(synthetic(head), segs);
+        return TokenDoc.node(n.kind(), chained(synthetic(head), segs));
     }
 
     /**
@@ -962,7 +963,7 @@ public final class Formatter {
             head = concat(aboveOf(left), expr(left), afterOf(left));
         }
         SyntaxNode right = ops.get(1);
-        segs.add(segment(operatorText(n) + " ", right, expr(right)));
+        segs.add(segment(token(operatorToken(n)), right, expr(right)));
         return head;
     }
 
@@ -989,7 +990,7 @@ public final class Formatter {
     private TokenDoc pipe(SyntaxNode n) {
         List<Segment> stages = new ArrayList<>();
         TokenDoc head = collectPipe(n, stages);
-        return chained(synthetic(head), stages);
+        return TokenDoc.node(n.kind(), chained(synthetic(head), stages));
     }
 
     /** Flattens a left-nested {@code |>} chain: returns the head doc and fills {@code stages} with each
@@ -1004,7 +1005,7 @@ public final class Formatter {
         } else {
             head = concat(aboveOf(left), expr(left), afterOf(left));
         }
-        stages.add(segment("|> ", right, expr(right)));
+        stages.add(segment(TokenDoc.token(SyntaxKind.VPIPE, "|>"), right, expr(right)));
         return head;
     }
 
@@ -1117,11 +1118,11 @@ public final class Formatter {
                 patternEnd = t;
             }
         }
-        TokenDoc written = TokenDoc.node(n.kind(), concat(pattern));
-        return chained(patternEnd == null
-                        ? synthetic(concat(raw("| "), written))
-                        : head(patternEnd, concat(raw("| "), written)),
-                List.of(segment("-> ", body, expr(body))));
+        TokenDoc written = concat(pattern);
+        return TokenDoc.node(n.kind(), chained(patternEnd == null
+                        ? synthetic(concat(PIPE, GAP, written))
+                        : head(patternEnd, concat(PIPE, GAP, written)),
+                List.of(segment(ARROW, body, expr(body)))));
     }
 
     private TokenDoc lambda(SyntaxNode n) {

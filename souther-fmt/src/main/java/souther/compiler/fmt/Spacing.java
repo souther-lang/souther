@@ -133,6 +133,8 @@ final class Spacing {
             # `-` negates or subtracts.
             MINUS IDENT    UNARY_EXPR       tight
             MINUS IDENT    BINARY_EXPR      spaced
+            MINUS INT_LIT  UNARY_EXPR       tight
+            MINUS INT_LIT  BINARY_EXPR      spaced
             """;
 
     /**
@@ -202,6 +204,7 @@ final class Spacing {
     /** The pairs written with one space between them wherever they occur. */
     private static final String SPACED_ROWS = """
             AND IDENT
+            ARROW FALSE_KW
             ARROW IDENT
             ARROW IF_KW
             ARROW INT_LIT
@@ -209,9 +212,11 @@ final class Spacing {
             ARROW LBRACKET
             ARROW LPAREN
             ARROW MATCH_KW
+            ARROW TRUE_KW
             ARROW TYPEVAR
             ARROW UNREACHABLE_KW
             ASSIGN DOT
+            ASSIGN FALSE_KW
             ASSIGN IDENT
             ASSIGN IF_KW
             ASSIGN INT_LIT
@@ -222,24 +227,24 @@ final class Spacing {
             ASSIGN MINUS
             ASSIGN STRING_LIT
             ASSIGN TRUE_KW
-            ASSIGN FALSE_KW
             AS_KW IDENT
             BEHAVIOR_KW IDENT
             COLON IDENT
             COLON LPAREN
             COLON TYPEVAR
-            COMMA FALSE_KW
             COMMA DECIMAL_LIT
+            COMMA FALSE_KW
             COMMA IDENT
-            COMMA LPAREN
-            COMMA MATCH_KW
             COMMA INT_LIT
             COMMA LBRACKET
+            COMMA LPAREN
+            COMMA MATCH_KW
             COMMA STRING_LIT
             COMMA TRUE_KW
             COMMA TYPEVAR
             CONSTRUCTS_KW IDENT
             DATA_KW IDENT
+            DECIMAL_LIT AND
             DECIMAL_LIT MINUS
             DECIMAL_LIT THEN_KW
             DEPENDS_KW IDENT
@@ -253,6 +258,7 @@ final class Spacing {
             EXPOSING_KW LPAREN
             FALSE_KW ELSE_KW
             FALSE_KW RBRACE
+            GE DECIMAL_LIT
             GE IDENT
             GE INT_LIT
             GT ASSIGN
@@ -269,26 +275,36 @@ final class Spacing {
             IDENT GE
             IDENT IDENT
             IDENT LBRACE
+            IDENT LE
             IDENT LET_KW
+            IDENT MINUS
             IDENT OR
             IDENT PIPE
             IDENT PIPEFWD
             IDENT PLUS
             IDENT PLUSPLUS
             IDENT RBRACE
+            IDENT STAR
             IDENT STRING_LIT
             IDENT THEN_KW
             IDENT VPIPE
             IDENT WITH_KW
             IF_KW IDENT
             IMPORT_KW IDENT
+            INT_LIT AND
+            INT_LIT ARROW
             INT_LIT ELSE_KW
             INT_LIT MINUS
+            INT_LIT PLUS
             INT_LIT RBRACE
+            INT_LIT SLASH
             INT_LIT THEN_KW
+            INT_LIT VPIPE
             INVARIANT_KW IDENT
             LBRACE IDENT
             LBRACE SPREAD
+            LE DECIMAL_LIT
+            LE INT_LIT
             LET_KW IDENT
             LET_KW LBRACE
             LET_KW LPAREN
@@ -301,33 +317,48 @@ final class Spacing {
             PIPE LPAREN
             PIPE STRING_LIT
             PIPEFWD IDENT
+            PLUS IDENT
             PLUS INT_LIT
+            PLUS LPAREN
             PLUSPLUS IDENT
             PLUSPLUS LBRACKET
             RBRACE ARROW
-            RBRACE RBRACE
             RBRACE ASSIGN
             RBRACE AS_KW
+            RBRACE RBRACE
             RBRACKET ELSE_KW
             RBRACKET RBRACE
+            RPAREN AND
             RPAREN ARROW
-            RPAREN RBRACE
             RPAREN ASSIGN
             RPAREN AS_KW
             RPAREN ELSE_KW
             RPAREN EQ
+            RPAREN GE
+            RPAREN LE
+            RPAREN LT
+            RPAREN PLUS
+            RPAREN PLUSPLUS
+            RPAREN RBRACE
             RPAREN STAR
             RPAREN THEN_KW
+            RPAREN VPIPE
             RPAREN WITH_KW
+            SLASH IDENT
+            STAR DECIMAL_LIT
             STAR IDENT
+            STAR INT_LIT
+            STAR LPAREN
+            STRING_LIT ARROW
             STRING_LIT COLON
+            STRING_LIT PLUSPLUS
             STRING_LIT RBRACE
             THEN_KW DECIMAL_LIT
-            TRUE_KW RBRACE
             THEN_KW FALSE_KW
             THEN_KW IDENT
             THEN_KW INT_LIT
             THEN_KW LPAREN
+            TRUE_KW RBRACE
             TYPEVAR ASSIGN
             UNREACHABLE_KW STRING_LIT
             VPIPE IDENT

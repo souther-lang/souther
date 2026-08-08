@@ -249,6 +249,16 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             }
 
             let opened (a: Int): Int = call(({ a }) -> a)
+
+            let arith (a: Int): Int = 1 + a * 2 - a
+
+            let compared (a: Int): Bool = a <= 1
+
+            let after (a: Int): Int = f(a) + 1
+
+            let atLeast (a: Int): Bool = f(a) >= 1
+
+            let piped (a: Int): Int = 1 |> double
             """,
             """
             examples for m
@@ -506,6 +516,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ARROW TYPEVAR
             ARROW UNREACHABLE_KW
             ASSIGN DOT
+            ASSIGN FALSE_KW
             ASSIGN IDENT
             ASSIGN IF_KW
             ASSIGN INT_LIT
@@ -515,7 +526,6 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             ASSIGN MINUS
             ASSIGN STRING_LIT
             ASSIGN TRUE_KW
-            ASSIGN FALSE_KW
             AS_KW IDENT
             BEHAVIOR_KW IDENT
             COLON IDENT
@@ -523,9 +533,9 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             COLON TYPEVAR
             COMMA FALSE_KW
             COMMA IDENT
-            COMMA LPAREN
             COMMA INT_LIT
             COMMA LBRACKET
+            COMMA LPAREN
             COMMA STRING_LIT
             COMMA TRUE_KW
             COMMA TYPEVAR
@@ -560,6 +570,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IDENT GE
             IDENT IDENT
             IDENT LBRACE
+            IDENT LE
             IDENT LET_KW
             IDENT OR
             IDENT PIPE
@@ -567,6 +578,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IDENT PLUS
             IDENT PLUSPLUS
             IDENT RBRACE
+            IDENT STAR
             IDENT STRING_LIT
             IDENT THEN_KW
             IDENT VPIPE
@@ -575,11 +587,14 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IMPORT_KW IDENT
             INT_LIT ELSE_KW
             INT_LIT MINUS
+            INT_LIT PLUS
             INT_LIT RBRACE
             INT_LIT THEN_KW
+            INT_LIT VPIPE
             INVARIANT_KW IDENT
             LBRACE IDENT
             LBRACE SPREAD
+            LE INT_LIT
             LET_KW IDENT
             LET_KW LBRACE
             LET_KW LPAREN
@@ -592,33 +607,37 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             PIPE LPAREN
             PIPE STRING_LIT
             PIPEFWD IDENT
+            PLUS IDENT
             PLUS INT_LIT
             PLUSPLUS IDENT
             PLUSPLUS LBRACKET
             RBRACE ARROW
-            RBRACE RBRACE
             RBRACE ASSIGN
             RBRACE AS_KW
+            RBRACE RBRACE
             RBRACKET ELSE_KW
             RBRACKET RBRACE
             RPAREN ARROW
-            RPAREN RBRACE
             RPAREN ASSIGN
             RPAREN AS_KW
             RPAREN ELSE_KW
             RPAREN EQ
+            RPAREN GE
+            RPAREN PLUS
+            RPAREN RBRACE
             RPAREN STAR
             RPAREN THEN_KW
             RPAREN WITH_KW
             STAR IDENT
+            STAR INT_LIT
             STRING_LIT COLON
             STRING_LIT RBRACE
             THEN_KW DECIMAL_LIT
-            TRUE_KW RBRACE
             THEN_KW FALSE_KW
             THEN_KW IDENT
             THEN_KW INT_LIT
             THEN_KW LPAREN
+            TRUE_KW RBRACE
             TYPEVAR ASSIGN
             UNREACHABLE_KW STRING_LIT
             VPIPE IDENT
