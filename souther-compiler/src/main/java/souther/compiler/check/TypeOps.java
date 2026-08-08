@@ -7,6 +7,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
@@ -1312,7 +1313,7 @@ public final class TypeOps {
         };
     }
 
-    public static Type primType(Ast.PrimKind kind) {
+    public static Type primType(LeafScalar kind) {
         return switch (kind) {
             case STRING -> Type.STRING;
             case INT -> Type.INT;

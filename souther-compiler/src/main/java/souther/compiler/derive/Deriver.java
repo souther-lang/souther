@@ -7,6 +7,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -138,23 +139,23 @@ public final class Deriver {
         return Ast.RawKind.INT;
     }
 
-    private static Ast.PrimKind primKind(Type t) {
+    private static LeafScalar primKind(Type t) {
         if (t == Type.STRING) {
-            return Ast.PrimKind.STRING;
+            return LeafScalar.STRING;
         }
         if (t == Type.BOOL) {
-            return Ast.PrimKind.BOOL;
+            return LeafScalar.BOOL;
         }
         if (t == Type.DECIMAL) {
-            return Ast.PrimKind.DECIMAL;
+            return LeafScalar.DECIMAL;
         }
         if (t == Type.DATE) {
-            return Ast.PrimKind.DATE;
+            return LeafScalar.DATE;
         }
         if (t == Type.DATETIME) {
-            return Ast.PrimKind.DATETIME;
+            return LeafScalar.DATETIME;
         }
-        return Ast.PrimKind.INT;
+        return LeafScalar.INT;
     }
 
     private static Ast.DecRef decRef(Type t, Ast.Data d, String field, SourcePos pos,

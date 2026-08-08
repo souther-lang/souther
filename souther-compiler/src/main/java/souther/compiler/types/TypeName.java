@@ -31,6 +31,31 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
         return new TypeName(PRIMITIVE, name);
     }
 
+    /** The same, minted from the primitive itself, which is where the spelling comes from. */
+    public static TypeName primitive(Type.Prim prim) {
+        return new TypeName(PRIMITIVE, prim.shown());
+    }
+
+    /**
+     * The primitive this name denotes, or null where it names none.
+     *
+     * <p>The other direction of {@link #primitive(Type.Prim)}, and written as its inverse rather
+     * than as a table beside it: a reader that needs the primitive back has one place to get it, and
+     * a spelling can only be wrong here by being wrong in both directions at once. {@code Some} and
+     * {@code None} are primitive-module names that denote no primitive, so they answer nothing.
+     */
+    public Type.Prim primitiveKind() {
+        if (!isPrimitive()) {
+            return null;
+        }
+        for (Type.Prim prim : Type.Prim.values()) {
+            if (prim.shown().equals(name())) {
+                return prim;
+            }
+        }
+        return null;
+    }
+
     /** A built-in error case ({@code DivisionByZero}). */
     public static TypeName runtime(String name) {
         return new TypeName(RUNTIME, name);

@@ -4,6 +4,7 @@ import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -893,7 +894,7 @@ final class CodecGen {
     }
 
     /** Pushes a Raoh leaf {@code Decoder} for a primitive value from the given source. */
-    private void emitLeafDecoder(CodeBuilder code, Ast.PrimKind kind, Src src) {
+    private void emitLeafDecoder(CodeBuilder code, LeafScalar kind, Src src) {
         ClassDesc owner = srcLeafOwner(src);
         switch (kind) {
             // A string that came from outside is canonicalized to NFC before anything reads it.
@@ -1697,8 +1698,8 @@ final class CodecGen {
      * hands the {@code BigDecimal} through as it is, scale and all, and the scale is how a number was
      * written rather than how much it is.
      */
-    private static void canonicalizeAmount(CodeBuilder code, Ast.PrimKind kind) {
-        if (kind != Ast.PrimKind.DECIMAL) {
+    private static void canonicalizeAmount(CodeBuilder code, LeafScalar kind) {
+        if (kind != LeafScalar.DECIMAL) {
             return;
         }
         code.invokedynamic(canonicalNumberCallSite());
@@ -1845,8 +1846,9 @@ final class CodecGen {
      * for a primitive, which declares none. */
     private void pushMemberEncoder(CodeBuilder code, TypeName member) {
         if (member.isPrimitive()) {
-            code.invokestatic(CD_ObjectEncoders, leafEncoderName(primKind(member)), MTD_Rencode_leaf);
-            canonicalizeAmount(code, primKind(member));
+            LeafScalar scalar = memberScalar(member);
+            code.invokestatic(CD_ObjectEncoders, leafEncoderName(scalar), MTD_Rencode_leaf);
+            canonicalizeAmount(code, scalar);
             return;
         }
         // a member is one of the union's effective members, every named sum already expanded to its
@@ -1897,20 +1899,24 @@ final class CodecGen {
                 encoderSig(cd(resultName), isEnumeration(members) ? CD_String : CD_Map));
     }
 
-    private static Ast.PrimKind primKind(TypeName member) {
-        return switch (member.name()) {
-            case "String" -> Ast.PrimKind.STRING;
-            case "Int" -> Ast.PrimKind.INT;
-            case "Bool" -> Ast.PrimKind.BOOL;
-            case "Decimal" -> Ast.PrimKind.DECIMAL;
-            case "Date" -> Ast.PrimKind.DATE;
-            case "DateTime" -> Ast.PrimKind.DATETIME;
-            default -> throw new IllegalStateException("no leaf encoder for the member " + member);
-        };
+    /**
+     * The scalar a primitive member is. Recovered through {@link TypeName#primitiveKind()}, which is
+     * the inverse of the mint a primitive case name comes from, rather than through a table of
+     * spellings kept here — that table was a second place for the language's own spelling to be
+     * written, and it answered a member outside it by raising.
+     */
+    private static LeafScalar memberScalar(TypeName member) {
+        Type.Prim prim = member.primitiveKind();
+        LeafScalar scalar = prim == null ? null : LeafScalar.of(prim);
+        if (scalar == null) {
+            throw new IllegalStateException("`" + member + "` is a member of a behavior's answer and"
+                    + " names no scalar a leaf codec exists for");
+        }
+        return scalar;
     }
 
     /** The Raoh {@code ObjectEncoders} leaf method for each primitive (matches the leaf decoders). */
-    private static String leafEncoderName(Ast.PrimKind kind) {
+    private static String leafEncoderName(LeafScalar kind) {
         return switch (kind) {
             case STRING -> "string";
             case INT -> "long_";
