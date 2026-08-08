@@ -47,12 +47,16 @@ public final class PipelineSigs {
                 // `depends on`, and both need the output union's generated interface. Where the arity
                 // rules out a use — every stage after the first takes one input (14.1) — the composition
                 // says so; leaving the name out of this map instead reports it as one that was never
-                // declared (issue #96).
-                List<Type> ins = new ArrayList<>();
-                for (Ast.Param p : spec.params()) {
-                    ins.add(TypeOps.successType(p.type(), symbols));
+                // declared.
+                // What the declaration says is admitted here, in the making of the signature, and
+                // there is no other way to make one. A behavior resting on a name that denotes
+                // nothing has no signature to build and is left out: the name was reported where it
+                // was written.
+                try {
+                    sigs.put(spec.name(), SignatureBoundary.of(spec, symbols));
+                } catch (Unanswerable _) {
+                    // deliberately empty: see above
                 }
-                sigs.put(spec.name(), new Sig(ins, TypeOps.successType(spec.ret(), symbols)));
             }
         }
         Map<String, List<Ast.Var>> pipeStages = pipelineStages(module);
@@ -144,7 +148,7 @@ public final class PipelineSigs {
         // flatten nested pipeline stages so `>->` is associative (spec 14.2)
         List<Ast.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
-        Type mainline = first.out();
+        Type mainline = first.outputType();
         Set<TypeName> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
             Sig g = stageSig(stages.get(i), sigs, symbols, pipe.pos());
@@ -181,8 +185,12 @@ public final class PipelineSigs {
                                 + ". Update the declared output or handle the case.");
             }
         }
-        // the pipeline takes whatever its first stage takes (spec 14.1)
-        return new Sig(first.ins(), out);
+        // The pipeline takes whatever its first stage takes (spec 14.1), which arrived admitted with
+        // that stage's own signature and is not asked again. What it answers is a type nobody wrote
+        // — the last stage's answer, merged with the cases that left the main line — so that is
+        // where the boundary is asked, once, about a composition.
+        return new Sig(first.ins(),
+                SignatureBoundary.composedOutput(pipe.name(), pipe.pos(), out, symbols));
     }
 
     /** Formats a set of case names as {@code A | B} (sorted, for a stable diagnostic). */
@@ -265,7 +273,7 @@ public final class PipelineSigs {
                                 + "the right behavior's input. Left output: " + mainline + ", right input: " + in);
             }
             retired.addAll(passed);
-            return g.out();
+            return g.outputType();
         }
         if (!mainline.equals(in)) {
             throw CompileException.of(
@@ -276,6 +284,6 @@ public final class PipelineSigs {
                             .build(),
                     "Cannot compose behaviors. Left output: " + mainline + ", right input: " + in);
         }
-        return g.out();
+        return g.outputType();
     }
 }

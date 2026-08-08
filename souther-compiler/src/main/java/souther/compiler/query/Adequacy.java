@@ -716,10 +716,10 @@ public final class Adequacy {
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
-            Generator.Subject subject = new Generator.Subject(parameters, sig.ins(),
+            Generator.Subject subject = new Generator.Subject(parameters, sig.inputTypes(),
                     partitioning.axes(), symbols);
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
-                    : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
+                    : (at, candidate) -> building.refuse(sig.inputTypes().get(at), candidate.value());
 
             List<Map<AxisId, Classification>> existing = rows.stream()
                     .map(row -> RowClasses.of(row, parameters, partitioning.axes())).toList();
@@ -1046,13 +1046,13 @@ public final class Adequacy {
     static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen,
                                         List<String> parameters, Exclusions excluded) {
         List<RowOutcome> rows = seen.rows();
-        Set<TypeName> declaredOut = coverableCases(sig.out(), symbols);
+        Set<TypeName> declaredOut = coverableCases(sig.outputType(), symbols);
         Set<TypeName> specified = new LinkedHashSet<>();
         Set<TypeName> observed = new LinkedHashSet<>();
         Set<TypeName> verified = new LinkedHashSet<>();
         int unreadableOut = 0;
 
-        List<Type> ins = sig.ins();
+        List<Type> ins = sig.inputTypes();
         List<Set<TypeName>> declaredIn = new ArrayList<>(ins.size());
         List<Set<TypeName>> inSpecified = new ArrayList<>(ins.size());
         List<Set<TypeName>> inExecuted = new ArrayList<>(ins.size());

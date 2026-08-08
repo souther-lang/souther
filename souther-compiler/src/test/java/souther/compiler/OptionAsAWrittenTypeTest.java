@@ -255,17 +255,18 @@ class OptionAsAWrittenTypeTest {
     }
 
     @Test
-    void anOptionalAsAMapKeyIsRefusedAsAnOptionalFirst() {
-        // Both this rule and the one about what may key a Map that crosses have something to say. The
-        // optional is asked about first, so the report names the type the author wrote rather than the
-        // position it happened to be in.
+    void anOptionalAsAMapKeyIsRefusedAsAKeyThatCannotBeWritten() {
+        // A key position asks first whether what stands there can be written as a boundary key, and
+        // the answer about an optional is no. Reported the other way round, the advice would be to
+        // write `Int` — which earns the key rule immediately, because the optional was never the
+        // reason there.
         CompileException e = err(HEAD + """
                 behavior bill : (m: Map<Option<Int>, String>) -> Receipt
                     constructs Receipt, Amount
                 let bill (m) = Receipt { total = Amount(Map.size(m)) }
                 """);
-        assertTrue(e.getMessage().contains("carries an optional"), e.getMessage());
-        assertTrue(e.getMessage().contains("E1313"), e.getMessage());
+        assertTrue(e.getMessage().contains("keyed by"), e.getMessage());
+        assertTrue(e.getMessage().contains("E1314"), e.getMessage());
     }
 
     @Test

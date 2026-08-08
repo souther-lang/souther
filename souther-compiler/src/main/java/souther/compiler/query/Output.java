@@ -63,7 +63,8 @@ public final class Output {
             }
             try {
                 Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
-                        in.lowered(), in.scope(), in.typePackages(), in.imported(), in.injected(),
+                        in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
+                        in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses()));
                 stamp(db, classes);
                 return Answer.of(Ordered.map(classes));
@@ -80,7 +81,8 @@ public final class Output {
          * stop being the same program, which is the one thing a measurement of them may not do.
          */
         record Inputs(Ast.Module lowered, Symbols scope, Map<String, String> typePackages,
-                      Map<String, Sig> imported, Set<String> injected, Map<String, ReqSig> callees,
+                      Map<String, Sig> sigs, Map<String, Sig> imported, Set<String> injected,
+                      Map<String, ReqSig> callees,
                       Map<String, List<BehaviorRequirement>> requirements,
                       TypeChecker.Checked checked,
                       Map<TypeName, List<Ast.InvariantClause>> dischargeClauses) {}
@@ -89,6 +91,10 @@ public final class Output {
             Answer<TypeChecker.Checked> checked = db.ask(new Bodies.Checked(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            // The same answer the check read. The backend replays the composition walk and emits
+            // the codecs a signature says are needed, so building its own would be the boundary's
+            // question answered a third time.
+            Answer<Map<String, Sig>> signatures = db.ask(new Bodies.Signatures(name));
             Answer<Map<String, Sig>> imported = db.ask(new Bodies.Imported(name));
             Answer<Set<String>> injected = db.ask(new Bodies.ImportedInjected(name));
             Answer<Map<String, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
@@ -100,12 +106,13 @@ public final class Output {
             Answer<Map<TypeName, List<Ast.InvariantClause>>> dischargeClauses =
                     db.ask(new Shapes.InvariantsForDischarge(name));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
-                    || !injected.present() || !callees.present() || !prepared.present()
-                    || !requirements.present() || !dischargeClauses.present()) {
+                    || !signatures.present() || !injected.present() || !callees.present()
+                    || !prepared.present() || !requirements.present() || !dischargeClauses.present()) {
                 return null;
             }
             return new Inputs(lowering.value().lowered(), scope.value(),
-                    typePackages(prepared.value()), imported.value(), injected.value(),
+                    typePackages(prepared.value()), signatures.value(), imported.value(),
+                    injected.value(),
                     callees.value(), requirements.value(), checked.value(), dischargeClauses.value());
         }
 
@@ -299,7 +306,8 @@ public final class Output {
             }
             try {
                 Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
-                        in.lowered(), in.scope(), in.typePackages(), in.imported(), in.injected(),
+                        in.lowered(), in.scope(), in.typePackages(), in.sigs(), in.imported(),
+                        in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
                         instrumentation));
                 Classes.stamp(db, name, classes);

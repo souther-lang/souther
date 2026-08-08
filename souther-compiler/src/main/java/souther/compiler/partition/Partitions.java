@@ -74,8 +74,8 @@ public final class Partitions {
     public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
-        for (int i = 0; i < sig.ins().size() && i < behavior.params().size(); i++) {
-            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), sig.ins().get(i),
+        for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
+            walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), sig.inputTypes().get(i),
                     0, symbols, found);
         }
         found.replaceAll(axis -> axis.excluding(

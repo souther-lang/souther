@@ -102,9 +102,9 @@ final class JvmLimits {
         for (Ast.BehaviorDef bd : module.behaviors()) {
             Sig sig = sigs.get(bd.name());
             // a composition whose stage names nothing has no signature, and nothing is emitted for it
-            if (sig != null && sig.ins().size() > INSTANCE_SLOTS) {
-                throw tooWide("e2101.behavior.parameters", bd.written(), sig.ins().size(),
-                        INSTANCE_SLOTS, "behavior `" + bd.name() + "` takes " + sig.ins().size()
+            if (sig != null && sig.inputTypes().size() > INSTANCE_SLOTS) {
+                throw tooWide("e2101.behavior.parameters", bd.written(), sig.inputTypes().size(),
+                        INSTANCE_SLOTS, "behavior `" + bd.name() + "` takes " + sig.inputTypes().size()
                                 + " parameters, but the `apply` generated for it takes at most "
                                 + INSTANCE_SLOTS);
             }

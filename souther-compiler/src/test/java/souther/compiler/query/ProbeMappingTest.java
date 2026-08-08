@@ -61,8 +61,8 @@ class ProbeMappingTest {
         assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
-                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.imported(),
-                        in.injected(), in.callees(), in.requirements(), in.checked(),
+                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                        in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
                         in.dischargeClauses(),
                         Instrumentation.NONE.measuring(somewhereElse)));
 
@@ -95,8 +95,8 @@ class ProbeMappingTest {
                 new CoverageSites.Plan(longer, real.guards(), real.byNode());
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
-                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.imported(),
-                        in.injected(), in.callees(), in.requirements(), in.checked(),
+                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.sigs(),
+                        in.imported(), in.injected(), in.callees(), in.requirements(), in.checked(),
                         in.dischargeClauses(),
                         Instrumentation.NONE.measuring(overcounted)));
 

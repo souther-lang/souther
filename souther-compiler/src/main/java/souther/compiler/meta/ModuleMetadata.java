@@ -105,11 +105,11 @@ public final class ModuleMetadata {
             return null;
         }
         StringBuilder params = new StringBuilder();
-        for (int i = 0; i < sig.ins().size(); i++) {
+        for (int i = 0; i < sig.inputTypes().size(); i++) {
             params.append(i == 0 ? "" : ", ").append("in").append(i).append(": ")
-                    .append(Type.showQualified(sig.ins().get(i)));
+                    .append(Type.showQualified(sig.inputTypes().get(i)));
         }
-        return "behavior " + b.name() + " : (" + params + ") -> " + Type.showQualified(sig.out());
+        return "behavior " + b.name() + " : (" + params + ") -> " + Type.showQualified(sig.outputType());
     }
 
     /**

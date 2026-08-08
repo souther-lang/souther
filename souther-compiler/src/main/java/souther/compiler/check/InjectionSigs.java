@@ -73,7 +73,7 @@ public final class InjectionSigs {
         for (String name : importedInjected) {
             Sig sig = importedSigs.get(name);
             if (sig != null) {
-                sigs.putIfAbsent(name, new ReqSig(sig.ins(), sig.out()));
+                sigs.putIfAbsent(name, new ReqSig(sig.inputTypes(), sig.outputType()));
             }
         }
         return sigs;
@@ -105,7 +105,7 @@ public final class InjectionSigs {
         for (String name : importedCallable) {
             Sig sig = importedSigs.get(name);
             if (sig != null) {
-                sigs.putIfAbsent(name, new ReqSig(sig.ins(), sig.out()));
+                sigs.putIfAbsent(name, new ReqSig(sig.inputTypes(), sig.outputType()));
             }
         }
         return sigs;

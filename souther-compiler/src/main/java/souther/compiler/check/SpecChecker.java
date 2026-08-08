@@ -195,7 +195,7 @@ public final class SpecChecker {
                 // against, and the other compositions still have theirs.
                 continue;
             }
-            Set<TypeName> inferred = TypeOps.leafCases(sig.out(), symbols);
+            Set<TypeName> inferred = TypeOps.leafCases(sig.outputType(), symbols);
             Ast.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(
@@ -410,62 +410,6 @@ public final class SpecChecker {
     }
 
     /**
-     * An injected behavior's declared {@code constructs} must each be Java-buildable (spec 13.3):
-     * a unit data (the base class hands the implementation a {@code protected} factory) or an
-     * exposed data (its {@code decoder} is public). A non-unit, unexposed one is E1305 — Java has
-     * no way to mint it.
-     */
-    /**
-     * An anonymous union appears only in a behavior's output; a parameter type is always a single
-     * named type, a named sum included (spec 8.6, 12.2). A parameter written as {@code A | B} — a
-     * {@code RetType} with more than one case — is rejected: declare {@code data AB = A | B} and take
-     * {@code (x: AB)}, so the input has a name the reader and the JVM can hold onto.
-     */
-    static void rejectAnonymousUnionParams(Ast.SpecBehavior spec) {
-        for (Ast.Param p : spec.params()) {
-            if (p.type().cases().size() > 1) {
-                String union = p.type().cases().stream()
-                        .map(SpecChecker::termName)
-                        .collect(java.util.stream.Collectors.joining(" | "));
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1312, "check.param.union")
-                                .at(p.written().region()).args(p.name(), union).build(),
-                        "parameter `" + p.name() + "` has an anonymous union type `" + union
-                                + "`; a parameter type must be a single named type — declare `data ... = "
-                                + union + "` and take that name (spec 8.6, 12.2)");
-            }
-        }
-    }
-
-    /** A tuple is expression-level only (ADR-0036): it has no external representation and cannot
-     * cross a decoder/encoder boundary, so it may not be a behavior's input or output. Tuple types in
-     * a helper/stdlib signature are fine — they never touch a codec. */
-    static void rejectTupleIO(Ast.SpecBehavior spec, Symbols symbols) {
-        for (Ast.Param p : spec.params()) {
-            for (Ast.TypeTerm c : p.type().cases()) {
-                if (carriesTuple(c, symbols)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1311, "check.param.tuple")
-                                    .at(p.written().region()).args(p.name()).build(),
-                            "parameter `" + p.name() + "` is a tuple; a tuple has no external"
-                                    + " representation and cannot cross the boundary, so a behavior's"
-                                    + " input must be a named data (ADR-0036)");
-                }
-            }
-        }
-        for (Ast.TypeTerm c : spec.ret().cases()) {
-            if (carriesTuple(c, symbols)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1311, "check.output.tuple")
-                                .at(spec.pos()).args(spec.name()).build(),
-                        "behavior `" + spec.name() + "` outputs a tuple; a tuple cannot cross the"
-                                + " boundary, so a behavior's output must be a named data or a sum of"
-                                + " them (ADR-0036)");
-            }
-        }
-    }
-
-    /**
      * Every effective member of a behavior's output goes by a name of its own. A member is named by
      * a {@code match} arm and by the {@code "type"} discriminator of the external representation, and
      * both take the name as written, so two types that are written the same cannot be members of one
@@ -480,7 +424,7 @@ public final class SpecChecker {
             if (sig == null) {
                 continue;
             }
-            TypeName[] clash = TypeOps.ambiguousMembers(sig.out(), symbols);
+            TypeName[] clash = TypeOps.ambiguousMembers(sig.outputType(), symbols);
             if (clash == null) {
                 continue;
             }
@@ -502,10 +446,10 @@ public final class SpecChecker {
     static void checkUnionMemberFields(Ast.Module module, Map<String, Sig> sigs, Symbols symbols) {
         for (Ast.BehaviorDef b : module.behaviors()) {
             Sig sig = sigs.get(b.name());
-            if (sig == null || !(sig.out() instanceof Type.Union)) {
+            if (sig == null || !(sig.outputType() instanceof Type.Union)) {
                 continue;
             }
-            TypeName carrying = TypeOps.memberCarryingField(sig.out(), DISCRIMINATOR, symbols);
+            TypeName carrying = TypeOps.memberCarryingField(sig.outputType(), DISCRIMINATOR, symbols);
             if (carrying == null) {
                 continue;
             }
@@ -522,162 +466,13 @@ public final class SpecChecker {
     /** The key a derived codec writes the case name under (spec 11.2). */
     private static final String DISCRIMINATOR = "type";
 
-    /**
-     * A behavior's input is decoded and its output encoded, so neither may carry a function — at any
-     * depth, since a function hides as easily inside a {@code List} or a {@code Map} as it stands on
-     * its own. Asked of the type rather than of the syntax: what the position requires is an external
-     * representation, and a function has none (ADR-0004).
-     */
-    static void rejectFunctionIO(Ast.SpecBehavior spec, Symbols symbols) {
-        for (Ast.Param p : spec.params()) {
-            Type t = TypeOps.successType(p.type(), symbols);
-            if (!TypeOps.hasExternalForm(t, symbols)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1311, "check.param.function")
-                                .at(p.written().region()).args(p.name(), Type.show(t)).build(),
-                        "parameter `" + p.name() + "` carries a function (" + Type.show(t)
-                                + "); a function has no external representation, so it cannot cross"
-                                + " the boundary into a behavior");
-            }
-        }
-        Type out = TypeOps.successType(spec.ret(), symbols);
-        if (!TypeOps.hasExternalForm(out, symbols)) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1311, "check.output.function")
-                            .at(spec.pos()).args(spec.name(), Type.show(out)).build(),
-                    "behavior `" + spec.name() + "` outputs a function (" + Type.show(out)
-                            + "); a function has no external representation, so it cannot cross the"
-                            + " boundary out of a behavior");
-        }
-    }
 
     /**
-     * An optional does not stand in a behavior's boundary. A boundary carries the model's own
-     * vocabulary, and absence there is owned by the data that holds it, on a {@code ?} field, or by a
-     * sum the model names — {@code -> 会員 | 会員なし}, which reads closer to the specification than
-     * {@code Option<会員>} and is what a reader of the answer gets to match on. What may not cross is
-     * the runtime representation of structural optionality, which has no owner on the far side.
-     *
-     * <p>Asked of the resolved type, so it holds whichever way the type was written: naming it and
-     * marking it with {@code ?} reach the same type, and a rule attached to one spelling is a rule the
-     * other spelling walks past. Asked of the boundary's shape rather than of the whole type, so a
-     * collection carrying one is subject to it and a data holding one is not — that is a field, which
-     * is where an optional belongs.
+     * An injected behavior's declared {@code constructs} must each be Java-buildable (spec 13.3):
+     * a unit data (the base class hands the implementation a {@code protected} factory) or an
+     * exposed data (its {@code decoder} is public). A non-unit, unexposed one is E1305 — Java has
+     * no way to mint it.
      */
-    static void rejectOptionalIO(Ast.SpecBehavior spec, Symbols symbols) {
-        for (Ast.Param p : spec.params()) {
-            Type opt = TypeOps.optionalInBoundaryShape(TypeOps.successType(p.type(), symbols));
-            if (opt != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1313, "check.param.optional")
-                                .at(p.written().region()).args(p.name(), Type.show(opt))
-                                .hint("check.optional.hint").build(),
-                        "parameter `" + p.name() + "` carries an optional (" + Type.show(opt)
-                                + "); " + OPTIONAL_ADVICE);
-            }
-        }
-        Type opt = TypeOps.optionalInBoundaryShape(TypeOps.successType(spec.ret(), symbols));
-        if (opt != null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1313, "check.output.optional")
-                            .at(spec.pos()).args(spec.name(), Type.show(opt))
-                            .hint("check.optional.hint").build(),
-                    "the output of `" + spec.name() + "` carries an optional (" + Type.show(opt)
-                            + "); " + OPTIONAL_ADVICE);
-        }
-    }
-
-    /** What to write instead, said of the optional rather than of the position it was found in: the
-     *  optional a collection carries is not the behavior's own answer, so advice naming the behavior's
-     *  type would be advice about something else. */
-    private static final String OPTIONAL_ADVICE =
-            "a model type has to own the absence where the optional stands — put it on a `?` field of"
-                    + " a data, or name it as a case of a sum, which where the whole output is the"
-                    + " optional is written directly as `-> A | Missing`";
-
-    /**
-     * A behavior's boundary carries types a model declared. The language declares vocabulary of its
-     * own — what a division by zero answers with, what a rounding takes, the reserved {@code Raw} —
-     * and each of those says what one of the language's operations can answer or take. A behavior with
-     * the same thing to report declares the case itself, so that what it publishes stays its own when
-     * the language's account of itself changes.
-     *
-     * <p>Asked of the boundary's shape, so a collection carrying such a name is subject to it and a
-     * member of an output union is too. A data a model declared crosses as itself whatever it holds
-     * inside, which is where the walk stops.
-     */
-    static void rejectForeignBoundaryName(Ast.SpecBehavior spec, Symbols symbols) {
-        for (Ast.Param p : spec.params()) {
-            TypeName foreign =
-                    TypeOps.foreignNameInBoundaryShape(TypeOps.successType(p.type(), symbols), symbols);
-            if (foreign != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1325, "check.param.foreignname")
-                                .at(p.written().region()).args(p.name(), foreign.name())
-                                .hint("check.foreignname.hint").build(),
-                        "parameter `" + p.name() + "` takes `" + foreign.name() + "`, which the"
-                                + " language declares rather than this model; " + FOREIGN_NAME_ADVICE);
-            }
-        }
-        TypeName foreign =
-                TypeOps.foreignNameInBoundaryShape(TypeOps.successType(spec.ret(), symbols), symbols);
-        if (foreign != null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1325, "check.output.foreignname")
-                            .at(spec.pos()).args(spec.name(), foreign.name())
-                            .hint("check.foreignname.hint").build(),
-                    "`" + spec.name() + "` answers `" + foreign.name() + "`, which the language"
-                            + " declares rather than this model; " + FOREIGN_NAME_ADVICE);
-        }
-    }
-
-    /** What to write instead. Said as declaring a type rather than as supplying a codec: the name is
-     *  refused for whose vocabulary it is, and a codec for it would not change that. Said of a type
-     *  rather than of a case, because a parameter is refused for the same reason and takes one. */
-    private static final String FOREIGN_NAME_ADVICE =
-            "declare this as a type of the model and write that at the boundary";
-
-    /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
-     * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the
-     * same rule, read where it applies. */
-    static void rejectNonBoundaryMapKeyIO(Ast.SpecBehavior spec, Symbols symbols) {
-        for (Ast.Param p : spec.params()) {
-            Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(p.type(), symbols), symbols);
-            if (bad != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1314, "check.map.key.param")
-                                .at(p.written().region()).args(p.name(), Type.show(bad))
-                                .hint("check.map.key.hint").build(),
-                        "parameter `" + p.name() + "` carries a Map keyed by " + Type.show(bad)
-                                + "; " + TypeOps.MAP_KEY_RULE);
-            }
-        }
-        Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(spec.ret(), symbols), symbols);
-        if (bad != null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1314, "check.map.key.output")
-                            .at(spec.pos()).args(spec.name(), Type.show(bad))
-                            .hint("check.map.key.hint").build(),
-                    "behavior `" + spec.name() + "` outputs a Map keyed by " + Type.show(bad)
-                            + "; " + TypeOps.MAP_KEY_RULE);
-        }
-    }
-
-    /** Whether a tuple is what stops {@code term} crossing the boundary. Asked of the type the term
-     * stands for, so the walk and the rule live where every other capability question does; a term
-     * that names no type answers no, and the function check below reports it. */
-    private static boolean carriesTuple(Ast.TypeTerm term, Symbols symbols) {
-        return TypeOps.withoutExternalForm(TypeOps.resolveTerm(term, symbols), symbols)
-                instanceof Type.TupleOf;
-    }
-
-    /** How a written term reads in a diagnostic that quotes the source — the characters the author
-     *  typed, which a name canonically equivalent to them is not. */
-    private static String termName(Ast.TypeTerm term) {
-        return term instanceof Ast.TypeRef ref && ref.written() != null
-                ? ref.written().quoted() : "a function";
-    }
-
     static void checkInjectionConstructs(Ast.SpecBehavior spec, Symbols symbols,
                                                  boolean exposeAll, Set<String> exposed) {
         for (Ast.Name name : spec.constructs()) {
@@ -784,10 +579,10 @@ public final class SpecChecker {
             String inKey = injected ? "check.inject.hiddeninput" : "check.surface.input";
             String outKey = injected ? "check.inject.hiddenoutput" : "check.surface.output";
             String hint = injected ? "check.inject.hidden.hint" : "check.surface.hint";
-            for (Type in : sig.ins()) {
+            for (Type in : sig.inputTypes()) {
                 refuseHidden(in, inKey, b.name(), null, hint, b.pos(), symbols, exposeAll, exposed);
             }
-            refuseHidden(sig.out(), outKey, b.name(), null, hint, b.pos(),
+            refuseHidden(sig.outputType(), outKey, b.name(), null, hint, b.pos(),
                     symbols, exposeAll, exposed);
         }
     }
