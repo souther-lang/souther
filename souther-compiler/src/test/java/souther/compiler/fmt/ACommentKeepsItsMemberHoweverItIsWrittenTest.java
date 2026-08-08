@@ -460,6 +460,30 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
+    /** The head of a chain is the part written before the first connector, and it stands for
+     * something written as much as the parts after it do — a match arm's pattern, an example row's
+     * description. This is the other side of the arm and the row from the two above. */
+    @Test
+    void theHeadOfAChain() {
+        assertEquals("""
+                module m
+
+                let helper (n: Int) = n
+
+                example helper
+                    | "doubles" // scenario description
+                        : (2)
+                        -> 2
+                """, Formatter.format("""
+                module m
+                let helper (n: Int) = n
+
+                example helper
+                    | "doubles"   // scenario description
+                        : (2) -> 2
+                """));
+    }
+
     /** No member to be about: the comment was written above the construct, and stays above it rather
      * than moving inside where the construct's own end comments go. */
     @Test

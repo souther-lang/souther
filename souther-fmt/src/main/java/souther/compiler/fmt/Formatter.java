@@ -208,12 +208,32 @@ public final class Formatter {
      * {@code ->}. Broken, each part starts a line one indent in and the connector leads it, so what
      * joins two parts is visible at the front of the second.
      */
-    private static Doc chained(Doc head, List<Segment> segments) {
+    private static Doc chained(Member head, List<Segment> segments) {
         List<Doc> parts = new ArrayList<>();
         for (Segment s : segments) {
             parts.add(concat(LINE, s.leading(), text(s.connector()), s.doc()));
         }
-        return group(concat(head, nest(INDENT, concat(parts))));
+        return group(concat(head.doc(), head.trailing(), nest(INDENT, concat(parts))));
+    }
+
+    /** The part of a chain written before the first connector, from the construct it stands for. A
+     * head is a member like a segment is, and the same three things it can stand for: a node, an
+     * identifier, or nothing the source wrote. */
+    private Member head(SyntaxNode owner, Doc doc) {
+        return new Member(concat(aboveOf(owner), doc), afterOf(owner));
+    }
+
+    private Member head(SyntaxToken owner, Doc doc) {
+        List<Doc> lead = new ArrayList<>();
+        for (Doc c : aboveCase(owner)) {
+            lead.add(concat(c, HARDLINE));
+        }
+        return new Member(concat(concat(lead), doc), afterCase(owner));
+    }
+
+    /** A head the source has nothing at — a `fake` row's default `_`. */
+    private static Member synthetic(Doc doc) {
+        return new Member(doc, Doc.NIL);
     }
 
     // --- top level ---
@@ -317,15 +337,15 @@ public final class Formatter {
 
         List<Segment> segs = new ArrayList<>();
         var desc = n.token(SyntaxKind.STRING_LIT);
-        Doc head;
+        Member head;
         if (desc.isPresent()) {
-            head = concat(text("| "), text(desc.get().text()));
+            head = head(desc.get(), concat(text("| "), text(desc.get().text())));
             segs.add(segment(": ", n.child(SyntaxKind.ARG_LIST).orElse(null), input));
         } else {
             // with no description the input opens the row, so the row's head carries its comments
             SyntaxNode args = n.child(SyntaxKind.ARG_LIST).orElse(null);
-            head = args == null ? concat(text("| "), input)
-                    : concat(aboveOf(args), text("| "), input, afterOf(args));
+            head = args == null ? synthetic(concat(text("| "), input))
+                    : head(args, concat(text("| "), input));
         }
         List<SyntaxNode> expected = exprChildren(n);   // the row's expr child that is not the ARG_LIST
         segs.add(segment("-> ", expected.isEmpty() ? null : expected.get(0),
@@ -355,8 +375,8 @@ public final class Formatter {
         }
         List<SyntaxNode> outs = exprChildren(n);
         // the input opens the row, so the head carries what was written above and beside it
-        Doc head = args.map(a -> concat(aboveOf(a), text("| "), input, afterOf(a)))
-                .orElse(concat(text("| "), input));
+        Member head = args.map(a -> head(a, concat(text("| "), input)))
+                .orElse(synthetic(concat(text("| "), input)));
         return chained(head,
                 List.of(segment("-> ", outs.isEmpty() ? null : outs.get(0),
                         outs.isEmpty() ? Doc.NIL : expr(outs.get(0)))));
@@ -439,7 +459,7 @@ public final class Formatter {
                     cases.add(segment("| ", t, text(t.text())));
                 }
             }
-            Doc chain = chained(head, cases);
+            Doc chain = chained(synthetic(head), cases);
             if (headComments.isEmpty()) {
                 return concat(text("data "), text(name), text(" = "), chain);
             }
@@ -698,7 +718,7 @@ public final class Formatter {
                 rest.add(segment("| ", c, typeTerm(c)));
             }
         }
-        Doc d = cases.isEmpty() ? Doc.NIL : chained(cases.get(0), rest);
+        Doc d = cases.isEmpty() ? Doc.NIL : chained(synthetic(cases.get(0)), rest);
         // `T?` in a core signature, the same mark a field carries
         return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, text("?")) : d;
     }
@@ -796,7 +816,7 @@ public final class Formatter {
     private Doc binary(SyntaxNode n) {
         List<Segment> segs = new ArrayList<>();
         Doc head = collectChain(n, ladderLevel(operatorKind(n)), segs);
-        return chained(head, segs);
+        return chained(synthetic(head), segs);
     }
 
     /**
@@ -846,7 +866,7 @@ public final class Formatter {
     private Doc pipe(SyntaxNode n) {
         List<Segment> stages = new ArrayList<>();
         Doc head = collectPipe(n, stages);
-        return chained(head, stages);
+        return chained(synthetic(head), stages);
     }
 
     /** Flattens a left-nested {@code |>} chain: returns the head doc and fills {@code stages} with each
@@ -940,6 +960,7 @@ public final class Formatter {
     private Doc matchCase(SyntaxNode n) {
         StringBuilder pattern = new StringBuilder();
         SyntaxNode body = null;
+        SyntaxToken patternEnd = null;
         boolean afterArrow = false;
         for (SyntaxElement e : meaningful(n)) {
             if (afterArrow) {
@@ -958,9 +979,12 @@ public final class Formatter {
                     pattern.append(' ');
                 }
                 pattern.append(t.text());
+                patternEnd = t;
             }
         }
-        return chained(concat(text("| "), text(pattern.toString())),
+        return chained(patternEnd == null
+                        ? synthetic(concat(text("| "), text(pattern.toString())))
+                        : head(patternEnd, concat(text("| "), text(pattern.toString()))),
                 List.of(segment("-> ", body, expr(body))));
     }
 
@@ -1235,6 +1259,8 @@ public final class Formatter {
         }
         if (next == null) {
             add(out.atEnd(), file, comment);          // nothing follows: it closes the file
+        } else if (isChainHead(next)) {
+            out.aboveCase().computeIfAbsent(next.start(), _ -> new ArrayList<>()).add(comment);
         } else if (isBareMember(next)) {
             // A clause keyword opens the line its first name is on, the way a bracket does, so a
             // comment above that name is above the clause rather than between the two.
@@ -1264,6 +1290,10 @@ public final class Formatter {
         // sum ends where the declaration does, and what ends on that line is the declaration.
         if (isBareMember(code) && code.end() != code.parent().end()) {
             out.afterCase().computeIfAbsent(nameEnd(code), _ -> new ArrayList<>()).add(comment);
+            return;
+        }
+        if (isChainHead(code)) {
+            out.afterCase().computeIfAbsent(code.end(), _ -> new ArrayList<>()).add(comment);
             return;
         }
         // A construct written over several lines has more lines than its last: `data D =` and
@@ -1482,6 +1512,31 @@ public final class Formatter {
             case DEPENDS_CLAUSE -> !t.equals(firstIdentToken(parent));
             default -> false;
         };
+    }
+
+    /** A token the head of a chain is written from — a match arm's pattern, an example row's
+     * description. Like a sum's cases these are tokens rather than nodes, so they are named by where
+     * they are; unlike them they open a chain rather than being one of its parts. */
+    private static boolean isChainHead(SyntaxToken t) {
+        return switch (t.parent().kind()) {
+            case EXAMPLE_ROW -> t.kind() == SyntaxKind.STRING_LIT;
+            case MATCH_CASE -> t.kind() != SyntaxKind.ARROW && followedByArrow(t);
+            default -> false;
+        };
+    }
+
+    private static boolean followedByArrow(SyntaxToken t) {
+        boolean after = false;
+        for (SyntaxElement e : t.parent().children()) {
+            if (!(e instanceof SyntaxToken s) || s.isTrivia()) {
+                continue;
+            }
+            if (after) {
+                return s.kind() == SyntaxKind.ARROW;
+            }
+            after = s.start() == t.start();
+        }
+        return false;
     }
 
     private static SyntaxToken firstIdentToken(SyntaxNode n) {
