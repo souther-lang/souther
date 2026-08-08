@@ -85,8 +85,10 @@ public sealed interface ObservedValue {
      * rather than reporting a gap it did not see. */
     record Unknown(String reason) implements ObservedValue {}
 
-    /** A value larger than {@link Limits} allows. What is kept is its size and a digest, which is enough
-     * to tell two truncated values apart without holding either. */
+    /** An observation {@link Limits} stopped. Not the same as a large value: the node budget is one
+     * for the whole walk, so a small value observed after a large sibling arrives here too. What is
+     * kept is the size and a digest, which is enough to tell two of these apart without holding
+     * either. */
     record Truncated(int observedSize, String digest) implements ObservedValue {}
 
     /** An empty map with a stable iteration order, for building a {@link Constructed}. */

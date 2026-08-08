@@ -49,9 +49,11 @@ public sealed interface GenerationReason {
     /**
      * Nothing could be built to try, so the generation never began.
      *
-     * <p>Named for what the generator met and not for what raised it: the classes it would have put
-     * candidates through would not link, and which of the things that raise a {@code LinkageError}
-     * happened is not something anything here can tell.
+     * <p>Two things arrive here and they are not the same fact. One is the classes refusing to
+     * link, which a {@code LinkageError} says and whose cause it does not. The other is their not
+     * being there at all. What both establish is that there was nothing to put a candidate through,
+     * and that is as far as the name goes — the difference changes nothing an author would do,
+     * since neither leaves a row to offer.
      */
-    record ClassesWouldNotLink(String behavior) implements GenerationReason {}
+    record NothingToBuildAgainst(String behavior) implements GenerationReason {}
 }

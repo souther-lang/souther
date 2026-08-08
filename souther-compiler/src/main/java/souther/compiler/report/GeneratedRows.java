@@ -196,9 +196,9 @@ public final class GeneratedRows {
                         "// generation stopped for `%s`: %d %s past the row limit%n",
                         limit.behavior(), limit.combinations(),
                         limit.combinations() == 1 ? "combination" : "combinations");
-                case GenerationReason.ClassesWouldNotLink none -> String.format(
-                        "// generation stopped for `%s`: the classes it would build against would"
-                                + " not link%n", none.behavior());
+                case GenerationReason.NothingToBuildAgainst none -> String.format(
+                        "// generation stopped for `%s`: there was nothing to build a candidate"
+                                + " against%n", none.behavior());
                 // The reasons it rests on rather than a word of its own. What was not read is a
                 // measurement's answer and is already said in those words; saying it again in the
                 // generator's would be the same fact under two spellings, read side by side.

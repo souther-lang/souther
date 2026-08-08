@@ -451,9 +451,13 @@ class CompilePartialAdequacyTest {
      *
      * <p>The truncation is inside the value a row wrote, and the measure that reads it is where it
      * becomes visible — as a count of rows it could not place. The count says how many and the
-     * reason says what happened, and an author reading only the count cannot tell a value that was
-     * too large to keep from one that could not be read at all. The first goes away if the fixture
+     * reason says what happened, and an author reading only the count cannot tell an observation a
+     * limit stopped from a value that could not be read at all. The first goes away if the fixture
      * is written smaller and the second does not.
+     *
+     * <p>Here it is the collection ahead of it that spent the budget, so the value at the position
+     * named is the number the invariant's lower bound names. Which is why the sentence says the
+     * observation was stopped and not that the value was large.
      *
      * <p>The statuses are what they were before the reason was carried. Nothing here is a new
      * finding: the measure had already come back partial, and what is new is that it can be
@@ -474,7 +478,7 @@ class CompilePartialAdequacyTest {
                 why.get(0).code());
         assertEquals(java.util.Optional.of("take"), why.get(0).behavior(),
                 "a position is inside one behavior");
-        assertTrue(report.human().contains("larger than an observation keeps"), report.human());
+        assertTrue(report.human().contains("the observation at"), report.human());
     }
 
     /**

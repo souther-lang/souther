@@ -53,11 +53,11 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
          * different version of what it calls. Nothing here can tell them apart, so nothing here
          * says which.
          *
-         * <p>And nothing here says what did not happen next. Three places write it: an example that
-         * would not run, a fill that could not put its candidates through the decoder, and a
-         * boundary that could not build one. Only the first is rows that did not run — the other
-         * two happen after the rows were read — so a reader of the code alone knows the linking
-         * failed and no more than that.
+         * <p>One place writes it: an example whose evaluation raised one, where nothing was
+         * observed and so its rows did not run. It had three, and the other two — a fill that could
+         * not put its candidates through the decoder, a boundary that could not build one — are the
+         * generator's to report and say so in the generator's own words. What a reader of this code
+         * knows is the linking failed and that the rows behind it did not run.
          */
         LINKAGE_FAILED,
         /** Nothing was observed from here, so what its rows cover is unknown. */

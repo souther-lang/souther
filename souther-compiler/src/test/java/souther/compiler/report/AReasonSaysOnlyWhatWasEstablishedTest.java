@@ -39,26 +39,24 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     }
 
     /**
-     * And it stops where its producers stop agreeing.
+     * And it says what did not happen next, now that one producer is left to say it.
      *
-     * <p>Three places write it: an example whose classes would not load, a fill that could not put
+     * <p>Three places wrote it: an example whose classes would not load, a fill that could not put
      * its candidates through the decoder, and a boundary that could not build one. Only the first
-     * of those is rows that did not run — the other two happen after the rows were read, and what
-     * failed is the building of something new. A sentence keyed on the code cannot tell which, so
-     * it says the one thing all three agree on.
+     * was rows that did not run — the other two happen after the rows were read — so the sentence
+     * stopped where the three stopped agreeing. The other two are the generator's now and report in
+     * its vocabulary, which leaves the example, where nothing was observed.
      *
-     * <p>This holds the wording and not the producers. Which places write a code is not something
-     * a unit of this size can walk; it is read by hand, and the reading is what the sentence above
-     * rests on.
+     * <p>This holds the wording and not the producers. Which places write a code is not something a
+     * unit of this size can walk; it is read by hand, and the reading is what the sentence rests
+     * on — so it is re-read whenever a producer is added or taken away, as one was here.
      */
     @Test
-    void aLinkageFailureDoesNotSayWhatDidNotHappenNext() {
+    void aLinkageFailureSaysWhatItsOneProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
                 Incompleteness.Scope.BEHAVIOR, "submit"));
 
-        assertEquals("the classes for `submit` would not link", said);
-        assertFalse(said.contains("did not run"),
-                "true where an example was running and not where a candidate was built: " + said);
+        assertEquals("the classes for `submit` would not link, so its rows did not run", said);
     }
 
     /**

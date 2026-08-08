@@ -963,7 +963,7 @@ public final class Adequacy {
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
                     out.put(spec.name(), Filling.stopped(
-                            new souther.compiler.partition.GenerationReason.ClassesWouldNotLink(
+                            new souther.compiler.partition.GenerationReason.NothingToBuildAgainst(
                                     spec.name())));
                 }
             }
@@ -1006,7 +1006,7 @@ public final class Adequacy {
                                 || absent.reason()
                                         == BoundaryAssessment.Attempt.Reason.NO_CLASSES) {
                             stopped.add(new souther.compiler.partition.GenerationReason
-                                    .ClassesWouldNotLink(behavior));
+                                    .NothingToBuildAgainst(behavior));
                         }
                     }
                 }

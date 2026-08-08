@@ -20,9 +20,11 @@ import java.util.Map;
  * one {@link NeutralForm#of} makes in the other direction: that one produces the form a decoder reads,
  * this one produces the form a measure reads.
  *
- * <p>The walk never fails. A value it cannot read becomes {@link ObservedValue.Unknown} and a value
- * larger than {@link Limits} becomes {@link ObservedValue.Truncated}, both carrying why, because a
- * measure that cannot classify a row has to say so rather than count the row as covering nothing.
+ * <p>The walk never fails. A value it cannot read becomes {@link ObservedValue.Unknown} and an
+ * observation {@link Limits} stopped becomes {@link ObservedValue.Truncated}, both carrying why,
+ * because a measure that cannot classify a row has to say so rather than count the row as covering
+ * nothing. The second is not the same as a large value: the node budget is one for the whole walk,
+ * so a small value observed after a large sibling is truncated as well.
  */
 final class ObservedValues {
 
