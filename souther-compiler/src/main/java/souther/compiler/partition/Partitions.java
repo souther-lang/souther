@@ -155,10 +155,10 @@ public final class Partitions {
             // Filtered once, and both answers read the filtered list. A line outside what the
             // position holds divides nothing, and it is not a boundary either: leaving it in the
             // cuts while the intervals dropped it asks for a row at a value the record refuses,
-            // which is the thing being fixed here happening again one field over.
+            // which is the thing being fixed here happening again one field over. The end the
+            // position stops short of is outside it as much as anything past it is.
             List<Threshold> reachable = here.stream()
-                    .filter(t -> (min == null || t.value().compareTo(min) >= 0)
-                            && (max == null || t.value().compareTo(max) <= 0))
+                    .filter(t -> domain == null || domain.admits(t.value()))
                     .toList();
             List<PartitionClass> classes = Intervals.classesOf(
                     Intervals.of(reachable, min, max), axis.path(), axis.type(), symbols);

@@ -98,6 +98,42 @@ class AnEndIsWhereItsRuleStopsTest {
                 () -> "and the edge is one a row is owed at:\n" + report);
     }
 
+    /**
+     * A comparison against a value the position cannot hold divides nothing.
+     *
+     * <p>A guard draws a line and both sides of it ordinarily hold values a row can write. Where the
+     * line is the end the position stops short of, one side holds nothing — and a class nothing can
+     * be written in is a gap no author can close.
+     */
+    @Test
+    void aGuardAtAnEndThePositionDoesNotReachDividesNothing() throws Exception {
+        String report = reportOn("""
+                module example.probe
+
+                data Ratio = Decimal
+                    invariant above = value > 5.0m
+
+                data Ok
+                data No
+
+                behavior pick : (r: Ratio) -> Ok | No
+                    constructs Ok, No
+
+                let pick (r) = {
+                    guard r.value > 5.0m else No
+                    Ok
+                }
+
+                example pick
+                    | "a" : (Ratio(6m)) -> Ok
+                """, "--generate");
+
+        assertFalse(report.contains("5 <= x <= 5"),
+                () -> "nothing of `value > 5.0m` is five:\n" + report);
+        assertFalse(report.contains("every value tried was refused"),
+                () -> "so no row is asked for there:\n" + report);
+    }
+
     private static String reportOn(String model, String... extra) throws Exception {
         Path file = Files.createTempDirectory("souther-ends").resolve("model.sou");
         Files.writeString(file, model);

@@ -183,6 +183,27 @@ class AGuardsArmsAreNotItsThresholdTest {
         assertTrue(below(0, false).provenDisjoint(holds(0L, 10L)));
     }
 
+    /**
+     * The position's own end is open at the value the arm starts at.
+     *
+     * <p>Two half-lines meeting at one number share it only where both hold it, and either side can
+     * be the one that does not. A rule that reaches an end without including it — `low < high` over
+     * decimals leaves `low` short of the top of its type — leaves the arm at that number nothing to
+     * be taken by, however the arm itself is written.
+     */
+    @Test
+    void anArmAtAnEndThePositionDoesNotReachIsProvenUnreachable() {
+        NumericDomain.Bounds under = new NumericDomain.Bounds(
+                Endpoint.inclusive(BigDecimal.ZERO), Endpoint.exclusive(BigDecimal.TEN));
+        NumericDomain.Bounds over = new NumericDomain.Bounds(
+                Endpoint.exclusive(BigDecimal.ZERO), Endpoint.inclusive(BigDecimal.TEN));
+
+        assertTrue(above(10, true).provenDisjoint(under), "no value of [0, 10) is 10 or above");
+        assertTrue(below(0, true).provenDisjoint(over), "and none of (0, 10] is 0 or below");
+        assertFalse(above(10, true).provenDisjoint(over), "10 is a value of (0, 10]");
+        assertFalse(below(0, true).provenDisjoint(under), "and 0 is one of [0, 10)");
+    }
+
     /** Nothing is proven where nothing is known. An unbounded position rules out no arm, and neither
      * does a position nobody bounded in the direction the arm goes. */
     @Test
