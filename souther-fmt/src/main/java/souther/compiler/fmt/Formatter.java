@@ -693,8 +693,48 @@ public final class Formatter {
         if (n.child(SyntaxKind.BLOCK_EXPR).isPresent() || n.child(SyntaxKind.INTRINSIC_BODY).isPresent()) {
             return null;
         }
+        // A written function type moves nothing. It says what the definition is, and what it says is
+        // a function, so the definition is a value of that type; lifting its parameters out would
+        // leave the written type describing something the definition is no longer. The frontend
+        // reads such a definition as a value for the same reason, and a definition the two of them
+        // read differently is one whose canonical form does not compile.
+        if (writesAFunctionType(n)) {
+            return null;
+        }
         SyntaxNode body = onlyExpr(n);
         return body.kind() == SyntaxKind.LAMBDA_EXPR ? body : null;
+    }
+
+    /** Whether a definition's written type is a lone function type. This is what the frontend asks
+     * of the type it built ({@code Ast.RetType.asFn}), asked of the syntax instead: a sum of a
+     * function with anything else is not one, an optional is a type of its own, and a single term in
+     * parentheses is the term. */
+    private static boolean writesAFunctionType(SyntaxNode n) {
+        Optional<SyntaxNode> written = n.child(SyntaxKind.RET_TYPE);
+        if (written.isEmpty() || written.get().token(SyntaxKind.QUESTION).isPresent()) {
+            return false;
+        }
+        List<SyntaxNode> cases = typeTerms(written.get());
+        return cases.size() == 1 && isFunctionType(cases.get(0));
+    }
+
+    private static boolean isFunctionType(SyntaxNode type) {
+        if (type.kind() == SyntaxKind.FN_TYPE) {
+            return true;
+        }
+        List<SyntaxNode> elements = typeTerms(type);
+        return type.kind() == SyntaxKind.TUPLE_TYPE && elements.size() == 1
+                && isFunctionType(elements.get(0));
+    }
+
+    private static List<SyntaxNode> typeTerms(SyntaxNode n) {
+        List<SyntaxNode> out = new ArrayList<>();
+        for (SyntaxNode c : n.childNodes()) {
+            if (isTypeNode(c.kind())) {
+                out.add(c);
+            }
+        }
+        return out;
     }
 
     /** A lambda's parameters as a definition's parameter list — always parenthesised, which is the
