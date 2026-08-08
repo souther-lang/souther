@@ -33,31 +33,52 @@ import java.util.List;
  */
 public final class GuardThresholds {
 
-    /** The thresholds one behavior's body compares its parameters against. {@code plan} supplies the
-     * guard each one belongs to, so a boundary can later ask whether the comparison ran. */
-    public static List<Threshold> of(String behavior, Core body, CoverageSites.Plan plan,
-                                     List<String> parameters, Symbols symbols) {
+    /**
+     * What one reading of a body says about the comparisons in it.
+     *
+     * <p>Two answers from one walk, because they are read off the same comparison and the operator is
+     * known once. Asked separately they would be two readings of it, and the second would have to
+     * recover from {@link Threshold} which side of the line each arm takes — which a threshold does not
+     * say and cannot be made to say (see {@link GuardEdge}).
+     */
+    public record Guards(List<Threshold> thresholds, List<GuardEdge> edges) {
+
+        public static final Guards NONE = new Guards(List.of(), List.of());
+
+        public Guards {
+            thresholds = List.copyOf(thresholds);
+            edges = List.copyOf(edges);
+        }
+    }
+
+    /** The thresholds one behavior's body compares its parameters against, and both arms of each
+     * comparison. {@code plan} supplies the guard each one belongs to, so a boundary can later ask
+     * whether the comparison ran and an arm can be found by the probe that counts it. */
+    public static Guards of(String behavior, Core body, CoverageSites.Plan plan,
+                            List<String> parameters, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
-        walk(behavior, body, plan, parameters, symbols, found);
-        return List.copyOf(found);
+        List<GuardEdge> edges = new ArrayList<>();
+        walk(behavior, body, plan, parameters, symbols, found, edges);
+        return new Guards(found, edges);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
-                             List<String> parameters, Symbols symbols, List<Threshold> out) {
+                             List<String> parameters, Symbols symbols, List<Threshold> out,
+                             List<GuardEdge> edges) {
         if (e instanceof Core.If iff) {
-            read(behavior, iff, plan, parameters, symbols).ifPresent(out::add);
+            read(behavior, iff, plan, parameters, symbols, out, edges);
         }
         // A match case's body and an attempted construction's departure are expression slots, so the
         // generic walk reaches them; only the arms themselves are not children, and this walk does not
         // number arms.
-        Core.forEachChild(e, child -> walk(behavior, child, plan, parameters, symbols, out));
+        Core.forEachChild(e, child -> walk(behavior, child, plan, parameters, symbols, out, edges));
     }
 
-    private static java.util.Optional<Threshold> read(String behavior, Core.If iff,
-                                                      CoverageSites.Plan plan,
-                                                      List<String> parameters, Symbols symbols) {
+    private static void read(String behavior, Core.If iff, CoverageSites.Plan plan,
+                             List<String> parameters, Symbols symbols, List<Threshold> out,
+                             List<GuardEdge> edges) {
         if (!(iff.cond() instanceof Core.Binary comparison)) {
-            return java.util.Optional.empty();
+            return;
         }
         Ast.BinOp op = comparison.op();
         TermPath path = pathOf(comparison.left(), parameters, symbols);
@@ -69,7 +90,7 @@ public final class GuardThresholds {
             op = mirrored(op);
         }
         if (path == null || value == null) {
-            return java.util.Optional.empty();
+            return;
         }
         Boolean below = switch (op) {
             case LE, GT -> Boolean.TRUE;    // the value itself is on the low side
@@ -77,15 +98,50 @@ public final class GuardThresholds {
             default -> null;                // EQ / NE do not order the values, so they draw no cut
         };
         if (below == null) {
-            return java.util.Optional.empty();
+            return;
         }
         CoverageSites.GuardRef guard = guardOf(plan, iff);
         if (guard == null) {
-            return java.util.Optional.empty();   // no site for this `if`: nothing could answer for it
+            return;   // no site for this `if`: nothing could answer for it
         }
-        return java.util.Optional.of(new Threshold(path, value, below,
+        out.add(new Threshold(path, value, below,
                 new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
                         below)));
+        // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
+        // and `x > c` agree about the first and take opposite halves, so the arms are read off the
+        // operator here, where it is still known, and not recovered from the threshold later.
+        int then = guard.siteIndexThen();
+        int otherwise = guard.siteIndexElse();
+        switch (op) {
+            case LE -> {
+                edge(edges, guard, then, path, value, true, true);
+                edge(edges, guard, otherwise, path, value, false, false);
+            }
+            case GT -> {
+                edge(edges, guard, then, path, value, false, false);
+                edge(edges, guard, otherwise, path, value, true, true);
+            }
+            case LT -> {
+                edge(edges, guard, then, path, value, true, false);
+                edge(edges, guard, otherwise, path, value, false, true);
+            }
+            case GE -> {
+                edge(edges, guard, then, path, value, false, true);
+                edge(edges, guard, otherwise, path, value, true, false);
+            }
+            default -> { }
+        }
+    }
+
+    /** One arm's edge, where that arm has a probe. An arm answering nothing has none, and it is owed
+     * no row whether anything reaches it or not. */
+    private static void edge(List<GuardEdge> edges, CoverageSites.GuardRef guard, int site,
+                             TermPath path, BigDecimal value, boolean below, boolean inclusive) {
+        if (site == CoverageSites.NO_SITE) {
+            return;
+        }
+        edges.add(below ? GuardEdge.below(guard, site, path, value, inclusive)
+                : GuardEdge.above(guard, site, path, value, inclusive));
     }
 
     private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {

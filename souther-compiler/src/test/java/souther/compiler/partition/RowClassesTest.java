@@ -76,7 +76,8 @@ class RowClassesTest {
         List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.withThresholds(
                 Partitions.of(spec, sigs.get("submit"), symbols, Exclusions.NONE),
-                GuardThresholds.of("submit", body, plan, parameters, symbols), symbols);
+                GuardThresholds.of("submit", body, plan, parameters, symbols).thresholds(),
+                symbols);
 
         Output.Examples.Of observed = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), module,
