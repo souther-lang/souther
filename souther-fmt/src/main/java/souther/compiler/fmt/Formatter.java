@@ -162,7 +162,7 @@ public final class Formatter {
             }
             parts.add(members.get(i).doc());
             if (i < members.size() - 1) {
-                parts.add(raw(","));
+                parts.add(TokenDoc.token(SyntaxKind.COMMA, ","));
             }
             parts.add(members.get(i).trailing());
         }
@@ -330,7 +330,7 @@ public final class Formatter {
                     afterOf(row)));
         }
         rows.add(endOf(n));
-        return concat(raw("example "), raw(target),
+        return concat(raw("example "), ident(target),
                 afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows)));
     }
 
@@ -348,7 +348,7 @@ public final class Formatter {
         if (with.isPresent()) {
             List<Member> binds = new ArrayList<>();
             for (SyntaxNode b : childNodes(with.get(), SyntaxKind.WITH_BINDING)) {
-                binds.add(member(b, concat(raw(firstIdent(b)), raw(" = "),
+                binds.add(member(b, concat(ident(firstIdent(b)), raw(" = "),
                         expr(firstExprChildOpt(b).orElseThrow()))));
             }
             input = concat(input, raw(" with "),
@@ -359,7 +359,7 @@ public final class Formatter {
         var desc = n.token(SyntaxKind.STRING_LIT);
         Member head;
         if (desc.isPresent()) {
-            head = head(desc.get(), concat(raw("| "), raw(desc.get().text())));
+            head = head(desc.get(), concat(raw("| "), token(desc.get())));
             segs.add(segment(": ", n.child(SyntaxKind.ARG_LIST).orElse(null), input));
         } else {
             // with no description the input opens the row, so the row's head carries its comments
@@ -381,7 +381,7 @@ public final class Formatter {
             rows.add(concat(HARD_GAP, concat(aboveOf(row), fakeRow(row)), afterOf(row)));
         }
         rows.add(endOf(n));
-        return concat(raw("fake "), raw(target),
+        return concat(raw("fake "), ident(target),
                 afterToken(ids.get(ids.size() - 1), ids.size() >= 2), nest(INDENT, concat(rows)));
     }
 
@@ -391,7 +391,7 @@ public final class Formatter {
         if (args.isPresent()) {
             input = delimited("(", RAW_SOFTLINE, exprDocs(args.get()), ")");
         } else {
-            input = raw("_");   // the default row
+            input = ident("_");   // the default row
         }
         List<SyntaxNode> outs = exprChildren(n);
         // the input opens the row, so the head carries what was written above and beside it
@@ -424,7 +424,7 @@ public final class Formatter {
         TokenDoc d = concat(raw("import "), qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow()));
         Optional<SyntaxNode> alias = n.child(SyntaxKind.IMPORT_ALIAS);
         if (alias.isPresent()) {
-            d = concat(d, raw(" as "), raw(idents(alias.get()).get(0).text()));
+            d = concat(d, raw(" as "), token(idents(alias.get()).get(0)));
         }
         Optional<SyntaxNode> list = n.child(SyntaxKind.NAME_LIST);
         if (list.isEmpty()) {
@@ -432,7 +432,7 @@ public final class Formatter {
         }
         List<Member> names = new ArrayList<>();
         for (SyntaxToken t : idents(list.get())) {
-            names.add(tokenMember(t, t, raw(t.text())));
+            names.add(tokenMember(t, t, token(t)));
         }
         return concat(d, raw(" "),
                 delimited("(", RAW_LINE, withEndComments(list.get(), names), ")"));
@@ -455,11 +455,11 @@ public final class Formatter {
         var product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
             if (isEmptyProduct(product.get())) {
-                return concat(raw("data "), raw(name), raw(" = {}"),
+                return concat(raw("data "), ident(name), raw(" = {}"),
                         afterToken(n.token(SyntaxKind.ASSIGN)),
                         nest(INDENT, concat(invariants)));
             }
-            return concat(raw("data "), raw(name), raw(" ="),
+            return concat(raw("data "), ident(name), raw(" ="),
                     afterToken(n.token(SyntaxKind.ASSIGN)),
                     nest(INDENT, concat(concat(HARD_GAP, productBody(product.get())), concat(invariants))));
         }
@@ -475,31 +475,31 @@ public final class Formatter {
                     continue;
                 }
                 if (head == null) {
-                    head = concat(raw(t.text()), afterCase(t));
+                    head = concat(token(t), afterCase(t));
                     headComments = new ArrayList<>();
                     for (TokenDoc c : aboveCase(t)) {
                         headComments.add(concat(c, HARD_GAP));
                     }
                 } else {
-                    cases.add(segment("| ", t, raw(t.text())));
+                    cases.add(segment("| ", t, token(t)));
                 }
             }
             TokenDoc chain = chained(synthetic(head), cases);
             if (headComments.isEmpty()) {
-                return concat(raw("data "), raw(name), raw(" = "), chain);
+                return concat(raw("data "), ident(name), raw(" = "), chain);
             }
             // The first case shares its line with `data S =`, so its comments cannot go above that
             // line without describing the declaration instead. The union moves down a line instead.
-            return concat(raw("data "), raw(name), raw(" ="),
+            return concat(raw("data "), ident(name), raw(" ="),
                     nest(INDENT, concat(HARD_GAP, concat(headComments), chain)));
         }
         var newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
             TokenDoc inner = concat(aboveOf(newtype.get()), typeRef(typeChild(newtype.get())),
                     afterOf(newtype.get()));
-            return concat(raw("data "), raw(name), raw(" = "), inner, nest(INDENT, concat(invariants)));
+            return concat(raw("data "), ident(name), raw(" = "), inner, nest(INDENT, concat(invariants)));
         }
-        return concat(raw("data "), raw(name));   // unit
+        return concat(raw("data "), ident(name));   // unit
     }
 
     /** The leading-comma product block: {@code { f1: T1\n, f2: T2\n}}. Multi-line wherever it holds
@@ -530,10 +530,10 @@ public final class Formatter {
             // No member wrote the opening brace, so the block writes it on a line of its own. This
             // is the body that holds only comments: `dataDef` writes a body holding nothing at all
             // as `{}` and never reaches here.
-            lines.add(raw("{"));
+            lines.add(TokenDoc.token(SyntaxKind.LBRACE, "{"));
         }
         lines.add(endOf(body));
-        lines.add(concat(HARD_GAP, raw("}")));
+        lines.add(concat(HARD_GAP, TokenDoc.token(SyntaxKind.RBRACE, "}")));
         return concat(lines);
     }
 
@@ -554,8 +554,8 @@ public final class Formatter {
     }
 
     private TokenDoc field(SyntaxNode n) {
-        TokenDoc d = concat(raw(firstIdent(n)), raw(": "), typeRef(typeChild(n)));
-        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, raw("?")) : d;
+        TokenDoc d = concat(ident(firstIdent(n)), raw(": "), typeRef(typeChild(n)));
+        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, TokenDoc.token(SyntaxKind.QUESTION, "?")) : d;
     }
 
     // --- behavior ---
@@ -580,7 +580,7 @@ public final class Formatter {
                             afterOf(c)));
                 }
             }
-            return concat(raw("behavior "), raw(name), raw(" : "), params, raw(" -> "), ret,
+            return concat(raw("behavior "), ident(name), raw(" : "), params, raw(" -> "), ret,
                     nest(INDENT, concat(clauses)));
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
@@ -595,14 +595,14 @@ public final class Formatter {
             parts.add(concat(RAW_LINE, aboveOf(st), raw(i == 0 ? "" : ">-> "), stage(st),
                     i == stages.size() - 1 ? declaredOut : TokenDoc.NIL, afterOf(st)));
         }
-        return concat(raw("behavior "), raw(name), raw(" ="),
+        return concat(raw("behavior "), ident(name), raw(" ="),
                 group(nest(INDENT, concat(parts))));
     }
 
     private TokenDoc paramList(SyntaxNode n) {
         List<Member> params = new ArrayList<>();
         for (SyntaxNode p : childNodes(n, SyntaxKind.PARAM)) {
-            params.add(member(p, concat(raw(firstIdent(p)), raw(": "),
+            params.add(member(p, concat(ident(firstIdent(p)), raw(": "),
                     retType(p.child(SyntaxKind.RET_TYPE).orElseThrow()))));
         }
         return delimited("(", RAW_SOFTLINE, withEndComments(n, params), ")");
@@ -671,13 +671,13 @@ public final class Formatter {
         SyntaxNode lifted = written.isPresent() ? null : liftedLambda(n);
         TokenDoc params = written.isPresent() ? concat(raw(" "), fnParamList(written.get()))
                 : lifted == null ? TokenDoc.NIL : concat(raw(" "), lambdaParams(lifted));
-        TokenDoc head = concat(keyword, raw(name), params, writtenType(n));
+        TokenDoc head = concat(keyword, ident(name), params, writtenType(n));
 
         var intrinsic = n.child(SyntaxKind.INTRINSIC_BODY);
         if (intrinsic.isPresent()) {
-            String raw = intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow().text();
+            SyntaxToken body = intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow();
             return concat(head, raw(" ="),
-                    group(nest(INDENT, concat(RAW_LINE, raw("intrinsic "), raw(raw)))));
+                    group(nest(INDENT, concat(RAW_LINE, raw("intrinsic "), token(body)))));
         }
         var block = n.child(SyntaxKind.BLOCK_EXPR);
         if (block.isPresent()) {
@@ -753,7 +753,7 @@ public final class Formatter {
         List<Member> params = new ArrayList<>();
         for (SyntaxNode p : childNodes(n, SyntaxKind.FN_PARAM)) {
             SyntaxNode pat = optionalPatternChild(p);
-            TokenDoc d = pat == null ? raw(firstIdent(p)) : pattern(pat);
+            TokenDoc d = pat == null ? ident(firstIdent(p)) : pattern(pat);
             var rt = p.child(SyntaxKind.RET_TYPE);
             if (rt.isPresent()) {
                 d = concat(d, raw(": "), retType(rt.get()));
@@ -800,7 +800,7 @@ public final class Formatter {
         }
         TokenDoc d = cases.isEmpty() ? TokenDoc.NIL : chained(synthetic(cases.get(0)), rest);
         // `T?` in a core signature, the same mark a field carries
-        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, raw("?")) : d;
+        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, TokenDoc.token(SyntaxKind.QUESTION, "?")) : d;
     }
 
     private TokenDoc typeRef(SyntaxNode n) {
@@ -815,7 +815,7 @@ public final class Formatter {
         }
         var typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
-            return raw(typevar.get().text());
+            return token(typevar.get());
         }
         TokenDoc name = qualifiedName(n);   // a type may be named through its module or an import alias
         var args = n.child(SyntaxKind.TYPE_ARGS);
@@ -844,15 +844,15 @@ public final class Formatter {
 
     private TokenDoc expr(SyntaxNode n) {
         return switch (n.kind()) {
-            case LITERAL_EXPR -> raw(firstMeaningfulToken(n).text());
-            case VAR_EXPR -> raw(firstIdent(n));
-            case FIELD_ACCESS -> concat(expr(firstExprChild(n)), raw("."), raw(lastIdent(n)));
-            case FIELD_GETTER -> concat(raw("."), raw(lastIdent(n)));
+            case LITERAL_EXPR -> token(firstMeaningfulToken(n));
+            case VAR_EXPR -> ident(firstIdent(n));
+            case FIELD_ACCESS -> concat(expr(firstExprChild(n)), TokenDoc.token(SyntaxKind.DOT, "."), ident(lastIdent(n)));
+            case FIELD_GETTER -> concat(TokenDoc.token(SyntaxKind.DOT, "."), ident(lastIdent(n)));
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
-            case UNARY_EXPR -> concat(raw("-"), expr(onlyExpr(n)));
+            case UNARY_EXPR -> concat(TokenDoc.token(SyntaxKind.MINUS, "-"), expr(onlyExpr(n)));
             case PIPE_EXPR -> pipe(n);
-            case PAREN_EXPR -> concat(raw("("), expr(onlyExpr(n)), raw(")"));
+            case PAREN_EXPR -> concat(TokenDoc.token(SyntaxKind.LPAREN, "("), expr(onlyExpr(n)), TokenDoc.token(SyntaxKind.RPAREN, ")"));
             case TUPLE_EXPR -> delimited("(", RAW_SOFTLINE, exprDocs(n), ")");
             case LIST_EXPR -> list(n);
             case LIST_COMP -> listComp(n);
@@ -979,8 +979,8 @@ public final class Formatter {
         List<Member> guards = exprs.subList(1, exprs.size());
         // The `|` is the comprehension's and it is on the element's line, so it goes before the
         // comment that ends that line — as a comma does for a member of a list.
-        return group(concat(raw("["), element.doc(), raw(" |"), element.trailing(),
-                nest(INDENT, concat(RAW_LINE, separated(guards))), RAW_SOFTLINE, raw("]")));
+        return group(concat(TokenDoc.token(SyntaxKind.LBRACKET, "["), element.doc(), raw(" |"), element.trailing(),
+                nest(INDENT, concat(RAW_LINE, separated(guards))), RAW_SOFTLINE, TokenDoc.token(SyntaxKind.RBRACKET, "]")));
     }
 
     private TokenDoc ifExpr(SyntaxNode n) {
@@ -988,7 +988,7 @@ public final class Formatter {
         TokenDoc departures = elseArms(n);
         return group(concat(raw("if "), expr(parts.get(0)), attemptBinder(n), raw(" then"),
                 nest(INDENT, concat(RAW_LINE, expr(parts.get(1)))),
-                RAW_LINE, raw("else"),
+                RAW_LINE, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
                 departures != TokenDoc.NIL
                         ? departures
                         : nest(INDENT, concat(RAW_LINE, expr(parts.get(2))))));
@@ -1108,8 +1108,8 @@ public final class Formatter {
                         dottedName(idents(c))));
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 var value = firstExprChildOpt(c);
-                member = value.map(v -> concat(raw(firstIdent(c)), raw(" = "), expr(v)))
-                        .orElse(raw(firstIdent(c)));   // shorthand `field`
+                member = value.map(v -> concat(ident(firstIdent(c)), raw(" = "), expr(v)))
+                        .orElse(ident(firstIdent(c)));   // shorthand `field`
             } else {
                 continue;
             }
@@ -1118,7 +1118,7 @@ public final class Formatter {
             // anyway: a `//` on a line the group had collapsed would swallow the rest of it.
             members.add(member(c, member));
         }
-        return concat(raw(typeName), raw(" "),
+        return concat(ident(typeName), raw(" "),
                 delimited("{", RAW_LINE, withEndComments(n, members), "}"));
     }
 
@@ -1130,7 +1130,7 @@ public final class Formatter {
             // lost on the first format.
             TokenDoc lead = aboveOf(c);
             TokenDoc d = switch (c.kind()) {
-                case LET_STMT -> concat(raw("let "), raw(firstIdent(c)), writtenType(c),
+                case LET_STMT -> concat(raw("let "), ident(firstIdent(c)), writtenType(c),
                         raw(" = "), expr(onlyExpr(c)));
                 case LET_DESTRUCTURE -> concat(raw("let "), pattern(patternChild(c)),
                         raw(" = "), expr(onlyExpr(c)));
@@ -1140,8 +1140,8 @@ public final class Formatter {
             lines.add(concat(HARD_GAP, lead, d, afterOf(c)));
         }
         lines.add(endOf(n));
-        return concat(raw("{"), afterToken(n.token(SyntaxKind.LBRACE)),
-                nest(INDENT, concat(lines)), HARD_GAP, raw("}"));
+        return concat(TokenDoc.token(SyntaxKind.LBRACE, "{"), afterToken(n.token(SyntaxKind.LBRACE)),
+                nest(INDENT, concat(lines)), HARD_GAP, TokenDoc.token(SyntaxKind.RBRACE, "}"));
     }
 
     /** A binding pattern, written back as it was: a name, a tuple, a newtype opened by its
@@ -1149,7 +1149,7 @@ public final class Formatter {
     private TokenDoc pattern(SyntaxNode n) {
         switch (n.kind()) {
             case PATTERN_NAME -> {
-                return raw(firstIdent(n));
+                return ident(firstIdent(n));
             }
             case PATTERN_TUPLE -> {
                 List<Member> elems = new ArrayList<>();
@@ -1161,7 +1161,7 @@ public final class Formatter {
                 return delimited("(", RAW_SOFTLINE, withEndComments(n, elems), ")");
             }
             case PATTERN_CTOR -> {
-                return concat(qualifiedName(n), raw("("), pattern(patternChild(n)), raw(")"));
+                return concat(qualifiedName(n), TokenDoc.token(SyntaxKind.LPAREN, "("), pattern(patternChild(n)), TokenDoc.token(SyntaxKind.RPAREN, ")"));
             }
             case PATTERN_RECORD -> {
                 List<Member> fields = new ArrayList<>();
@@ -1171,13 +1171,13 @@ public final class Formatter {
                     }
                     List<SyntaxToken> names = idents(f);
                     fields.add(member(f, names.size() > 1
-                            ? concat(raw(names.get(0).text()), raw(" = "), raw(names.get(1).text()))
-                            : raw(names.get(0).text())));
+                            ? concat(token(names.get(0)), raw(" = "), token(names.get(1)))
+                            : token(names.get(0))));
                 }
                 return delimited("{", RAW_LINE, withEndComments(n, fields), "}");
             }
             default -> {
-                return raw(firstIdent(n));
+                return ident(firstIdent(n));
             }
         }
     }
@@ -1995,6 +1995,16 @@ public final class Formatter {
      * one — assembling it is deciding, and a name is one of the places the same decision used to be
      * written out again.
      */
+    /** A token of the source, written back as itself. */
+    private static TokenDoc token(SyntaxToken t) {
+        return TokenDoc.token(t.kind(), t.text());
+    }
+
+    /** An identifier the canonical form writes. */
+    private static TokenDoc ident(String text) {
+        return TokenDoc.token(SyntaxKind.IDENT, text);
+    }
+
     private static TokenDoc dottedName(List<SyntaxToken> idents) {
         List<TokenDoc> parts = new ArrayList<>();
         for (SyntaxToken t : idents) {
