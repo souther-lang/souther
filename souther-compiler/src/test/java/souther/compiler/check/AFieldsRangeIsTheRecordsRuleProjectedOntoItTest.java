@@ -300,6 +300,71 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                         + " it to a sibling across a module boundary");
     }
 
+    /**
+     * A doubt reaches as far as the bound it is about.
+     *
+     * <p>`a` has no rule of its own that the domain could not hold. Its upper bound is `b`'s, carried
+     * by the equality, and `b` holds a hole the domain cannot keep — so `a = 10` wants the `b` the
+     * hole refuses. A bound arrives along a path through the differences, and the doubt takes the
+     * same path or it is not about the same bound.
+     */
+    @Test
+    void aBoundReachedThroughAnotherAtomCarriesThatAtomsDoubt() {
+        FieldDomains domains = domainsIn("""
+                module example.paired
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+
+                data R =
+                    { a: N
+                    , b: N
+                    }
+                    invariant same = a == b
+                    invariant notTen = b.value /= 10
+                """, "R");
+
+        assertBounds(domains.at("a"), 0, 10);
+        assertFalse(domains.exact("b"), "the hole is written about b");
+        assertFalse(domains.exact("a"), "and a's edge is b's edge, carried by the equality");
+    }
+
+    /**
+     * A relation is a projection only where both ends brought their ranges.
+     *
+     * <p>An imported type's own invariant cannot be re-elaborated by the module reading it (#464), so
+     * the ordering arrives and the ranges do not. Nothing narrows, the derivation puts each type's
+     * own edges back, and those are values no pair holds. Said while that stands, and unreachable
+     * once it is fixed.
+     */
+    @Test
+    void aRelationOverATypeWhoseRangeNeverArrivedIsNotAProjection() {
+        Compilation compilation = Compilation.ofSources(List.of("""
+                module example.money exposing ( Amount )
+
+                data Amount = Int
+                    invariant within = value >= 0 && value <= 10
+                """, """
+                module example.pair
+
+                import example.money ( Amount )
+
+                data Pair =
+                    { a: Amount
+                    , b: Amount
+                    }
+                    invariant ordered = a < b
+                """), souther.compiler.meta.ModulePath.EMPTY);
+        compilation.answerEverything();
+        Symbols symbols = compilation.db().ask(new Shapes.Scope("example.pair")).value();
+        TypeName named = new TypeName("example.pair", "Pair");
+        FieldDomains domains = FieldDomains.of(named, (Ast.Data) symbols.get(named), symbols);
+
+        assertFalse(domains.exact("a"),
+                "the ordering is here and the range it would have narrowed is not");
+        assertFalse(domains.exact("b"));
+    }
+
     /** A newtype has no siblings, so there is nothing here to project. */
     @Test
     void aNewtypeHasNothingToProjectOnto() {

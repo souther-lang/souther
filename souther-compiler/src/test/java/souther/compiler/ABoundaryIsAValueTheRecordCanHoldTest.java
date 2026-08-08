@@ -253,6 +253,44 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "and no build is refused over it:\n" + report);
     }
 
+    /**
+     * A row at the value settles what the projection could not.
+     *
+     * <p>A hole in a range is a rule the domain cannot keep, so neither edge of that position is
+     * promised. One of them has a row sitting on it, which went through the decoder to get there —
+     * reporting that value as not known to be writable is preferring an absence of argument to a
+     * witness.
+     */
+    @Test
+    void aRowAtTheValueIsTheProofTheProjectionCouldNotGive() throws Exception {
+        String holed = """
+                module example.holed
+
+                data N = Int
+                    invariant within = value >= 0 && value <= 10
+
+                data R = { a: N }
+                    invariant hole = a.value /= 5
+
+                data Ok
+
+                behavior f : (r: R) -> Ok
+                    constructs Ok
+
+                let f (r) = Ok
+
+                example f
+                    | "zero" : (R { a = N(0) }) -> Ok
+                """;
+        String report = reportOn(holed);
+
+        assertTrue(report.contains("boundary    1/1"),
+                () -> "the row at 0 counts, and 10 is neither met nor owed:\n" + report);
+        assertFalse(report.contains("not known to be writable: f/r.a = 0"),
+                () -> "there is a row at it:\n" + report);
+        assertTrue(report.contains("not known to be writable: f/r.a = 10"), () -> report);
+    }
+
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test
