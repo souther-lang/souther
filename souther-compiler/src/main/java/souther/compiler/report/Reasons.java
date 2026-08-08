@@ -32,17 +32,18 @@ final class Reasons {
     /**
      * What happened, said as what happened — and no further than every producer agrees.
      *
-     * <p>The three below have been read against theirs. {@code ROW_UNDECIDED} has one producer;
+     * <p>The four below have been read against theirs. {@code ROW_UNDECIDED} has one producer;
      * {@code OBSERVATION_ABSENT} has two and they mean the same thing; {@code LINKAGE_FAILED} has
      * three — an example that would not run, a fill that could not build its candidates, and a
      * boundary that could not build one — which agree that the classes would not link and disagree
      * about what did not happen next, so that is where the sentence stops.
+     * {@code INSTRUMENTATION_ABSENT} has one, on a branch taken only where arm coverage was asked
+     * for and returning no rows, so the sentence may name the request and the empty result both.
      *
      * <p>The rest keep the shape they had, which asserts nothing the code does not already say.
-     * Writing sentences for those wants the same walk done for each, and it turns up more than it
-     * looks like it will: the subject of a search limit is a count and a phrase rather than a name,
-     * and the code for a lost probe mapping is written wherever the instrumented classes could not
-     * be made, which is a good deal wider than a mapping that was lost.
+     * {@code SEARCH_LIMIT}'s subject is a count and a phrase rather than a name, so anything
+     * quoting it as an identifier garbles it. The two value codes are written where nothing reads
+     * them as words, and until something does there is no reader for a sentence to be honest to.
      */
     static String said(Incompleteness gap) {
         return switch (gap.code()) {
@@ -52,7 +53,10 @@ final class Reasons {
                     gap.subject());
             case ROW_UNDECIDED -> String.format(
                     "a row of `%s` did not come back, so what it covers is unknown", gap.subject());
-            case VALUE_UNREADABLE, VALUE_TRUNCATED, PROBE_MAPPING_LOST, SEARCH_LIMIT ->
+            case INSTRUMENTATION_ABSENT -> String.format(
+                    "the classes `%s` needed for arm coverage could not be made, so none of its"
+                            + " rows were read", gap.subject());
+            case VALUE_UNREADABLE, VALUE_TRUNCATED, SEARCH_LIMIT ->
                     String.format("%s (%s)", gap.subject(),
                             gap.code().name().toLowerCase(Locale.ROOT));
         };

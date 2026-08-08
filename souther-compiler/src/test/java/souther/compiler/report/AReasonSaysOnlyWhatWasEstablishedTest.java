@@ -61,20 +61,21 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     }
 
     /**
-     * A code whose producers have not been read is left as it was.
+     * A code with one producer says what that producer establishes, and that can be more than the
+     * code alone.
      *
-     * <p>{@code PROBE_MAPPING_LOST} is written wherever the instrumented classes could not be made
-     * — a backend that failed, inputs that were not there — which is wider than a probe whose
-     * mapping was lost, and its subject at that one producer is a module rather than a behavior. A
-     * sentence about arms would be a claim neither the code nor the producer supports.
+     * <p>{@code INSTRUMENTATION_ABSENT} is written at one place, on a branch taken only where arm
+     * coverage was asked for, and it returns no rows with it. Both are part of what the sentence may
+     * say. What it may not say is which of the things that stop those classes being made happened —
+     * a backend that failed, inputs that were not there — because nothing there can tell them apart.
      */
     @Test
-    void aCodeWhoseProducersAreUnreadIsNotTurnedIntoAClaim() {
-        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.PROBE_MAPPING_LOST,
+    void oneProducerLetsTheSentenceSayWhatThatProducerEstablishes() {
+        String said = Reasons.said(Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
                 Incompleteness.Scope.MODULE, "example.trip"));
 
-        assertFalse(said.contains("arms"), "nothing here has established that: " + said);
-        assertEquals("example.trip (probe_mapping_lost)", said);
+        assertEquals("the classes `example.trip` needed for arm coverage could not be made,"
+                + " so none of its rows were read", said);
     }
 
     /** And a subject that is a phrase rather than a name is not quoted as one. */

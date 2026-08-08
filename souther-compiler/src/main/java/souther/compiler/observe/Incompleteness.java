@@ -69,14 +69,17 @@ public record Incompleteness(Code code, Scope scope, String subject, Optional<So
         /** Nothing was observed from here, so what its rows cover is unknown. */
         OBSERVATION_ABSENT,
         /**
-         * The instrumented classes could not be made, so the arms went unread.
+         * The classes an arm-measuring evaluation needs were not made.
          *
-         * <p>Wider than the name. Its one producer writes it wherever the classes an arm-measuring
-         * evaluation needs are absent — a backend that failed on them, inputs that were not there —
-         * and a probe whose mapping was lost is one way to arrive at that rather than the whole of
-         * it. The name is left alone here and read against the rest of the vocabulary at once.
+         * <p>Named for the absence and not for any of the things that cause it — a backend that
+         * failed on them, inputs that were not there — because its one producer cannot tell them
+         * apart and neither can a reader of the code. A probe whose mapping was lost is one way to
+         * arrive here rather than the whole of it, which is what the earlier name claimed.
+         *
+         * <p>Its one producer takes this branch only where arm coverage was asked for, and returns
+         * no rows with it. So the request and the empty result are both part of what this says.
          */
-        PROBE_MAPPING_LOST,
+        INSTRUMENTATION_ABSENT,
         /** A search gave up before it could decide. */
         SEARCH_LIMIT
     }

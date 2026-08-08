@@ -768,7 +768,7 @@ public final class Adequacy {
          */
         public boolean armsUnseen() {
             return incompleteness.stream()
-                    .anyMatch(gap -> gap.code() == Incompleteness.Code.PROBE_MAPPING_LOST);
+                    .anyMatch(gap -> gap.code() == Incompleteness.Code.INSTRUMENTATION_ABSENT);
         }
 
         /**
