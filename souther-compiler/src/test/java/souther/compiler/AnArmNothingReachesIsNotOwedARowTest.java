@@ -152,17 +152,17 @@ class AnArmNothingReachesIsNotOwedARowTest {
     }
 
     /**
-     * What a body may answer with is a fact about the body.
+     * A case nothing answers with is not the same as a case nothing can answer with.
      *
-     * <p>Two behaviors that can answer with the same cases are owed the same rows. Read only where a
-     * guard happens to be provable, adding an arm nothing reaches to a behavior would change what its
-     * signature is owed — a case would leave the denominator because a guard beside it was written,
-     * not because anything about the answers had changed.
+     * <p>What is taken away here is a case something does answer with, at a place the rules prove
+     * nothing reaches. A case the body has no producer for stays: that a signature says {@code A | B}
+     * and the implementation never answers `B` is a gap between the two, and it is the kind of gap
+     * this measure is for.
      */
     @Test
-    void aDeadGuardDoesNotChangeWhatTheSignatureIsOwed() throws Exception {
+    void onlyACaseSomethingAnswersWithBehindAProvenArmIsTakenAway() throws Exception {
         String model = """
-                module example.passthrough
+                module example.threeways
 
                 data N = Int
                     invariant cap = value <= 10
@@ -170,24 +170,26 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 data A
                 data B
 
-                behavior f : (n: N, b: B) -> A | B
-                    constructs A
+                behavior f : (n: N) -> A | B
+                    constructs BUILDS
 
-                let f (n, b) = BODY
+                let f (n) = BODY
 
                 example f
-                    | "one" : (N(1), B) -> A
+                    | "one" : (N(1)) -> A
                 """;
-        String dead = reportOn(model.replace("BODY", "if n.value > 100 then b else A"));
-        String plain = reportOn(model.replace("BODY", "A"));
-        String live = reportOn(model.replace("BODY", "if n.value > 5 then b else A"));
+        String dead = reportOn(model.replace("BODY", "if n.value > 100 then B else A")
+                .replace("BUILDS", "A, B"));
+        String none = reportOn(model.replace("BODY", "A").replace("BUILDS", "A"));
+        String live = reportOn(model.replace("BODY", "if n.value > 5 then B else A")
+                .replace("BUILDS", "A, B"));
 
         assertTrue(dead.contains("out specified 1/1"),
-                () -> "no pair holds an `n` above 100, so nothing here answers `B`:\n" + dead);
-        assertTrue(plain.contains("out specified 1/1"),
-                () -> "and the same body without the guard answers the same cases:\n" + plain);
+                () -> "`B` is answered only where nothing reaches:\n" + dead);
+        assertTrue(none.contains("out specified 1/2"),
+                () -> "nothing answers `B` here, which is a gap and not an impossibility:\n" + none);
         assertTrue(live.contains("out specified 1/2"),
-                () -> "where the guard is one a row can take, `B` is owed again:\n" + live);
+                () -> "and here a row can take the arm that answers it:\n" + live);
     }
 
     // --- what happens if the proof is wrong -------------------------------------------------------

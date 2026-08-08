@@ -10,25 +10,26 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The cases of its output a body may answer with.
+ * The cases of a behavior's output that no row could carry, because everything answering with them is
+ * behind an arm nothing reaches.
  *
- * <p>Asked because a case is owed a row only where something can produce it. An arm nothing reaches
- * produces nothing, and a case produced nowhere else is then a case the signature would ask for and
- * no row could give — the same obligation the classes and the lines have already stopped asking for.
- *
- * <p>A may-analysis, so the answer is only ever too wide. What one producer contributes is
+ * <p>Taken away and not counted up. A case a body has no producer for stays owed: that a signature
+ * says {@code A | B} and an implementation never answers {@code B} is a gap between the two, and it is
+ * the kind of gap a coverage measure is for. What is not a gap is a case something does answer with,
+ * at a place the model's own rules prove nothing reaches — nobody can write that row, and asking is
+ * asking for work nobody can do.
  *
  * <pre>
- * nothing               where an arm it sits under is proven unreachable
- * the case it builds    where the value it builds names one
- * every declared case   otherwise
+ * a reachable producer, or one this cannot read   keep
+ * producers, and every one of them unreachable    take away
+ * no producer at all                              keep
  * </pre>
  *
- * and the answer is their union. The last line is the top of the lattice and it is where everything
- * this cannot read goes: a call, a value bound elsewhere, a body that is a function. So a helper that
- * might answer anything keeps every case owed, which is the safe direction — a case left in is a case
- * the report asks for, and an author reading a gap they cannot fill has at least been told something
- * true about their model.
+ * <p>The middle line is the only one that takes anything, and it is the one #479 is about. The first
+ * covers everything unreadable — a call, a value bound elsewhere, a body that is a function — so a
+ * helper that might answer anything keeps every case owed, which is the safe direction: a case left in
+ * is a case the report asks for, and an author reading a gap they cannot fill has at least been told
+ * something true about their model.
  *
  * <p>Only guards take an arm away, because only a guard's arm has a reachability proof behind it. A
  * {@code match} arm is left alone: which cases of a sum can arrive is a different question and
@@ -37,22 +38,38 @@ import java.util.Set;
 public final class ProducedCases {
 
     /**
-     * <p>Asked of every body, and not only of one with an arm this can rule out. What a body may
-     * answer with is a fact about the body: reading it only where a guard happens to be provable
-     * would make the same two bodies answer differently, and adding a guard nothing reaches to a
-     * behavior would change what its signature is owed.
-     *
-     * @param declared what the output type's cases are, which is both the answer where nothing can be
-     *                 read and the set every unresolved producer contributes
+     * @param declared what the output type's cases are, which is what this answers where nothing is
+     *                 taken away
      */
     public static Set<TypeName> of(Core body, CoverageSites.Plan plan, GuardReachability reachable,
                                    Set<TypeName> declared) {
-        if (body == null || declared.isEmpty()) {
-            return declared;   // nothing to read, so every case the type has stays owed
+        // Nothing proven is nothing to take away: what this returns is `declared` less the cases whose
+        // every producer is behind a proven arm, and with no such arm there are none. Skipped rather
+        // than walked to the same answer.
+        if (body == null || declared.isEmpty() || reachable.isEmpty()) {
+            return declared;
         }
-        Set<TypeName> found = new LinkedHashSet<>();
-        walk(body, List.of(), plan, reachable, declared, found);
-        return found;
+        Seen seen = new Seen();
+        walk(body, List.of(), plan, reachable, declared, seen);
+        if (seen.anythingUnreadable) {
+            return declared;   // something reachable answers with what this cannot name
+        }
+        Set<TypeName> out = new LinkedHashSet<>(declared);
+        seen.behindAProvenArm.stream().filter(each -> !seen.reachable.contains(each)).toList()
+                .forEach(out::remove);
+        return Set.copyOf(out);
+    }
+
+    /** Where a case was answered with, which is what decides whether it can be answered at all. */
+    private static final class Seen {
+
+        /** Answered with somewhere no proof rules out. */
+        private final Set<TypeName> reachable = new LinkedHashSet<>();
+        /** Answered with behind an arm nothing reaches, which is only worth acting on where the case
+         * is answered with nowhere else. */
+        private final Set<TypeName> behindAProvenArm = new LinkedHashSet<>();
+        /** A producer that could answer with anything, at a place something reaches. */
+        private boolean anythingUnreadable;
     }
 
     /**
@@ -63,55 +80,56 @@ public final class ProducedCases {
      * case owed because the body happened to build one on its way past.
      */
     private static void walk(Core e, List<Integer> under, CoverageSites.Plan plan,
-                             GuardReachability reachable, Set<TypeName> declared,
-                             Set<TypeName> found) {
-        if (found.size() == declared.size()) {
-            return;   // already the whole set; nothing further can widen it
+                             GuardReachability reachable, Set<TypeName> declared, Seen seen) {
+        if (seen.anythingUnreadable) {
+            return;   // nothing further can be taken away
         }
         switch (e) {
             case Core.Unreachable _ -> { }   // answers nothing, so it produces nothing
-            case Core.LetIn li -> walk(li.body(), under, plan, reachable, declared, found);
+            case Core.LetIn li -> walk(li.body(), under, plan, reachable, declared, seen);
             case Core.If iff -> {
                 int[] arms = plan.probesOf(iff);
-                walk(iff.then(), beneath(under, arms, 0), plan, reachable, declared, found);
-                walk(iff.els(), beneath(under, arms, 1), plan, reachable, declared, found);
+                walk(iff.then(), beneath(under, arms, 0), plan, reachable, declared, seen);
+                walk(iff.els(), beneath(under, arms, 1), plan, reachable, declared, seen);
             }
             case Core.Match m -> {
                 int[] arms = plan.probesOf(m);
                 for (int i = 0; i < m.cases().size(); i++) {
                     walk(m.cases().get(i).body(), beneath(under, arms, i), plan, reachable, declared,
-                            found);
+                            seen);
                 }
             }
             case Core.IfConstructed ic -> {
                 int[] arms = plan.probesOf(ic);
-                walk(ic.then(), beneath(under, arms, 0), plan, reachable, declared, found);
+                walk(ic.then(), beneath(under, arms, 0), plan, reachable, declared, seen);
                 for (int i = 0; i < ic.els().size(); i++) {
                     walk(ic.els().get(i).body(), beneath(under, arms, i + 1), plan, reachable,
-                            declared, found);
+                            declared, seen);
                 }
             }
-            case Core.UnitValue u -> produce(u.data(), under, reachable, declared, found);
-            case Core.NewData nd -> produce(nd.typeName(), under, reachable, declared, found);
+            case Core.UnitValue u -> produce(u.data(), under, reachable, declared, seen);
+            case Core.NewData nd -> produce(nd.typeName(), under, reachable, declared, seen);
             // Everything else answers something this cannot name: a call, a name read from a binding,
             // a function value. The top of the lattice, which keeps every case owed.
-            case null, default -> produce(null, under, reachable, declared, found);
+            case null, default -> produce(null, under, reachable, declared, seen);
         }
     }
 
-    /** What one producer contributes, which is nothing at all where an arm above it is unreachable. */
+    /** Where one producer puts the case it answers with. */
     private static void produce(TypeName built, List<Integer> under, GuardReachability reachable,
-                                Set<TypeName> declared, Set<TypeName> found) {
-        for (int site : under) {
-            if (reachable.provenUnreachable(site)) {
-                return;
-            }
-        }
-        if (built != null && declared.contains(built)) {
-            found.add(built);
+                                Set<TypeName> declared, Seen seen) {
+        boolean proven = under.stream().anyMatch(reachable::provenUnreachable);
+        if (built == null || !declared.contains(built)) {
+            // Not a case this can name. Reachable, it could be any of them and nothing is taken away;
+            // behind a proven arm it answers nothing and says nothing about any case either.
+            seen.anythingUnreadable |= !proven;
             return;
         }
-        found.addAll(declared);
+        if (proven) {
+            seen.behindAProvenArm.add(built);
+        } else {
+            seen.reachable.add(built);
+        }
     }
 
     /** The arms of an inner fork, added to the ones already above it. An arm with no probe adds

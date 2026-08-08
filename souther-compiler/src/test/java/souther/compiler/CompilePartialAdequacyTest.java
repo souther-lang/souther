@@ -432,18 +432,13 @@ class CompilePartialAdequacyTest {
      * The lines say what the summary says.
      *
      * <p>A `(partial)` in the margin and a flat assertion under it read as a finding with a footnote.
-     * Under partial the honest sentence is that nothing *seen* claims the class.
-     *
-     * <p>Read at a position and not at the output. `take` answers with `Ok` and nothing else, so
-     * `Refused` is not a case any row could carry and the signature stops counting it — which is a
-     * different question from how a gap is worded, and the wording is what this holds.
+     * Under partial the honest sentence is that nothing *seen* claims the case.
      */
     @Test
-    void aMeasureLineUnderPartialDoesNotAssert() {
+    void aSignatureLineUnderPartialDoesNotAssert() {
         String human = AdequacyReport.of(split()).human();
 
-        assertTrue(human.contains("undecided whether a row is in `No`"), human);
-        assertFalse(human.contains("· no row is in"), human);
+        assertTrue(human.contains("undecided whether a row expects `Refused`"), human);
         assertFalse(human.contains("· no row expects"), human);
     }
 
