@@ -7,6 +7,7 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.LeafScalar;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -141,21 +142,17 @@ final class SignatureBoundary {
      * here as it is anywhere else in the shape.
      */
     private static BoundaryMapKey mapKey(Type key, Where where, Symbols symbols) {
-        BoundaryMapKey classified = TypeOps.classifyConcreteMapKey(key, symbols);
-        if (classified == null) {
+        MapKeyRepresentation representation = TypeOps.classifyConcreteMapKey(key, symbols);
+        if (representation == null) {
             throw notAKey(key, where);
         }
-        return switch (classified) {
-            case BoundaryMapKey.StringNewtype n -> {
-                nominal(n.name(), where, symbols);
-                yield classified;
-            }
-            case BoundaryMapKey.UnitEnum e -> {
-                nominal(e.name(), where, symbols);
-                yield classified;
-            }
-            case BoundaryMapKey.Text _, BoundaryMapKey.Date _, BoundaryMapKey.DateTime _ -> classified;
-        };
+        switch (representation) {
+            case MapKeyRepresentation.StringNewtype n -> nominal(n.name(), where, symbols);
+            case MapKeyRepresentation.UnitEnum e -> nominal(e.name(), where, symbols);
+            case MapKeyRepresentation.Text _, MapKeyRepresentation.Date _,
+                 MapKeyRepresentation.DateTime _ -> { }
+        }
+        return new BoundaryMapKey(representation);
     }
 
     private static CompileException union(Type.Union u, Where where) {

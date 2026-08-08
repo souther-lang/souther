@@ -5,6 +5,7 @@ import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.BoundaryMapKey;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
@@ -516,12 +517,12 @@ public final class Runner {
      * representation is the string leaf, parsed for a temporal.
      */
     private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, BoundaryMapKey key) {
-        return switch (key) {
-            case BoundaryMapKey.StringNewtype n -> codecOf(loader, n.name(), "decoder");
-            case BoundaryMapKey.UnitEnum e -> codecOf(loader, e.name(), "decoder");
-            case BoundaryMapKey.Text _ -> text();
-            case BoundaryMapKey.Date _ -> text().date();
-            case BoundaryMapKey.DateTime _ -> text().dateTime();
+        return switch (key.representation()) {
+            case MapKeyRepresentation.StringNewtype n -> codecOf(loader, n.name(), "decoder");
+            case MapKeyRepresentation.UnitEnum e -> codecOf(loader, e.name(), "decoder");
+            case MapKeyRepresentation.Text _ -> text();
+            case MapKeyRepresentation.Date _ -> text().date();
+            case MapKeyRepresentation.DateTime _ -> text().dateTime();
         };
     }
 
@@ -666,13 +667,13 @@ public final class Runner {
      * case name — and which kind it is travelled here rather than being asked again.
      */
     private static String encodeKey(MemoryClassLoader loader, BoundaryMapKey key, Object value) {
-        return (String) switch (key) {
-            case BoundaryMapKey.Text _ -> encodeLeaf(LeafScalar.STRING, value);
-            case BoundaryMapKey.Date _ -> encodeLeaf(LeafScalar.DATE, value);
-            case BoundaryMapKey.DateTime _ -> encodeLeaf(LeafScalar.DATETIME, value);
-            case BoundaryMapKey.StringNewtype n ->
+        return (String) switch (key.representation()) {
+            case MapKeyRepresentation.Text _ -> encodeLeaf(LeafScalar.STRING, value);
+            case MapKeyRepresentation.Date _ -> encodeLeaf(LeafScalar.DATE, value);
+            case MapKeyRepresentation.DateTime _ -> encodeLeaf(LeafScalar.DATETIME, value);
+            case MapKeyRepresentation.StringNewtype n ->
                     encodeThrough(loader, n.name().qualified(), value);
-            case BoundaryMapKey.UnitEnum e ->
+            case MapKeyRepresentation.UnitEnum e ->
                     encodeThrough(loader, e.name().qualified(), value);
         };
     }

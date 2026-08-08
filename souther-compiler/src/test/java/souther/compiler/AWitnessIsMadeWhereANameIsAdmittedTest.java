@@ -4,6 +4,7 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.Sig;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
@@ -43,9 +44,8 @@ class AWitnessIsMadeWhereANameIsAdmittedTest {
     }
 
     @Test
-    void aMapKeyNamingATypeIsMadeOnlyWhereThatNameIsAdmitted() throws Exception {
-        assertClosed(BoundaryMapKey.StringNewtype.class, TypeName.class);
-        assertClosed(BoundaryMapKey.UnitEnum.class, TypeName.class);
+    void anAdmittedMapKeyIsMadeOnlyWhereItsPositionAdmittedIt() throws Exception {
+        assertClosed(BoundaryMapKey.class, MapKeyRepresentation.class);
     }
 
     private static void assertClosed(Class<?> witness, Class<?>... parameters) throws Exception {

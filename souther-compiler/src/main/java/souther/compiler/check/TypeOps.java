@@ -10,6 +10,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.CaseShape;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -1082,32 +1083,38 @@ public final class TypeOps {
     }
 
     /**
-     * What a concrete {@code key} is converted through at the boundary, or null when it cannot cross.
-     * A map's external form is a JSON object, whose keys are strings, so an admitted key renders as
-     * and parses from a bare string: {@code String} itself, a String-backed newtype (ADR-0040), a
-     * temporal as the ISO form a {@code Date} field already travels as, or an enumeration as its
-     * case's name (issue #161).
+     * What a concrete {@code key} would be converted through, or null when it has no representation
+     * at all. A map's external form is a JSON object, whose keys are strings, so a key that has one
+     * renders as and parses from a bare string: {@code String} itself, a String-backed newtype
+     * (ADR-0040), a temporal as the ISO form a {@code Date} field already travels as, or an
+     * enumeration as its case's name (issue #161).
      *
-     * <p>The answer is the witness rather than a yes, and it is this function's alone. A reader that
-     * builds a decoder, renders an encoder's keys or lowers a key into the codec IR takes what it
-     * needs from the result; none of them asks the type again.
+     * <p>This classifies and does not admit. Whether a key of a given representation may stand in a
+     * given position is the position's own question — a behavior's boundary refuses a name the
+     * language declares of its own operations, and a fixture's position asks something else again —
+     * so what comes back says what the key converts through and nothing about where it may be
+     * written. A boundary turns one into a {@link BoundaryMapKey} once it has admitted the name.
+     *
+     * <p>The classification itself is this function's alone. A reader that builds a decoder, renders
+     * an encoder's keys or lowers a key into the codec IR takes what it needs from the result; none
+     * of them asks the type again.
      */
-    public static BoundaryMapKey classifyConcreteMapKey(Type key, Symbols symbols) {
+    public static MapKeyRepresentation classifyConcreteMapKey(Type key, Symbols symbols) {
         if (key == Type.STRING) {
-            return new BoundaryMapKey.Text();
+            return new MapKeyRepresentation.Text();
         }
         if (key == Type.DATE) {
-            return new BoundaryMapKey.Date();
+            return new MapKeyRepresentation.Date();
         }
         if (key == Type.DATETIME) {
-            return new BoundaryMapKey.DateTime();
+            return new MapKeyRepresentation.DateTime();
         }
         if (key instanceof Type.Ref r) {
             if (isStringNewtype(r.name(), symbols)) {
-                return new BoundaryMapKey.StringNewtype(r.name());
+                return new MapKeyRepresentation.StringNewtype(r.name());
             }
             if (isUnitOnlySum(key, symbols)) {
-                return new BoundaryMapKey.UnitEnum(r.name());
+                return new MapKeyRepresentation.UnitEnum(r.name());
             }
         }
         return null;

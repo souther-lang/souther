@@ -124,9 +124,26 @@ these cases pointless; the second is what the runner's guards were removed on th
 is what `BoundaryScalar` already was, having six cases and no way to name `Raw`. This takes the
 second, and takes it everywhere: a reader is handed a case of a union, an element of a list or a
 map's key at least as often as it is handed a whole signature, so a guarantee that held only of the
-signature would not be the guarantee the readers rest on. The cases that name no type stay records —
-each stands for a representation the boundary always admits, so there is no refused state to
-assemble.
+signature would not be the guarantee the readers rest on.
+
+**Classifying a key and admitting one are separate types, because they are separate questions.**
+Closing a constructor is not enough where a public function hands the value out: `classifyConcreteMapKey`
+answered a witness, and what it looked at was whether the type *has* a representation — which a name
+of the language's own has as much as a model's. `SignatureBoundary` proved the gap by re-asking
+`declaredByAModel` of the classified name. So the classification is `MapKeyRepresentation`, a fact
+about a type that anything may work out, and `BoundaryMapKey` holds one and is made only where a key
+position admitted the name.
+
+The split is also what #462 says in the general form: a key position is established by a behavior's
+boundary, by a data's field and by a fixture, and they do not admit alike, while the representation
+is what all three share. It removes a package cycle as a side effect — `Ast` carries the
+representation in its codec IR, which is a fact about a type and belongs in `types`, where `Ast`
+could already reach.
+
+Of the two questions a key position asks, only the first has an example in today's library: a name
+with no representation at all is refused as that (`E1314`), and there is no type the language
+declares of its own that a key *could* be classified as. The second obligation is the position's
+whether or not anything can reach it now, which is why it is written where the position is.
 
 With that, the runner's last two reflective guards go — `run.decode.nodecoder` and
 `run.encode.noencoder`, which asked whether the class a name denotes has the factory being reached

@@ -4,7 +4,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Compilation;
 import souther.compiler.check.BoundaryInput;
-import souther.compiler.check.BoundaryMapKey;
+import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.LeafScalar;
 
@@ -69,7 +69,7 @@ class OneBoundaryAnswerReachesTheReaderTest {
         // than a shape — a list or an option cannot be written there at all.
         BoundaryInput.MapOf by = assertInstanceOf(BoundaryInput.MapOf.class, sig.ins().get(3));
         assertEquals("UserId",
-                assertInstanceOf(BoundaryMapKey.StringNewtype.class, by.key()).name().name());
+                assertInstanceOf(MapKeyRepresentation.StringNewtype.class, by.key().representation()).name().name());
         assertInstanceOf(BoundaryInput.Nominal.class, by.value());
 
         assertEquals("Note", assertInstanceOf(BoundaryOutput.Nominal.class, sig.out()).name().name());
