@@ -37,13 +37,18 @@ import java.util.Set;
 public final class ProducedCases {
 
     /**
+     * <p>Asked of every body, and not only of one with an arm this can rule out. What a body may
+     * answer with is a fact about the body: reading it only where a guard happens to be provable
+     * would make the same two bodies answer differently, and adding a guard nothing reaches to a
+     * behavior would change what its signature is owed.
+     *
      * @param declared what the output type's cases are, which is both the answer where nothing can be
      *                 read and the set every unresolved producer contributes
      */
     public static Set<TypeName> of(Core body, CoverageSites.Plan plan, GuardReachability reachable,
                                    Set<TypeName> declared) {
-        if (body == null || declared.isEmpty() || reachable.isEmpty()) {
-            return declared;   // nothing to take away, so nothing is worth walking for
+        if (body == null || declared.isEmpty()) {
+            return declared;   // nothing to read, so every case the type has stays owed
         }
         Set<TypeName> found = new LinkedHashSet<>();
         walk(body, List.of(), plan, reachable, declared, found);

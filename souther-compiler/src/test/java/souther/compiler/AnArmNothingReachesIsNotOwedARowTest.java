@@ -151,6 +151,45 @@ class AnArmNothingReachesIsNotOwedARowTest {
                 () -> "nothing here says what `answer` holds:\n" + report);
     }
 
+    /**
+     * What a body may answer with is a fact about the body.
+     *
+     * <p>Two behaviors that can answer with the same cases are owed the same rows. Read only where a
+     * guard happens to be provable, adding an arm nothing reaches to a behavior would change what its
+     * signature is owed — a case would leave the denominator because a guard beside it was written,
+     * not because anything about the answers had changed.
+     */
+    @Test
+    void aDeadGuardDoesNotChangeWhatTheSignatureIsOwed() throws Exception {
+        String model = """
+                module example.passthrough
+
+                data N = Int
+                    invariant cap = value <= 10
+
+                data A
+                data B
+
+                behavior f : (n: N, b: B) -> A | B
+                    constructs A
+
+                let f (n, b) = BODY
+
+                example f
+                    | "one" : (N(1), B) -> A
+                """;
+        String dead = reportOn(model.replace("BODY", "if n.value > 100 then b else A"));
+        String plain = reportOn(model.replace("BODY", "A"));
+        String live = reportOn(model.replace("BODY", "if n.value > 5 then b else A"));
+
+        assertTrue(dead.contains("out specified 1/1"),
+                () -> "no pair holds an `n` above 100, so nothing here answers `B`:\n" + dead);
+        assertTrue(plain.contains("out specified 1/1"),
+                () -> "and the same body without the guard answers the same cases:\n" + plain);
+        assertTrue(live.contains("out specified 1/2"),
+                () -> "where the guard is one a row can take, `B` is owed again:\n" + live);
+    }
+
     // --- what happens if the proof is wrong -------------------------------------------------------
 
     private static CoverageSites.Site arm(int index) {
