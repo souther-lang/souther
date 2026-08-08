@@ -1194,7 +1194,15 @@ public final class Formatter {
      */
     private static boolean separates(SyntaxToken t) {
         return switch (t.kind()) {
-            case COMMA, PIPE, PIPEFWD, VPIPE, ARROW, COLON -> true;
+            case COMMA, PIPE, PIPEFWD, VPIPE -> true;
+            // An arrow joins two parts of a chain only where a chain is what the layout writes. A
+            // function type and a lambda are written as one line with an arrow in it, and a comment
+            // before that arrow has no part after it to be about — reading it as a connector there
+            // moved the comment on the first formatting and moved it again on the second.
+            case ARROW, COLON -> switch (t.parent().kind()) {
+                case EXAMPLE_ROW, FAKE_ROW, MATCH_CASE -> true;
+                default -> false;
+            };
             default -> isBinaryOperator(t.kind());
         };
     }
