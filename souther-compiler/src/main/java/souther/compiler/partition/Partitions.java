@@ -5,6 +5,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.InvariantBound;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Incompleteness;
@@ -350,11 +351,9 @@ public final class Partitions {
         // from the rule that put one there, and which record did the narrowing is said beside it.
         return new Bounds(
                 own.min() == null ? null
-                        : new End(highest(own.min().value(), valueOf(projected.min())),
-                                own.min().from()),
+                        : new End(Endpoint.lower(own.min().at(), projected.min()), own.min().from()),
                 own.max() == null ? null
-                        : new End(lowest(own.max().value(), valueOf(projected.max())),
-                                own.max().from()),
+                        : new End(Endpoint.upper(own.max().at(), projected.max()), own.max().from()),
                 own.decimal());
     }
 
@@ -374,8 +373,8 @@ public final class Partitions {
         if (own == null) {
             return null;   // not a number, so nothing bounds it either way
         }
-        Endpoint min = own.min() == null ? null : Endpoint.inclusive(own.min().value());
-        Endpoint max = own.max() == null ? null : Endpoint.inclusive(own.max().value());
+        Endpoint min = own.min() == null ? null : own.min().at();
+        Endpoint max = own.max() == null ? null : own.max().at();
         return projected == null ? new NumericDomain.Bounds(min, max)
                 : new NumericDomain.Bounds(Endpoint.lower(min, projected.min()),
                         Endpoint.upper(max, projected.max()));
@@ -466,9 +465,20 @@ public final class Partitions {
      * they are two rules a row could be owed to, which is the accounting a cut already keeps. Holding
      * one would drop an obligation rather than a line of text.
      */
-    private record End(BigDecimal value, List<TypeName> from) {
+    private record End(Endpoint at, List<TypeName> from) {
 
-        /** This end, or {@code other} where it is the stronger, or both where they agree. */
+        BigDecimal value() {
+            return at.value();
+        }
+
+        /**
+         * This end, or {@code other} where it is the stronger, or both where they agree.
+         *
+         * <p>Which number survives and whether the value is one of the range's own are the same
+         * question asked of {@link Endpoint}, so that this and the domain cannot disagree about it.
+         * Where the two are at one number both names are kept: each is a rule the line is owed to,
+         * however far into the range each of them reaches.
+         */
         static End tighter(End had, End one, boolean upper) {
             if (one == null) {
                 return had;
@@ -476,13 +486,13 @@ public final class Partitions {
             if (had == null) {
                 return one;
             }
-            int order = one.value().compareTo(had.value());
-            if (order == 0) {
-                List<TypeName> both = new ArrayList<>(had.from());
-                one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
-                return new End(had.value(), List.copyOf(both));
+            Endpoint at = upper ? Endpoint.upper(had.at(), one.at()) : Endpoint.lower(had.at(), one.at());
+            if (had.value().compareTo(one.value()) != 0) {
+                return at == had.at() ? had : one;
             }
-            return (upper ? order < 0 : order > 0) ? one : had;
+            List<TypeName> both = new ArrayList<>(had.from());
+            one.from().stream().filter(n -> !both.contains(n)).forEach(both::add);
+            return new End(at, List.copyOf(both));
         }
     }
 
@@ -516,42 +526,20 @@ public final class Partitions {
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                    InvariantConstraints.Constraint read =
-                            InvariantConstraints.of(each, base).orElse(null);
-                    min = End.tighter(min, endOf(lowerOf(read), layer), false);
-                    max = End.tighter(max, endOf(upperOf(read), layer), true);
+                    InvariantBound read = InvariantBound.of(each, base).orElse(null);
+                    if (read == null) {
+                        continue;
+                    }
+                    End end = new End(read.end(), List.of(layer.named()));
+                    if (read.lower()) {
+                        min = End.tighter(min, end, false);
+                    } else {
+                        max = End.tighter(max, end, true);
+                    }
                 }
             }
         }
         return new Bounds(min, max, base == Type.DECIMAL);
-    }
-
-    private static End endOf(BigDecimal value, TypeOps.Layer layer) {
-        return value == null ? null : new End(value, List.of(layer.named()));
-    }
-
-
-
-    /** The lower bound a constraint states, or null where it states none. */
-    private static BigDecimal lowerOf(InvariantConstraints.Constraint read) {
-        return switch (read) {
-            case InvariantConstraints.Min m -> BigDecimal.valueOf(m.n());
-            case InvariantConstraints.Positive _, InvariantConstraints.DecimalPositive _ ->
-                    BigDecimal.ONE;
-            case InvariantConstraints.NonNegative _, InvariantConstraints.DecimalNonNegative _ ->
-                    BigDecimal.ZERO;
-            case InvariantConstraints.DecimalMin m -> m.n();
-            case null, default -> null;   // length, pattern, size, or a rule this cannot read
-        };
-    }
-
-    /** The upper bound a constraint states, or null where it states none. */
-    private static BigDecimal upperOf(InvariantConstraints.Constraint read) {
-        return switch (read) {
-            case InvariantConstraints.Max m -> BigDecimal.valueOf(m.n());
-            case InvariantConstraints.DecimalMax m -> m.n();
-            case null, default -> null;
-        };
     }
 
     /** The cuts of a position, each carrying the rule that drew it. */
@@ -856,22 +844,6 @@ public final class Partitions {
     private static ObservedValue numeric(BigDecimal value, boolean decimal) {
         return decimal ? new ObservedValue.Decimal(value)
                 : new ObservedValue.Integer(value.longValueExact());
-    }
-
-    /** The higher of two bounds, where a null is no bound at all and so never the higher. */
-    private static BigDecimal highest(BigDecimal had, BigDecimal one) {
-        if (one == null) {
-            return had;
-        }
-        return had == null || one.compareTo(had) > 0 ? one : had;
-    }
-
-    /** The lower of two, the same way. */
-    private static BigDecimal lowest(BigDecimal had, BigDecimal one) {
-        if (one == null) {
-            return had;
-        }
-        return had == null || one.compareTo(had) < 0 ? one : had;
     }
 
     private Partitions() {}
