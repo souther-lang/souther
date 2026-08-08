@@ -136,6 +136,51 @@ class APairIsChosenOnePositionAtATimeTest {
     }
 
     /**
+     * Spending the last of the bound is not being short of it.
+     *
+     * <p>Eight positions of two values each is exactly what the search is allowed to compose. Every
+     * one of them is refused, and every one of them was tried — so what the reader is owed is that
+     * nothing here builds, and not that the search gave up one assignment early.
+     */
+    @Test
+    void aSearchThatSpentItsLastAssignmentSaysEverythingWasRefused() throws Exception {
+        StringBuilder fields = new StringBuilder("    { a1: Int\n");
+        for (int i = 2; i <= 8; i++) {
+            fields.append("    , a").append(i).append(": Int\n");
+        }
+        String model = """
+                module example.exact
+
+                data R =
+                FIELDS    }
+                    invariant rule = a1 * a2 >= 5
+
+                data Ok
+
+                behavior f : (r: R, flag: Bool) -> Ok
+                    constructs Ok
+
+                let f (r, flag) = Ok
+                """.replace("FIELDS", fields.toString());
+        Path file = Files.createTempDirectory("souther-exact").resolve("model.sou");
+        Files.writeString(file, model);
+        PrintStream was = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[] {"examples", "--generate", file.toString()});
+        } finally {
+            System.setOut(was);
+        }
+        String rows = out.toString(StandardCharsets.UTF_8);
+
+        assertTrue(rows.contains("every value tried was refused"),
+                () -> "256 assignments, all composed and all refused:\n" + rows);
+        assertFalse(rows.contains("the search stopped before reaching it"),
+                () -> "and none of them was left untried:\n" + rows);
+    }
+
+    /**
      * A dense strict bound is reached by a value off the end, and not by the order of choosing.
      *
      * <p>Choosing {@code low} first leaves {@code high} at zero and above, because {@code low < high}

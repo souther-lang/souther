@@ -687,7 +687,14 @@ public final class Generator {
         private int left = MAX_TUPLES;
         private boolean cutShort;
 
-        /** Whether there is room to compose one more assignment. */
+        /**
+         * Whether there is room to compose one more assignment.
+         *
+         * <p>The only place the bound is called reached. Spending the last of it is not the same as
+         * being short of it: a search whose last assignment was composed and refused has tried
+         * everything it had, and marking it where the count reaches zero would report the one search
+         * that finished as the one that stopped.
+         */
         boolean spend() {
             if (left <= 0) {
                 cutShort = true;
@@ -735,8 +742,7 @@ public final class Generator {
             }
             chosen.remove(position.path());
             settled.remove(position.path());
-            if (budget.left <= 0) {
-                budget.cutShort = true;   // branches left, and nothing to spend on them
+            if (budget.cutShort) {
                 return null;
             }
         }
