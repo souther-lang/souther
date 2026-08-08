@@ -102,6 +102,10 @@ public final class Adequacy {
                      Map<String, PartitionEvidence> partitions,
                      Map<String, BranchEvidence> branches) {}
 
+    /** Nothing proven and nothing disproved, for a module whose reachability could not be asked. */
+    static final Effective NOTHING_PROVEN =
+            new Effective(souther.compiler.partition.GuardReachability.NONE, Set.of());
+
     static Asked askedOf(Db db) {
         Asked asked = db.ask(new Requested()).value();
         return asked == null ? Asked.NOTHING : asked;
@@ -182,6 +186,125 @@ public final class Adequacy {
     }
 
     /**
+     * The arms of every behavior of one module that the model's own rules prove nothing reaches.
+     *
+     * <p>Asked once, for the same reason {@link Excluded} is: what a position is divided into, which
+     * lines are owed a row, which arms are owed a row and which cases the signature is owed are
+     * projections of one universe of possible executions. Derived per measure they disagreed — the
+     * class beyond a cap was dropped while the arm behind it was still asked for.
+     *
+     * <p>A guard whose comparison this cannot read leaves both of its arms owed, and so does a position
+     * nothing bounds. Only a proof takes an arm away.
+     */
+    public record Reachable(String name)
+            implements Key<Map<String, souther.compiler.partition.GuardReachability>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, souther.compiler.partition.GuardReachability>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.check.TypeChecker.Checked checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked == null ? Map.of() : checked.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.of(
+                            Coverage.sourceIdOf(db, name), bodies);
+            Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            Symbols symbols = scope.value();
+            Map<String, souther.compiler.partition.GuardReachability> out = new LinkedHashMap<>();
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+                    continue;   // a composition has no body of its own, so no arms of its own
+                }
+                souther.compiler.core.Core body = bodies.get(spec.name());
+                Sig sig = sigs.value().get(spec.name());
+                if (body == null || sig == null) {
+                    continue;
+                }
+                List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+                souther.compiler.partition.GuardThresholds.Guards guards =
+                        souther.compiler.partition.GuardThresholds.of(
+                                spec.name(), body, plan, parameters, symbols);
+                // What the positions can hold, read before any threshold is applied: a guard's own line
+                // is not what says whether that line is reachable.
+                Map<String, souther.compiler.numeric.NumericDomain.Bounds> admissible =
+                        souther.compiler.partition.Partitions.of(spec, sig, symbols,
+                                excluded == null ? Exclusions.NONE
+                                        : excluded.getOrDefault(spec.name(), Exclusions.NONE))
+                                .domains();
+                out.put(spec.name(), souther.compiler.partition.GuardReachability.of(
+                        guards.edges(), admissible));
+            }
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
+     * What is proven about a behavior's arms once the rows have run.
+     *
+     * <p>A proof is about the model's own rules and the rows are about what happened, so a row that
+     * went through an arm nothing was supposed to reach settles it: the proof was wrong. Recorded
+     * rather than dropped, because that is a disagreement between an analysis and an execution and
+     * not a gap in anybody's rows.
+     *
+     * @param reachable  the arms still proven unreachable, which is what every measure excludes by
+     * @param contradicted the ones a row reached anyway
+     */
+    public record Effective(souther.compiler.partition.GuardReachability reachable, Set<Integer> contradicted) {
+
+        public Effective {
+            contradicted = Set.copyOf(contradicted);
+        }
+    }
+
+    /**
+     * The effective reachability of every behavior of one module.
+     *
+     * <p>Derived once and read by both of the measures that exclude by it. Asked separately they
+     * would disagree exactly where it matters most: an arm put back into the branch measure by a row
+     * that reached it would still be taken out of the signature's, and the case behind it would stay
+     * unowed over a proof already known to be wrong.
+     */
+    public record Reached(String name) implements Key<Map<String, Effective>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Effective>> compute(Db db) {
+            Answer<Map<String, souther.compiler.partition.GuardReachability>> proven = db.ask(new Reachable(name));
+            if (!proven.present()) {
+                return Answer.absent();
+            }
+            Set<Integer> lit = new LinkedHashSet<>();
+            for (Observed observed : rowsOf(db, name).values()) {
+                for (RowOutcome row : observed.rows()) {
+                    lit.addAll(row.hits());
+                }
+            }
+            Map<String, Effective> out = new LinkedHashMap<>();
+            proven.value().forEach((behavior, reachable) -> {
+                Set<Integer> contradicted = new LinkedHashSet<>(reachable.unreachableSites());
+                contradicted.retainAll(lit);
+                out.put(behavior, new Effective(reachable.without(contradicted), contradicted));
+            });
+            return Answer.of(Ordered.map(out));
+        }
+    }
+
+    /**
      * The signature evidence for every behavior of one module.
      *
      * <p>A module's question, not a source's, although the rows are evaluated per source. A behavior's
@@ -206,6 +329,16 @@ public final class Adequacy {
             }
             Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, Exclusions> excluded = db.ask(new Excluded(name)).value();
+            // What each body can answer with, so that a case only an unreachable arm produces is not
+            // counted. Read from the same reachability the arms are counted by.
+            souther.compiler.check.TypeChecker.Checked checkedBodies =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> producing =
+                    checkedBodies == null ? Map.of() : checkedBodies.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan producingPlan =
+                    souther.compiler.coverage.CoverageSites.of(
+                            Coverage.sourceIdOf(db, name), producing);
+            Map<String, Effective> reachableArms = db.ask(new Reached(name)).value();
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 Sig sig = sigs.value().get(behavior.name());
@@ -217,7 +350,10 @@ public final class Adequacy {
                         behavior instanceof Ast.SpecBehavior spec ? spec.params().stream()
                                 .map(Ast.Param::name).toList() : List.of(),
                         excluded == null ? Exclusions.NONE
-                                : excluded.getOrDefault(behavior.name(), Exclusions.NONE)));
+                                : excluded.getOrDefault(behavior.name(), Exclusions.NONE),
+                        producing.get(behavior.name()), producingPlan,
+                        reachableArms == null ? NOTHING_PROVEN
+                                : reachableArms.getOrDefault(behavior.name(), NOTHING_PROVEN)));
             }
             return Answer.of(Ordered.map(out));
         }
@@ -362,7 +498,8 @@ public final class Adequacy {
                     continue;
                 }
                 out.addAll(Coverages.assess(axis, parameters, observed, symbols, armsAsked,
-                        partitioning.edgeIsKnownWritable(axis.path().toString()), probe));
+                        partitioning.edgeIsKnownWritable(axis.path().toString()), probe,
+                        partitioning.domains().get(axis.path().toString())));
             }
             return List.copyOf(out);
         }
@@ -405,11 +542,20 @@ public final class Adequacy {
      * conditions is four arms and says nothing about whether their combinations were tried, so nothing
      * here calls this covering the paths a body has.
      *
-     * @param all     every arm the behavior has
+     * @param all     every arm the behavior is owed a row for. An arm the model's own rules prove
+     *                nothing reaches is not one of them: it is instrumented, because a probe is what
+     *                would show the proof wrong, and it is not owed, because no row can light it.
+     *                Which arms those are is {@link GuardReachability}'s answer, asked once for the
+     *                module and read by every measure.
      * @param covered the ones a row went through
+     * @param contradicted arms proven unreachable that a row went through anyway. Nothing in the model
+     *                is wrong here — the proof is. Kept rather than dropped, and the arm is left in
+     *                {@link #all} beside it, because a measure that quietly counted such an arm as
+     *                covered would report a full denominator and hide the one fact worth acting on.
      */
     public record BranchEvidence(List<souther.compiler.coverage.CoverageSites.Site> all,
-                                 Set<Integer> covered, MeasurementStatus status, Reason reason) {
+                                 Set<Integer> covered, Set<Integer> contradicted,
+                                 MeasurementStatus status, Reason reason) {
 
         /**
          * Why a behavior's arms have no number, in the order the measurement asks.
@@ -434,17 +580,36 @@ public final class Adequacy {
         }
 
         public static BranchEvidence unavailable(Reason reason) {
-            return new BranchEvidence(List.of(), Set.of(), MeasurementStatus.UNAVAILABLE, reason);
+            return new BranchEvidence(List.of(), Set.of(), Set.of(),
+                    MeasurementStatus.UNAVAILABLE, reason);
         }
 
+        /**
+         * The arms of one behavior, with the ones nothing reaches taken out of what it is owed.
+         *
+         * <p>Taken out here and not where the probes are numbered. The plan says where instrumentation
+         * is; this says which of it is owed a row, and the two are different questions — a site with no
+         * probe could never disprove the reachability it was excluded by.
+         */
         public static BranchEvidence measured(List<souther.compiler.coverage.CoverageSites.Site> all,
-                                              Set<Integer> covered, MeasurementStatus status) {
-            return new BranchEvidence(all, covered, status, null);
+                                              Set<Integer> covered, Effective reachable,
+                                              MeasurementStatus status) {
+            List<souther.compiler.coverage.CoverageSites.Site> owed = all.stream()
+                    .filter(site -> !reachable.reachable().provenUnreachable(site.index())).toList();
+            Set<Integer> counted = new LinkedHashSet<>(covered);
+            counted.retainAll(owed.stream()
+                    .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
+            // A proof a row has already disproved is not something to report a complete measurement
+            // over. What is wrong is this analysis, not the model's rows, and a number given as though
+            // nothing had happened is the one thing that must not come out of it.
+            return new BranchEvidence(owed, counted, reachable.contradicted(),
+                    reachable.contradicted().isEmpty() ? status : MeasurementStatus.PARTIAL, null);
         }
 
         public BranchEvidence {
             all = List.copyOf(all);
             covered = Set.copyOf(covered);
+            contradicted = Set.copyOf(contradicted);
             Unavailable.check(status, reason);
         }
 
@@ -507,6 +672,8 @@ public final class Adequacy {
                 }
             }
 
+            Map<String, Effective> reachable = db.ask(new Reached(name)).value();
+
             Map<String, BranchEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 List<souther.compiler.coverage.CoverageSites.Site> arms = plan.sites().stream()
@@ -527,6 +694,8 @@ public final class Adequacy {
                 boolean partial = !observed.complete() || observed.rows().stream()
                         .anyMatch(row -> row.disposition() == Disposition.INCOMPLETE);
                 out.put(behavior.name(), BranchEvidence.measured(arms, covered,
+                        reachable == null ? NOTHING_PROVEN
+                                : reachable.getOrDefault(behavior.name(), NOTHING_PROVEN),
                         partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE));
             }
             return Answer.of(Ordered.map(out));
@@ -1210,9 +1379,15 @@ public final class Adequacy {
      *                   at an input position is matched to the position this counts
      */
     static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen,
-                                        List<String> parameters, Exclusions excluded) {
+                                        List<String> parameters, Exclusions excluded,
+                                        souther.compiler.core.Core body,
+                                        souther.compiler.coverage.CoverageSites.Plan plan,
+                                        Effective reachable) {
         List<RowOutcome> rows = seen.rows();
-        Set<TypeName> declaredOut = coverableCases(sig.outputType(), symbols);
+        // The cases the output type has, less the ones only an arm nothing reaches produces. A case
+        // no reachable producer answers with is not a gap in the rows.
+        Set<TypeName> declaredOut = souther.compiler.partition.ProducedCases.of(
+                body, plan, reachable.reachable(), coverableCases(sig.outputType(), symbols));
         Set<TypeName> specified = new LinkedHashSet<>();
         Set<TypeName> observed = new LinkedHashSet<>();
         Set<TypeName> verified = new LinkedHashSet<>();

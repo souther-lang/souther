@@ -48,8 +48,9 @@ class ThresholdNormalizationTest {
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body);
         CoverageSites.Plan plan = CoverageSites.of("m.sou", checked.behaviorBodies());
-        List<Threshold> thresholds = GuardThresholds.of(behavior, body, plan,
+        GuardThresholds.Guards guards = GuardThresholds.of(behavior, body, plan,
                 spec.params().stream().map(Ast.Param::name).toList(), symbols);
+        List<Threshold> thresholds = guards.thresholds();
         Partitions.Partitioning base = Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE);
         return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds);
     }
@@ -204,7 +205,8 @@ class ThresholdNormalizationTest {
         Read read = read(CEILING, "submit");
         Axis cost = axis(read.partitioning(), "request.cost");
 
-        List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, Symbols.none());
+        List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, Symbols.none(),
+                read.partitioning().domains().get("request.cost"));
         List<String> described = obligations.stream()
                 .map(o -> o.side() + " " + Intervals.numberOf(o.value())).toList();
 
@@ -240,7 +242,8 @@ class ThresholdNormalizationTest {
         Axis amount = axis(read.partitioning(), "amount");
         assertEquals(List.of("0 <= x < 3000", "3000 <= x"), labels(amount));
 
-        List<String> described = Partitions.obligationsOf(amount, Symbols.none()).stream()
+        List<String> described = Partitions.obligationsOf(amount, Symbols.none(),
+                read.partitioning().domains().get(amount.path().toString())).stream()
                 .map(o -> o.side() + " " + Intervals.numberOf(o.value())).toList();
         assertTrue(described.contains("AT 3000"), described.toString());
         assertTrue(described.contains("BELOW 2999"), described.toString());
