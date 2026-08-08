@@ -625,7 +625,18 @@ public final class Generator {
         // Asked again choosing one position at a time, each from what is left once the ones before it
         // are asserted, which is the only way `a < b` is met in general.
         Outcome conditioned = conditioned(subject, p, decided, settled, check);
-        return conditioned.value() != null ? conditioned : product;
+        if (conditioned.value() != null) {
+            return conditioned;
+        }
+        // A pass that stopped at its bound has not tried everything it had, and neither pass may be
+        // reported as though it had: `ALL_CANDIDATES_REJECTED` is what a reader is told nothing else
+        // can be written at, and a search still holding assignments it never composed has not
+        // established that.
+        if (product.reason() == UnresolvedCombination.Reason.SEARCH_LIMIT
+                || conditioned.reason() == UnresolvedCombination.Reason.SEARCH_LIMIT) {
+            return new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
+        }
+        return product;
     }
 
     /**
@@ -646,19 +657,45 @@ public final class Generator {
         Type type = subject.types().get(p);
         TermPath at = TermPath.of(subject.parameters().get(p));
         List<Position> found = new ArrayList<>();
-        if (positionsUnder(type, at, subject.symbols(), 0, found, decided.keySet()) != null) {
-            return new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
-        }
+        positionsUnder(type, at, subject.symbols(), 0, found, decided.keySet());
         // What the caller fixed goes first, so that everything chosen after it is chosen beside it.
         // A class stands for one value and a boundary is one value, and neither is worth deciding
         // after the positions whose range it settles.
         List<Position> positions = new ArrayList<>(
                 found.stream().filter(each -> decided.containsKey(each.path())).toList());
         positions.addAll(found.stream().filter(each -> !decided.containsKey(each.path())).toList());
+        Budget budget = new Budget();
         FixtureTemplate built = descend(subject, p, positions, 0, new LinkedHashMap<>(),
-                new LinkedHashMap<>(settled), decided, check, new int[] {MAX_TUPLES});
-        return built != null ? new Outcome(built, null, null)
-                : new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+                new LinkedHashMap<>(settled), decided, check, budget);
+        if (built != null) {
+            return new Outcome(built, null, null);
+        }
+        return new Outcome(null, budget.cutShort
+                ? UnresolvedCombination.Reason.SEARCH_LIMIT
+                : UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+    }
+
+    /**
+     * What is left of the bound on one search, and whether it ran out.
+     *
+     * <p>The two are one fact and are held together. Nothing left is not the same as everything
+     * tried, and a search that stopped at the bound reporting that every value was refused would put
+     * a combination nobody looked at beside the ones that were.
+     */
+    private static final class Budget {
+
+        private int left = MAX_TUPLES;
+        private boolean cutShort;
+
+        /** Whether there is room to compose one more assignment. */
+        boolean spend() {
+            if (left <= 0) {
+                cutShort = true;
+                return false;
+            }
+            left--;
+            return true;
+        }
     }
 
     /** One position of a row: where it is, and what it holds. */
@@ -675,9 +712,9 @@ public final class Generator {
                                            Map<String, FixtureTemplate> chosen,
                                            Map<String, BigDecimal> settled,
                                            Map<String, List<FixtureTemplate>> decided,
-                                           CandidateCheck check, int[] budget) {
+                                           CandidateCheck check, Budget budget) {
         if (index == positions.size()) {
-            if (budget[0]-- <= 0) {
+            if (!budget.spend()) {
                 return null;
             }
             FixtureTemplate whole = compose(subject.types().get(p),
@@ -698,7 +735,8 @@ public final class Generator {
             }
             chosen.remove(position.path());
             settled.remove(position.path());
-            if (budget[0] <= 0) {
+            if (budget.left <= 0) {
+                budget.cutShort = true;   // branches left, and nothing to spend on them
                 return null;
             }
         }
@@ -727,28 +765,24 @@ public final class Generator {
 
     /** The positions under one parameter, in the order they are composed. The same rule
      * {@link #choicesUnder} walks, so that the two agree about where a row chooses anything. */
-    private static String positionsUnder(Type type, TermPath at, Symbols symbols, int depth,
-                                         List<Position> out, java.util.Set<String> decided) {
+    private static void positionsUnder(Type type, TermPath at, Symbols symbols, int depth,
+                                       List<Position> out, java.util.Set<String> decided) {
         if (decided.contains(at.toString())) {
             out.add(new Position(at.toString(), type));
-            return null;
+            return;
         }
         if (depth < MAX_DEPTH && type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
             Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
             if (!fields.isEmpty()) {
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
-                    String missing = positionsUnder(field.getValue(), at.then(field.getKey()), symbols,
+                    positionsUnder(field.getValue(), at.then(field.getKey()), symbols,
                             depth + 1, out, decided);
-                    if (missing != null) {
-                        return missing;
-                    }
                 }
-                return null;
+                return;
             }
         }
         out.add(new Position(at.toString(), type));
-        return null;
     }
 
     /**

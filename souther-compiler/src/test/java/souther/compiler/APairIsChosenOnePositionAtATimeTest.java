@@ -88,6 +88,54 @@ class APairIsChosenOnePositionAtATimeTest {
     }
 
     /**
+     * A search that stopped at its bound has not tried everything it had.
+     *
+     * <p>Eleven positions, each with a hole in its range, and the assignment that satisfies all of
+     * them is the last the walk would reach. What the reader is owed is which of the two happened:
+     * that everything was refused is a stronger claim than that the search ran out, and it is the one
+     * a later reader would take for an impossibility.
+     */
+    @Test
+    void aSearchThatRanOutSaysSoRatherThanThatEverythingWasRefused() throws Exception {
+        StringBuilder fields = new StringBuilder("    { a1: Int\n");
+        StringBuilder rule = new StringBuilder("a1 /= 0");
+        for (int i = 2; i <= 11; i++) {
+            fields.append("    , a").append(i).append(": Int\n");
+            rule.append(" && a").append(i).append(" /= 0");
+        }
+        String model = """
+                module example.budget
+
+                data R =
+                FIELDS    }
+                    invariant rule = RULE
+
+                data Ok
+
+                behavior f : (r: R, flag: Bool) -> Ok
+                    constructs Ok
+
+                let f (r, flag) = Ok
+                """.replace("FIELDS", fields.toString()).replace("RULE", rule.toString());
+        Path file = Files.createTempDirectory("souther-budget").resolve("model.sou");
+        Files.writeString(file, model);
+        PrintStream was = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[] {"examples", "--generate", file.toString()});
+        } finally {
+            System.setOut(was);
+        }
+        String rows = out.toString(StandardCharsets.UTF_8);
+
+        assertTrue(rows.contains("the search stopped before reaching it"),
+                () -> "it ran out of assignments to compose:\n" + rows);
+        assertFalse(rows.contains("every value tried was refused"),
+                () -> "and it did not try them all:\n" + rows);
+    }
+
+    /**
      * A dense strict bound is reached by a value off the end, and not by the order of choosing.
      *
      * <p>Choosing {@code low} first leaves {@code high} at zero and above, because {@code low < high}
