@@ -103,6 +103,15 @@ public final class Formatter {
     }
 
     /**
+     * The document this formatter builds for {@code file}. For a test that has to see the tokens
+     * the formatter lays out rather than the text they render to — what is written between two of
+     * them is decided from the document, so a check on that decision reads the document.
+     */
+    static TokenDoc document(SyntaxNode file) {
+        return new Formatter().file(file);
+    }
+
+    /**
      * A tree that nests deeper than this walk can descend. {@link CstParser} bounds what it builds,
      * so a tree from a parse this compiler ran does not reach here; what does is a thread with less
      * stack than that bound was set for, and a {@code StackOverflowError} is not a
@@ -503,7 +512,9 @@ public final class Formatter {
             if (m.kind() == SyntaxKind.FIELD) {
                 member = field(m);
             } else if (m.kind() == SyntaxKind.SPREAD_MEMBER) {
-                member = concat(raw("..."), raw(firstIdent(m)));
+                member = TokenDoc.node(m.kind(), concat(
+                        TokenDoc.token(SyntaxKind.SPREAD, "..."), TokenDoc.GAP,
+                        dottedName(idents(m))));
             } else {
                 continue;
             }
@@ -597,15 +608,9 @@ public final class Formatter {
         return delimited("(", RAW_SOFTLINE, withEndComments(n, params), ")");
     }
 
+    /** One stage of a pipeline, which is a name and is written as one. */
     private TokenDoc stage(SyntaxNode n) {
-        StringBuilder sb = new StringBuilder();
-        for (SyntaxToken t : idents(n)) {
-            if (sb.length() > 0) {
-                sb.append('.');
-            }
-            sb.append(t.text());
-        }
-        return raw(sb.toString());
+        return qualifiedName(n);
     }
 
     /** The names a {@code constructs} / {@code depends on} clause lists. {@code skipIdents} drops
@@ -615,9 +620,7 @@ public final class Formatter {
         // an entry may name through a module, so the dots of one name are kept and only a comma
         // starts the next
         List<Member> names = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        SyntaxToken opened = null;
-        SyntaxToken ended = null;
+        List<SyntaxToken> current = new ArrayList<>();
         int skipped = 0;
         for (SyntaxElement e : meaningful(clause)) {
             if (!(e instanceof SyntaxToken t)) {
@@ -628,27 +631,24 @@ public final class Formatter {
                 continue;
             }
             switch (t.kind()) {
-                case IDENT -> {
-                    if (opened == null) {
-                        opened = t;
-                    }
-                    ended = t;
-                    current.append(t.text());
-                }
-                case DOT -> current.append('.');
+                case IDENT -> current.add(t);
                 case COMMA -> {
-                    names.add(tokenMember(opened, ended, raw(current.toString())));
-                    current.setLength(0);
-                    opened = null;
-                    ended = null;
+                    names.add(named(clause, current));
+                    current = new ArrayList<>();
                 }
-                default -> { }   // the `constructs` / `depends` keyword
+                default -> { }   // the dots of one name, and the `constructs` / `depends` keyword
             }
         }
-        if (current.length() > 0) {
-            names.add(tokenMember(opened, ended, raw(current.toString())));
+        if (!current.isEmpty()) {
+            names.add(named(clause, current));
         }
         return group(nest(INDENT, separated(withEndComments(clause, names))));
+    }
+
+    /** One name of such a clause, held against where its identifiers are. */
+    private Member named(SyntaxNode clause, List<SyntaxToken> idents) {
+        return tokenMember(idents.get(0), idents.get(idents.size() - 1),
+                TokenDoc.node(clause.kind(), dottedName(idents)));
     }
 
     /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
@@ -1037,28 +1037,6 @@ public final class Formatter {
                 afterToken(n.token(SyntaxKind.WITH_KW)), nest(INDENT, concat(cases)));
     }
 
-    /**
-     * What goes between two tokens of a match arm's pattern. The grammar writes such a pattern as a
-     * run of tokens rather than as a node, so this is the one place the formatter joins two tokens
-     * itself instead of a construct writing what goes between them. It answers as the constructs
-     * that write the same syntax do — a newtype opened by its constructor is {@code X(inner)} in a
-     * {@code let} and has to read as {@code X(inner)} here, and a record's fields are written
-     * {@code { f = v, g }} in both.
-     */
-    private static boolean spaceBetween(SyntaxKind left, SyntaxKind right) {
-        if (isOpeningBracket(left) && isClosingBracket(right)) {
-            // Brackets with nothing between them are written with nothing between them, which is the
-            // rule `delimited` states for a construct built as a document. A pattern is built as a
-            // run of tokens instead, so the rule has to be written on both paths; both are asked
-            // about it by AllOfABracketedConstructsCardinalitiesAreSweptTest.
-            return false;
-        }
-        return left != SyntaxKind.DOT && right != SyntaxKind.DOT       // a qualified name is one name
-                && right != SyntaxKind.COMMA
-                && right != SyntaxKind.LPAREN                          // what is opened, not a call
-                && left != SyntaxKind.LPAREN && right != SyntaxKind.RPAREN;
-    }
-
     /** The brackets a construct is written between. One place knows which they are. */
     static boolean isOpeningBracket(SyntaxKind k) {
         return k == SyntaxKind.LPAREN || k == SyntaxKind.LBRACKET || k == SyntaxKind.LBRACE;
@@ -1068,8 +1046,15 @@ public final class Formatter {
         return k == SyntaxKind.RPAREN || k == SyntaxKind.RBRACKET || k == SyntaxKind.RBRACE;
     }
 
+    /**
+     * One arm. The grammar writes an arm's pattern as a run of tokens rather than as nodes, so this
+     * is where those tokens are handed over; what goes between two of them is the rule's answer for
+     * the arm, the same way it is for every other construct. It used to be the one place the
+     * formatter joined two tokens itself, and it wrote `Some ( x )` where the `let` opening the same
+     * value writes `Some(x)`.
+     */
     private TokenDoc matchCase(SyntaxNode n) {
-        StringBuilder pattern = new StringBuilder();
+        List<TokenDoc> pattern = new ArrayList<>();
         SyntaxNode body = null;
         SyntaxToken patternEnd = null;
         boolean afterArrow = false;
@@ -1083,16 +1068,17 @@ public final class Formatter {
                     afterArrow = true;
                     continue;
                 }
-                if (patternEnd != null && spaceBetween(patternEnd.kind(), t.kind())) {
-                    pattern.append(' ');
+                if (patternEnd != null) {
+                    pattern.add(TokenDoc.GAP);
                 }
-                pattern.append(t.text());
+                pattern.add(TokenDoc.token(t.kind(), t.text()));
                 patternEnd = t;
             }
         }
+        TokenDoc written = TokenDoc.node(n.kind(), concat(pattern));
         return chained(patternEnd == null
-                        ? synthetic(concat(raw("| "), raw(pattern.toString())))
-                        : head(patternEnd, concat(raw("| "), raw(pattern.toString()))),
+                        ? synthetic(concat(raw("| "), written))
+                        : head(patternEnd, concat(raw("| "), written)),
                 List.of(segment("-> ", body, expr(body))));
     }
 
@@ -1116,7 +1102,10 @@ public final class Formatter {
         for (SyntaxNode c : n.childNodes()) {
             TokenDoc member;
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
-                member = concat(raw("..."), raw(identPath(c)));   // `...c` or `...c.address`
+                // `...c` or `...c.address`
+                member = TokenDoc.node(c.kind(), concat(
+                        TokenDoc.token(SyntaxKind.SPREAD, "..."), TokenDoc.GAP,
+                        dottedName(idents(c))));
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 var value = firstExprChildOpt(c);
                 member = value.map(v -> concat(raw(firstIdent(c)), raw(" = "), expr(v)))
@@ -1996,14 +1985,27 @@ public final class Formatter {
     // --- CST navigation ---
 
     private TokenDoc qualifiedName(SyntaxNode n) {
-        StringBuilder sb = new StringBuilder();
-        for (SyntaxToken t : idents(n)) {
-            if (sb.length() > 0) {
-                sb.append('.');
+        return TokenDoc.node(n.kind(), dottedName(idents(n)));
+    }
+
+    /**
+     * A name written through the module or the alias that declares it: its identifiers, and the
+     * dots the canonical form writes between them. What goes at each of those boundaries is the
+     * rule's to say, which is why the name is handed over as its tokens rather than assembled into
+     * one — assembling it is deciding, and a name is one of the places the same decision used to be
+     * written out again.
+     */
+    private static TokenDoc dottedName(List<SyntaxToken> idents) {
+        List<TokenDoc> parts = new ArrayList<>();
+        for (SyntaxToken t : idents) {
+            if (!parts.isEmpty()) {
+                parts.add(TokenDoc.GAP);
+                parts.add(TokenDoc.token(SyntaxKind.DOT, "."));
+                parts.add(TokenDoc.GAP);
             }
-            sb.append(t.text());
+            parts.add(TokenDoc.token(t.kind(), t.text()));
         }
-        return raw(sb.toString());
+        return concat(parts);
     }
 
     private List<Member> exprDocs(SyntaxNode n) {
@@ -2070,20 +2072,6 @@ public final class Formatter {
             }
         }
         return out;
-    }
-
-    /** Every identifier of a node, dotted — a spread's field path ({@code c.address}). */
-    private String identPath(SyntaxNode n) {
-        List<String> parts = new ArrayList<>();
-        for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
-                parts.add(t.text());
-            }
-        }
-        if (parts.isEmpty()) {
-            throw new IllegalStateException("no identifier in " + n.kind());
-        }
-        return String.join(".", parts);
     }
 
     private String firstIdent(SyntaxNode n) {
