@@ -100,7 +100,8 @@ final class NeutralForm {
         }
         if (data.newtype()) {
             Type base = shapeOf(newtypeBaseType(caseName));
-            return adjacentlyTagged(name, shaped(of(field(live, "value", helper), base, helper), base));
+            return newtypeAt(position, caseName, name,
+                    shaped(of(field(live, "value", helper), base, helper), base));
         }
         Map<String, Ast.TypeRef> declared = fieldTypes(caseName);
         Map<String, Object> out = new LinkedHashMap<>();
@@ -132,13 +133,14 @@ final class NeutralForm {
     // --- the form itself, read by both directions -------------------------------------------------
 
     /**
-     * A newtype case of a sum decodes from the adjacent form its sum's decoder reads — the inner value
-     * under {@code value}, next to the discriminator (spec 10.3) — while a fixture names the case the
-     * way the domain constructs it, {@code アクティベート済み(メールアドレス("a@example.com"))}. Wrap it
-     * here, as a product case's field map and a unit case's name are wrapped; a newtype that is nobody's
-     * case is its bare inner value, unchanged.
+     * A newtype case read through its sum decodes from the adjacent form that sum's decoder reads —
+     * the inner value under {@code value}, next to the discriminator (spec 10.3) — while a fixture
+     * names the case the way the domain constructs it,
+     * {@code アクティベート済み(メールアドレス("a@example.com"))}. Wrap it here, as a product case's
+     * field map and a unit case's name are wrapped; a newtype no sum lists is its bare inner value,
+     * unchanged.
      */
-    Object adjacentlyTagged(String caseName, Object inner) {
+    private Object adjacentlyTagged(String caseName, Object inner) {
         Map<String, Object> tagged = new LinkedHashMap<>();
         tagged(caseName, tagged);
         if (tagged.isEmpty()) {
@@ -221,6 +223,31 @@ final class NeutralForm {
             }
         }
         return v;
+    }
+
+    /** Whether the position names this type itself rather than a sum that lists it. Read as itself, a
+     *  newtype's form is its inner value — what its own decoder reads — and what some other
+     *  declaration does with the type does not reach here. */
+    private boolean readsAsItself(Type position, TypeName caseName) {
+        return open(position) instanceof Type.Ref r && caseName.equals(r.name());
+    }
+
+    /**
+     * A newtype's neutral form at the position it is written in: its inner value, wearing the envelope
+     * only where the position reads it through a sum that lists it.
+     *
+     * <p>The {@code "value"} envelope is not part of a newtype's representation — it is what
+     * membership adds, which is why a standalone newtype is bare (spec 10.3). So the position decides
+     * it, the way it decides whether a unit case travels as a bare name, and what some other
+     * declaration does with the type does not reach a fixture written at the type itself.
+     */
+    Object newtypeAt(Type position, TypeName caseName, String written, Object inner) {
+        return readsAsItself(position, caseName) ? inner : adjacentlyTagged(written, inner);
+    }
+
+    /** As above, for a construction written as a call, where the name is what the row spelled. */
+    Object newtypeAt(Type position, String written, Object inner) {
+        return newtypeAt(position, symbols.resolve(written), written, inner);
     }
 
     /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,

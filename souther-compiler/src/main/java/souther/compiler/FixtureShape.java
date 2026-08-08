@@ -224,14 +224,14 @@ public sealed interface FixtureShape {
         return new Nominal(name);
     }
 
-    /** The primitive a primitive-spelled name denotes. {@code Raw} answers none, and is refused as
-     *  the reserved name it is. */
+    /** The primitive a primitive-spelled name denotes, read through the inverse of the mint one is
+     *  made by. {@code Raw} answers a primitive and is refused as the reserved name it is; a
+     *  primitive-module name that denotes none — {@code Some}, {@code None} — answers nothing. */
     private static Type.Prim primitive(TypeName name) {
-        for (Type.Prim prim : Type.Prim.values()) {
-            if (Type.show(prim).equals(name.name())) {
-                return prim;
-            }
+        Type.Prim prim = name.primitiveKind();
+        if (prim == null) {
+            throw new FixtureException("`" + name.name() + "` is not a type this example can read");
         }
-        throw new FixtureException("`" + name.name() + "` is not a type this example can read");
+        return prim;
     }
 }

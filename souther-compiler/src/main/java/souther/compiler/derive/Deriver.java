@@ -7,9 +7,9 @@ import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingOwner;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BoundaryMapKey;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 
@@ -37,16 +37,10 @@ public final class Deriver {
     /** Derives codecs using {@code symbols} for type resolution (own definitions plus any
      * imported ones, for cross-module fields — spec 4). */
     public static Ast.Module derive(Ast.Module module, Symbols symbols) {
-        java.util.Set<TypeName> caseNames = new java.util.HashSet<>();
-        for (Ast.Def def : symbols.visible()) {
-            if (def instanceof Ast.SumData s) {
-                caseNames.addAll(TypeOps.caseNames(s));
-            }
-        }
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             defs.add(switch (def) {
-                case Ast.Data d -> deriveData(d, symbols, caseNames.contains(symbols.own(d.name())));
+                case Ast.Data d -> deriveData(d, symbols);
                 case Ast.SumData s -> deriveSum(s, symbols);
                 case Ast.UnitData u -> u;
             });
@@ -56,7 +50,7 @@ public final class Deriver {
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
-    private static Ast.Data deriveData(Ast.Data d, Symbols symbols, boolean isCase) {
+    private static Ast.Data deriveData(Ast.Data d, Symbols symbols) {
         Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
         if (fields.values().stream().anyMatch(t -> t instanceof Type.Erroneous)) {
             // A field whose type nobody could name has no external representation, and saying so
@@ -70,12 +64,12 @@ public final class Deriver {
         BindingOwner declared = new BindingOwner.OfData(symbols.own(d.name()));
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
                 ? d.decoder()
-                : Optional.of(deriveDecoder(d, fields, isCase, symbols,
+                : Optional.of(deriveDecoder(d, fields, symbols,
                         new Ast.Binders(new BindingOwner.Synthesized(declared,
                                 BindingOwner.Pass.DERIVER, 0))));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()
                 ? d.encoder()
-                : Optional.of(deriveEncoder(d, fields, isCase, symbols,
+                : Optional.of(deriveEncoder(d, fields, symbols,
                         new Ast.Binders(new BindingOwner.Synthesized(declared,
                                 BindingOwner.Pass.DERIVER, 1))));
         return new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(), d.invariants(),
@@ -84,13 +78,13 @@ public final class Deriver {
 
     // --- decoder derivation ---
 
-    private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, Type> fields, boolean isCase,
+    private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, Type> fields,
                                                Symbols symbols, Ast.Binders binders) {
         SourcePos pos = d.pos();
         Ast.Name self = Ast.Name.resolved(symbols.own(d.name()), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
-        // with one field (spec 8.7). A sum case is embedded in the discriminated object, never bare.
-        Map.Entry<String, Type> single = bareField(d, fields, isCase);
+        // with one field (spec 8.7).
+        Map.Entry<String, Type> single = bareField(d, fields);
         if (single != null) {
             Ast.RawKind kind = rawKind(single.getValue());
             Ast.Binder input = binders.binder("__in", pos);
@@ -99,7 +93,7 @@ public final class Deriver {
             return new Ast.PrimDecoder(kind, input, List.of(), result, pos);
         }
         // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec 8.7)
-        if (d.newtype() && !isCase) {
+        if (d.newtype()) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
             Ast.Binder input = binders.binder("__in", pos);
             Ast.Construct result = new Ast.Construct(self,
@@ -138,23 +132,23 @@ public final class Deriver {
         return Ast.RawKind.INT;
     }
 
-    private static Ast.PrimKind primKind(Type t) {
+    private static LeafScalar primKind(Type t) {
         if (t == Type.STRING) {
-            return Ast.PrimKind.STRING;
+            return LeafScalar.STRING;
         }
         if (t == Type.BOOL) {
-            return Ast.PrimKind.BOOL;
+            return LeafScalar.BOOL;
         }
         if (t == Type.DECIMAL) {
-            return Ast.PrimKind.DECIMAL;
+            return LeafScalar.DECIMAL;
         }
         if (t == Type.DATE) {
-            return Ast.PrimKind.DATE;
+            return LeafScalar.DATE;
         }
         if (t == Type.DATETIME) {
-            return Ast.PrimKind.DATETIME;
+            return LeafScalar.DATETIME;
         }
-        return Ast.PrimKind.INT;
+        return LeafScalar.INT;
     }
 
     private static Ast.DecRef decRef(Type t, Ast.Data d, String field, SourcePos pos,
@@ -184,11 +178,11 @@ public final class Deriver {
 
     // --- encoder derivation ---
 
-    private static Ast.EncoderDef deriveEncoder(Ast.Data d, Map<String, Type> fields, boolean isCase,
+    private static Ast.EncoderDef deriveEncoder(Ast.Data d, Map<String, Type> fields,
                                                 Symbols symbols, Ast.Binders binders) {
         SourcePos pos = d.pos();
         Ast.Binder self = binders.binder("self", pos);
-        Map.Entry<String, Type> single = bareField(d, fields, isCase);
+        Map.Entry<String, Type> single = bareField(d, fields);
         if (single != null) {
             Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), single.getKey(), pos);
             return new Ast.EncoderDef(self, primRaw(single.getValue(), access, pos), pos);
@@ -196,7 +190,7 @@ public final class Deriver {
         // a newtype over a non-primitive Y encodes self.value as Y writes itself — Y's
         // representation, not `{value: ...}` (spec 8.7). Y is a named data, a sum, or a collection,
         // so this is the same choice a field of type Y makes.
-        if (d.newtype() && !isCase) {
+        if (d.newtype()) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
             Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), only.getKey(), pos);
             return new Ast.EncoderDef(self,
@@ -425,10 +419,14 @@ public final class Deriver {
     /**
      * The bare inner field of an explicit newtype {@code data X = Y} whose {@code Y} is primitive
      * (spec 8.7). A braced record is always an object — even a single-field one — so newtype-ness
-     * is decided by the {@code = Y} syntax, not the shape; a sum case is never bare either.
+     * is decided by the {@code = Y} syntax, not the shape.
+     *
+     * <p>What some other declaration does with the type is not asked. A derived codec is the
+     * standalone representation, and the {@code "value"} envelope a sum's case wears is what the
+     * sum's own encoding adds to it.
      */
-    private static Map.Entry<String, Type> bareField(Ast.Data d, Map<String, Type> fields, boolean isCase) {
-        if (!d.newtype() || isCase) {
+    private static Map.Entry<String, Type> bareField(Ast.Data d, Map<String, Type> fields) {
+        if (!d.newtype()) {
             return null;
         }
         Map.Entry<String, Type> only = fields.entrySet().iterator().next();

@@ -1055,8 +1055,16 @@ public final class Backend {
      * other — and so is a declaration read back from a jar. A jar built before this was trusted for
      * both: what its compiler checked was what its author wrote, and a composition it published, or a
      * declaration a reader takes on faith, was never asked.
+     *
+     * <p>Version 10 moves where the {@code "value"} envelope is written. A derived codec is now the
+     * standalone representation of its type, and a sum's encoding adds what membership in that sum
+     * requires (spec §sum-discrimination); before, a newtype that some sum listed had the envelope
+     * written into its own codec, so what the type published depended on a declaration elsewhere. A
+     * jar built before this carries a {@code $Enc} that writes {@code {"value": …}} and a
+     * {@code $Dec} that demands it, which this compiler's sum encoder would wrap a second time and
+     * its sum decoder would hand the inner value to.
      */
-    public static final int BOUNDARY_VERSION = 9;
+    public static final int BOUNDARY_VERSION = 10;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

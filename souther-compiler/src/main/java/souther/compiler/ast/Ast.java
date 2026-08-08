@@ -4,6 +4,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
@@ -815,7 +816,7 @@ public interface Ast {
     sealed interface DecRef extends Ast
             permits PrimDecRef, DataDecRef, ListDecRef, SetDecRef, OptionDecRef, MapDecRef {}
 
-    record PrimDecRef(PrimKind kind, SourcePos pos) implements DecRef {}
+    record PrimDecRef(LeafScalar kind, SourcePos pos) implements DecRef {}
 
     record DataDecRef(Name typeName, SourcePos pos) implements DecRef {}
 
@@ -838,8 +839,6 @@ public interface Ast {
     record MapDecRef(DecRef value, BoundaryMapKey key, SourcePos pos) implements DecRef {}
 
     /** A primitive field decoder kind. */
-    enum PrimKind { STRING, INT, BOOL, DECIMAL, DATE, DATETIME }
-
     /** A statement in a single-value decoder body. */
     sealed interface DecStmt extends Ast permits Let {}
 
@@ -934,7 +933,7 @@ public interface Ast {
      * element encoder nests as deeply as the type does. */
     sealed interface EncElem extends Ast permits PrimEnc, DataEnc, ListElemEnc, SetElemEnc, MapElemEnc {}
 
-    record PrimEnc(PrimKind kind, SourcePos pos) implements EncElem {}
+    record PrimEnc(LeafScalar kind, SourcePos pos) implements EncElem {}
 
     record DataEnc(Name typeName, SourcePos pos) implements EncElem {}
 

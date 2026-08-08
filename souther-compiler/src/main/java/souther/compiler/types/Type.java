@@ -39,7 +39,24 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      */
     sealed interface Open extends Leaf permits Var, MetaVar {}
 
-    enum Prim implements Leaf { INT, STRING, BOOL, DECIMAL, DATE, DATETIME, RAW }
+    enum Prim implements Leaf {
+        INT, STRING, BOOL, DECIMAL, DATE, DATETIME, RAW;
+
+        /** How this primitive is written. One table, read forwards by everything that shows a type
+         *  and backwards by {@link TypeName#primitiveKind()} — a primitive case name is minted from
+         *  this spelling, so recovering the primitive has to read the same one and not a copy. */
+        public String shown() {
+            return switch (this) {
+                case INT -> "Int";
+                case STRING -> "String";
+                case BOOL -> "Bool";
+                case DECIMAL -> "Decimal";
+                case DATE -> "Date";
+                case DATETIME -> "DateTime";
+                case RAW -> "Raw";
+            };
+        }
+    }
 
     /** The element type of the empty-list literal {@code []} (ADR-0028): a bottom that unifies with
      * any element type. It only ever appears as {@code ListOf(NOTHING)} — the empty list — whose type
@@ -381,15 +398,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
 
     private static String show(Type t, java.util.Set<String> qualify) {
         return switch (t) {
-            case Prim p -> switch (p) {
-                case INT -> "Int";
-                case STRING -> "String";
-                case BOOL -> "Bool";
-                case DECIMAL -> "Decimal";
-                case DATE -> "Date";
-                case DATETIME -> "DateTime";
-                case RAW -> "Raw";
-            };
+            case Prim p -> p.shown();
             case Ref r -> showName(r.name(), qualify);
             // A variable the core wrote is shown as the core wrote it; the name carries the `'`
             // (`'a`), so it is not added twice. One the compiler minted is shown as `_`: its spelling

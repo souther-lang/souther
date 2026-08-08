@@ -545,7 +545,7 @@ public final class FixtureReader {
             case Ast.Binary bin -> fold(bin);
             case Ast.Apply c -> collectionOrNewtype(c, expected);
             case Ast.Var v -> named(v, expected);
-            case Ast.NewData nd -> record(nd);
+            case Ast.NewData nd -> record(nd, expected);
             case Ast.LetIn let -> bound(let, expected);
             case Ast.ListLit l -> {
                 Type element = NeutralForm.elementOf(expected);
@@ -718,7 +718,7 @@ public final class FixtureReader {
         if (appliedHelper(c) instanceof Applied helper) {
             return applied(c, helper, expected);
         }
-        return newtypeInner(c);
+        return newtypeInner(c, expected);
     }
 
     /**
@@ -840,7 +840,7 @@ public final class FixtureReader {
         return helpers.invoke(helper.reached(), args);
     }
 
-    private Object newtypeInner(Ast.Apply c) {
+    private Object newtypeInner(Ast.Apply c, Type expected) {
         if ("Date".equals(c.reaches()) || "DateTime".equals(c.reaches())) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
@@ -873,19 +873,19 @@ public final class FixtureReader {
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe
-        return neutral.adjacentlyTagged(c.written(),
+        return neutral.newtypeAt(expected, c.written(),
                 neutral.shaped(raw(c.args().get(0), neutral.shapeOf(neutral.newtypeBaseType(c.written()))),
                         neutral.shapeOf(neutral.newtypeBaseType(c.written()))));
     }
 
-    private Object record(Ast.NewData nd) {
+    private Object record(Ast.NewData nd, Type expected) {
         // `金額(500)` is the record literal `金額 { value = 500 }` written in call form (ADR-0032), and
         // a value's body reaches here already written the second way. Either spelling is the newtype's
         // own neutral form — its inner value — not a field map.
         TypeName built = nd.typeName().denotes();
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return neutral.adjacentlyTagged(nd.typeName().written(),
+            return neutral.newtypeAt(expected, built, nd.typeName().written(),
                     neutral.shaped(raw(nd.inits().get(0).value(), neutral.shapeOf(neutral.newtypeBaseType(built))),
                             neutral.shapeOf(neutral.newtypeBaseType(built))));
         }

@@ -4,6 +4,8 @@ import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BoundaryMapKey;
+import souther.compiler.types.CaseShape;
+import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -252,24 +254,20 @@ final class CodecGen {
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
-            // Dispatch on the runtime case type, encode that case to a Map, then inject the
-            // discriminator key = case tag (spec 11.2).
+            // Dispatch on the runtime case type, encode that case as it writes itself, then add what
+            // membership in this sum requires of it (spec 11.2).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 for (Ast.EncVariant v : enc.variants()) {
-                    ClassDesc caseCd = cd(v.caseType().denotes());
+                    TypeName caseName = v.caseType().denotes();
                     code.aload(1);
-                    code.instanceOf(caseCd);
+                    code.instanceOf(cd(caseName));
                     Label next = code.newLabel();
                     code.ifeq(next);
-                    invokeCodec(code, v.caseType(), "encoder", MTD_Rencoder);
-                    code.aload(1);
-                    code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-                    code.checkcast(CD_Map);
-                    code.dup();
-                    code.loadConstant(enc.key());
-                    code.loadConstant(v.tag());
-                    code.invokeinterface(CD_Map, "put", MTD_Map_put);
-                    code.pop();
+                    emitTagged(code, TypeOps.caseShape(caseName, symbols), enc.key(), v.tag(), () -> {
+                        invokeCodec(code, v.caseType(), "encoder", MTD_Rencoder);
+                        code.aload(1);
+                        code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+                    });
                     code.areturn();
                     code.labelBinding(next);
                 }
@@ -309,7 +307,18 @@ final class CodecGen {
                     code.dup();
                     pushInt(code, i);
                     code.loadConstant(v.tag());
-                    invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
+                    // The mirror of what the encoder wrote: a case that wears the envelope is handed
+                    // what is under `"value"` and reads it as the standalone value it is, while a
+                    // product and a unit read the discriminated object they are part of. So a wrapped
+                    // case is read from under a key, which is not always this source's own decoder.
+                    if (TypeOps.caseShape(v.caseType().denotes(), symbols) == CaseShape.WRAPPED) {
+                        code.loadConstant(CaseShape.ENVELOPE_KEY);
+                        emitUnderAKeyDecoder(code, v.caseType(), src);
+                        code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
+                        code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
+                    } else {
+                        invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
+                    }
                     code.invokestatic(CD_RDecoders, "variant", MTD_Rvariant);
                     code.aastore();
                     i++;
@@ -562,10 +571,17 @@ final class CodecGen {
             if (TypeOps.isUnitOnlySum(sum, symbols)) {
                 return false;   // an enumeration is a bare column, not a whole row (issue #161)
             }
-            for (Ast.Name caseName : sum.cases()) {
-                Ast.Def caseDef = symbols.get(caseName.denotes());
-                if (caseDef instanceof Ast.UnitData) continue;
-                if (!(caseDef instanceof Ast.Data d) || !isFlatObject(d)) return false;
+            for (Ast.Name written : sum.cases()) {
+                TypeName caseName = written.denotes();
+                Ast.Def caseDef = symbols.get(caseName);
+                if (caseDef instanceof Ast.UnitData) continue;   // the discriminator alone, no column
+                if (!(caseDef instanceof Ast.Data d)) return false;   // a nested sum is not a row
+                // A case wearing the envelope reads the column the sum's decoder hands it, so it is a
+                // row when what it wraps is a column.
+                boolean ok = TypeOps.caseShape(caseName, symbols) == CaseShape.WRAPPED
+                        ? flatColumn(TypeOps.newtypeInner(caseName, symbols))
+                        : isFlatObject(d);
+                if (!ok) return false;
             }
             return true;
         }
@@ -893,7 +909,7 @@ final class CodecGen {
     }
 
     /** Pushes a Raoh leaf {@code Decoder} for a primitive value from the given source. */
-    private void emitLeafDecoder(CodeBuilder code, Ast.PrimKind kind, Src src) {
+    private void emitLeafDecoder(CodeBuilder code, LeafScalar kind, Src src) {
         ClassDesc owner = srcLeafOwner(src);
         switch (kind) {
             // A string that came from outside is canonicalized to NFC before anything reads it.
@@ -1174,25 +1190,36 @@ final class CodecGen {
         };
     }
 
+    /**
+     * The decoder for a named type read from under a key of {@code src} — a data's field, or the
+     * envelope key a sum's wrapped case sits under.
+     *
+     * <p>Taking a value out from under a key leaves the source behind, and by how much depends on the
+     * source. A jOOQ row is flat, so what is under a key is a column and not a row: only the type's
+     * own {@code Object} decoder can read it, and a type that is not a whole row has no
+     * {@code recordDecoder()} to reach for anyway. A neutral object's value is a bare {@code Object},
+     * so a type that reads a {@code Map} is bridged to one — which is also where a value of the wrong
+     * shape is told so at that key. A JSON object's value is a {@code JsonNode} like the object
+     * holding it, so that source alone carries through.
+     */
+    private void emitUnderAKeyDecoder(CodeBuilder code, Ast.Name typeName, Src src) {
+        switch (src) {
+            case NEUTRAL -> {
+                invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
+                if (isMapInput(typeName)) {
+                    code.invokestatic(CD_MapDecoders, "nested", MTD_nested);   // Decoder<Map> -> Decoder<Object>
+                }
+            }
+            case JSON -> invokeCodec(code, typeName, "jsonDecoder", MTD_Rdecoder);
+            case JOOQ -> invokeCodec(code, typeName, "decoder", MTD_Rdecoder);
+        }
+    }
+
     /** Pushes a {@code Decoder} for the given field-value reference, for the given source. */
     private void emitDecoderObject(CodeBuilder code, Ast.DecRef ref, Src src) {
         switch (ref) {
             case Ast.PrimDecRef p -> emitLeafDecoder(code, p.kind(), src);
-            case Ast.DataDecRef d -> {
-                switch (src) {
-                    case NEUTRAL -> {
-                        invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
-                        if (isMapInput(d.typeName())) {
-                            code.invokestatic(CD_MapDecoders, "nested", MTD_nested);   // Decoder<Map> -> Decoder<Object>
-                        }
-                    }
-                    // JSON field value is a JsonNode: the nested type's json decoder reads it directly.
-                    case JSON -> invokeCodec(code, d.typeName(), "jsonDecoder", MTD_Rdecoder);
-                    // jOOQ rows are flat: only a newtype (a bare column) is nestable; objects/sums are
-                    // gated out of record generation, so this only ever pushes a newtype's Object decoder.
-                    case JOOQ -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
-                }
-            }
+            case Ast.DataDecRef d -> emitUnderAKeyDecoder(code, d.typeName(), src);
             case Ast.ListDecRef l -> {
                 emitDecoderObject(code, l.element(), src);
                 code.invokestatic(srcListOwner(src), "list", MTD_listDec);
@@ -1697,8 +1724,8 @@ final class CodecGen {
      * hands the {@code BigDecimal} through as it is, scale and all, and the scale is how a number was
      * written rather than how much it is.
      */
-    private static void canonicalizeAmount(CodeBuilder code, Ast.PrimKind kind) {
-        if (kind != Ast.PrimKind.DECIMAL) {
+    private static void canonicalizeAmount(CodeBuilder code, LeafScalar kind) {
+        if (kind != LeafScalar.DECIMAL) {
             return;
         }
         code.invokedynamic(canonicalNumberCallSite());
@@ -1810,43 +1837,59 @@ final class CodecGen {
 
     /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
     private void emitMemberEncode(CodeBuilder code, TypeName member) {
-        if (flatMember(member)) {
+        emitTagged(code, TypeOps.caseShape(member, symbols), "type", member.name(), () -> {
             pushMemberEncoder(code, member);
             pushMemberValue(code, member);
             code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-            code.checkcast(CD_Map);
-            code.dup();
-            code.loadConstant("type");
-            code.loadConstant(member.name());
-            code.invokeinterface(CD_Map, "put", MTD_Map_put);
-            code.pop();
-            return;
+        });
+    }
+
+    /**
+     * Leaves a discriminated case on the stack: what the case writes on its own, plus what standing
+     * in this sum — or in a behavior's answer, which is the same rule — adds to it (spec 11.2). A
+     * product lays its fields beside the discriminator and a unit is the discriminator alone, so both
+     * carry it in the object they already are; a newtype and a primitive have no key of their own to
+     * put it on, so their representation goes under {@code "value"} beside it.
+     *
+     * @param encoded leaves the case's own encoded form on the stack
+     */
+    private void emitTagged(CodeBuilder code, CaseShape shape, String key, String tag,
+                            Runnable encoded) {
+        switch (shape) {
+            case PRODUCT, UNIT -> {
+                encoded.run();
+                code.checkcast(CD_Map);
+                code.dup();
+                code.loadConstant(key);
+                code.loadConstant(tag);
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+            }
+            case WRAPPED -> {
+                code.new_(CD_LinkedHashMap);
+                code.dup();
+                code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
+                code.dup();
+                code.loadConstant(key);
+                code.loadConstant(tag);
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+                code.dup();
+                code.loadConstant(CaseShape.ENVELOPE_KEY);
+                encoded.run();
+                code.invokeinterface(CD_Map, "put", MTD_Map_put);
+                code.pop();
+            }
         }
-        // A member whose own representation is not an object cannot carry `"type"` on itself, so it
-        // goes under `"value"` beside it — where a newtype case of a named sum goes (spec 11.2).
-        code.new_(CD_LinkedHashMap);
-        code.dup();
-        code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
-        code.dup();
-        code.loadConstant("type");
-        code.loadConstant(member.name());
-        code.invokeinterface(CD_Map, "put", MTD_Map_put);
-        code.pop();
-        code.dup();
-        code.loadConstant("value");
-        pushMemberEncoder(code, member);
-        pushMemberValue(code, member);
-        code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
-        code.invokeinterface(CD_Map, "put", MTD_Map_put);
-        code.pop();
     }
 
     /** Pushes the encoder a member writes itself with: its own derived one, or the Raoh leaf encoder
      * for a primitive, which declares none. */
     private void pushMemberEncoder(CodeBuilder code, TypeName member) {
         if (member.isPrimitive()) {
-            code.invokestatic(CD_ObjectEncoders, leafEncoderName(primKind(member)), MTD_Rencode_leaf);
-            canonicalizeAmount(code, primKind(member));
+            LeafScalar scalar = memberScalar(member);
+            code.invokestatic(CD_ObjectEncoders, leafEncoderName(scalar), MTD_Rencode_leaf);
+            canonicalizeAmount(code, scalar);
             return;
         }
         // a member is one of the union's effective members, every named sum already expanded to its
@@ -1868,18 +1911,6 @@ final class CodecGen {
         JvmTypes.box(code, held);
     }
 
-    /** Whether a member's own encoder writes an object, which the discriminator can be put into. */
-    private boolean flatMember(TypeName member) {
-        if (member.isPrimitive()) {
-            return false;   // a primitive writes a bare scalar, which carries no key
-        }
-        return switch (symbols.get(member)) {
-            case Ast.Data data -> encoderOutput(data).equals(CD_Map);
-            case Ast.UnitData _ -> true;   // an empty object, which the tag alone then fills
-            case null, default -> throw new IllegalStateException("not a union member: " + member);
-        };
-    }
-
     /** Whether every member is a unit, so the union carries nothing but which member it is and
      * travels as that member's name — the form a named sum of units has (spec 11.2). */
     private boolean isEnumeration(List<TypeName> members) {
@@ -1897,20 +1928,24 @@ final class CodecGen {
                 encoderSig(cd(resultName), isEnumeration(members) ? CD_String : CD_Map));
     }
 
-    private static Ast.PrimKind primKind(TypeName member) {
-        return switch (member.name()) {
-            case "String" -> Ast.PrimKind.STRING;
-            case "Int" -> Ast.PrimKind.INT;
-            case "Bool" -> Ast.PrimKind.BOOL;
-            case "Decimal" -> Ast.PrimKind.DECIMAL;
-            case "Date" -> Ast.PrimKind.DATE;
-            case "DateTime" -> Ast.PrimKind.DATETIME;
-            default -> throw new IllegalStateException("no leaf encoder for the member " + member);
-        };
+    /**
+     * The scalar a primitive member is. Recovered through {@link TypeName#primitiveKind()}, which is
+     * the inverse of the mint a primitive case name comes from, rather than through a table of
+     * spellings kept here — that table was a second place for the language's own spelling to be
+     * written, and it answered a member outside it by raising.
+     */
+    private static LeafScalar memberScalar(TypeName member) {
+        Type.Prim prim = member.primitiveKind();
+        LeafScalar scalar = prim == null ? null : LeafScalar.of(prim);
+        if (scalar == null) {
+            throw new IllegalStateException("`" + member + "` is a member of a behavior's answer and"
+                    + " names no scalar a leaf codec exists for");
+        }
+        return scalar;
     }
 
     /** The Raoh {@code ObjectEncoders} leaf method for each primitive (matches the leaf decoders). */
-    private static String leafEncoderName(Ast.PrimKind kind) {
+    private static String leafEncoderName(LeafScalar kind) {
         return switch (kind) {
             case STRING -> "string";
             case INT -> "long_";
