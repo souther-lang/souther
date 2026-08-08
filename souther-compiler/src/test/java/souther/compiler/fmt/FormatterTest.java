@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The formatter's contract: it is idempotent, its output re-parses without error, the comments
  * survive, and the non-trivia token stream survives — over this corpus. The last of those does not
- * hold of the language: a comma-separated list may carry a trailing comma and the canonical form
- * writes none, so formatting a source that has one deletes a code token. See
- * {@link ATrailingCommaIsRemovedAndIsNotWhitespaceTest}, which is where that is written down.
+ * hold of the language: the canonical form removes a trailing comma, writes the bar in front of a
+ * match's first arm, and moves a definition's lambda parameters to the left of its `=`. See
+ * {@link ACanonicalFormCanRewriteCodeTokensTest}, which is where those are written down.
  * Verified over the real example and prelude corpus, plus a pinned snapshot of the canonical form.
  */
 class FormatterTest {
@@ -54,7 +54,8 @@ class FormatterTest {
     }
 
     /** The non-trivia token stream (kind + text), identical before and after for every source here:
-     * none of them writes a trailing comma, which is the one thing formatting removes. */
+     * none of them writes a trailing comma, an unbarred first match arm, or a lambda on the right of
+     * a definition, which are what the canonical form rewrites. */
     private static List<String> code(String source) {
         List<String> out = new ArrayList<>();
         for (GreenToken t : CstLexer.lex(source).tokens()) {
