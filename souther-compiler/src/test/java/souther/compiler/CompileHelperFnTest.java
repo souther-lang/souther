@@ -111,6 +111,36 @@ class CompileHelperFnTest {
         assertEquals("E1813", e.code());
     }
 
+    /**
+     * Every member of a mutual cycle is missing its return type, and the one reported is the one
+     * declared first. Which member a compile names is not the run's to choose: an immutable copy of
+     * a set answers its members in an order the JVM salts, so a set built in declaration order and
+     * copied that way names a different helper on a different run of the same source.
+     */
+    @Test
+    void theHelperNamedIsTheOneDeclaredFirst() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data Out = Int
+
+                behavior run : (n: Int) -> Out
+                    constructs Out
+
+                let alpha (n: Int) = bravo(n)
+                let bravo (n: Int) = charlie(n)
+                let charlie (n: Int) = delta(n)
+                let delta (n: Int) = echo(n)
+                let echo (n: Int) = foxtrot(n)
+                let foxtrot (n: Int) = alpha(n)
+
+                let run (n) = Out(alpha(n))
+                """));
+        assertEquals("E1813", e.code());
+        assertEquals("alpha", e.diagnostic().args()[0],
+                "the first-declared member of the cycle is the one reported");
+    }
+
     /** A helper may call another helper; the expansion nests, α-renaming each level (spec 12.5). */
     @Test
     void helpersNestOneCallingAnother() throws Exception {

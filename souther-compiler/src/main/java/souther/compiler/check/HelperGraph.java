@@ -21,7 +21,10 @@ import java.util.Set;
  * had to agree.
  *
  * <p>A helper recurses iff it can reach itself through helper calls; every member of a mutual cycle
- * is reached from itself, so all are marked. Both a module's own helpers and the shipped prelude ones
+ * is reached from itself, so all are marked. {@code recursive} answers them in the order they were
+ * declared, because a reader that reports one member of a cycle reports the one it reaches first: an
+ * immutable copy answers its members in an order the JVM salts per run, which would make the same
+ * source name a different helper on a different run. Both a module's own helpers and the shipped prelude ones
  * are walked: {@code List.foldFrom} is a recursive prelude helper and has to be left standing —
  * lowered to a method, not inlined — exactly as a module-own recursive helper is, or its self-call is
  * expanded forever.
@@ -46,7 +49,7 @@ public record HelperGraph(Map<String, Set<String>> callsOf, Set<String> recursiv
                 recursive.add(name);
             }
         }
-        return new HelperGraph(fixed(callsOf), Set.copyOf(recursive));
+        return new HelperGraph(fixed(callsOf), Collections.unmodifiableSet(recursive));
     }
 
     /**
