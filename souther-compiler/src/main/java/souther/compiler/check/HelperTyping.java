@@ -304,8 +304,8 @@ public final class HelperTyping {
                                     p.name()));
             if (left != null) {
                 d.secondary(Region.ofWidth(left.use().pos(), Elaborator.width(left.use())),
-                        field ? "helper.a-field-is-read-off-it-and-that-names-no-type"
-                                : "helper.this-use-names-no-type");
+                        field ? new HelperMessage.AFieldIsReadOffItAndThatNamesNoType()
+                                : new HelperMessage.ThisUseNamesNoType());
             }
             throw CompileException.of(d.build());
         }

@@ -261,6 +261,12 @@ public final class Diagnostic {
             return this;
         }
 
+        /** A second place to point at, saying what it says as the values it is about. */
+        public Builder secondary(Region region, Message label) {
+            this.secondary.add(new LabeledRegion(region, null, label));
+            return this;
+        }
+
         /** A second place to point at, in the same file as the primary region. */
         public Builder secondary(Region region, String labelKey, Object... labelArgs) {
             this.secondary.add(new LabeledRegion(region, null, labelKey, labelArgs));

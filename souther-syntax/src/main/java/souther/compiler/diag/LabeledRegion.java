@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.Message;
+
 /**
  * A secondary source region with a note. Used when one error points at more than one place — the
  * left behavior's output and the right behavior's input of a failed composition, or the two
@@ -12,7 +14,18 @@ package souther.compiler.diag;
  * line that happens to sit at that number in the first. Read it through
  * {@link #sourceIdOr(String)}: a resolver is asked about a source that is named, never about null.
  */
-public record LabeledRegion(Region region, String sourceId, String labelKey, Object[] labelArgs) {
+public record LabeledRegion(Region region, String sourceId, String labelKey, Object[] labelArgs,
+                            Message said) {
+
+    /** A label written as a message. */
+    public LabeledRegion(Region region, String sourceId, Message said) {
+        this(region, sourceId, said.key(), new Object[0], said);
+    }
+
+    /** A label written as a key and its arguments. */
+    public LabeledRegion(Region region, String sourceId, String labelKey, Object[] labelArgs) {
+        this(region, sourceId, labelKey, labelArgs, null);
+    }
 
     public LabeledRegion {
         // Two things can say which file this is in — what the label was given, and what the region's
@@ -37,10 +50,10 @@ public record LabeledRegion(Region region, String sourceId, String labelKey, Obj
     /** What makes two labels the same label. A record compares an array component by identity, and
      * {@code labelArgs} is one. */
     public record Of(Region region, String sourceId, String labelKey,
-                     java.util.List<Object> labelArgs) {}
+                     java.util.List<Object> labelArgs, Message said) {}
 
     public Of identity() {
         return new Of(region, sourceId, labelKey,
-                labelArgs == null ? java.util.List.of() : java.util.Arrays.asList(labelArgs));
+                labelArgs == null ? java.util.List.of() : java.util.Arrays.asList(labelArgs), said);
     }
 }
