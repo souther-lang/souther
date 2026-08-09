@@ -7,6 +7,7 @@ import souther.compiler.cst.CstParser;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 /**
  * A break is a decision and the layout keeps it: where it was written, how far in, and which
@@ -62,11 +63,15 @@ class ALayoutSaysWhatEachBreakWroteTest {
 
         assertEquals("a\n    b\n        c", layout.text());
         assertEquals(List.of(4, 8), layout.breaks().stream().map(Newline::indent).toList());
-        assertEquals(
-                List.of(List.of(((Doc.Nest) outer).ref()),
-                        List.of(((Doc.Nest) outer).ref(), ((Doc.Nest) innermost).ref())),
-                layout.breaks().stream().map(Newline::under).toList(),
-                "the second break is one level further in than the first, and says so by naming"
-                        + " the nesting rather than by the difference of two numbers");
+
+        List<Doc.NestRef> shallower = layout.breaks().get(0).under();
+        List<Doc.NestRef> deeper = layout.breaks().get(1).under();
+        assertEquals(1, shallower.size());
+        assertEquals(2, deeper.size());
+        assertEquals(shallower, deeper.subList(0, 1),
+                "the deeper break is written under the shallower one's nesting and one more");
+        assertNotSame(deeper.get(0), deeper.get(1),
+                "and that one more is a nesting of its own — two nestings written the same way are"
+                        + " two, so the levels are named rather than told apart by their amounts");
     }
 }
