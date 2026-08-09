@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
@@ -27,7 +28,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
     @Test
     void aWidthBreakAndAForcedBreakWriteTheSameCharacters() {
         Doc tooWide = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, Doc.text("cd")));
-        Doc forced = Doc.group(Doc.concat(Doc.text("ab"), Doc.HARDLINE, Doc.text("cd")));
+        Doc forced = Doc.group(Doc.concat(Doc.text("ab"), Doc.hardline(), Doc.text("cd")));
 
         Layout byWidth = tooWide.layout(4);
         Layout byForce = forced.layout(100);
@@ -63,7 +64,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
         Doc one = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, Doc.text("cd")));
         Doc other = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, Doc.text("cd")));
 
-        Layout layout = Doc.concat(one, Doc.HARDLINE, other).layout(100);
+        Layout layout = Doc.concat(one, Doc.hardline(), other).layout(100);
 
         assertEquals("ab cd\nab cd", layout.text());
         assertEquals(2, layout.decisions().size());
@@ -141,5 +142,38 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
             case Doc.Concat c -> c.parts().forEach(part -> groupsOf(part, out));
             default -> { }
         }
+    }
+
+    /**
+     * A group holding a forced break is written down the page at every width, so what decided its
+     * layout is that break and not the column it was measured at. Read off where the measurement
+     * happened to stop, a group too wide to fit and holding a hardline answers with the width — and
+     * answers with the break at a width where the same group is just as broken.
+     */
+    @Test
+    void aGroupThatCanNeverBeFlatSaysSoAtEveryWidth() {
+        Doc wideAndForced = Doc.group(Doc.concat(
+                Doc.text("way-too-wide"), Doc.hardline(), Doc.text("tail")));
+
+        assertEquals(wideAndForced.layout(1000).decisions().get(0).outcome(),
+                wideAndForced.layout(4).decisions().get(0).outcome(),
+                "the width it was measured at does not change what refused the flat layout");
+        assertInstanceOf(Outcome.BrokenByForcedLayout.class,
+                wideAndForced.layout(4).decisions().get(0).outcome());
+    }
+
+    /** And the break that refused is the one named, so the rule behind it can be given later
+     * without the group being measured again to find out which it was. */
+    @Test
+    void andTheDecisionNamesWhatRefusedTheFlatLayout() {
+        Doc refusing = Doc.hardline();
+        Doc other = Doc.hardline();
+        Doc doc = Doc.group(Doc.concat(Doc.text("a"), refusing, Doc.text("b")));
+
+        Outcome outcome = Doc.concat(doc, other, Doc.text("c")).layout(100)
+                .decisions().get(0).outcome();
+
+        assertEquals(new Outcome.BrokenByForcedLayout(refusing), outcome,
+                "the break inside the group and not the one after it");
     }
 }

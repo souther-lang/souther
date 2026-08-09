@@ -255,7 +255,7 @@ final class Gaps {
     private static Doc lower(TokenDoc doc, List<String> answers, int[] next) {
         return switch (doc) {
             case TokenDoc.Nil _ -> Doc.NIL;
-            case TokenDoc.MustBreak _ -> Doc.MUST_BREAK;
+            case TokenDoc.MustBreak _ -> Doc.mustBreak();
             case TokenDoc.Token t -> Doc.text(t.lexeme());
             case TokenDoc.Comment c -> Doc.text(c.text());
             case TokenDoc.Trailing t -> Doc.trailing(t.text());
@@ -275,7 +275,7 @@ final class Gaps {
             case TokenDoc.Gap g -> {
                 String flat = answers.get(next[0]++);
                 yield switch (g.policy()) {
-                    case ALWAYS -> Doc.HARDLINE;
+                    case ALWAYS -> Doc.hardline();
                     case MAY -> flat.isEmpty() ? Doc.SOFTLINE : Doc.LINE;
                     case NEVER -> flat.isEmpty() ? Doc.NIL : Doc.text(flat);
                 };

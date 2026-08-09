@@ -42,7 +42,7 @@ class ALayoutSaysWhatEachBreakWroteTest {
     /** A break says how far in it was written and which nesting wrote it. */
     @Test
     void andABreakSaysWhichNestingItWasWrittenUnder() {
-        Doc inner = Doc.nest(4, Doc.concat(Doc.text("a"), Doc.HARDLINE, Doc.text("b")));
+        Doc inner = Doc.nest(4, Doc.concat(Doc.text("a"), Doc.hardline(), Doc.text("b")));
         Layout layout = Doc.group(inner).layout(100);
 
         assertEquals("a\n    b", layout.text());
@@ -57,8 +57,8 @@ class ALayoutSaysWhatEachBreakWroteTest {
      * readable rather than guessed from the amounts. */
     @Test
     void andConsecutiveLevelsAreTellableApart() {
-        Doc innermost = Doc.nest(4, Doc.concat(Doc.text("b"), Doc.HARDLINE, Doc.text("c")));
-        Doc outer = Doc.nest(4, Doc.concat(Doc.text("a"), Doc.HARDLINE, innermost));
+        Doc innermost = Doc.nest(4, Doc.concat(Doc.text("b"), Doc.hardline(), Doc.text("c")));
+        Doc outer = Doc.nest(4, Doc.concat(Doc.text("a"), Doc.hardline(), innermost));
         Layout layout = Doc.group(outer).layout(100);
 
         assertEquals("a\n    b\n        c", layout.text());

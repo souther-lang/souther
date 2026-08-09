@@ -21,6 +21,10 @@ sealed interface Outcome {
     /** Written down the page because the line it would take is over the width. */
     record BrokenByWidth() implements Outcome {}
 
-    /** Written down the page because something in it cannot share a line with what follows. */
-    record BrokenByForcedLayout() implements Outcome {}
+    /**
+     * Written down the page because something in it cannot share a line with what follows, and
+     * that thing. Naming it is what lets the obligation behind it be given later without the group
+     * being measured again to find out which of them it was.
+     */
+    record BrokenByForcedLayout(Doc refusing) implements Outcome {}
 }

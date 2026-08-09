@@ -17,18 +17,21 @@ sealed interface Doc {
     Doc NIL = new Nil();
     Doc LINE = new Line(" ");        // a space when flat, a newline when broken
     Doc SOFTLINE = new Line("");     // nothing when flat, a newline when broken
-    Doc HARDLINE = new Hard();       // always a newline; forces the enclosing group to break
 
     /** Writes nothing, and the group holding it is never laid out flat. A comment cannot share the
      * line after it, so a construct holding one breaks even where its own content would have fitted
      * — and where the break itself is the enclosing construct's to write, as the brackets of a list
      * whose only content is a comment. */
-    Doc MUST_BREAK = new MustBreak();
 
     record Nil() implements Doc {}
     record Text(String s) implements Doc {}
+
+    /** Which of the things that refuse a flat layout this one is. A group is broken by one of them
+     * in particular, and told apart only by their kind two hardlines are one answer. */
+    final class Ref {
+    }
     record Line(String flat) implements Doc {}
-    record Hard() implements Doc {}
+    record Hard(Ref ref) implements Doc {}
     record Concat(List<Doc> parts) implements Doc {}
     record Nest(NestRef ref, int indent, Doc doc) implements Doc {}
 
@@ -55,12 +58,22 @@ sealed interface Doc {
      * for — it sits past the end of the line whatever its length — but nothing else can share the
      * line after it, so a group holding one cannot be laid out flat.
      */
-    record Trailing(String s) implements Doc {}
+    record Trailing(Ref ref, String s) implements Doc {}
 
-    record MustBreak() implements Doc {}
+    record MustBreak(Ref ref) implements Doc {}
 
     static Doc text(String s) {
         return new Text(s);
+    }
+
+    /** Always a newline, and the group holding it is never laid out flat. */
+    static Doc hardline() {
+        return new Hard(new Ref());
+    }
+
+    /** Writes nothing, and the group holding it is never laid out flat. */
+    static Doc mustBreak() {
+        return new MustBreak(new Ref());
     }
 
     static Doc concat(Doc... parts) {
@@ -73,7 +86,7 @@ sealed interface Doc {
 
     /** A comment at the end of the line the preceding document ends on. */
     static Doc trailing(String s) {
-        return new Trailing(s);
+        return new Trailing(new Ref(), s);
     }
 
     static Doc nest(int indent, Doc doc) {
@@ -151,14 +164,12 @@ sealed interface Doc {
                     todo.push(new Item(it.indent, it.mode, a.doc(), null, it.under));
                 }
                 case Group g -> {
-                    Fit fit = fits(width - col, new Item(it.indent, Mode.FLAT, g.doc()), todo);
-                    decisions.add(new GroupDecision(g.ref(), col, switch (fit) {
-                        case FITS -> new Outcome.Flat();
-                        case TOO_WIDE -> new Outcome.BrokenByWidth();
-                        case REFUSED -> new Outcome.BrokenByForcedLayout();
-                    }));
+                    Outcome outcome = flatnessOf(width - col,
+                            new Item(it.indent, Mode.FLAT, g.doc()), todo);
+                    decisions.add(new GroupDecision(g.ref(), col, outcome));
                     todo.push(new Item(it.indent,
-                            fit == Fit.FITS ? Mode.FLAT : Mode.BREAK, g.doc(), null, it.under));
+                            outcome instanceof Outcome.Flat ? Mode.FLAT : Mode.BREAK, g.doc(),
+                            null, it.under));
                 }
                 case Line l -> {
                     if (it.mode == Mode.FLAT) {
@@ -191,16 +202,18 @@ sealed interface Doc {
                 it.under() == null ? List.of() : it.under().outermostFirst());
     }
 
-    /** What a flat layout of a group came to. Refused and too wide are not one answer: the first is
-     * a fact about the group's content and the second about the width it was measured against. */
-    enum Fit { FITS, TOO_WIDE, REFUSED }
-
-    /** Whether the documents starting with {@code first} then the queued rest fit in {@code remaining}
-     * columns before the next forced break — the standard flat-fits check. */
-    private static Fit fits(int remaining, Item first, Deque<Item> rest) {
-        if (remaining < 0) {
-            return Fit.TOO_WIDE;
-        }
+    /**
+     * What a flat layout of a group comes to: written on one line, or written down the page because
+     * it is over the width, or because something in it refuses to share a line at all.
+     *
+     * <p>Refusing wins over the width. A group holding a forced break is written down the page
+     * whatever it is measured against, so the width did not decide it — and answering with whichever
+     * of the two the walk met first would make the reason a fact about where the measuring stopped.
+     * The walk therefore goes on past the overflow, over the group's own flat content, to see
+     * whether one is there.
+     */
+    private static Outcome flatnessOf(int remaining, Item first, Deque<Item> rest) {
+        boolean over = remaining < 0;
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(first);
         Iterator<Item> restIt = rest.iterator();
@@ -211,15 +224,13 @@ sealed interface Doc {
             } else if (restIt.hasNext()) {
                 it = restIt.next();
             } else {
-                return Fit.FITS;
+                return over ? new Outcome.BrokenByWidth() : new Outcome.Flat();
             }
             switch (it.doc) {
                 case Nil _ -> { }
                 case Text t -> {
                     remaining -= t.s().length();
-                    if (remaining < 0) {
-                        return Fit.TOO_WIDE;
-                    }
+                    over |= remaining < 0;
                 }
                 case Concat c -> {
                     List<Doc> parts = c.parts();
@@ -233,26 +244,31 @@ sealed interface Doc {
                 case Line l -> {
                     if (it.mode == Mode.FLAT) {
                         remaining -= l.flat().length();
-                        if (remaining < 0) {
-                            return Fit.TOO_WIDE;
-                        }
+                        over |= remaining < 0;
                     } else {
-                        return Fit.FITS;   // a break within reach means it fits
+                        // the measured stretch ends here, and what follows is another line's
+                        return over ? new Outcome.BrokenByWidth() : new Outcome.Flat();
                     }
                 }
-                case Hard _ -> {
-                    // a hardline cannot be laid out flat: inside the group under test (FLAT) it forces
-                    // a break; in an already-broken outer context it just ends the measured line.
-                    return it.mode == Mode.FLAT ? Fit.REFUSED : Fit.FITS;
+                // Refuses a flat layout where it is inside the group being measured. In an
+                // already-broken outer context it just ends the stretch being measured.
+                case Hard h -> {
+                    if (it.mode == Mode.FLAT) {
+                        return new Outcome.BrokenByForcedLayout(h);
+                    }
+                    return over ? new Outcome.BrokenByWidth() : new Outcome.Flat();
                 }
-                case Trailing _ -> {
-                    // the same, and for the same reason: whatever follows starts a new line, so it
-                    // is measured against that line rather than this one, and the comment's own
-                    // width is measured against nothing.
-                    return it.mode == Mode.FLAT ? Fit.REFUSED : Fit.FITS;
+                case Trailing t -> {
+                    if (it.mode == Mode.FLAT) {
+                        return new Outcome.BrokenByForcedLayout(t);
+                    }
+                    return over ? new Outcome.BrokenByWidth() : new Outcome.Flat();
                 }
-                case MustBreak _ -> {
-                    return it.mode == Mode.FLAT ? Fit.REFUSED : Fit.FITS;
+                case MustBreak m -> {
+                    if (it.mode == Mode.FLAT) {
+                        return new Outcome.BrokenByForcedLayout(m);
+                    }
+                    return over ? new Outcome.BrokenByWidth() : new Outcome.Flat();
                 }
             }
         }
