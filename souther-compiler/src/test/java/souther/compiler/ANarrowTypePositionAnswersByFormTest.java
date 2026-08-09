@@ -12,11 +12,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A position that reads one type rather than a whole one answers about the form the author wrote.
+ * A position that reads the narrow type production answers about the form the author wrote.
  *
- * <p>A data field, a type argument and a tuple's member each take one type, and they take it by
- * reading a narrower production than a behavior's parameter does. That is a decision about the
- * language and it stands. What did not stand was its consequence for a reader: a form the
+ * <p>A data field, a type argument and a tuple's member read a narrower production than a behavior's
+ * parameter does, so an anonymous union is not a form any of the three is written in. That is a
+ * decision about the language and it stands. What did not stand was its consequence for a reader: a form the
  * production never built could not be named by anything downstream, so a `|` on a field was
  * reported as a missing `}` and a `?` inside a `List` as a missing `>` — the token the parser
  * wanted, about text the author did not write.

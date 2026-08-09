@@ -5490,8 +5490,8 @@ Reported while reading the text into tokens (<<the-source-is-made-of-tokens>>), 
 
 [,text]
 ----
-Field `ticket` is written with an anonymous union; a field has the one type it holds. Declare a
-`data` over the cases and give the field that name.
+Field `ticket` is written with an anonymous union, which is not a form a field's type is written
+in. Declare a `data` over the cases and give the field that name.
 ----
 
 Reported where a `+|+` follows the type of a data field, a type argument or a tuple's member (<<an-anonymous-union-is-not-written-in-a-narrow-type-position>>). None of the three reads the form, so it is recognized at the `+|+` rather than left to the delimiter the reading stopped at — the author reached for a choice, and a report about a missing `+}+` is not about what they wrote. A behavior's parameter is the other position that refuses one, and it reaches <<e1312>>: it reads the form and the boundary refuses what was read (<<a-parameter-names-one-type>>). Everywhere else a whole type is read an anonymous union stands, a helper's signature included (<<union-intersection>>).

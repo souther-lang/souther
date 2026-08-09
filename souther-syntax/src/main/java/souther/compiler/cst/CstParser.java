@@ -727,19 +727,19 @@ public final class CstParser {
     }
 
     /**
-     * The one type a narrow position takes — a data field, a type argument, a tuple's member — where
-     * {@link #retType} reads a whole one. The type is the same in every position; what differs is the
-     * continuation the position does not take, and neither continuation is a stray token: a `{@code |}`
-     * is an author reaching for a choice and a `{@code ?}` for an absence. So each is recognized where
-     * it is written and refused by name, ahead of the delimiter that would otherwise be the whole
-     * report. Recognizing a form in order to refuse it is not reading it: what the position takes is
-     * unchanged, and nothing downstream is handed a type the position does not have.
+     * The narrow type production — a data field, a type argument, a tuple's member — where
+     * {@link #retType} reads a whole type. What it reads is the same in every one of the three; what
+     * differs is the continuation the position does not read, and neither continuation is a stray
+     * token: a `{@code |}` is an author reaching for a choice and a `{@code ?}` for an absence. So
+     * each is recognized where it is written and refused by name, ahead of the delimiter that would
+     * otherwise be the whole report. Recognizing a form in order to refuse it is not reading it: what
+     * the production admits is unchanged, and nothing downstream is handed a form it does not build.
      *
      * <p>The refused continuation is consumed so the declaration around it still parses, and the
      * author sees the one thing they wrote wrong rather than it and everything it displaced.
      *
      * @param optionalSuffix whether a `{@code ?}` after the type belongs to this position
-     * @param ifUnion what to say about a `{@code |}`, which no narrow position takes
+     * @param ifUnion what to say about a `{@code |}`, which none of the three reads
      */
     private <M extends Message & Reported> void narrowType(boolean optionalSuffix, M ifUnion) {
         narrowMember(optionalSuffix);
