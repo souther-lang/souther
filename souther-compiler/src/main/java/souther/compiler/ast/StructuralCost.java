@@ -30,11 +30,13 @@ import java.util.List;
  * one, like any other construct. What is counted is what the compiler will build, and a call it
  * will not splice builds nothing per argument.
  *
- * <p>A block needs no rule beyond these: each of its statements is a binding the ones after it are
- * written inside, so the rule for a construct already counts a level each, and what a statement
- * holds is counted from where that statement stands rather than from the block's end. A long block
- * of small statements and a short one holding something large can cost the same, which is the
- * point — what is counted is the longest way down, not two quantities added.
+ * <p>A block is counted in the steps its statements take, and a step is not always a binding: a
+ * {@code guard} introduces no name and is one, because what follows it is written inside the case
+ * it settles; an ordinary {@code let} is one; a {@code let} written with a pattern is as many as
+ * the pattern binds. The rule for a construct counts a level each, and what a statement holds is
+ * counted from where that statement stands rather than from the block's end — so a long block of
+ * small statements and a short one holding something large can cost the same, which is the point:
+ * what is counted is the longest way down, not two quantities added.
  *
  * <p>Neither number is read off the tree: both are counted from what the author wrote, and the tree
  * is only where they are read from.

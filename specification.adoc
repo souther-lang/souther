@@ -3649,10 +3649,11 @@ The model author does not write this type name in Souther source; they only writ
 * a name or a literal is one;
 * a construct is one more than the deepest thing it holds;
 * an application of a helper that is substituted at the call (<<fn-rules>>) is its argument count more than the deepest of what it holds, since each argument is bound where the body is put; an application that is not substituted — a behavior, a recursive helper, a function a binding holds — is a construct like any other;
-* a binding site is the number of bindings it introduces, counted through the patterns it is written with: a name introduces one, a tuple pattern one for the value and its elements' own, a record pattern one for the value and one per field it names, and a case pattern one for the value and its inner pattern's own;
 * a name that reaches a value counts that value's complexity where the value is substituted (<<fn-value-semantics>>).
 
-A block needs no rule of its own — each of its statements is a binding site the ones after it are written inside — so a long block and a deeply written expression are counted the same way, and what a statement holds is counted from where that statement stands.
+A block is counted in the steps its statements take. Everything a statement is followed by is written inside what that statement introduced, so a block of statements and an expression written that deep are the same structure said two ways, and what a statement holds is counted from where that statement stands rather than from the block's end.
+
+A step is not always a binding. A `+guard+` introduces no name and is one step, since what follows it is written inside the case it settles; an ordinary `+let+` is one; a `+let+` written with a pattern is as many as the pattern binds, counted through the pattern: a name binds one, a tuple one for the value and its elements' own, a record one for the value and one per field it names, a case one for the value and its inner pattern's own. A definition's parameters are counted the same way as the patterns they are written with.
 
 This is a separate limit from the one above, and neither implies the other. Nesting is bounded as the source is read; complexity is bounded over what the source says, which the reading does not settle: a module writes its declarations flat and substitution composes them, so a source that nests barely at all can be arbitrarily complex. It is reported at the construct that exceeded it — the block, the definition, or the value whose substitution composed it — and never as a nesting to flatten, since naming parts is what composes complexity rather than what reduces it.
 
@@ -5407,7 +5408,8 @@ Naming the parts is the answer to this one, and what the parts add up to is a se
 
 [,text]
 ----
-This block has {statements} statements, and a definition holds at most {holds} levels of structure.
+This block binds {bindings} names, and a definition holds at most {holds} levels of structure.
+Everything after a binding is written inside it, so each one is a level.
 ----
 
 [,text]

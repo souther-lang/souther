@@ -128,6 +128,42 @@ class StructuralCostTest {
         }
     }
 
+    /**
+     * What a statement is charged and what folding it builds are the same number.
+     *
+     * <p>A block's steps are charged from the statements the source wrote, and folding them writes
+     * a level each — a {@code let} a binding, a {@code guard} the case it settles, a pattern one per
+     * name it binds. The charge and the fold agreeing is what lets the count be taken off the
+     * folded body: a fold that stopped writing a level per step would leave the count reading
+     * something the rule does not say, and this is where that shows.
+     */
+    @Test
+    void aStatementIsChargedOneStepAndFoldingItWritesOneLevel() {
+        record Case(String what, String statement, int steps) {}
+        List<Case> cases = List.of(
+                new Case("a let", "let a%d = x", 1),
+                new Case("a guard", "guard x > %d else 0", 1),
+                new Case("a tuple destructure", "let (a%d, b%d) = t", 3));
+
+        for (Case one : cases) {
+            int shorter = costOfBlock(one.statement(), 4);
+            int longer = costOfBlock(one.statement(), 14);
+
+            assertEquals(one.steps() * 10, longer - shorter,
+                    one.what() + " is charged " + one.steps() + " step(s), and ten more of them "
+                            + "build " + (longer - shorter) + " levels");
+        }
+    }
+
+    /** A block of {@code statements} of one kind, over a tuple something can be taken out of. */
+    private static int costOfBlock(String statement, int statements) {
+        StringBuilder sb = new StringBuilder("{\n    let t = (x, x)\n");
+        for (int i = 0; i < statements; i++) {
+            sb.append("    ").append(statement.replace("%d", String.valueOf(i))).append("\n");
+        }
+        return costOf(sb.append("    x\n}").toString());
+    }
+
     /** Every definition the language ships is far inside the bound; a bound that the prelude was
      *  already past would be one nothing could be written under. */
     @Test

@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * being watched for; the slack is for the levels a lowering legitimately introduces around what it
  * lowers, which are a constant per construct rather than a count of anything.
  */
-class AnAcceptedSourceBuildsNoDeeperThanTheBoundTest {
+class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
 
     /** What a lowering may add around what it lowers. A behavior's body arrives wrapped in the
      *  bindings its parameters and its {@code depends on} make, and a construction is elaborated
@@ -105,6 +105,27 @@ class AnAcceptedSourceBuildsNoDeeperThanTheBoundTest {
         return sb.append(")").append(" + 1".repeat(nesting)).append("\n").toString();
     }
 
+    /** A block of guards: a step that binds nothing, and the only statement kind that does not. */
+    private static String guards(int statements) {
+        StringBuilder sb = new StringBuilder("module m exposing (f)\n\n"
+                + "behavior f : (x: Int) -> Int\nlet f (x) = {\n");
+        for (int i = 0; i < statements; i++) {
+            sb.append("    guard x > ").append(i).append(" else 0\n");
+        }
+        return sb.append("    x\n}\n").toString();
+    }
+
+    /** Guards, destructurings and a deep value in one block: every statement kind at once. */
+    private static String everyStatementKind() {
+        StringBuilder sb = new StringBuilder("module m exposing (f)\n\n"
+                + "behavior f : (x: Int) -> Int\nlet f (x) = {\n    let t = (x, x)\n");
+        for (int i = 0; i < 60; i++) {
+            sb.append("    guard x > ").append(i).append(" else 0\n");
+            sb.append("    let (a").append(i).append(", b").append(i).append(") = t\n");
+        }
+        return sb.append("    x").append(" + 1".repeat(50)).append("\n}\n").toString();
+    }
+
     /** A block of statements over a chain of values: two producers in one definition. */
     private static String blockOverAChain() {
         StringBuilder sb = new StringBuilder("module m exposing (f)\n\nlet v0 = 1\n");
@@ -129,7 +150,9 @@ class AnAcceptedSourceBuildsNoDeeperThanTheBoundTest {
                 new Case("a block over a chain", blockOverAChain()),
                 new Case("a record taken apart in a parameter", recordPattern(200)),
                 new Case("a block of destructurings", destructuringBlock(100)),
-                new Case("the widest expansion, under nesting", widestExpansion(50)));
+                new Case("the widest expansion, under nesting", widestExpansion(50)),
+                new Case("a block of guards", guards(300)),
+                new Case("every statement kind at once", everyStatementKind()));
 
         for (Case one : cases) {
             Compilation compilation = Compiler.compiled(one.source(), "m");

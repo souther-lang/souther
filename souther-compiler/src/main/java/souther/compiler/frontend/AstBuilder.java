@@ -1123,7 +1123,7 @@ public final class AstBuilder {
             }
             if (bindings > StructuralCost.MAX) {
                 throw errorWithHint(pos(stmts.get(stmts.size() - 1)),
-                        new DeclarationMessage.ABlockHasMoreStatementsThanADefinitionHolds(
+                        new DeclarationMessage.ABlockIntroducesMoreBindingsThanADefinitionHolds(
                                 bindings, StructuralCost.MAX),
                         new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
             }
