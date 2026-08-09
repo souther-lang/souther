@@ -110,4 +110,32 @@ class ABreakOpportunityBelongsToAGroupTest {
         assertNotSame(found.get(0).line(), found.get(1).line(),
                 "each is its own, and neither stands for the other");
     }
+
+    /**
+     * A boundary the layout may break outside every group is not an opportunity. The outermost
+     * context breaks, so it always breaks and no decision settles it — which is what a forced break
+     * is rather than a conditional one, and an opportunity naming nobody would be one a witness
+     * could not explain.
+     */
+    @Test
+    void andOneOutsideEveryGroupIsNotAnOpportunity() {
+        Doc outsideEveryGroup = Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd"));
+
+        Layout layout = outsideEveryGroup.layout(100);
+
+        assertEquals("ab\ncd", layout.text(), "it breaks, since the outermost context does");
+        assertEquals(List.of(), layout.opportunities());
+    }
+
+    /** And the formatter writes none of those, so nothing real is left out by that. */
+    @Test
+    void andTheFormatterWritesNoneOfThem() {
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+            Doc doc = Formatter.canonicalize(
+                    souther.compiler.cst.CstParser.parse(source).root()).construction().doc()
+                    .resolve();
+            assertEquals(linesIn(doc), doc.layout(100).opportunities().size(),
+                    "a boundary the layout may break that no group settles, in:\n" + source);
+        }
+    }
 }

@@ -202,8 +202,13 @@ sealed interface Doc {
                 }
                 case Line l -> {
                     // The group that settles it is the innermost one holding it, which is the one
-                    // the walk was inside when it reached here.
-                    opportunities.add(new Opportunity(l.ref(), it.within(), it.mode != Mode.FLAT));
+                    // the walk was inside when it reached here. One outside every group is not an
+                    // opportunity: the outermost context breaks, so it always breaks and no
+                    // decision settles it. The formatter writes none, which is its own check.
+                    if (it.within() != null) {
+                        opportunities.add(new Opportunity(l.ref(), it.within(),
+                                it.mode != Mode.FLAT));
+                    }
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
                         col += l.flat().length();
