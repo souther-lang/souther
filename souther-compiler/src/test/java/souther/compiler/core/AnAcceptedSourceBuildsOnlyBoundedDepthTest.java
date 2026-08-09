@@ -3,6 +3,7 @@ package souther.compiler.core;
 import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.CompileException;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -10,6 +11,10 @@ import souther.compiler.query.Compilation;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -137,6 +142,38 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
             sb.append("    let a").append(i).append(" = a").append(i - 1).append("\n");
         }
         return sb.append("    a127 + v188\n}\n").toString();
+    }
+
+    /**
+     * The bound accepts what is inside it and refuses what is one past, counted the way the source
+     * says rather than the way anything was folded.
+     *
+     * <p>Asked with guards, which take a step each and bind nothing: what the fold leaves behind is
+     * an {@code if} per guard, and what the source says is a step per guard, and the two are the
+     * same count for reasons this holds one at a time. A block one step over says how many steps it
+     * takes, not how many names it binds, because it binds none.
+     */
+    @Test
+    void aBlockIsAcceptedToTheBoundAndRefusedOneStepPast() {
+        // A guard is a step, and the result stands after all of them — so a block of n guards costs
+        // n and then the result, and the last one that fits leaves the result on the bound.
+        assertDoesNotThrow(() -> Compiler.compiled(guards(StructuralCost.MAX - 1), "m"));
+
+        CompileException one = assertThrows(CompileException.class,
+                () -> Compiler.compiled(guards(StructuralCost.MAX), "m"));
+        assertEquals("E2107", one.code(), one.getMessage());
+        assertTrue(one.getMessage().contains((StructuralCost.MAX + 1) + " levels of structure"),
+                one.getMessage());
+
+        // Past what the block alone may take, the block says so before it is folded — and says
+        // steps, because a guard binds nothing and this block binds no names at all.
+        CompileException steps = assertThrows(CompileException.class,
+                () -> Compiler.compiled(guards(StructuralCost.MAX + 1), "m"));
+        assertEquals("E2107", steps.code(), steps.getMessage());
+        assertTrue(steps.getMessage().contains((StructuralCost.MAX + 1) + " structural steps"),
+                steps.getMessage());
+        assertFalse(steps.getMessage().contains("binds " + (StructuralCost.MAX + 1)),
+                "a block of guards binds no names, and this counts steps: " + steps.getMessage());
     }
 
     @Test

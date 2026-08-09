@@ -77,7 +77,56 @@ public final class StructuralCost {
      * expanded one, and none of them costs more than a construct.
      */
     public static int of(Ast.Expr e) {
-        return composed(e, _ -> null).costs();
+        return of(e, _ -> UNKNOWN);
+    }
+
+    /** What {@link #of(Ast.Expr, Known)} is told where the cost of a subtree is not to be counted
+     *  off the subtree. */
+    public static final int UNKNOWN = -1;
+
+    /**
+     * What a subtree costs, where something already knows and this must not work it out again.
+     *
+     * <p>A block is the case there is. What it costs is the steps its statements take and what they
+     * hold from where they stand, which is a fact about the statements the source wrote — and by the
+     * time this could walk one, they are a spine of bindings, so walking it would be reading the
+     * shape they were folded into. Whoever folded them says what they cost, and this takes that
+     * answer rather than deriving one.
+     */
+    @FunctionalInterface
+    public interface Known {
+        int costOf(Ast.Expr e);
+    }
+
+    /** As {@link #of(Ast.Expr)}, taking {@code known}'s answer for any subtree it has one for. */
+    public static int of(Ast.Expr e, Known known) {
+        if (e == null) {
+            return 0;
+        }
+        List<Ast.Expr> nodes = new ArrayList<>();
+        List<Integer> above = new ArrayList<>();
+        nodes.add(e);
+        above.add(0);
+        int most = 0;
+        while (!nodes.isEmpty()) {
+            Ast.Expr node = nodes.remove(nodes.size() - 1);
+            int here = above.remove(above.size() - 1);
+            if (node == null) {
+                continue;
+            }
+            int said = known.costOf(node);
+            if (said != UNKNOWN) {
+                most = Math.max(most, here + said);
+                continue;
+            }
+            int at = here + here(node, false);
+            most = Math.max(most, at);
+            Ast.forEachChild(node, child -> {
+                nodes.add(child);
+                above.add(at);
+            });
+        }
+        return most;
     }
 
     /** What one node costs where it stands. A block's statements are a binding each by the time

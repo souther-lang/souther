@@ -153,7 +153,7 @@ public sealed interface DeclarationMessage extends Message {
     record TheCompilerRanOutOfRoom() implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2107)
-    record ABlockIntroducesMoreBindingsThanADefinitionHolds(int bindings, int holds)
+    record ABlockTakesMoreStructuralStepsThanADefinitionHolds(int steps, int holds)
             implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2107)

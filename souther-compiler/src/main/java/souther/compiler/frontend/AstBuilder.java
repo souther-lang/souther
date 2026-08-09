@@ -44,6 +44,16 @@ import java.util.Set;
  */
 public final class AstBuilder {
 
+    /**
+     * What each block this pass built costs, against the expression it folded to.
+     *
+     * <p>A block's cost is a fact about the statements the source wrote, and folding them leaves a
+     * spine of bindings — so it is worked out where the statements are still statements, and kept
+     * here for whatever holds the block to read. Held by identity: two blocks that read alike are
+     * two blocks.
+     */
+    private final java.util.Map<Ast.Expr, Integer> blockCosts = new java.util.IdentityHashMap<>();
+
     private final LineIndex lines;
     private String moduleName = "";
     private int matchWholeCounter = 0;
@@ -456,7 +466,7 @@ public final class AstBuilder {
         // [#source-structural-complexity-is-bounded]); folding it makes one level per binding, so
         // measuring the fold would give the same number today and would make the answer a fact
         // about this lowering rather than about the source.
-        int costs = StructuralCost.of(body) + bindingsIntroducedBy(paramPatterns);
+        int costs = costOf(body) + bindingsIntroducedBy(paramPatterns);
         // a pattern parameter took a fresh name above; it opens itself at the top of the body, so
         // the helper still takes plain names and nothing downstream sees a pattern
         for (int i = paramPatterns.size() - 1; i >= 0; i--) {
@@ -1104,32 +1114,68 @@ public final class AstBuilder {
                 default -> result = c;   // the trailing result expression
             }
         }
-        return foldStatements(stmts, 0, result);
+        List<int[]> tally = new ArrayList<>();
+        Ast.Expr folded = foldStatements(stmts, 0, result, tally);
+        blockCosts.put(folded, costOfBlock(tally));
+        return folded;
     }
 
-    private Ast.Expr foldStatements(List<SyntaxNode> stmts, int index, SyntaxNode result) {
-        // Before the fold and not after it. Each statement is a binding site the ones after it are
-        // written inside, so folding them descends once per binding — a block long enough to be
-        // refused is a block long enough to run this out on the way to saying so.
-        //
-        // Counted in bindings rather than statements: `let (a, b) = t` is one statement and two
-        // names, and what the ones after it are written inside is the names.
+    /**
+     * What a block costs, from the steps its statements take and what each of them holds.
+     *
+     * <p>Read off {@code tally}, which is a step count and a payload cost per statement in the
+     * order they were written, and the result's cost last. Everything a statement is followed by is
+     * written inside what that statement introduced, so what a statement holds is counted from
+     * where that statement stands — the steps before it, and then it. The block is the deepest of
+     * those, and not the steps and the deepest payload added, which would charge one statement's
+     * contents from the far end of every other.
+     */
+    private static int costOfBlock(List<int[]> tally) {
+        int stepsBefore = 0;
+        int most = 0;
+        for (int[] at : tally) {
+            most = Math.max(most, stepsBefore + at[1]);
+            stepsBefore += at[0];
+        }
+        return most;
+    }
+
+    /** How many steps one statement takes: a `let` written with a pattern is what the pattern
+     *  binds, and anything else — an ordinary `let`, a `guard`, which binds nothing — is one. */
+    private int stepsTakenBy(SyntaxNode stmt) {
+        return stmt.kind() == SyntaxKind.LET_DESTRUCTURE
+                ? bindingsIntroducedBy(patternChild(stmt))
+                : 1;
+    }
+
+    /** What an expression costs, with any block inside it costing what it was worked out to cost
+     *  where it was built rather than what folding it left behind. */
+    private int costOf(Ast.Expr e) {
+        return StructuralCost.of(e, held ->
+                blockCosts.containsKey(held) ? blockCosts.get(held) : StructuralCost.UNKNOWN);
+    }
+
+    private Ast.Expr foldStatements(List<SyntaxNode> stmts, int index, SyntaxNode result,
+                                    List<int[]> tally) {
+        // Before the fold and not after it. Everything a statement is followed by is written inside
+        // what that statement introduced, so folding them descends once per step — a block long
+        // enough to be refused is a block long enough to run this out on the way to saying so.
         if (index == 0) {
-            int bindings = 0;
+            int steps = 0;
             for (SyntaxNode s : stmts) {
-                bindings += s.kind() == SyntaxKind.LET_DESTRUCTURE
-                        ? bindingsIntroducedBy(patternChild(s))
-                        : 1;
+                steps += stepsTakenBy(s);
             }
-            if (bindings > StructuralCost.MAX) {
+            if (steps > StructuralCost.MAX) {
                 throw errorWithHint(pos(stmts.get(stmts.size() - 1)),
-                        new DeclarationMessage.ABlockIntroducesMoreBindingsThanADefinitionHolds(
-                                bindings, StructuralCost.MAX),
+                        new DeclarationMessage.ABlockTakesMoreStructuralStepsThanADefinitionHolds(
+                                steps, StructuralCost.MAX),
                         new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
             }
         }
         if (index == stmts.size()) {
-            return expr(result);   // a block always ends in a result expression
+            Ast.Expr end = expr(result);   // a block always ends in a result expression
+            tally.add(new int[]{0, costOf(end)});
+            return end;
         }
         SyntaxNode s = stmts.get(index);
         SourcePos pos = pos(s);
@@ -1137,7 +1183,8 @@ public final class AstBuilder {
             case LET_STMT -> {
                 Ast.RetType annotation = s.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
                 Ast.Expr value = expr(onlyExpr(s));
-                Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                tally.add(new int[]{1, costOf(value)});
+                Ast.Expr rest = foldStatements(stmts, index + 1, result, tally);
                 // The statement starts at its keyword and the binding is written after it. A reader
                 // asking what a cursor is on has only the name to compare against.
                 Ast.Binder bound = binderOf(s);
@@ -1149,22 +1196,31 @@ public final class AstBuilder {
                 List<SyntaxNode> exprs = exprChildren(s);
                 SyntaxToken as = attemptBinder(s);
                 String binder = as == null ? null : ident(as);
-                Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                // Written before what it holds is built, so that the statements are tallied in the
+                // order they stand; what it holds is filled in below, where it exists.
+                int[] takes = new int[]{1, 0};
+                tally.add(takes);
+                Ast.Expr rest = foldStatements(stmts, index + 1, result, tally);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 if (arms != null) {
-                    yield new Ast.IfConstructed(expr(exprs.get(0)),
-                            binderOf(as), rest, arms, pos);
+                    Ast.Expr settles = expr(exprs.get(0));
+                    takes[1] = costOf(settles);
+                    yield new Ast.IfConstructed(settles, binderOf(as), rest, arms, pos);
                 }
+                Ast.Expr settles = expr(exprs.get(0));
+                Ast.Expr otherwise = expr(exprs.get(1));
+                takes[1] = Math.max(costOf(settles), costOf(otherwise));
                 yield binder == null
-                        ? new Ast.If(expr(exprs.get(0)), rest, expr(exprs.get(1)), pos)
-                        : new Ast.IfConstructed(expr(exprs.get(0)),
-                                binderOf(as), rest,
-                                List.of(Ast.ElseArm.any(expr(exprs.get(1)))), pos);
+                        ? new Ast.If(settles, rest, otherwise, pos)
+                        : new Ast.IfConstructed(settles, binderOf(as), rest,
+                                List.of(Ast.ElseArm.any(otherwise)), pos);
             }
             case LET_DESTRUCTURE -> {
                 SyntaxNode pat = patternChild(s);
-                yield bindPattern(pat, expr(onlyExpr(s)),
-                        foldStatements(stmts, index + 1, result), pos(pat));
+                Ast.Expr taken = expr(onlyExpr(s));
+                tally.add(new int[]{stepsTakenBy(s), costOf(taken)});
+                yield bindPattern(pat, taken,
+                        foldStatements(stmts, index + 1, result, tally), pos(pat));
             }
             default -> throw error(pos, new ParseMessage.AStatementWasExpected());
         };

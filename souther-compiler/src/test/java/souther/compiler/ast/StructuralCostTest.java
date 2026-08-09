@@ -164,6 +164,45 @@ class StructuralCostTest {
         return costOf(sb.append("    x\n}").toString());
     }
 
+    /**
+     * The bound is where the algebra says, and the algebra is over the source.
+     *
+     * <p>Written as a pair on either side of it, for each way a block can spend what it has: steps
+     * alone, and steps with something held at the end of them. What is fixed here is the arithmetic
+     * — that the steps a block takes and what its result holds add, and that a step is a step
+     * whether or not it binds a name. A `+guard+` binds nothing, so a block of them costing what a
+     * block of `+let+`s costs is the whole of what "step" means.
+     */
+    @Test
+    void theBoundIsWhereTheAlgebraPutsIt() {
+        assertEquals(1, costOfGuards(200) - costOfGuards(199),
+                "one more guard is one more step");
+        assertEquals(costOfGuards(100), costOfBlock("let a%d = x", 100),
+                "a guard binds nothing and costs what a let costs");
+
+        assertEquals(30, costOfSteppedBlockHolding(250, 50) - costOfSteppedBlockHolding(250, 20),
+                "what the result holds is counted from where the result stands, and adds");
+        assertEquals(costOfSteppedBlockHolding(250, 50), costOfSteppedBlockHolding(270, 30),
+                "steps and what is held at the end of them are the one quantity");
+    }
+
+    private static int costOfGuards(int statements) {
+        StringBuilder sb = new StringBuilder("{\n");
+        for (int i = 0; i < statements; i++) {
+            sb.append("    guard x > ").append(i).append(" else 0\n");
+        }
+        return costOf(sb.append("    x\n}").toString());
+    }
+
+    /** A block of {@code steps} guards whose result nests {@code held} deep. */
+    private static int costOfSteppedBlockHolding(int steps, int held) {
+        StringBuilder sb = new StringBuilder("{\n");
+        for (int i = 0; i < steps; i++) {
+            sb.append("    guard x > ").append(i).append(" else 0\n");
+        }
+        return costOf(sb.append("    x").append(" + 1".repeat(held - 1)).append("\n}").toString());
+    }
+
     /** Every definition the language ships is far inside the bound; a bound that the prelude was
      *  already past would be one nothing could be written under. */
     @Test

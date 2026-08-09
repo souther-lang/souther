@@ -5408,8 +5408,9 @@ Naming the parts is the answer to this one, and what the parts add up to is a se
 
 [,text]
 ----
-This block binds {bindings} names, and a definition holds at most {holds} levels of structure.
-Everything after a binding is written inside it, so each one is a level.
+This block takes {steps} structural steps, and a definition holds at most {holds}. Everything a
+statement is followed by is written inside what that statement introduced, so each step is a level —
+a `guard` binds nothing and is one all the same.
 ----
 
 [,text]
