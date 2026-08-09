@@ -186,23 +186,16 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         Declarations found = classes.of(binaryName);
         String text = found == null ? null : member.apply(found);
         if (text == null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1504, "check.module.publishedincomplete")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1504, "check.module.publishedincomplete")
                             .args(name, m.name()).hint("check.module.publishedincomplete.hint", m.name())
-                            .build(),
-                    "module `" + m.name() + "` says it declares `" + name
-                            + "`, but the class carrying that declaration is not on the classpath");
+                            .build());
         }
         return text;
     }
 
     private static CompileException incompatible(SoutherModuleView m) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1505, "check.module.incompatible")
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1505, "check.module.incompatible")
                         .args(m.name(), m.compiler())
-                        .hint("check.module.incompatible.hint", m.name()).build(),
-                "module `" + m.name() + "` was compiled by Souther " + m.compiler()
-                        + ", which does not agree with this compiler about what an importing module"
-                        + " may reach; rebuild it with this compiler");
+                        .hint("check.module.incompatible.hint", m.name()).build());
     }
 }

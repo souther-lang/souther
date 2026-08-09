@@ -9,6 +9,7 @@ import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.SourceContext;
 
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.util.Locale;
 import java.util.Map;
@@ -19,6 +20,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** End-to-end test for the {@code ...} spread (flattened fields + inherited invariants) and value spread {@code ...src} (spec 8.2, 12.4). */
 class CompileIncludeTest {
+
+    /**
+     * A collision names both groups that supply the field.
+     *
+     * <p>The taking data declares no `issuedAt` of its own — both came through spreads — so naming
+     * it as the other side of the collision sent a reader to a declaration where nothing is written.
+     * What they need is the group that supplied the earlier one, and the caret on the spread that
+     * brought the second.
+     */
+    @org.junit.jupiter.api.Test
+    void aCollisionBetweenTwoSpreadsNamesBothGroups() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data Issued = { issuedAt: Int }
+                data Sold = { issuedAt: Int }
+                data Ticket =
+                    { ...Issued
+                    , ...Sold
+                    }
+                """));
+        assertEquals("E1004", e.code());
+        assertTrue(e.getMessage().contains("`...Sold`"), e.getMessage());
+        assertTrue(e.getMessage().contains("`...Issued`"), e.getMessage());
+        assertFalse(e.getMessage().contains("Ticket"),
+                "the taking data declares no such field: " + e.getMessage());
+    }
 
     // the ... spread flattens Common's fields into each state; a behavior transitions Draft -> Submitted by spreading it.
     private static final String FLOW = """
@@ -89,7 +117,7 @@ class CompileIncludeTest {
                 data Invoice = { ...Common, total: Int }
                 """));
 
-        assertTrue(e.getMessage().contains("unknown type `Common`"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
         assertEquals(2, e.diagnostic().region().start().line());
         assertEquals(21, e.diagnostic().region().start().column(), "the caret is on the spread's name");
         assertEquals(27, e.diagnostic().region().end().column());
@@ -104,7 +132,7 @@ class CompileIncludeTest {
                 data Invoice = { c: Common, total: Int }
                 """));
 
-        assertTrue(e.getMessage().contains("unknown type `Common`"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
         assertEquals(21, e.diagnostic().region().start().column());
     }
 
@@ -137,7 +165,7 @@ class CompileIncludeTest {
                 data Invoice = { ...Common, total: Int } invariant total > 0
                 """}) {
             CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-            assertTrue(e.getMessage().contains("unknown type `Common`"), e.getMessage());
+            assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
         }
     }
 

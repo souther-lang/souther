@@ -742,23 +742,15 @@ public final class HelperInliner {
             }
             String param = params.get(i).name();
             if (fnParam < 0) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1804, "check.fn.argnotfn")
-                                .at(lambda.pos()).args(call.written(), i + 1, param).build(),
-                        "argument " + (i + 1) + " of `" + call.written() + "` is `" + param
-                                + "`, which does not take a function");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1804, "check.fn.argnotfn")
+                                .at(lambda.pos()).args(call.written(), i + 1, param).build());
             }
             String shape = params.stream().map(Ast.FnParam::name)
                     .collect(java.util.stream.Collectors.joining(", "));
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1804, "check.fn.argorder")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1804, "check.fn.argorder")
                             .at(lambda.pos())
                             .args(call.written(), i + 1, param, fnParam + 1, params.get(fnParam).name(), shape)
-                            .hint("check.fn.argorder.hint").build(),
-                    "argument " + (i + 1) + " of `" + call.written() + "` is `" + param
-                            + "`, which does not take a function: the function goes to argument "
-                            + (fnParam + 1) + " (`" + params.get(fnParam).name() + "`). Write `"
-                            + call.written() + "(" + shape + ")`.");
+                            .hint("check.fn.argorder.hint").build());
         }
     }
 
@@ -1100,21 +1092,14 @@ public final class HelperInliner {
                 ? writing.scopedLambdas().get(local.id()) : null;
         LambdaOrigin origin = applied == null ? null : applied.origin();
         if (origin != null) {
-            return CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockparam.arity")
+            return CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockparam.arity")
                             .at(origin.pos())
                             .args(origin.param(), origin.owner(), given,
-                                    helper.params().size()).build(),
-                    "the block passed to `" + origin.param() + "` of `let " + origin.owner()
-                            + "` takes " + given + " argument(s) but is written with "
-                            + helper.params().size());
+                                    helper.params().size()).build());
         }
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1802, "check.helper.arity")
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.helper.arity")
                         .at(call.name().region())
-                        .args(helper.name(), helper.params().size(), given).build(),
-                "helper `let " + helper.name() + "` takes " + helper.params().size()
-                        + " argument(s) but is called with " + given);
+                        .args(helper.name(), helper.params().size(), given).build());
     }
 
     /**
@@ -1229,11 +1214,7 @@ public final class HelperInliner {
         if (shape != null) {
             d.hint("check.fn.argnotvalue.hint");
         }
-        return CompileException.of(d.build(),
-                "argument " + (index + 1) + " of `" + rawCall.written() + "` is `" + p.name()
-                        + "`, which takes a function: pass a named function or a lambda"
-                        + (shape == null ? ""
-                                : ". Write `" + rawCall.written() + "(" + shape + ")`."));
+        return CompileException.of(d.build());
     }
 
     /**

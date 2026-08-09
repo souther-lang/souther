@@ -86,7 +86,7 @@ class CompileModuleTest {
                 data Order = { total: Amount }
                 """));
         assertTrue(e.getMessage().contains("shared.money"), e.getMessage());
-        assertTrue(e.getMessage().contains("unknown module"), e.getMessage());
+        assertTrue(e.getMessage().contains("Unknown module"), e.getMessage());
     }
 
     /** A standard-library import is not a module import: it is stripped before that check. */

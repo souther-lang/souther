@@ -72,11 +72,8 @@ public final class HelperTyping {
                     if (recursive) {
                         // a recursive helper is lowered to a method, not inlined, so no call site
                         // expands it — its parameter types cannot be inferred and must be declared.
-                        throw CompileException.of(
-                                Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
-                                        .at(p.written().region()).args(h.name(), p.name()).build(),
-                                "helper `let " + h.name() + "` must annotate parameter `" + p.name()
-                                        + "` with its type (spec 13.1)");
+                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
+                                        .at(p.written().region()).args(h.name(), p.name()).build());
                     }
                     // a parameter with no type beside it takes one from the body (spec 13.1).
                     inferred.add(i);
@@ -162,12 +159,9 @@ public final class HelperTyping {
             if (declaredReturn != null) {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, symbols)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1812, "check.helper.return")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1812, "check.helper.return")
                                     .at(h.pos()).args(h.name(), Type.show(declared), Type.show(bodyType))
-                                    .build(),
-                            "helper `let " + h.name() + "` declares it returns " + Type.show(declared)
-                                    + " but its body is " + Type.show(bodyType));
+                                    .build());
                 }
             }
         }
@@ -273,12 +267,8 @@ public final class HelperTyping {
         for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
             if (HelperParams.isApplied(body, p.binder())) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1811, "check.helper.fnparam")
-                                .at(p.written().region()).args(h.name(), p.name()).build(),
-                        "helper `let " + h.name() + "` parameter `" + p.name() + "` is used as a"
-                                + " function; a function-typed parameter must be annotated with its"
-                                + " type (spec 13.1)");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1811, "check.helper.fnparam")
+                                .at(p.written().region()).args(h.name(), p.name()).build());
             }
         }
         Map<Integer, HelperParams.OpenUse> openUses = new HashMap<>();
@@ -309,12 +299,7 @@ public final class HelperTyping {
                 d.secondary(Region.ofWidth(left.use().pos(), Elaborator.width(left.use())),
                         field ? "check.helper.infer.field.use" : "check.helper.infer.use");
             }
-            throw CompileException.of(d.build(), field
-                    ? "helper `let " + h.name() + "` parameter `" + p.name() + "` is only read"
-                            + " through a field, which names no type; annotate it with its type"
-                            + " (spec 13.1)"
-                    : "helper `let " + h.name() + "` parameter `" + p.name() + "` is not determined by"
-                            + " its body; annotate it with its type (spec 13.1)");
+            throw CompileException.of(d.build());
         }
     }
 
@@ -339,21 +324,14 @@ public final class HelperTyping {
         for (String name : inliner.recursiveHelpers()) {
             Ast.FnDef h = inliner.helper(name);
             if (h.declaredReturn() == null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1813, "check.rechelper.return")
-                                .at(h.pos()).args(name).build(),
-                        "recursive helper `let " + name + "` must declare its return type — `let " + name
-                                + " (...) : <type> = ...` — because its result cannot be inferred through"
-                                + " the recursion (spec 13.1)");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1813, "check.rechelper.return")
+                                .at(h.pos()).args(name).build());
             }
             List<Type> params = new ArrayList<>();
             for (Ast.FnParam p : h.params()) {
                 if (p.type() == null) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
-                                    .at(p.written().region()).args(name, p.name()).build(),
-                            "helper `let " + name + "` must annotate parameter `" + p.name()
-                                    + "` with its type (spec 13.1)");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
+                                    .at(p.written().region()).args(name, p.name()).build());
                 }
                 // a recursive helper is a static method taking its parameters as values; a function
                 // parameter is passed as a first-class Fn (a closure), applied inside the method.
@@ -384,12 +362,8 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1);
         String rendered = "invariant -> " + PartialReachability.render(path);
         Ast.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1106, "check.invariant.partial")
-                        .at(at == null ? null : at.name().region()).args(data, reached, rendered).build(),
-                "the invariant of `" + data + "` reaches the `partial` helper `" + reached
-                        + "` (" + rendered + "), which carries no termination guarantee; an invariant is"
-                        + " checked at construction time and must terminate");
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1106, "check.invariant.partial")
+                        .at(at == null ? null : at.name().region()).args(data, reached, rendered).build());
     }
 
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where
@@ -436,11 +410,7 @@ public final class HelperTyping {
                         named == null ? "check.invariant.construct.here.unnamed"
                                 : "check.invariant.construct.here", named);
             }
-            throw CompileException.of(b.build(),
-                    "the invariant " + (named == null ? "" : "`" + named + "` ") + "of `" + data
-                            + "` constructs `" + constructed
-                            + "`, but an invariant may not construct a data — it observes the value being"
-                            + " built, it does not build another (spec §invariant-expressions)");
+            throw CompileException.of(b.build());
         }
         TypeChecker.forEachChild(e, c -> rejectConstructionInInvariant(c, data, clause));
     }
@@ -457,13 +427,9 @@ public final class HelperTyping {
     static void rejectUnreachableInInvariant(Ast.Expr e, String data, Ast.InvariantClause clause) {
         if (e instanceof Ast.Unreachable u) {
             String named = clause.name().orElse(null);
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1106, "check.invariant.unreachable")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1106, "check.invariant.unreachable")
                             .at(u.pos(), "unreachable".length())
-                            .args(data, named).build(),
-                    "the invariant " + (named == null ? "" : "`" + named + "` ") + "of `" + data
-                            + "` answers `unreachable`, but an invariant says whether the value holds"
-                            + " on every path (spec §invariant-expressions)");
+                            .args(data, named).build());
         }
         TypeChecker.forEachChild(e, c -> rejectUnreachableInInvariant(c, data, clause));
     }
@@ -471,12 +437,8 @@ public final class HelperTyping {
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
         if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1814, "check.rechelper.pure")
-                            .at(call.name().region()).args(helper, call.written()).build(),
-                    "recursive helper `let " + helper + "` is pure and cannot call the injected behavior `"
-                            + call.written() + "` — put the effect in the behavior that calls this helper"
-                            + " (spec 13.1)");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1814, "check.rechelper.pure")
+                            .at(call.name().region()).args(helper, call.written()).build());
         }
         TypeChecker.forEachChild(e, c -> rejectInjectedCalls(c, helper, injected));
     }
@@ -572,11 +534,8 @@ public final class HelperTyping {
      * (`'b?` / `String`), not in the checker's own spelling. */
     private static CompileException blockReturnMismatch(Ast.FnDef h, String paramName, Type want,
                                                         Type got, SourcePos pos) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1805, "check.fn.blockparam.return")
-                        .at(pos).args(paramName, h.name(), Type.show(want), Type.show(got)).build(),
-                "the block passed to `" + paramName + "` of `let " + h.name() + "` must return "
-                        + Type.show(want) + " but returns " + Type.show(got));
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1805, "check.fn.blockparam.return")
+                        .at(pos).args(paramName, h.name(), Type.show(want), Type.show(got)).build());
     }
 
     /** Whether a type still holds a type variable, so nothing concrete can be checked against it yet.
@@ -592,13 +551,9 @@ public final class HelperTyping {
                                          Map<String, Type> bind) {
         if (arg instanceof Ast.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockparam.arity")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockparam.arity")
                                 .at(arg.pos()).args(paramName, h.name(), want.params().size(),
-                                        lambda.params().size()).build(),
-                        "the block passed to `" + paramName + "` of `let " + h.name() + "` takes "
-                                + want.params().size() + " argument(s) but is written with "
-                                + lambda.params().size());
+                                        lambda.params().size()).build());
             }
             Scope lenv = env;
             for (int j = 0; j < lambda.params().size(); j++) {
@@ -631,11 +586,8 @@ public final class HelperTyping {
             }
         } else if (arg instanceof Ast.Var v
                 && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1803, "check.fn.notfunction")
-                            .at(arg.pos()).args(paramName, h.name(), v.name()).build(),
-                    "`" + paramName + "` of `let " + h.name() + "` expects a function, but `" + v.name()
-                            + "` is a value, not a function");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.fn.notfunction")
+                            .at(arg.pos()).args(paramName, h.name(), v.name()).build());
         }
     }
 

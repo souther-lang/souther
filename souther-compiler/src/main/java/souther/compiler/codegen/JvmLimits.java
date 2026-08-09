@@ -214,29 +214,18 @@ final class JvmLimits {
         Diagnostic.Builder said =
                 Diagnostic.of(limit.code, limit.messageKey).at(written.region());
         return switch (limit) {
-            case CODE_SIZE -> CompileException.of(
-                    said.args(name, exceeded.method(), measured, String.valueOf(CODE_BYTES))
-                            .hint("e2102.hint").build(),
-                    "the `" + exceeded.method() + "` method generated for `" + name + "` is "
-                            + measured + " bytes of code, but a JVM method holds at most " + CODE_BYTES);
-            case CONSTANT_POOL_INDEX -> CompileException.of(
-                    said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build(),
-                    "the class generated for `" + name + "` refers to constant-pool entry " + measured
-                            + ", and a class file addresses at most " + POOL_ENTRIES);
-            case CONSTANT_POOL_SIZE -> CompileException.of(
-                    said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build(),
-                    "the class generated for `" + name + "` needs " + measured
-                            + " constant-pool entries, and a class file holds at most " + POOL_ENTRIES);
+            case CODE_SIZE -> CompileException.of(said.args(name, exceeded.method(), measured, String.valueOf(CODE_BYTES))
+                            .hint("e2102.hint").build());
+            case CONSTANT_POOL_INDEX -> CompileException.of(said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build());
+            case CONSTANT_POOL_SIZE -> CompileException.of(said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build());
         };
     }
 
     private static CompileException tooWide(String key, WrittenName written, int needed,
                                             int limit, String message) {
         String name = written.canonical();
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2101, key).at(written.region())
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E2101, key).at(written.region())
                         .args(name, String.valueOf(needed), String.valueOf(limit))
-                        .hint(key + ".hint").build(),
-                message);
+                        .hint(key + ".hint").build());
     }
 }

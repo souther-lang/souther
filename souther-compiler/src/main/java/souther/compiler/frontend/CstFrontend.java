@@ -124,6 +124,6 @@ public final class CstFrontend {
         LineIndex lines = new LineIndex(source, sourceId);
         Diagnostic diag = Diagnostic.of(e.code(), e.messageKey())
                 .at(lines.posOf(e.offset()), e.width()).args(e.args()).build();
-        return CompileException.of(diag, e.legacyMessage());
+        return CompileException.of(diag);
     }
 }

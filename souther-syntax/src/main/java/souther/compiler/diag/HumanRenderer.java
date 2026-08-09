@@ -65,7 +65,8 @@ public final class HumanRenderer implements DiagnosticRenderer {
         }
         for (Note note : d.notes()) {
             out.append(hintLabel(locale))
-                    .append(Messages.get(note.messageKey(), locale, note.args())).append('\n');
+                    .append(note.said() != null ? Messages.render(note.said(), locale)
+                            : Messages.get(note.messageKey(), locale, note.args())).append('\n');
         }
         return out.toString();
     }

@@ -1,5 +1,10 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.MessageKeys;
+import souther.compiler.diag.msg.MessageTemplate;
+import souther.compiler.diag.msg.MessageValues;
+
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.Prelude;
@@ -10,7 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.MessageFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -283,6 +290,9 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         for (Catalog catalog : catalogs()) {
             Properties messages = load(catalog.path());
             for (String key : messages.stringPropertyNames()) {
+                if (ownedByAMessage().contains(key)) {
+                    continue;   // filled by name, so a brace holds a name and not an index
+                }
                 try {
                     new MessageFormat(messages.getProperty(key), catalog.locale());
                 } catch (IllegalArgumentException e) {
@@ -476,12 +486,182 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         Set<String> unshown = new TreeSet<>();
         for (String key : keysOf(baseCatalog().path())) {
             if (key.endsWith(".hint") || key.startsWith("check.typearg.") || key.startsWith("kind.")
-                    || named.contains(key)) {
+                    || named.contains(key) || ownedByAMessage().contains(key)) {
                 continue;
             }
             unshown.add(key);
         }
         assertEquals(Set.of(), unshown, "defined and unreachable — nothing can show these");
+    }
+
+    /**
+     * Every message declared under {@link Message}, found by walking what the interface permits.
+     *
+     * <p>Read off the hierarchy rather than listed, so a message that is declared is a message the
+     * checks below are asked about — a list here would be one more thing to keep in step.
+     */
+    private static final List<Class<?>> LEAVES = new ArrayList<>();
+
+    private static List<Class<? extends Message>> messages() {
+        List<Class<? extends Message>> found = new ArrayList<>();
+        List<Class<?>> leaves = new ArrayList<>();
+        Deque<Class<?>> pending = new ArrayDeque<>(List.of(Message.class));
+        while (!pending.isEmpty()) {
+            Class<?> next = pending.poll();
+            Class<?>[] permitted = next.getPermittedSubclasses();
+            if (permitted != null && permitted.length > 0) {
+                pending.addAll(List.of(permitted));
+                continue;
+            }
+            leaves.add(next);
+            if (next.isRecord() && Message.class.isAssignableFrom(next)) {
+                found.add(next.asSubclass(Message.class));
+            }
+        }
+        LEAVES.clear();
+        LEAVES.addAll(leaves);
+        return found;
+    }
+
+    /**
+     * Every message is a record that names the rule it reports.
+     *
+     * <p>The walk above takes the records and passes over anything else, so without this a leaf that
+     * is not one — a class implementing the interface, an enum — carries no values to check and every
+     * rule below is silent about it. A missing {@code @Code} is the same shape of hole: it raises
+     * where the message is built rather than where it is declared, which is a use site away from the
+     * mistake.
+     */
+    @Test
+    void everyMessageIsARecordThatNamesItsRule() {
+        messages();   // fills LEAVES
+        List<String> wrong = new ArrayList<>();
+        for (Class<?> leaf : LEAVES) {
+            if (!leaf.isRecord()) {
+                wrong.add(leaf.getName() + " is not a record");
+                continue;
+            }
+            if (leaf.getAnnotation(souther.compiler.diag.msg.Code.class) == null) {
+                wrong.add(leaf.getName() + " names no code");
+            }
+        }
+        wrong.sort(String::compareTo);
+        assertEquals(List.of(), wrong,
+                "a message is a record whose components are its values, and it reports a rule");
+    }
+
+    private static Set<String> ownedByAMessage() {
+        Set<String> keys = new TreeSet<>();
+        for (Class<? extends Message> message : messages()) {
+            keys.add(MessageKeys.of(message));
+        }
+        return keys;
+    }
+
+    /**
+     * One entry belongs to one message.
+     *
+     * <p>The key is derived, which is what keeps a site from choosing one — it is not what keeps two
+     * messages from arriving at the same one. The derivation lowercases and drops a suffix, so it is
+     * not injective, and where two messages did collide every check below would read one entry twice
+     * and say nothing: the map they are gathered into would keep the last. Injectivity is held here
+     * rather than assumed of the function, which also survives the naming rule being changed.
+     */
+    @Test
+    void oneEntryBelongsToOneMessage() {
+        Map<String, List<String>> owners = new TreeMap<>();
+        for (Class<? extends Message> message : messages()) {
+            owners.computeIfAbsent(MessageKeys.of(message), _ -> new ArrayList<>())
+                    .add(message.getName());
+        }
+        List<String> shared = new ArrayList<>();
+        owners.forEach((key, byThese) -> {
+            if (byThese.size() > 1) {
+                shared.add(key + " is owned by " + String.join(" and ", byThese));
+            }
+        });
+        assertEquals(List.of(), shared, "two messages cannot render through one entry");
+    }
+
+    /** Every message renders through an entry, in every catalog that ships. */
+    @Test
+    void everyMessageHasAnEntryInEveryCatalog() throws IOException {
+        List<String> missing = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties entries = load(catalog.path());
+            for (Class<? extends Message> message : messages()) {
+                String key = MessageKeys.of(message);
+                if (entries.getProperty(key) == null) {
+                    missing.add(catalog.name() + ": " + key);
+                }
+            }
+        }
+        missing.sort(String::compareTo);
+        assertEquals(List.of(), missing, "a message with no entry renders as its own key");
+    }
+
+    /**
+     * A message says every value it carries.
+     *
+     * <p>This is the rule the messages are records for. A diagnostic that holds the clause it
+     * judged, or the group that supplied the field, and prints neither, is what a reader cannot act
+     * on — and it was writable for as long as the values were an untyped array beside a key. Here
+     * the entry is held to naming each one, in every language, so carrying a value and not showing
+     * it is not something a catalog can be edited into.
+     */
+    @Test
+    void everyMessageSaysEachValueItCarries() throws IOException {
+        List<String> silent = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties entries = load(catalog.path());
+            for (Class<? extends Message> message : messages()) {
+                String key = MessageKeys.of(message);
+                String written = entries.getProperty(key);
+                if (written == null) {
+                    continue;   // everyMessageHasAnEntryInEveryCatalog reports this one
+                }
+                for (String value : MessageValues.namesOf(message)) {
+                    if (!written.contains("{" + value + "}")) {
+                        silent.add(catalog.name() + ": " + key + " does not say `" + value + "`");
+                    }
+                }
+            }
+        }
+        silent.sort(String::compareTo);
+        assertEquals(List.of(), silent,
+                "these carry a value the reader is never shown; write it into the entry");
+    }
+
+    /** The other direction: a name in an entry is a value the message carries. */
+    @Test
+    void everyNamedPlaceholderIsAValueTheMessageCarries() throws IOException {
+        List<String> unknown = new ArrayList<>();
+        Map<String, Class<? extends Message>> byKey = new TreeMap<>();
+        for (Class<? extends Message> message : messages()) {
+            byKey.put(MessageKeys.of(message), message);
+        }
+        for (Catalog catalog : catalogs()) {
+            Properties entries = load(catalog.path());
+            for (Map.Entry<String, Class<? extends Message>> owned : byKey.entrySet()) {
+                String written = entries.getProperty(owned.getKey());
+                if (written == null) {
+                    continue;
+                }
+                Set<String> carried = new TreeSet<>(MessageValues.namesOf(owned.getValue()));
+                MessageTemplate parsed = MessageTemplate.parse(written);
+                for (String malformed : parsed.malformations()) {
+                    unknown.add(catalog.name() + ": " + owned.getKey() + " has " + malformed);
+                }
+                for (String named : parsed.names()) {
+                    if (!carried.contains(named)) {
+                        unknown.add(catalog.name() + ": " + owned.getKey() + " names `" + named
+                                + "`, which it does not carry");
+                    }
+                }
+            }
+        }
+        unknown.sort(String::compareTo);
+        assertEquals(List.of(), unknown, "an entry names a value nothing fills");
     }
 
     private static final Pattern KEY_LITERAL =

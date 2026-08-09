@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -206,12 +207,8 @@ public final class TypeOps {
         for (Type m : members) {
             TypeName name = memberName(m);
             if (name == null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1613, "check.union.members")
-                                .at(ret.pos()).args(Type.show(m)).build(),
-                        "`" + Type.show(m) + "` cannot be a union member: a member is a type that is"
-                                + " nominal, tells itself apart at run time, and can be written as a"
-                                + " `match` type arm");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1613, "check.union.members")
+                                .at(ret.pos()).args(Type.show(m)).build());
             }
             names.add(name);
         }
@@ -620,11 +617,9 @@ public final class TypeOps {
                 } else if (arg == Type.NOTHING) {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (!assignable(arg, bound, symbols) && !assignable(bound, arg, symbols)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                                     .at(pos).args(what, Type.show(bound), Type.show(arg))
-                                    .diff(Type.show(arg, bound), Type.show(bound, arg)).build(),
-                            what + ": expected " + bound + " but got " + arg);
+                                    .diff(Type.show(arg, bound), Type.show(bound, arg)).build());
                 }
             }
             case Type.ListOf p when arg instanceof Type.ListOf a ->
@@ -651,11 +646,9 @@ public final class TypeOps {
             }
             default -> {
                 if (!assignable(arg, param, symbols)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                                     .at(pos).args(what, Type.show(param), Type.show(arg))
-                                    .diff(Type.show(arg, param), Type.show(param, arg)).build(),
-                            what + ": expected " + param + " but got " + arg);
+                                    .diff(Type.show(arg, param), Type.show(param, arg)).build());
                 }
             }
         }
@@ -878,30 +871,32 @@ public final class TypeOps {
     /** Effective field name → type (included data flattened first, then own fields). */
     public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
         Map<String, Type> types = new LinkedHashMap<>();
+        // Which spread put each field here, so a collision names the group that supplied the earlier
+        // one. Reporting it against the taking data names a declaration that, where both fields came
+        // through spreads, holds no such field at all.
+        Map<String, String> suppliedBy = new LinkedHashMap<>();
         for (Ast.Name inc : data.includes()) {
             TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1015, "check.spread.notproduct")
-                                .at(inc.name().region()).args(inc.written()).build(),
-                        "cannot spread `..." + inc.written() + "` (not a product data)");
+                throw CompileException.of(Diagnostic.at(inc.name().region())
+                        .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
+                        .build());
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
                 if (types.put(e.getKey(), e.getValue()) != null) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1004, "e1004.msg").at(data.pos())
-                                    .args(e.getKey(), inc.written(), data.name()).build(),
-                            "Field `" + e.getKey() + "` from `..." + inc.written() + "` conflicts with a field of `"
-                                    + data.name() + "`.");
+                    throw CompileException.of(Diagnostic.at(inc.name().region())
+                            .say(new DataMessage.SpreadFieldCollision(
+                                    e.getKey(), inc.written(), suppliedBy.get(e.getKey())))
+                            .build());
                 }
+                suppliedBy.put(e.getKey(), "..." + inc.written());
             }
         }
         for (Ast.Field f : data.fields()) {
             if (types.put(f.name(), fieldType(f)) != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.declaredfield").at(f.pos())
-                                .args(f.name(), data.name()).build(),
-                        "duplicate field `" + f.name() + "` in `" + data.name() + "`");
+                throw CompileException.of(Diagnostic.at(f.pos())
+                        .say(new DataMessage.FieldIsDeclaredMoreThanOnceIn(f.name(), data.name()))
+                        .build());
             }
         }
         return types;
@@ -1062,15 +1057,6 @@ public final class TypeOps {
                 && d.fields().size() == 1
                 && d.fields().get(0).type() instanceof Ast.TypeRef base && "String".equals(base.name());
     }
-
-    /** How a refused {@code Map} key is described to a Java caller, in one place. Which types are
-     *  admitted is {@link #classifyConcreteMapKey}'s, and a message that listed them here would be a
-     *  second copy of that rule — which is what happened when the enumeration was admitted and three
-     *  of the four sentences went on naming four kinds. The kinds are named in the catalog's hint,
-     *  where a reader is told what to write instead. */
-    public static final String MAP_KEY_RULE =
-            "a Map crossing the boundary must be keyed by a type with a boundary text"
-                    + " representation (ADR-0040)";
 
     /**
      * Whether {@code key} may stand as a {@code Map} key in a signature. This is not the question the
@@ -1540,10 +1526,8 @@ public final class TypeOps {
     private static void requireEquality(Type t, Symbols symbols, Ast.TypeRef at, String key,
                                         String message) {
         if (!supportsEquality(t, symbols)) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1315, key)
-                            .at(at.pos()).args(Type.show(t)).build(),
-                    message + ": " + Type.show(t));
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1315, key)
+                            .at(at.pos()).args(Type.show(t)).build());
         }
     }
 
@@ -1551,10 +1535,8 @@ public final class TypeOps {
     private static Type typeArg(Ast.TypeRef ref, Symbols symbols, String key, int width,
                                 String message) {
         if (ref.arg() == null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1316, "check.typearg." + key)
-                            .at(ref.pos(), width).build(),
-                    message);
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1316, "check.typearg." + key)
+                            .at(ref.pos(), width).build());
         }
         return resolveTerm(ref.arg(), symbols);
     }
@@ -1576,30 +1558,23 @@ public final class TypeOps {
             String name = canonical.substring(dot + 1);
             String module = symbols.moduleOfQualifier(qualifier);
             if (module == null) {
-                return CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
+                return CompileException.of(Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
                                 .at(written.region()).args(qualifier, name)
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
-                                .build(),
-                        "no module named `" + qualifier + "`");
+                                .build());
             }
             boolean declared = symbols.contains(new TypeName(module, name));
-            return CompileException.of(
-                    Diagnostic.of(declared ? DiagnosticCode.E1507 : DiagnosticCode.E1506,
+            return CompileException.of(Diagnostic.of(declared ? DiagnosticCode.E1507 : DiagnosticCode.E1506,
                                     declared ? "check.qualified.notexposed" : "check.qualified.notdefined")
                             .at(written.region()).args(name, module)
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
-                            .build(),
-                    "`" + name + "` is not " + (declared ? "exposed by" : "defined in")
-                            + " `" + module + "`");
+                            .build());
         }
         Set<String> known = symbols.namesInScope();
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.type.msg")
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.type.msg")
                         .at(written.region())
                         .args(written.quoted())
                         .suggestion(Suggest.candidate(canonical, known))
-                        .build(),
-                "unknown type `" + written.quoted() + "`" + Suggest.hint(canonical, known));
+                        .build());
     }
 }

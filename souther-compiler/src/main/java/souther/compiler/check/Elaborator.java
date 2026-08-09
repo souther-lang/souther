@@ -83,11 +83,8 @@ public final class Elaborator {
         String key = bad instanceof TypeOps.UncomparableIn.MapKey
                 ? "check.map.key.function" : "check.set.function";
         String what = bad instanceof TypeOps.UncomparableIn.MapKey ? "key" : "element";
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1315, key)
-                        .at(c.pos()).args(Type.show(bad.type())).build(),
-                "this collection would have to compare " + Type.show(bad.type()) + " as its " + what
-                        + ", and a function has no value to compare");
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1315, key)
+                        .at(c.pos()).args(Type.show(bad.type())).build());
     }
 
     private static Core elaborating(Ast.Expr e, Scope env, CheckContext ctx,
@@ -122,17 +119,12 @@ public final class Elaborator {
                 Core tuple = elaborate(tg.tuple(), env, ctx);
                 Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1320, "check.tuple.pattern")
-                                    .at(tg.pos()).args(Type.show(tt)).build(),
-                            "a tuple pattern needs a tuple, got " + tt);
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1320, "check.tuple.pattern")
+                                    .at(tg.pos()).args(Type.show(tt)).build());
                 }
                 if (to.elements().size() != tg.arity()) {   // exact arity, in either direction (Elm)
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1320, "check.tuple.arity")
-                                    .at(tg.pos()).args(tg.arity(), to.elements().size()).build(),
-                            "this pattern binds " + tg.arity()
-                                    + " name(s) but the tuple has " + to.elements().size() + " element(s)");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1320, "check.tuple.arity")
+                                    .at(tg.pos()).args(tg.arity(), to.elements().size()).build());
                 }
                 yield new Core.TupleGet(tuple, tg.index(), tg.arity(),
                         to.elements().get(tg.index()), tg.pos());
@@ -141,12 +133,10 @@ public final class Elaborator {
                 Core operand = elaborate(neg.operand(), env, ctx);
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1319, "check.neg.msg")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1319, "check.neg.msg")
                                     .at(new Region(neg.pos(), region(neg.operand()).end()))
                                     .args(Type.show(t))
-                                    .build(),
-                            "unary minus needs an Int or Decimal, got " + t);
+                                    .build());
                 }
                 yield new Core.Neg(operand, t, neg.pos());
             }
@@ -197,11 +187,8 @@ public final class Elaborator {
             // so nothing has to be read off its applications
             case Ast.Block block when expected instanceof Type.FnOf want ->
                     elaborateFunctionValue(block, want.params(), env, ctx);
-            case Ast.Block block -> throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
-                            .at(block.pos()).build(),
-                    "a block is not a value: it may be passed as an argument or bound to a `let` and "
-                            + "applied, but it cannot be returned or stored in a data (spec 12.5)");
+            case Ast.Block block -> throw CompileException.of(Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
+                            .at(block.pos()).build());
             // What the name is was answered when the module's names were resolved; what is left here
             // is its type. A binding is looked up, a unit data is its own value (spec 8.4), and
             // anything else is not a value — reported below under the name that was written.
@@ -249,11 +236,9 @@ public final class Elaborator {
                     throw new Unanswerable(nd.pos());
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1018, "check.construct.no")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1018, "check.construct.no")
                                     .at(built.name().region()).args(built.name().quoted())
-                                    .build(),
-                            "cannot construct `" + built.name().quoted() + "`");
+                                    .build());
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
                 // the construction when it was inlined, so Core reads the binding it copies from
@@ -288,38 +273,32 @@ public final class Elaborator {
                 if (joined != null) {
                     yield new Core.If(cond, then, els, joined, iff.pos());
                 }
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
                                 .at(iff.pos(), 2)
                                 .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())),
                                         "check.if.then", Type.show(tt))
                                 .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())),
                                         "check.if.else", Type.show(et))
                                 .hint("check.if.hint")
-                                .build(),
-                        "if branches disagree: " + Type.show(tt) + " vs " + Type.show(et));
+                                .build());
             }
             case Ast.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
                 if (!(built instanceof Core.NewData construct)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E2012, "check.attempt.notconstruction")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2012, "check.attempt.notconstruction")
                                     .at(region(ic.construct()))
                                     .hint("check.attempt.notconstruction.hint")
-                                    .build(),
-                            "`as` attempts a construction, and this is not one");
+                                    .build());
                 }
                 // What decides the branch is the invariant, so a type with none has no failing side
                 // and the else value could never be reached. Reported rather than compiled into a
                 // branch that is not one — the same call a unit data's forbidden invariant makes.
                 if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E2013, "check.attempt.noinvariant")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2013, "check.attempt.noinvariant")
                                     .at(region(ic.construct()))
                                     .args(construct.typeName().name())
                                     .hint("check.attempt.noinvariant.hint")
-                                    .build(),
-                            "`" + construct.typeName().name() + "` has no invariant to attempt");
+                                    .build());
                 }
                 checkArmsAnswerClauses(ic, construct.typeName(), ctx.symbols());
                 // The binder names the built value, so the success branch reads it at the data's own
@@ -335,16 +314,14 @@ public final class Elaborator {
                     arms.add(new Core.ElseArm(arm.clause(), body));
                     Type next = TypeOps.join(joined, body.type());
                     if (next == null) {
-                        throw CompileException.of(
-                                Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
+                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
                                         .at(ic.pos(), 2)
                                         .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
                                                 "check.if.then", Type.show(then.type()))
                                         .secondary(Region.ofWidth(arm.body().pos(), width(arm.body())),
                                                 "check.if.else", Type.show(body.type()))
                                         .hint("check.if.hint")
-                                        .build(),
-                                "if branches disagree: " + Type.show(joined) + " vs " + Type.show(body.type()));
+                                        .build());
                     }
                     joined = next;
                 }
@@ -432,14 +409,10 @@ public final class Elaborator {
                 // the field in every case.
                 d = d.hint("check.access.sum.unshared", fa.field());
             }
-            throw CompileException.of(d.build(),
-                    "cannot read a field `" + fa.field() + "` on the sum `" + Type.show(target)
-                            + "`: a sum has no fields of its own; open it with `match`");
+            throw CompileException.of(d.build());
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1321, "check.access")
-                        .at(fa.name().region()).args(fa.field()).build(),
-                "cannot access field `" + fa.field() + "` on this value");
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1321, "check.access")
+                        .at(fa.name().region()).args(fa.field()).build());
     }
 
     /**
@@ -497,12 +470,9 @@ public final class Elaborator {
         if (narrowGot == null) {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
                         .at(stepArg.pos()).args(fnName, Type.show(narrowGot),
-                                Type.show(TypeOps.substitute(declaredStep.result(), bind))).build(),
-                "the step of " + fnName + " returns " + Type.show(narrowGot)
-                        + ", but the accumulator is " + Type.show(TypeOps.substitute(declaredStep.result(), bind)));
+                                Type.show(TypeOps.substitute(declaredStep.result(), bind))).build());
     }
 
     /** Elaborates a block argument at {@code paramTypes}; the node it returns carries the
@@ -515,38 +485,25 @@ public final class Elaborator {
             Core value = elaborate(arg, env, ctx);
             if (value.type() instanceof Type.FnOf fn) {
                 if (fn.params().size() != paramTypes.size()) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1802, "check.fn.callarity")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.callarity")
                                     .at(arg.pos()).args(fnName, paramTypes.size(), fn.params().size())
-                                    .build(),
-                            fnName + " calls its function with " + paramTypes.size()
-                                    + " argument(s), but it takes " + fn.params().size());
+                                    .build());
                 }
                 for (int i = 0; i < paramTypes.size(); i++) {
                     if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), ctx.symbols())) {
-                        throw CompileException.of(
-                                Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
+                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
                                         .at(arg.pos()).args(fnName, Type.show(paramTypes.get(i)),
-                                                Type.show(fn.params().get(i))).build(),
-                                fnName + "'s element type " + paramTypes.get(i)
-                                        + " is not acceptable to the function, which takes "
-                                        + fn.params().get(i));
+                                                Type.show(fn.params().get(i))).build());
                     }
                 }
                 return value;
             }
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1804, "check.fn.expectsblock")
-                            .at(arg.pos()).args(fnName).build(),
-                    fnName + " expects a block, e.g. `" + fnName
-                            + "((acc, x) -> ..., seed, xs)` (spec 12.5)");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1804, "check.fn.expectsblock")
+                            .at(arg.pos()).args(fnName).build());
         }
         if (block.params().size() != paramTypes.size()) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockarity")
-                            .at(block.pos()).args(paramTypes.size(), block.params().size()).build(),
-                    "this block takes " + paramTypes.size() + " parameter(s), got "
-                            + block.params().size());
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockarity")
+                            .at(block.pos()).args(paramTypes.size(), block.params().size()).build());
         }
         Scope inner = env;
         for (int i = 0; i < paramTypes.size(); i++) {
@@ -587,24 +544,18 @@ public final class Elaborator {
         String opened = li.opens().written();
         TypeName layer = li.opens().denotes();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1206, "check.open.notnewtype")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.open.notnewtype")
                             .at(li.pos()).args(opened)
-                            .hint("check.open.notnewtype.hint").build(),
-                    "`" + opened + "` is not a newtype, so a binding cannot open it with `"
-                            + opened + "(...)`; a value that may or may not have a shape is opened"
-                            + " with `match`");
+                            .hint("check.open.notnewtype.hint").build());
         }
         // compared as types, not as the text of a name: a type is reachable through the module that
         // declares it, so `probe.a.Tags` and an imported bare `Tags` are the one type
         if (!(valueType instanceof Type.Ref r) || !r.name().equals(layer)) {
             String shown = layer.name();
             String actual = Type.show(valueType);
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1206, "check.open.mismatch")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.open.mismatch")
                             .at(li.pos()).args(shown, actual)
-                            .diff(actual, shown).build(),
-                    "this pattern opens `" + shown + "`, but the value is `" + actual + "`");
+                            .diff(actual, shown).build());
         }
     }
 
@@ -622,12 +573,9 @@ public final class Elaborator {
         if (TypeOps.assignable(valueType, declared, symbols)) {
             return;
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1317, "check.let.annotation")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.let.annotation")
                         .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
-                        .diff(Type.show(valueType, declared), Type.show(declared, valueType)).build(),
-                "the binding `" + li.name() + "` declares " + Type.show(declared)
-                        + " but its value is " + Type.show(valueType));
+                        .diff(Type.show(valueType, declared), Type.show(declared, valueType)).build());
     }
 
     /**
@@ -970,11 +918,8 @@ public final class Elaborator {
      * describes a function. Raised from the surface check below and from the value path, so the two
      * shapes a function binding takes (a bare lambda, one an {@code if} chooses) read the same. */
     static CompileException functionAnnotation(Ast.LetIn li) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1810, "check.fn.annotation")
-                        .at(li.pos()).args(li.name()).hint("check.fn.annotation.hint").build(),
-                "the binding `" + li.name() + "` is a function, so it takes no annotation: a function"
-                        + " type may be written only in a helper's parameter (spec 13.1)");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1810, "check.fn.annotation")
+                        .at(li.pos()).args(li.name()).hint("check.fn.annotation.hint").build());
     }
 
     /**
@@ -991,12 +936,9 @@ public final class Elaborator {
                 throw functionAnnotation(li);
             }
             if (declared.params().size() != lambda.params().size()) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
                                 .at(lambda.pos())
-                                .args(lambda.params().size(), declared.params().size()).build(),
-                        "this lambda takes " + lambda.params().size()
-                                + " parameter(s) but its type states " + declared.params().size());
+                                .args(lambda.params().size(), declared.params().size()).build());
             }
         }
         TypeChecker.forEachChild(e, sub -> checkAnnotatedLambdaBindings(sub, symbols));
@@ -1018,22 +960,15 @@ public final class Elaborator {
         List<List<Type>> uses = new ArrayList<>();
         collectApplications(binder, body, env, ctx, uses, Set.of());
         if (uses.isEmpty()) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1808, "check.fn.noinfer")
-                            .at(body.pos()).args(binder.name()).build(),
-                    "cannot infer the type of the function `" + binder.name() + "`: write its type"
-                            + " (`let " + binder.name() + ": (Int) -> Bool = ...`), or apply it in"
-                            + " this scope so the parameter types can be read off the application");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1808, "check.fn.noinfer")
+                            .at(body.pos()).args(binder.name()).build());
         }
         List<Type> first = uses.get(0);
         for (List<Type> u : uses) {
             if (!u.equals(first)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1807, "check.fn.difftypes")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1807, "check.fn.difftypes")
                                 .at(body.pos()).args(binder.name(), first.toString(), u.toString())
-                                .build(),
-                        "the function `" + binder.name() + "` is applied with different argument"
-                                + " types: " + first + " vs " + u);
+                                .build());
             }
         }
         return first;
@@ -1216,11 +1151,8 @@ public final class Elaborator {
         return switch (value) {
             case Ast.Block b -> {
                 if (b.params().size() != paramTypes.size()) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
-                                    .at(b.pos()).args(b.params().size(), paramTypes.size()).build(),
-                            "this lambda takes " + b.params().size() + " parameter(s) but is applied with "
-                                    + paramTypes.size());
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
+                                    .at(b.pos()).args(b.params().size(), paramTypes.size()).build());
                 }
                 Scope inner = env;
                 for (int i = 0; i < paramTypes.size(); i++) {
@@ -1236,10 +1168,8 @@ public final class Elaborator {
                 Type t = then.type();
                 Type f = els.type();
                 if (!t.equals(f)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1807, "check.fn.branchtypes")
-                                    .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build(),
-                            "the two branches produce different function types: " + Type.show(t) + " vs " + Type.show(f));
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1807, "check.fn.branchtypes")
+                                    .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build());
                 }
                 yield new Core.If(cond, then, els, t, iff.pos());
             }
@@ -1273,11 +1203,8 @@ public final class Elaborator {
 
     static void rejectBuiltinShadow(String name, SourcePos pos) {
         if (BUILTIN_VALUES.contains(name)) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1019, "check.builtin.shadow")
-                            .at(pos, name.length()).args(name).build(),
-                    "`" + name + "` is a built-in value and cannot be used as a binding name — it would"
-                            + " shadow the built-in; choose another name");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1019, "check.builtin.shadow")
+                            .at(pos, name.length()).args(name).build());
         }
     }
 
@@ -1319,14 +1246,12 @@ public final class Elaborator {
     static void requireType(Ast.Expr e, Type actual, Type expected,
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1317, "check.type.mismatch.msg")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.type.mismatch.msg")
                             .at(region(e))
                             .args(what)
                             .diff(Type.show(actual, expected), Type.show(expected, actual))
                             .hint("check.type.mismatch.hint")
-                            .build(),
-                    what + " must be " + expected + " but is " + actual);
+                            .build());
         }
     }
 
@@ -1371,18 +1296,14 @@ public final class Elaborator {
             case null, default -> null;
         };
         if (denotes != null) {
-            return CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1024, "check.notavalue")
-                            .at(v.written().region()).args(v.name(), denotes).build(),
-                    "`" + v.name() + "` is " + denotes + ", and cannot be held as a value here");
+            return CompileException.of(Diagnostic.of(DiagnosticCode.E1024, "check.notavalue")
+                            .at(v.written().region()).args(v.name(), denotes).build());
         }
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                         .at(v.written().region())
                         .args(v.name())
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))
-                        .build(),
-                "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.spellings()));
+                        .build());
     }
 
     /**
@@ -1398,20 +1319,9 @@ public final class Elaborator {
         if (!some && !name.equals("None")) {
             return;
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1303, some ? "e1303.some" : "e1303.none")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1303, some ? "e1303.some" : "e1303.none")
                         .at(pos, name.length())
-                        .hint(some ? "e1303.some.hint" : "e1303.none.hint").build(),
-                some
-                        ? "`Some(...)` is not a call: a value written into a `?` field is wrapped for"
-                                + " you, and that is the only place an optional is made. Where a `?`"
-                                + " field is being given a value, write the value on its own;"
-                                + " elsewhere an optional is only read, never made."
-                        : "`None` is the empty value of a `?` field, and nothing here is asking for"
-                                + " one. Where the model owns the absence, make it a case of its own"
-                                + " sum. Absence of that kind does not reach `List.filterMap`, whose"
-                                + " step has to answer an optional: use `List.flatMap` over a step"
-                                + " answering a list of nought or one.");
+                        .hint(some ? "e1303.some.hint" : "e1303.none.hint").build());
     }
 
     /**
@@ -1448,46 +1358,36 @@ public final class Elaborator {
             String name = arm.clause().get();
             answered.add(name);
             if (!named.contains(name)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2014, "check.attempt.unknownclause")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2014, "check.attempt.unknownclause")
                                 .at(arm.pos(), name.length())
                                 .args(name, typeName.name())
                                 .hint("check.attempt.unknownclause.hint",
                                         named.isEmpty() ? "-" : String.join(", ", named))
-                                .build(),
-                        "`" + typeName.name() + "` has no invariant clause named `" + name + "`");
+                                .build());
             }
         }
         List<String> missing = new ArrayList<>(named);
         missing.removeAll(answered);
         if (!missing.isEmpty()) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E2015, "check.attempt.clauseunanswered")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2015, "check.attempt.clauseunanswered")
                             .at(ic.pos(), 2)
                             .args(String.join(", ", missing), typeName.name())
                             .hint("check.attempt.clauseunanswered.hint")
-                            .build(),
-                    "these clauses of `" + typeName.name() + "` have no arm: "
-                            + String.join(", ", missing));
+                            .build());
         }
         if (unnamed && !wildcard) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E2016, "check.attempt.unnamedunanswered")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2016, "check.attempt.unnamedunanswered")
                             .at(ic.pos(), 2)
                             .args(typeName.name())
                             .hint("check.attempt.unnamedunanswered.hint")
-                            .build(),
-                    "`" + typeName.name() + "` has clauses carrying no name, and no `| _ ->` answers"
-                            + " them");
+                            .build());
         }
         if (!unnamed && wildcard) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E2017, "check.attempt.nothingunnamed")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2017, "check.attempt.nothingunnamed")
                             .at(ic.pos(), 2)
                             .args(typeName.name())
                             .hint("check.attempt.nothingunnamed.hint")
-                            .build(),
-                    "every clause of `" + typeName.name() + "` is named, so `| _ ->` answers nothing");
+                            .build());
         }
     }
 

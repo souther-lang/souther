@@ -78,7 +78,7 @@ class CompileDecimalDivideTest {
                     | Decimal as q -> Out { n = 0 }
                     | DivisionByZero -> Out { n = 0 }
                 """));
-        assertTrue(four.getMessage().contains("Int.divide takes 2"), four.getMessage());
+        assertTrue(four.getMessage().contains("`Int.divide` takes 2"), four.getMessage());
 
         CompileException two = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
@@ -89,7 +89,7 @@ class CompileDecimalDivideTest {
                     | Int as q -> Out { n = q }
                     | DivisionByZero -> Out { n = 0 }
                 """));
-        assertTrue(two.getMessage().contains("Decimal.divide takes 4"), two.getMessage());
+        assertTrue(two.getMessage().contains("`Decimal.divide` takes 4"), two.getMessage());
     }
 
     @Test

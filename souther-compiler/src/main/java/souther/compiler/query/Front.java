@@ -514,10 +514,8 @@ public final class Front {
             if (id.equals(layout.idOfModule().get(m.name()))) {
                 return Answer.of(m.name());
             }
-            return Answer.absent(Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1503, "check.module.duplicate")
-                            .at(m.pos()).args(m.name()).build(),
-                    "duplicate module `" + m.name() + "`"));
+            return Answer.absent(Report.raised(Diagnostic.of(DiagnosticCode.E1503, "check.module.duplicate")
+                            .at(m.pos()).args(m.name()).build()));
         }
     }
 
@@ -612,10 +610,8 @@ public final class Front {
             }
             SourcePos pos = db.ask(new Parsed(id)).present()
                     ? db.ask(new Parsed(id)).value().module().pos() : null;
-            return Answer.absent(Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1907, "check.example.notarget")
-                            .at(pos).args(target).build(),
-                    "an `examples for " + target + "` file names a module that is not being compiled"));
+            return Answer.absent(Report.raised(Diagnostic.of(DiagnosticCode.E1907, "check.example.notarget")
+                            .at(pos).args(target).build()));
         }
     }
 
@@ -679,10 +675,8 @@ public final class Front {
             if (PublishedModule.read(name, path.declarations()) == null) {
                 return Answer.of(Boolean.FALSE);
             }
-            return Answer.absent(Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1503, "check.module.shadowspath")
-                            .args(name).hint("check.module.shadowspath.hint", name).build(),
-                    "module `" + name + "` is compiled here and is also on the path"));
+            return Answer.absent(Report.raised(Diagnostic.of(DiagnosticCode.E1503, "check.module.shadowspath")
+                            .args(name).hint("check.module.shadowspath.hint", name).build()));
         }
     }
 
@@ -756,23 +750,15 @@ public final class Front {
      * when the name is the module's to take. */
     static Report reservedNamespace(String name, SourcePos pos) {
         if (name.equals(RESERVED) || name.startsWith(RESERVED + ".")) {
-            return Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1502, "check.module.reserved")
-                            .at(pos).args(name).build(),
-                    "module `" + name + "` is in the reserved `" + RESERVED + "` namespace: the"
-                            + " compiler ships souther.string / souther.list / souther.map /"
-                            + " souther.bool, and a user module cannot take a reserved name.");
+            return Report.raised(Diagnostic.of(DiagnosticCode.E1502, "check.module.reserved")
+                            .at(pos).args(name).build());
         }
         // The short qualifiers are how the standard library is reached (`List.map`, `import
         // String`); a user module by one of these names would shadow the library and could not be
         // imported.
         if (Prelude.isQualifier(name)) {
-            return Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1502, "check.module.qualifier")
-                            .at(pos).args(name).build(),
-                    "module `" + name + "` uses a name reserved for the standard-library qualifier `"
-                            + name + "` (as in `" + name + ".…` / `import " + name + " { … }`); pick"
-                            + " another module name.");
+            return Report.raised(Diagnostic.of(DiagnosticCode.E1502, "check.module.qualifier")
+                            .at(pos).args(name).build());
         }
         return null;
     }

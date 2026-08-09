@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -250,11 +251,8 @@ public final class Names {
             // declare a behavior by it.
             String last = dot < 0 ? "" : written.substring(dot + 1);
             if (last.equals("decoder") || last.equals("encoder")) {
-                return nothing(ref, Report.raised(
-                        Diagnostic.of(DiagnosticCode.E1703, "check.pipe.boundary")
-                                .at(ref.pos()).build(),
-                        "decode/encode are boundary edges, not pipeline stages; `>->` composes"
-                                + " behaviors only (spec 14.1)"));
+                return nothing(ref, Report.raised(Diagnostic.of(DiagnosticCode.E1703, "check.pipe.boundary")
+                                .at(ref.pos()).build()));
             }
             return behavior(ref, this::unknownBehavior);
         }
@@ -266,13 +264,10 @@ public final class Names {
          * name denote — asked of a clause rather than of a stage.
          */
         Ast.Var required(Ast.Var ref, String by) {
-            return behavior(ref, (name, candidates) -> Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1607, "e1607.unknown")
+            return behavior(ref, (name, candidates) -> Report.raised(Diagnostic.of(DiagnosticCode.E1607, "e1607.unknown")
                             .at(name.written().region()).args(by, name.name())
                             .suggestion(Suggest.candidate(name.name(), candidates))
-                            .hint("e1607.unknown.hint").build(),
-                    "`behavior " + by + "` declares `depends on " + name.name() + "`, which is not a"
-                            + " behavior in scope" + Suggest.hint(name.name(), candidates)));
+                            .hint("e1607.unknown.hint").build()));
         }
 
         /** A name that must denote a behavior, with what to say when none does. */
@@ -293,10 +288,8 @@ public final class Names {
                 return bare(ref, bare, unknown);   // this module, named through itself
             }
             if (!db.ask(new Front.ModuleNames()).value().contains(target)) {
-                return nothing(ref, Report.raised(
-                        Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
-                                .at(ref.pos()).args(qualifier, bare).build(),
-                        "no module named `" + qualifier + "`"));
+                return nothing(ref, Report.raised(Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
+                                .at(ref.pos()).args(qualifier, bare).build()));
             }
             Answer<Set<String>> declared = db.ask(new Front.Behaviors(target));
             if (!declared.present()) {
@@ -352,12 +345,9 @@ public final class Names {
         private Report unknownBehavior(Ast.Var ref, Set<String> candidates) {
             WrittenName written = ref.written();
             String name = written.canonical();
-            return Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1023, "check.unknown.behavior.msg")
+            return Report.raised(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.behavior.msg")
                             .at(written.region()).args(written.quoted())
-                            .suggestion(Suggest.candidate(name, candidates)).build(),
-                    "unknown behavior `" + written.quoted() + "` in pipeline"
-                            + Suggest.hint(name, candidates));
+                            .suggestion(Suggest.candidate(name, candidates)).build());
         }
 
         /** Records why a name denotes nothing, and gives it the name that says so. */
@@ -556,10 +546,8 @@ public final class Names {
                 Set<String> exposed = registry.exposedBy(imp.module());
                 for (String imported : imp.names()) {
                     if (!exposed.contains(imported)) {
-                        reports.add(Report.raised(
-                                Diagnostic.of(DiagnosticCode.E1507, "check.import.notexposed")
-                                        .at(imp.pos()).args(imported, imp.module()).build(),
-                                "`" + imported + "` is not exposed by `" + imp.module() + "`"));
+                        reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1507, "check.import.notexposed")
+                                        .at(imp.pos()).args(imported, imp.module()).build()));
                         nameless(scope, List.of(imported));
                         continue;
                     }
@@ -571,10 +559,8 @@ public final class Names {
                         if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
                             continue;
                         }
-                        reports.add(Report.raised(
-                                Diagnostic.of(DiagnosticCode.E1506, "check.import.notdefined")
-                                        .at(imp.pos()).args(imported, imp.module()).build(),
-                                "`" + imported + "` is not defined in `" + imp.module() + "`"));
+                        reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1506, "check.import.notdefined")
+                                        .at(imp.pos()).args(imported, imp.module()).build()));
                         nameless(scope, List.of(imported));
                         continue;
                     }
@@ -821,7 +807,7 @@ public final class Names {
                             || used.contains(new Use(imported.text(), imp.module(), imported.text()))) {
                         continue;
                     }
-                    reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1922, "check.import.unused").warning()
+                    reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1922, "check.import.unused")
                             .at(imported.written().region())
                             .args(imported.written().quoted())
                             .hint("check.import.unused.hint")
@@ -1368,9 +1354,7 @@ public final class Names {
                     // The reference that closes the cycle is written here, so this is the file to
                     // quote. Everything from the module it names round to this one is in the cycle,
                     // and none of them can be compiled — each needs an answer from the next.
-                    found.putIfAbsent(name, Report.raised(
-                            Diagnostic.of(DiagnosticCode.E1501, "e1501.msg").at(dep.pos()).build(),
-                            "Cyclic module dependency detected."));
+                    found.putIfAbsent(name, Report.raised(Diagnostic.of(DiagnosticCode.E1501, "e1501.msg").at(dep.pos()).build()));
                     members.addAll(stack.subList(closes, stack.size()));
                     continue;
                 }
@@ -1429,10 +1413,8 @@ public final class Names {
     }
 
     static Report unknownModule(Ast.Import imp) {
-        return Report.raised(
-                Diagnostic.of(DiagnosticCode.E1504, "check.import.unknownmodule")
-                        .at(imp.pos()).args(imp.module()).build(),
-                "unknown module `" + imp.module() + "`");
+        return Report.raised(Diagnostic.of(DiagnosticCode.E1504, "check.import.unknownmodule")
+                        .at(imp.pos()).args(imp.module()).build());
     }
 
     /**
@@ -1448,11 +1430,9 @@ public final class Names {
         if (taken == null) {
             return null;
         }
-        return Report.raised(
-                Diagnostic.of(DiagnosticCode.E1508, "check.import.aliastaken")
+        return Report.raised(Diagnostic.of(DiagnosticCode.E1508, "check.import.aliastaken")
                         .at(imp.pos()).args(imp.alias(), taken)
-                        .hint("check.import.aliastaken.hint").build(),
-                "the alias `" + imp.alias() + "` is already how `" + taken + "` is named here");
+                        .hint("check.import.aliastaken.hint").build());
     }
 
     /**
@@ -1479,12 +1459,8 @@ public final class Names {
             // of that name hides it — from every module, since the qualifier is not this module's to
             // shadow. Refused where it is declared, as a reserved module name is (see Front).
             if (Prelude.isQualifier(def.name())) {
-                reports.add(Report.raised(
-                        Diagnostic.of(DiagnosticCode.E1502, "check.data.qualifier")
-                                .at(def.pos()).args(def.name()).build(),
-                        "data `" + def.name() + "` uses a name reserved for the standard-library"
-                                + " qualifier `" + def.name() + "` (as in `" + def.name()
-                                + ".…`); pick another name"));
+                reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1502, "check.data.qualifier")
+                                .at(def.pos()).args(def.name()).build()));
             }
             declared.put(def.name(), def);
         }
@@ -1496,11 +1472,8 @@ public final class Names {
             if (implementing.contains(fn.name()) || !declared.containsKey(fn.name())) {
                 continue;
             }
-            reports.add(Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1012, "check.dup.valuename")
-                            .at(fn.pos()).args(fn.name()).build(),
-                    "`let " + fn.name() + "` and data `" + fn.name()
-                            + "` are one name where a value is written; rename one"));
+            reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1012, "check.dup.valuename")
+                            .at(fn.pos()).args(fn.name()).build()));
         }
         // What this module declares under a name, whichever kind of declaration it is: a data, a
         // `let`, a behavior. A behavior and its `let` are one of them, so the set is what is asked
@@ -1565,20 +1538,17 @@ public final class Names {
      */
     private static Report importCollision(String name, Ast.Import imp, Ast.Import earlier) {
         if (earlier == null) {
-            return Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1508, "check.import.conflict")
-                            .at(imp.pos()).args(name).hint("check.import.conflict.hint").build(),
-                    "imported `" + name + "` conflicts with a local definition");
+            return Report.raised(Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(name))
+                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
+                            .build());
         }
         Diagnostic.Builder b = Diagnostic.of(DiagnosticCode.E1508, "check.import.duplicate").at(imp.pos()).args(name, earlier.module(), imp.module())
                 .secondary(Region.point(earlier.pos()), "check.import.duplicate.first", name,
                         earlier.module());
-        return Report.raised(
-                (earlier.module().equals(imp.module())
+        return Report.raised((earlier.module().equals(imp.module())
                         ? b.hint("check.import.duplicate.same.hint")
-                        : b.hint("check.import.duplicate.hint", name, imp.module())).build(),
-                "`" + name + "` is imported from both `" + earlier.module() + "` and `"
-                        + imp.module() + "`; one name cannot stand for two types");
+                        : b.hint("check.import.duplicate.hint", name, imp.module())).build());
     }
 
     /** Every type written in {@code m}: its data's fields, and its behaviors' and fns' signatures. */

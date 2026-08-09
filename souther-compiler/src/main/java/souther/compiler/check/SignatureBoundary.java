@@ -157,24 +157,15 @@ final class SignatureBoundary {
 
     private static CompileException union(Type.Union u, Where where) {
         String shown = Type.show(u);
-        return where.refusal(DiagnosticCode.E1312, "check.param.union",
-                "parameter `" + where.name() + "` has an anonymous union type `" + shown
-                        + "`; a parameter type must be a single named type — declare `data ... = "
-                        + shown + "` and take that name (spec 8.6, 12.2)", shown);
+        return where.refusal(DiagnosticCode.E1312, "check.param.union", shown);
     }
 
     /** A tuple is expression-level only: it has no external representation, so it cannot cross a
      *  decoder or an encoder. A tuple in a helper's signature is fine — it never touches a codec. */
     private static CompileException tuple(Where where) {
         return where.parameter()
-                ? where.refusal(DiagnosticCode.E1311, "check.param.tuple",
-                        "parameter `" + where.name() + "` is a tuple; a tuple has no external"
-                                + " representation and cannot cross the boundary, so a behavior's"
-                                + " input must be a named data")
-                : where.refusal(DiagnosticCode.E1311, "check.output.tuple",
-                        "behavior `" + where.name() + "` outputs a tuple; a tuple cannot cross the"
-                                + " boundary, so a behavior's output must be a named data or a sum"
-                                + " of them");
+                ? where.refusal(DiagnosticCode.E1311, "check.param.tuple")
+                : where.refusal(DiagnosticCode.E1311, "check.output.tuple");
     }
 
     /** A function has no external representation at any depth, since one hides as easily inside a
@@ -182,14 +173,8 @@ final class SignatureBoundary {
     private static CompileException function(Type whole, Where where) {
         String shown = Type.show(whole);
         return where.parameter()
-                ? where.refusal(DiagnosticCode.E1311, "check.param.function",
-                        "parameter `" + where.name() + "` carries a function (" + shown
-                                + "); a function has no external representation, so it cannot cross"
-                                + " the boundary into a behavior", shown)
-                : where.refusal(DiagnosticCode.E1311, "check.output.function",
-                        "behavior `" + where.name() + "` outputs a function (" + shown
-                                + "); a function has no external representation, so it cannot cross"
-                                + " the boundary out of a behavior", shown);
+                ? where.refusal(DiagnosticCode.E1311, "check.param.function", shown)
+                : where.refusal(DiagnosticCode.E1311, "check.output.function", shown);
     }
 
     /**
@@ -201,50 +186,26 @@ final class SignatureBoundary {
     private static CompileException optional(Type.OptionOf o, Where where) {
         String shown = Type.show(o);
         return where.parameter()
-                ? where.hinted(DiagnosticCode.E1313, "check.param.optional", "check.optional.hint",
-                        "parameter `" + where.name() + "` carries an optional (" + shown + "); "
-                                + OPTIONAL_ADVICE, shown)
-                : where.hinted(DiagnosticCode.E1313, "check.output.optional", "check.optional.hint",
-                        "the output of `" + where.name() + "` carries an optional (" + shown + "); "
-                                + OPTIONAL_ADVICE, shown);
+                ? where.hinted(DiagnosticCode.E1313, "check.param.optional", "check.optional.hint", shown)
+                : where.hinted(DiagnosticCode.E1313, "check.output.optional", "check.optional.hint", shown);
     }
 
     /** What to write instead, said of the optional rather than of the position it was found in: the
      *  optional a collection carries is not the behavior's own answer, so advice naming the
      *  behavior's type would be advice about something else. */
-    private static final String OPTIONAL_ADVICE =
-            "a model type has to own the absence where the optional stands — put it on a `?` field of"
-                    + " a data, or name it as a case of a sum, which where the whole output is the"
-                    + " optional is written directly as `-> A | Missing`";
-
     private static CompileException foreignName(TypeName foreign, Where where) {
         return where.parameter()
-                ? where.hinted(DiagnosticCode.E1325, "check.param.foreignname",
-                        "check.foreignname.hint",
-                        "parameter `" + where.name() + "` takes `" + foreign.name() + "`, which the"
-                                + " language declares rather than this model; " + FOREIGN_NAME_ADVICE,
-                        foreign.name())
-                : where.hinted(DiagnosticCode.E1325, "check.output.foreignname",
-                        "check.foreignname.hint",
-                        "`" + where.name() + "` answers `" + foreign.name() + "`, which the language"
-                                + " declares rather than this model; " + FOREIGN_NAME_ADVICE,
-                        foreign.name());
+                ? where.hinted(DiagnosticCode.E1325, "check.param.foreignname", "check.foreignname.hint", foreign.name())
+                : where.hinted(DiagnosticCode.E1325, "check.output.foreignname", "check.foreignname.hint", foreign.name());
     }
 
     /** What to write instead. Said as declaring a type rather than as supplying a codec: the name is
      *  refused for whose vocabulary it is, and a codec for it would not change that. */
-    private static final String FOREIGN_NAME_ADVICE =
-            "declare this as a type of the model and write that at the boundary";
-
     private static CompileException notAKey(Type key, Where where) {
         String shown = Type.show(key);
         return where.parameter()
-                ? where.hinted(DiagnosticCode.E1314, "check.map.key.param", "check.map.key.hint",
-                        "parameter `" + where.name() + "` carries a Map keyed by " + shown + "; "
-                                + TypeOps.MAP_KEY_RULE, shown)
-                : where.hinted(DiagnosticCode.E1314, "check.map.key.output", "check.map.key.hint",
-                        "behavior `" + where.name() + "` outputs a Map keyed by " + shown + "; "
-                                + TypeOps.MAP_KEY_RULE, shown);
+                ? where.hinted(DiagnosticCode.E1314, "check.map.key.param", "check.map.key.hint", shown)
+                : where.hinted(DiagnosticCode.E1314, "check.map.key.output", "check.map.key.hint", shown);
     }
 
     /**
@@ -278,14 +239,12 @@ final class SignatureBoundary {
             return region == null ? builder.at(pos) : builder.at(region);
         }
 
-        CompileException refusal(DiagnosticCode code, String key, String english, Object... rest) {
-            return CompileException.of(diagnostic(code, key).args(args(rest)).build(), english);
+        CompileException refusal(DiagnosticCode code, String key, Object... rest) {
+            return CompileException.of(diagnostic(code, key).args(args(rest)).build());
         }
 
-        CompileException hinted(DiagnosticCode code, String key, String hint, String english,
-                                Object... rest) {
-            return CompileException.of(
-                    diagnostic(code, key).args(args(rest)).hint(hint).build(), english);
+        CompileException hinted(DiagnosticCode code, String key, String hint, Object... rest) {
+            return CompileException.of(diagnostic(code, key).args(args(rest)).hint(hint).build());
         }
 
         /** What the subject is called, then whatever the rule adds. Every one of these messages

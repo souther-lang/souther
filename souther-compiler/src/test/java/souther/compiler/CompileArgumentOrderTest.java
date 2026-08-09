@@ -40,7 +40,7 @@ class CompileArgumentOrderTest {
 
         String message = e.getMessage();
         assertTrue(message.contains("List.map"), message);
-        assertTrue(message.contains("argument 2"), message);   // where the lambda was written
+        assertTrue(message.contains("Argument 2"), message);   // where the lambda was written
         assertTrue(message.contains("xs"), message);           // the parameter that takes a value
         assertFalse(message.contains("not a value"), message);
     }

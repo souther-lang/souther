@@ -818,7 +818,7 @@ public final class InvariantChecker {
             case UNKNOWN -> {
                 if (!attempted) {
                     warnings.add(Diagnostic.of(DiagnosticCode.E2011, "check.invariant.unproven").at(pos).args(type.name())
-                            .hint("check.invariant.reify", type.name()).warning().build());
+                            .hint("check.invariant.reify", type.name()).build());
                 }
             }
             // Nothing was asked here, so nothing is said. Whether that is the right thing to say of a
@@ -1111,10 +1111,8 @@ public final class InvariantChecker {
      * knows which of the two decided it and not what within the second did, so neither message names
      * a guard. */
     private void reportViolation(Ast.Data type, SourcePos pos, String reason) {
-        errors.add(CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2010, reason)
-                        .at(pos).args(type.name()).build(),
-                "constructing `" + type.name() + "` here violates its invariant"));
+        errors.add(CompileException.of(Diagnostic.of(DiagnosticCode.E2010, reason)
+                        .at(pos).args(type.name()).build()));
     }
 
     // --- introducing a binding -----------------------------------------------------------------

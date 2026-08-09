@@ -1335,7 +1335,7 @@ public final class Adequacy {
         private static Report warning(Finding finding) {
             DiagnosticCode code = finding.code().orElseThrow();
             souther.compiler.diag.Diagnostic.Builder built =
-                    souther.compiler.diag.Diagnostic.of(code, messageKey(finding.kind())).warning()
+                    souther.compiler.diag.Diagnostic.of(code, messageKey(finding.kind()))
                             .at(finding.at())
                             .args(finding.args().toArray());
             switch (finding.kind()) {

@@ -114,10 +114,8 @@ public final class Requirements {
         }
         if (!inProgress.add(name)) {
             String path = String.join(" >-> ", inProgress) + " >-> " + name;
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1608, "e1608.msg").at(bd.pos())
-                            .args(name, path).hint("e1608.hint").build(),
-                    "cyclic behavior composition: " + path);
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1608, "e1608.msg").at(bd.pos())
+                            .args(name, path).hint("e1608.hint").build());
         }
         Map<String, List<String>> acc = new LinkedHashMap<>();
         switch (bd) {

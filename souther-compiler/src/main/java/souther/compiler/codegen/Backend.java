@@ -215,20 +215,13 @@ public final class Backend {
         for (Ast.BehaviorDef bd : module.behaviors()) {
             String cls = behaviorClass(bd.name());
             if (localTypes.contains(cls)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2105, "check.behavior.collision.data")
-                                .at(bd.pos()).args(bd.name(), cls).build(),
-                        "behavior `" + bd.name() + "`'s first letter is capitalized to form the JVM class `"
-                                + cls + "` (spec 19.5), which collides with data `" + cls
-                                + "`; rename one so their class names differ");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.behavior.collision.data")
+                                .at(bd.pos()).args(bd.name(), cls).build());
             }
             String prev = behaviorClassOwner.put(cls, bd.name());
             if (prev != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2105, "check.behavior.collision.behavior")
-                                .at(bd.pos()).args(prev, bd.name(), cls).build(),
-                        "behaviors `" + prev + "` and `" + bd.name() + "` both capitalize to the same JVM"
-                                + " class `" + cls + "` (spec 19.5); rename one so their class names differ");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.behavior.collision.behavior")
+                                .at(bd.pos()).args(prev, bd.name(), cls).build());
             }
         }
         // A behavior whose output is an anonymous union gets a generated sealed interface
@@ -888,24 +881,17 @@ public final class Backend {
             String what = owner != null ? owner.name() : e.getValue().get(0);
             TypeName sameName = byBridgeName.put(bridge, member);
             if (sameName != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2105, "check.bridge.collision.member")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.bridge.collision.member")
                                 .at(pos).args(sameName.qualified(), member.qualified(), bridge)
-                                .hint("check.bridge.collision.member.hint").build(),
-                        "`" + sameName + "` and `" + member + "` both join a union of this module"
-                                + " through a generated case class `" + bridge + "`");
+                                .hint("check.bridge.collision.member.hint").build());
             }
             String collidesWith = localTypes.contains(bridge) ? "check.bridge.collision.data"
                     : behaviorClassOwner.containsKey(bridge) ? "check.bridge.collision.behavior" : null;
             if (collidesWith != null) {
                 String other = localTypes.contains(bridge) ? bridge : behaviorClassOwner.get(bridge);
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2105, collidesWith)
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, collidesWith)
                                 .at(pos).args(what, member.name(), bridge, other)
-                                .hint("check.bridge.collision.hint", bridge).build(),
-                        "the output of `" + what + "` has the member `" + member.name() + "`, which"
-                                + " joins the union through a generated case class `" + bridge
-                                + "` (spec 19.8), and `" + other + "` already takes that class name");
+                                .hint("check.bridge.collision.hint", bridge).build());
             }
         }
     }
@@ -924,23 +910,15 @@ public final class Backend {
             SourcePos pos = owner != null ? owner.pos() : module.pos();
             String what = owner != null ? owner.name() : resultName;
             if (localTypes.contains(resultName)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2105, "check.result.collision.data")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.result.collision.data")
                                 .at(pos).args(what, resultName)
-                                .hint("check.result.collision.hint", resultName).build(),
-                        "the output of `" + what + "` is a union, generated as a sealed interface `"
-                                + resultName + "` (spec 19.8), and `" + resultName
-                                + "` already takes that class name");
+                                .hint("check.result.collision.hint", resultName).build());
             }
             String behavior = behaviorClassOwner.get(resultName);
             if (behavior != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2105, "check.result.collision.behavior")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.result.collision.behavior")
                                 .at(pos).args(what, resultName, behavior)
-                                .hint("check.result.collision.hint", resultName).build(),
-                        "the output of `" + what + "` is a union, generated as a sealed interface `"
-                                + resultName + "` (spec 19.8), and `" + behavior
-                                + "` already capitalizes into that class name");
+                                .hint("check.result.collision.hint", resultName).build());
             }
         }
     }

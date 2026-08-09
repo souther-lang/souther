@@ -76,12 +76,9 @@ public final class NewtypeDesugar {
                 TypeName built = call.denotes() instanceof ValueName.OfType named ? named.type() : null;
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
-                        throw CompileException.of(
-                                Diagnostic.of(DiagnosticCode.E1802, "check.newtype.arity")
+                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.newtype.arity")
                                         .at(call.name().region()).args(call.written(), args.size())
-                                        .build(),
-                                "`" + call.written() + "` wraps one value, but is applied to " + args.size()
-                                        + " argument(s)");
+                                        .build());
                     }
                     yield new Ast.NewData(
                             new Ast.Name(call.name(), built),

@@ -96,7 +96,7 @@ class CompilePipeTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(e.getMessage().contains("takes 2 inputs"), e.getMessage());
-        assertTrue(e.getMessage().contains("14.1"), "the diagnostic should name the rule: " + e.getMessage());
+        assertTrue(e.getMessage().contains("Every stage after the first takes one input"), "the diagnostic should name the rule: " + e.getMessage());
     }
 
     /**
@@ -155,6 +155,6 @@ class CompilePipeTest {
                 behavior bad = a >-> nosuch
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(e.getMessage().contains("unknown behavior"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot find a behavior named"), e.getMessage());
     }
 }

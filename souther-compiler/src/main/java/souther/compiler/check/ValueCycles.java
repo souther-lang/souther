@@ -94,11 +94,8 @@ public final class ValueCycles {
             boolean declaredAFunction = e.getValue().declaredReturn() != null
                     && e.getValue().declaredReturn().asFn() != null;
             if (!declaredAFunction && e.getValue().writtenBody() instanceof Ast.Block block) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
-                                .at(block.pos()).build(),
-                        "a block is not a value: `let " + e.getKey() + "` writes no parameters, so it"
-                                + " defines a value, and a block cannot be one (spec 12.5)");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
+                                .at(block.pos()).build());
             }
             if (!reachesItself.contains(e.getKey())) {
                 continue;
@@ -107,11 +104,9 @@ public final class ValueCycles {
             if (pathBackTo(e.getKey(), e.getKey(), edges, new LinkedHashSet<>(), path)) {
                 path.add(0, e.getKey());
                 String written = String.join(" -> ", path);
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1022, "check.value.cycle")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1022, "check.value.cycle")
                                 .at(e.getValue().written().region())
-                                .args(e.getKey(), written).build(),
-                        "`let " + e.getKey() + "` is defined in terms of itself (" + written + ")");
+                                .args(e.getKey(), written).build());
             }
         }
     }

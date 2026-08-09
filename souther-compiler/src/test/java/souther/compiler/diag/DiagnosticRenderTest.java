@@ -17,6 +17,48 @@ class DiagnosticRenderTest {
     private static final SourceContext SRC =
             new SourceContext("demo.sou", "module demo\nlet f (n) = null\n");
 
+    /**
+     * The JSON form carries the values the message is about, under the names its entry writes them
+     * under.
+     *
+     * <p>This is the half of the interface a tool reads. The rendered sentence is for a person and
+     * changes with the language it is asked in; a tool that wanted the field it names would have had
+     * to find it inside that sentence. Each value is written as the text it renders as, so which
+     * Java type a component happens to have stays a fact about the compiler.
+     */
+    @Test
+    void jsonCarriesTheValuesTheMessageIsAbout() {
+        Diagnostic d = Diagnostic.at(new SourcePos(2, 13))
+                .say(new souther.compiler.diag.msg.DataMessage.SpreadFieldCollision(
+                        "issuedAt", "Sold", "...Issued"))
+                .build();
+        String out = new JsonRenderer().render(d, SRC, Locale.ENGLISH);
+        assertTrue(out.contains("\"values\":{\"field\":\"issuedAt\",\"from\":\"Sold\","
+                + "\"heldBy\":\"...Issued\"}"), out);
+    }
+
+    /** A diagnostic not written as a message carries no values object rather than an empty one. */
+    @Test
+    void jsonCarriesNoValuesWhereThereIsNoMessage() {
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
+                .at(new SourcePos(2, 13), 4)
+                .build();
+        assertFalse(new JsonRenderer().render(d, SRC, Locale.ENGLISH).contains("\"values\""));
+    }
+
+    /** The names are the message's, so they are the same in every language the sentence is asked in. */
+    @Test
+    void theValuesAreNamedTheSameInEveryLanguage() {
+        Diagnostic d = Diagnostic.at(new SourcePos(2, 13))
+                .say(new souther.compiler.diag.msg.DataMessage.SpreadFieldCollision(
+                        "issuedAt", "Sold", "...Issued"))
+                .build();
+        String english = new JsonRenderer().render(d, SRC, Locale.ENGLISH);
+        String japanese = new JsonRenderer().render(d, SRC, Locale.JAPANESE);
+        assertTrue(japanese.contains("\"values\":{\"field\":\"issuedAt\""), japanese);
+        assertFalse(english.equals(japanese), "the sentence differs; the names do not");
+    }
+
     @Test
     void humanRendererQuotesTheLineAndUnderlinesTheToken() {
         Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")

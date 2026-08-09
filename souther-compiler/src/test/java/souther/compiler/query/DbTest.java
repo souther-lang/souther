@@ -70,6 +70,47 @@ class DbTest {
     }
 
     /** A key that reports rather than answers. */
+    /** Two questions that report one rule at one place, about different values. */
+    record ComplainsAbout(String field, String data) implements Key<String> {
+        @Override
+        public String module() {
+            return "demo";
+        }
+
+        @Override
+        public Answer<String> compute(Db db) {
+            return Answer.absent(Report.raised(Diagnostic.at(new souther.compiler.diag.SourcePos(3, 5))
+                            .say(new souther.compiler.diag.msg.DataMessage.NotAFieldOf(field, data))
+                            .build()));
+        }
+    }
+
+    /**
+     * A rule reported twice at one place, about different values, is two things the author is told.
+     *
+     * <p>The store keeps one report per identity, because one problem found by two questions is one
+     * problem. What tells two of them apart is the values they carry — and a message carries those
+     * as its own components, so an identity that read only the code, the place and the old untyped
+     * arguments answered that these were the same and dropped one.
+     */
+    @Test
+    void twoReportsOfOneRuleAtOnePlaceAboutDifferentValuesAreBothKept() {
+        Db db = new Db();
+        db.ask(new ComplainsAbout("x", "A"));
+        db.ask(new ComplainsAbout("y", "B"));
+        assertEquals(2, db.allReports().size(),
+                "each names a different field; neither is a repeat of the other");
+    }
+
+    /** The same rule, place and values twice is one problem, however many questions found it. */
+    @Test
+    void twoReportsOfOneRuleAtOnePlaceAboutOneValueAreOne() {
+        Db db = new Db();
+        db.ask(new ComplainsAbout("x", "A"));
+        db.ask(new ComplainsAbout("x", "A"));
+        assertEquals(1, db.allReports().size());
+    }
+
     record Complains(String about) implements Key<String> {
         @Override
         public Answer<String> compute(Db db) {
@@ -123,7 +164,7 @@ class DbTest {
     @Test
     void raisesTheMessageAPassRaisedItWith() {
         Diagnostic d = Diagnostic.of(DiagnosticCode.E1503, "check.module.duplicate").build();
-        CompileException raised = CompileException.of(d, "duplicate module `a`");
+        CompileException raised = CompileException.of(d);
         List<Report> reports = Report.of(raised);
         assertEquals(raised.getMessage(), reports.get(0).asException().getMessage());
     }

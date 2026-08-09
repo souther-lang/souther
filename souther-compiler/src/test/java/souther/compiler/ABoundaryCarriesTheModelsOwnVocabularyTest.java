@@ -25,7 +25,7 @@ class ABoundaryCarriesTheModelsOwnVocabularyTest {
         CompileException e = err("module demo\n\n" + signature + "\n" + body + "\n");
         assertTrue(e.getMessage().contains("E1325"), e.getMessage());
         assertTrue(e.getMessage().contains("`" + named + "`"), "names the type: " + e.getMessage());
-        assertTrue(e.getMessage().contains("declare this as a type of the model"),
+        assertTrue(e.getMessage().contains("Declare this as a type of the model"),
                 "says what to write: " + e.getMessage());
     }
 

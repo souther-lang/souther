@@ -81,7 +81,7 @@ class ARefusedMapKeyStatesItsRuleOnceTest {
     void eachSiteCarriesTheRuleItWasGivenRatherThanItsOwn() {
         for (String source : List.of(FIELD, PARAM, OUTPUT)) {
             String message = refusal(source).getMessage();
-            assertTrue(message.contains(TypeOps.MAP_KEY_RULE), message);
+            assertTrue(message.contains("A Map is a JSON object, whose keys are strings"), message);
         }
     }
 }

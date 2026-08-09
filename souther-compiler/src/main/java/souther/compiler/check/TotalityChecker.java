@@ -469,17 +469,13 @@ final class TotalityChecker {
     /** Said at the helper's own name: `let` comes first, and a report anchored at the definition
      *  underlines the keyword rather than what it is about. */
     private static CompileException error(Ast.FnDef h, String name, String key, String message) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2001, key)
-                        .at(h.written().region()).args(name).build(),
-                message);
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E2001, key)
+                        .at(h.written().region()).args(name).build());
     }
 
     private static CompileException error(Ast.Apply call, String name, String key, String message) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2001, key)
-                        .at(call.name().region()).args(name).build(),
-                message);
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E2001, key)
+                        .at(call.name().region()).args(name).build());
     }
 
     // --- a direct-child visitor mirroring the one in HelperInliner/TypeChecker ---

@@ -46,13 +46,15 @@ public class CompileException extends RuntimeException {
     }
 
     /**
-     * A migrated throw site: the structured {@code diagnostic} drives the Elm-style / JSON rendering,
-     * while {@code legacyBody} keeps {@link #getMessage()} returning the same one-line form as before
-     * (so callers and tests that read the message text are unchanged).
+     * A throw site, whose {@link #getMessage()} is what the diagnostic says, rendered in English.
+     *
+     * <p>The body used to be handed in beside the diagnostic, so every site wrote its message twice
+     * — once as a catalog key with its values, once as a Java string — and the two drifted. What a
+     * rule says is in the catalog, and this is where it is read.
      */
-    public static CompileException of(Diagnostic diagnostic, String legacyBody) {
-        return new CompileException(diagnostic,
-                format(diagnostic.pos(), diagnostic.code(), legacyBody));
+    public static CompileException of(Diagnostic diagnostic) {
+        return new CompileException(diagnostic, format(diagnostic.pos(), diagnostic.code(),
+                DiagnosticRenderer.legacyBody(diagnostic)));
     }
 
     /**

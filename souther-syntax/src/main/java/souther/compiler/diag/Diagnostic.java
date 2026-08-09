@@ -1,6 +1,9 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.Code;
+import souther.compiler.diag.msg.Message;
+
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.List;
@@ -35,6 +38,7 @@ public final class Diagnostic {
     private final String messageKey;
     private final Object[] args;
     private final String literalMessage;
+    private final Message said;
     private final TypeComparison diff;
     private final List<Note> notes;
     private final String suggestion;
@@ -42,7 +46,7 @@ public final class Diagnostic {
     private Diagnostic(Severity severity, DiagnosticCode code, Region region,
                        List<LabeledRegion> secondary, String messageKey, Object[] args,
                        String literalMessage, TypeComparison diff, List<Note> notes,
-                       String suggestion) {
+                       String suggestion, Message said) {
         this.severity = severity;
         this.code = code;
         this.region = region;
@@ -53,6 +57,17 @@ public final class Diagnostic {
         this.diff = diff;
         this.notes = notes;
         this.suggestion = suggestion;
+        this.said = said;
+    }
+
+    /**
+     * What this says, as the values it is about, or null for a site not yet written that way.
+     *
+     * <p>A renderer reads this rather than the key and the arguments: the entry names each value,
+     * so the text is filled by name.
+     */
+    public Message said() {
+        return said;
     }
 
     public Severity severity() {
@@ -117,11 +132,17 @@ public final class Diagnostic {
      * compares an array component by identity — so two diagnostics built the same way from the same
      * values are never equal. The arguments are the difference between "expected A, found B" and
      * "expected C, found B", which is two problems and not one, so they are in here.
+     *
+     * <p>{@code said} is here for the same reason and is the one that matters now: a message carries
+     * its values as record components rather than in {@code args}, so two diagnostics of one rule at
+     * one place, about different values, are told apart by nothing else. What reads this is the
+     * store's own de-duplication, which keeps one report per identity — so leaving the values out
+     * drops a real diagnostic rather than a repeat of one.
      */
     public record Identity(Severity severity, String code, String titleKey, Region region,
                            List<LabeledRegion.Of> secondary, String messageKey, List<Object> args,
                            String literalMessage, TypeComparison diff, List<Note.Of> notes,
-                           String suggestion) {}
+                           String suggestion, Message said) {}
 
     public Identity identity() {
         List<LabeledRegion.Of> labels = new ArrayList<>();
@@ -134,7 +155,7 @@ public final class Diagnostic {
         }
         return new Identity(severity, code(), titleKey(), region, labels, messageKey,
                 args == null ? List.of() : java.util.Arrays.asList(args), literalMessage, diff,
-                hints, suggestion);
+                hints, suggestion, said);
     }
 
     /** A pre-formatted English message wrapped verbatim — the compatibility path for a site that
@@ -142,13 +163,23 @@ public final class Diagnostic {
      * either of those has a catalog key by now. {@code pos} may be null for a position-less error. */
     public static Diagnostic literal(SourcePos pos, String message) {
         return new Diagnostic(Severity.ERROR, null, pos == null ? null : Region.point(pos),
-                List.of(), null, null, message, null, List.of(), null);
+                List.of(), null, null, message, null, List.of(), null, null);
     }
 
     /**
      * A builder for a diagnostic that reports a known rule. The code carries the title, so the two
      * agree at every site reporting that rule and neither is given here.
      */
+    /** A diagnostic about a place, which {@link Builder#say} then gives what it says. */
+    public static Builder at(Region region) {
+        return new Builder(null, null).at(region);
+    }
+
+    /** A diagnostic about a position, which {@link Builder#say} then gives what it says. */
+    public static Builder at(SourcePos pos) {
+        return new Builder(null, null).at(pos);
+    }
+
     public static Builder of(DiagnosticCode code, String messageKey) {
         return new Builder(Objects.requireNonNull(code, "a diagnostic reports a rule, and a rule has"
                 + " a code; `literal` is the one path without one"), messageKey);
@@ -156,24 +187,40 @@ public final class Diagnostic {
 
 
     public static final class Builder {
-        private final DiagnosticCode code;
-        private final String messageKey;
+        private DiagnosticCode code;
+        private String messageKey;
+        private Message said;
         private Region region;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private Object[] args = new Object[0];
         private TypeComparison diff;
         private final List<Note> notes = new ArrayList<>();
         private String suggestion;
-        private Severity severity = Severity.ERROR;
 
         private Builder(DiagnosticCode code, String messageKey) {
             this.code = code;
             this.messageKey = messageKey;
         }
 
-        /** Marks this a warning: it is reported but does not fail the build. */
-        public Builder warning() {
-            this.severity = Severity.WARNING;
+        /**
+         * What this diagnostic says. The rule it reports and the catalog entry it renders through
+         * are read off {@code message}: neither is a string this site chooses.
+         */
+        public Builder say(Message message) {
+            Code reports = message.getClass().getAnnotation(Code.class);
+            if (reports == null) {
+                throw new IllegalArgumentException("a message reports a rule, and "
+                        + message.getClass().getName() + " names no code");
+            }
+            this.said = message;
+            this.code = reports.value();
+            this.messageKey = message.key();
+            return this;
+        }
+
+        /** A hint written as a message of its own. */
+        public Builder hint(Message hint) {
+            this.notes.add(new Note(hint));
             return this;
         }
 
@@ -227,8 +274,12 @@ public final class Diagnostic {
         }
 
         public Diagnostic build() {
-            return new Diagnostic(severity, code, region, List.copyOf(secondary),
-                    messageKey, args, null, diff, List.copyOf(withMessageArgs(notes)), suggestion);
+            if (code == null) {
+                throw new IllegalStateException("a diagnostic reports a rule; call `say`");
+            }
+            return new Diagnostic(code.severity(), code, region, List.copyOf(secondary),
+                    messageKey, args, null, diff, List.copyOf(withMessageArgs(notes)), suggestion,
+                    said);
         }
 
         /** A hint's text is written against the same numbered arguments as the message it follows

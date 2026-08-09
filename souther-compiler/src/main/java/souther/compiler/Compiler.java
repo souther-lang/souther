@@ -89,10 +89,7 @@ public final class Compiler {
      * source as a whole, and the author's move is the same wherever it landed — name the parts.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2104, "check.expr.toodeep").build(),
-                "an expression in this source nests too deeply for the compiler to walk;"
-                        + " name its parts with `let` to flatten it");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E2104, "check.expr.toodeep").build());
     }
 
     /**
@@ -205,8 +202,7 @@ public final class Compiler {
             // is readable when nothing is.
             db.ask(new Output.SaidDisagreements(module));
             if (failures.size() == 1) {
-                throw CompileException.of(failures.get(0),
-                        ExampleVerifier.legacySummary(failures));
+                throw CompileException.of(failures.get(0));
             }
             if (!failures.isEmpty()) {
                 throw CompileException.ofAll(failures, ExampleVerifier.legacySummary(failures));
