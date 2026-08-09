@@ -128,7 +128,12 @@
                              threads of every fork are competing for the cores the tests are on.
                              Measured on the compiler's suite, whole build, eight forks: 49s without
                              these, 27s with them. -->
-                        <argLine>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC</argLine>
+                        <!-- -Xss4m is the stack this compiler is supported on, and the tests are
+                             held to the same one: a source at the structural bound needs about a
+                             megabyte, and what is checked here has to be checked on the stack the
+                             bound was set for. A test that wants a smaller one makes its own
+                             thread. -->
+                        <argLine>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xss4m</argLine>
                     </configuration>
                 </plugin>
             </plugins>

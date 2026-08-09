@@ -3650,6 +3650,8 @@ This is a separate limit from the one above, and neither implies the other. Nest
 
 The limit is a property of the language, not of a compiler's internal representation. What a compiler builds from a definition, and how deep that is, is its own choice; what a definition may say is this.
 
+A compiler states the runtime it holds this bound on. Every phase descends what it builds by recursion, so what a definition may say and what it takes to walk one are the same question asked from two sides, and a stack left to whatever a platform defaults to would make a source compile in one place and not another. This compiler is supported on a 4 MB thread stack — the `+souther+` binary sets it, an editor launching the language server passes it, and the tests run with it — against a source at the bound needing about a megabyte. The number is this implementation's and moves with it; the bound above does not.
+
 [,text]
 ----
 Source -> Lexer -> Parser -> AST
