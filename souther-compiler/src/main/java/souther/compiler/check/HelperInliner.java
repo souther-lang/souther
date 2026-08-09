@@ -403,9 +403,12 @@ public final class HelperInliner {
      * reaches and took on to emit — a library one, or one another module published (spec 13.1). A
      * call to any of them is left standing by {@link #inline}. The graph's own {@code recursive} set
      * additionally holds recursive helpers the module does not reach at all, so {@code inline} never
-     * expands one that slips in through a nested body. */
-    public Set<String> recursiveHelpers() {
-        Set<String> result = new java.util.LinkedHashSet<>();
+     * expands one that slips in through a nested body.
+     *
+     * <p>Answered in declaration order, which is the order a check reporting one of them reports in.
+     * The order is the graph's and is carried, not rebuilt. */
+    public java.util.SequencedSet<String> recursiveHelpers() {
+        java.util.SequencedSet<String> result = new java.util.LinkedHashSet<>();
         for (String name : graph.recursive()) {
             if (table.held().containsKey(name)) {
                 result.add(name);

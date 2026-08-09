@@ -35,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.Set;
 
 /**
@@ -701,15 +702,17 @@ public final class Bodies {
     }
 
     /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec
-     * 13.1), including the prelude ones it has taken on as its own. */
-    public record RecursiveHelpers(String name) implements Key<Set<String>> {
+     * 13.1), including the prelude ones it has taken on as its own. Answered in declaration order:
+     * a check that reports one member of a mutual cycle reports the first, so the order is part of
+     * the answer and is said in the type. */
+    public record RecursiveHelpers(String name) implements Key<SequencedSet<String>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Set<String>> compute(Db db) {
+        public Answer<SequencedSet<String>> compute(Db db) {
             Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
             return inliner.present() ? Answer.of(inliner.value().recursiveHelpers())
                     : Answer.absent();
@@ -832,7 +835,7 @@ public final class Bodies {
         public Answer<Ast.FnDef> compute(Db db) {
             Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
-            Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
+            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
             Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
             if (!def.present() || !inliner.present() || !recursive.present()
                     || !behaviors.present()) {
@@ -863,7 +866,7 @@ public final class Bodies {
         public Answer<Ast.FnDef> compute(Db db) {
             Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.DISCHARGE);
-            Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
+            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(module));
             Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
             if (!def.present() || !inliner.present() || !recursive.present()
                     || !behaviors.present()) {
@@ -896,7 +899,7 @@ public final class Bodies {
         @Override
         public Answer<Lower.Lowered> compute(Db db) {
             Answer<Ast.Module> settled = db.ask(new Settled(name));
-            Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(name));
+            Answer<SequencedSet<String>> recursive = db.ask(new RecursiveHelpers(name));
             Answer<Set<String>> examples = db.ask(new ExampleHelpers(name));
             if (!settled.present() || !recursive.present() || !examples.present()) {
                 return Answer.absent();
