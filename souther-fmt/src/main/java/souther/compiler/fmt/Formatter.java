@@ -642,7 +642,11 @@ public final class Formatter {
         }
         parts.add(TokenDoc.carries(ofTheFile, Carrier.AT_END));
         parts.add(TokenDoc.forced(Obligation.A_FILE_ENDS_WITH_ONE_NEWLINE));
-        return concat(parts);
+        // The file joins its items, so the boundary between the last token of one and the first of
+        // the next belongs to a construct like any other. Left unnamed, the one adjacency a reader
+        // can close up by hand — writing two top-level items on a line — is the one no rule is
+        // recorded against.
+        return TokenDoc.node(file.kind(), concat(parts));
     }
 
     /** One blank line separates every top-level item, except the module header and its imports,
