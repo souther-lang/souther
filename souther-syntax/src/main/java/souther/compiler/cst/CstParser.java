@@ -742,18 +742,30 @@ public final class CstParser {
      * @param ifUnion what to say about a `{@code |}`, which no narrow position takes
      */
     private <M extends Message & Reported> void narrowType(boolean optionalSuffix, M ifUnion) {
+        narrowMember(optionalSuffix);
+        if (at(SyntaxKind.PIPE)) {
+            error(ifUnion);
+            while (eat(SyntaxKind.PIPE)) {
+                narrowMember(optionalSuffix);
+            }
+        }
+    }
+
+    /**
+     * One member of what a narrow position was given, read the way that position reads a type. The
+     * members after a refused `{@code |}` are read this way too and not with a bare {@link #typeRef}:
+     * a `{@code ?}` on one of them is forbidden there for the same reason it is forbidden on the
+     * first, and read without that the `{@code ?}` would be left standing for the closing delimiter
+     * to trip over — the report this whole reading exists to prevent, reappearing inside the recovery
+     * meant to prevent it.
+     */
+    private void narrowMember(boolean optionalSuffix) {
         typeRef();
         if (optionalSuffix) {
             eat(SyntaxKind.QUESTION);
         } else if (at(SyntaxKind.QUESTION)) {
             error(new ParseMessage.AnOptionalIsNotWrittenInsideAnotherType());
             bump();   // ?
-        }
-        if (at(SyntaxKind.PIPE)) {
-            error(ifUnion);
-            while (eat(SyntaxKind.PIPE)) {
-                typeRef();
-            }
         }
     }
 
