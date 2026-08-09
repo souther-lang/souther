@@ -1143,6 +1143,50 @@ public final class AstBuilder {
         return most;
     }
 
+    /**
+     * How many steps a block takes, blocks written inside it counted along with it, read from the
+     * source before any of it is folded.
+     *
+     * <p>Before, because folding descends once per step and a block whose steps are the ones inside
+     * it too has as many to descend. Each block on its own can be well under the bound while what
+     * they come to together is thousands, and the fold would be that far down before anything could
+     * say so — the answer would come from running out rather than from counting.
+     *
+     * <p>What is counted is the way down: the steps before a statement, the step it is, and then
+     * whatever block it holds. A block held at the first statement of one that takes three hundred
+     * costs what it costs and not three hundred more, which is what makes this never refuse
+     * something the whole count would keep. Anything that is not a block counts as one here — it is
+     * bounded as the source is read, and this is only about what the fold will descend.
+     */
+    private int stepsTakenBy(List<SyntaxNode> stmts, SyntaxNode result) {
+        int stepsBefore = 0;
+        int most = 0;
+        for (SyntaxNode stmt : stmts) {
+            for (SyntaxNode held : exprChildren(stmt)) {
+                most = Math.max(most, stepsBefore + 1 + stepsHeldBy(held));
+            }
+            stepsBefore += stepsTakenBy(stmt);
+        }
+        return Math.max(most, stepsBefore + stepsHeldBy(result));
+    }
+
+    /** What a block written here would take, or one where nothing is written here or what is is
+     *  not a block. */
+    private int stepsHeldBy(SyntaxNode held) {
+        if (held == null || held.kind() != SyntaxKind.BLOCK_EXPR) {
+            return 1;
+        }
+        List<SyntaxNode> stmts = new ArrayList<>();
+        SyntaxNode result = null;
+        for (SyntaxNode c : held.childNodes()) {
+            switch (c.kind()) {
+                case LET_STMT, LET_DESTRUCTURE, GUARD_STMT -> stmts.add(c);
+                default -> result = c;
+            }
+        }
+        return stepsTakenBy(stmts, result);
+    }
+
     /** How many steps one statement takes: a `let` written with a pattern is what the pattern
      *  binds, and anything else — an ordinary `let`, a `guard`, which binds nothing — is one. */
     private int stepsTakenBy(SyntaxNode stmt) {
@@ -1164,10 +1208,7 @@ public final class AstBuilder {
         // what that statement introduced, so folding them descends once per step — a block long
         // enough to be refused is a block long enough to run this out on the way to saying so.
         if (index == 0) {
-            int steps = 0;
-            for (SyntaxNode s : stmts) {
-                steps += stepsTakenBy(s);
-            }
+            int steps = stepsTakenBy(stmts, result);
             if (steps > StructuralCost.MAX) {
                 throw errorWithHint(pos(stmts.get(stmts.size() - 1)),
                         new DeclarationMessage.ABlockTakesMoreStructuralStepsThanADefinitionHolds(

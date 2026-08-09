@@ -162,16 +162,10 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
         // n and then the result, and the last one that fits leaves the result on the bound.
         assertDoesNotThrow(() -> Compiler.compiled(guards(StructuralCost.MAX - 1), "m"));
 
-        CompileException one = assertThrows(CompileException.class,
-                () -> Compiler.compiled(guards(StructuralCost.MAX), "m"));
-        assertEquals("E2107", one.code(), one.getMessage());
-        assertTrue(one.getMessage().contains((StructuralCost.MAX + 1) + " levels of structure"),
-                one.getMessage());
-
-        // Past what the block alone may take, the block says so before it is folded — and says
-        // steps, because a guard binds nothing and this block binds no names at all.
+        // One more, and the block says so before it is folded — in steps, because a guard binds
+        // nothing and this block binds no names at all.
         CompileException steps = assertThrows(CompileException.class,
-                () -> Compiler.compiled(guards(StructuralCost.MAX + 1), "m"));
+                () -> Compiler.compiled(guards(StructuralCost.MAX), "m"));
         assertEquals("E2107", steps.code(), steps.getMessage());
         assertTrue(steps.getMessage().contains((StructuralCost.MAX + 1) + " structural steps"),
                 steps.getMessage());
@@ -218,6 +212,47 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
         }
         sb.append("\nlet held = {\n    let a = v").append(names).append("\n    a\n}\n\n");
         return sb.append("behavior f : (x: Int) -> Int\nlet f (x) = x + held\n").toString();
+    }
+
+    /**
+     * Blocks written inside blocks are refused by the count, not by running out.
+     *
+     * <p>Each of these is well under the bound on its own, and folding them descends once per step
+     * of every one of them at once. Counted only where each block starts, they all pass and the
+     * fold goes as deep as they come to together — which on the supported stack is deep enough to
+     * give out, so what the author would be told is that the compiler ran out rather than what
+     * their definition says.
+     */
+    @Test
+    void blocksInsideBlocksAreCountedBeforeTheyAreFolded() {
+        for (int nesting : new int[]{5, 15, 25, 30}) {
+            CompileException said = assertThrows(CompileException.class,
+                    () -> Compiler.compiled(blocksInsideBlocks(nesting, 319), "m"),
+                    nesting + " blocks of 319 steps is past the bound");
+
+            assertEquals("E2107", said.code(),
+                    nesting + " blocks deep: " + said.getMessage());
+        }
+    }
+
+    /** {@code nesting} blocks of {@code stepsEach} statements, each written in the value of a
+     *  statement of the one outside it. */
+    private static String blocksInsideBlocks(int nesting, int stepsEach) {
+        return "module m exposing (f)\n\nbehavior f : (x: Int) -> Int\nlet f (x) = "
+                + oneOf(nesting, stepsEach, new int[]{0}) + "\n";
+    }
+
+    private static String oneOf(int nesting, int stepsEach, int[] named) {
+        if (nesting == 0) {
+            return "x";
+        }
+        StringBuilder sb = new StringBuilder("{\n");
+        for (int i = 0; i < stepsEach; i++) {
+            sb.append("    let a").append(named[0]++).append(" = x\n");
+        }
+        sb.append("    let held").append(nesting).append(" = ")
+          .append(oneOf(nesting - 1, stepsEach, named)).append("\n");
+        return sb.append("    held").append(nesting).append("\n}").toString();
     }
 
     @Test
