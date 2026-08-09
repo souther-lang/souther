@@ -6,16 +6,16 @@ import souther.compiler.diag.DiagnosticCode;
 public sealed interface InjectionMessage extends Message {
 
     /** An injected behavior's input rests on a type the module keeps to itself. */
-    @Code(DiagnosticCode.E1612)
+    @Code(DiagnosticCode.E1611)
     record AnInjectedInputRestsOnWhatIsKept(String behavior, String kept)
             implements InjectionMessage {}
 
     /** The same, of its output. */
-    @Code(DiagnosticCode.E1612)
+    @Code(DiagnosticCode.E1611)
     record AnInjectedOutputRestsOnWhatIsKept(String behavior, String kept)
             implements InjectionMessage {}
 
     /** Why an injected behavior is held to it whatever `exposing` says. */
-    @Code(DiagnosticCode.E1612)
+    @Code(DiagnosticCode.E1611)
     record TheBaseClassIsPublicWhateverExposingSays(String kept) implements InjectionMessage {}
 }

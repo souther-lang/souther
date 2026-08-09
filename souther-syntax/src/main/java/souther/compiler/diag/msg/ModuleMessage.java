@@ -110,10 +110,10 @@ public sealed interface ModuleMessage extends Message {
     @Code(DiagnosticCode.E1503)
     record RenameItOrDropTheDependency(String module) implements ModuleMessage {}
 
-    @Code(DiagnosticCode.E1504)
+    @Code(DiagnosticCode.E1506)
     record TheModuleDeclaresNoSuchQualifiedName(String name, String module) implements ModuleMessage {}
 
-    @Code(DiagnosticCode.E1504)
+    @Code(DiagnosticCode.E1507)
     record ItIsDeclaredThereAndNotExposed(String name, String module) implements ModuleMessage {}
 
     @Code(DiagnosticCode.E1504)
