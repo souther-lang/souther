@@ -51,16 +51,27 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
         record NotMeasured(Reason reason) implements Coverage {}
 
         /** Why a line has no answer. */
-        enum Reason {
+        enum Reason implements souther.compiler.observe.MeasureReason {
             /** The build did not ask for the arms, and a guard's line is met by reaching the
              *  comparison rather than by writing the value. Never a reason for an invariant's line,
              *  which needs no arms. */
-            ARMS_NOT_ASKED,
+            ARMS_NOT_ASKED(MeasurementStatus.NOT_MEASURED),
             /** The rows ran without instrumentation, so no row can be shown to have reached the
              *  comparison. Never a reason for an invariant's line. */
-            ARMS_UNREADABLE,
+            ARMS_UNREADABLE(MeasurementStatus.NOT_MEASURED),
             /** No row names this behavior. */
-            NO_ROWS
+            NO_ROWS(MeasurementStatus.NOT_MEASURED);
+
+            private final MeasurementStatus status;
+
+            Reason(MeasurementStatus status) {
+                this.status = status;
+            }
+
+            @Override
+            public MeasurementStatus status() {
+                return status;
+            }
         }
 
         default boolean hit() {
@@ -155,7 +166,7 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
      */
     public MeasurementStatus status() {
         return switch (coverage) {
-            case Coverage.NotMeasured _ -> MeasurementStatus.UNAVAILABLE;
+            case Coverage.NotMeasured absent -> absent.reason().status();
             case Coverage.Undecided _ -> MeasurementStatus.PARTIAL;
             case Coverage.Hit _, Coverage.Missed _ -> MeasurementStatus.COMPLETE;
         };

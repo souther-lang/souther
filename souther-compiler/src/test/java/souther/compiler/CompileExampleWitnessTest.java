@@ -126,7 +126,7 @@ class CompileExampleWitnessTest {
     void aBehaviorWithNoRowsIsNotMeasured() {
         Adequacy.SignatureEvidence lookup = evidence(BASE).get("lookup");
 
-        assertEquals(MeasurementStatus.UNAVAILABLE, lookup.status(),
+        assertEquals(MeasurementStatus.NOT_MEASURED, lookup.status(),
                 "no rows is an absence of evidence, not a set of gaps");
     }
 

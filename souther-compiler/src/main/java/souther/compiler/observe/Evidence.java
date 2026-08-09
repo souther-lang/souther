@@ -22,7 +22,9 @@ final class Evidence {
 
     static MeasurementStatus status(Set<TypeName> declared, int unclassifiedRows) {
         if (declared.isEmpty()) {
-            return MeasurementStatus.UNAVAILABLE;   // not a sum: no cases to cover
+            // Not a sum. No row could give this position a case to cover, so the measure does not
+            // apply rather than going unmade.
+            return MeasurementStatus.NOT_APPLICABLE;
         }
         return unclassifiedRows == 0 ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
     }

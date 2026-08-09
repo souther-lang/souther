@@ -310,7 +310,7 @@ class CompileExampleCoverageTest {
                     | (Draft { cost = Amount(50) }) -> Submitted { cost = Amount(50) }
                 """;
 
-        assertEquals(MeasurementStatus.UNAVAILABLE, branch(indirect, "classify").status(),
+        assertEquals(MeasurementStatus.NOT_MEASURED, branch(indirect, "classify").status(),
                 "nobody wrote a row about `classify`");
         assertEquals(MeasurementStatus.COMPLETE, branch(indirect, "submit").status());
     }
@@ -332,7 +332,7 @@ class CompileExampleCoverageTest {
                     | (MemberId("m-1")) -> Found { id = MemberId("m-1") }
                 """, "findMember");
 
-        assertEquals(MeasurementStatus.UNAVAILABLE, branch.status());
+        assertEquals(MeasurementStatus.NOT_APPLICABLE, branch.status());
         assertEquals(List.of(), branch.all());
     }
 
@@ -341,7 +341,7 @@ class CompileExampleCoverageTest {
     void aModelWithNoRowsIsSilent() {
         Adequacy.BranchEvidence branch = branch(MODEL, "submit");
 
-        assertEquals(MeasurementStatus.UNAVAILABLE, branch.status());
+        assertEquals(MeasurementStatus.NOT_MEASURED, branch.status());
         assertTrue(unreached(branch).isEmpty());
     }
 

@@ -28,20 +28,130 @@ import java.util.Set;
  *                     reasons: these are what classification observed, and joining them to
  *                     everything else a module could not read happens where that list is built
  */
-public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryAssessment> boundaries,
+public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 PairSpace pairs, List<String> notDerivable,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
 
-    public static final PartitionEvidence NONE = new PartitionEvidence(List.of(), List.of(),
-            PairSpace.NONE, List.of(), List.of(), List.of());
+    /**
+     * No measure of this kind here at all, which is not a measure that came back empty.
+     *
+     * <p>What a {@code >->} composition gets. It has no positions of its own for either of these to
+     * be about, the way it has no arms, and no row anybody writes would give it one — so the two
+     * answer inapplicable, and a verdict that counted them would hold every model with a composition
+     * in it open for a measurement that was never anybody's to make.
+     */
+    public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
+            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of());
 
     public PartitionEvidence {
-        axes = List.copyOf(axes);
-        boundaries = List.copyOf(boundaries);
         notDerivable = List.copyOf(notDerivable);
         omitted = List.copyOf(omitted);
         whyUnclassified = List.copyOf(whyUnclassified);
+    }
+
+    /** The positions, for a reader that wants them and not what the measure made of itself. */
+    public List<AxisCoverage> axes() {
+        return partitioned.at();
+    }
+
+    /** The lines, likewise. */
+    public List<BoundaryAssessment> boundaries() {
+        return bounded.at();
+    }
+
+    /**
+     * The positions this behavior is measured at, and — where there are none — why not.
+     *
+     * <p>The list alone cannot say. An empty one is what a behavior whose model divides nothing has
+     * and what a behavior whose positions could not be read has, and a reader counting entries calls
+     * both of them measured and finds no gaps. So the measure answers for itself, and the entries are
+     * what it answered with.
+     */
+    public record Partitioned(List<AxisCoverage> at, MeasurementStatus status, Reason reason) {
+
+        /** Why no position was measured. */
+        public enum Reason implements souther.compiler.observe.MeasureReason {
+            /** Nothing came back divided. Whether the model draws no line anywhere or the reading
+             *  stopped short of one is not something this can tell, and only a proof excludes: the
+             *  positions it could not derive are named beside it and may be carrying rules. */
+            NO_AXIS_DERIVED(MeasurementStatus.NOT_MEASURED),
+            /** This behavior has no positions for the measure to be about — a {@code >->}
+             *  composition, which is measured at its stages. */
+            NO_SUBJECT(MeasurementStatus.NOT_APPLICABLE);
+
+            private final MeasurementStatus status;
+
+            Reason(MeasurementStatus status) {
+                this.status = status;
+            }
+
+            @Override
+            public MeasurementStatus status() {
+                return status;
+            }
+        }
+
+        public static Partitioned of(List<AxisCoverage> at) {
+            return at.isEmpty()
+                    ? new Partitioned(List.of(), Reason.NO_AXIS_DERIVED.status(),
+                            Reason.NO_AXIS_DERIVED)
+                    : new Partitioned(at, MeasurementStatus.COMPLETE, null);
+        }
+
+        static Partitioned absent() {
+            return new Partitioned(List.of(), Reason.NO_SUBJECT.status(), Reason.NO_SUBJECT);
+        }
+
+        public Partitioned {
+            at = List.copyOf(at);
+            Unavailable.check(status, reason);
+        }
+    }
+
+    /** The lines some rule drew that this behavior is measured at, and — where there are none — why
+     * not. The same argument as {@link Partitioned}: an empty list of obligations reads exactly like
+     * a measure that was made and found everything met. */
+    public record Bounded(List<BoundaryAssessment> at, MeasurementStatus status, Reason reason) {
+
+        /** Why no line was measured. */
+        public enum Reason implements souther.compiler.observe.MeasureReason {
+            /** No obligation was derived. A model whose bounds sit one type away from the position
+             *  the behavior takes has this, and so has one with no bound anywhere; nothing here can
+             *  tell them apart, and calling it measured said the rows carrying a model's whole risk
+             *  had earned nothing. */
+            NO_LINES_DERIVED(MeasurementStatus.NOT_MEASURED),
+            /** This behavior has no positions for a line to be drawn on — a {@code >->} composition,
+             *  which is measured at its stages. */
+            NO_SUBJECT(MeasurementStatus.NOT_APPLICABLE);
+
+            private final MeasurementStatus status;
+
+            Reason(MeasurementStatus status) {
+                this.status = status;
+            }
+
+            @Override
+            public MeasurementStatus status() {
+                return status;
+            }
+        }
+
+        public static Bounded of(List<BoundaryAssessment> at) {
+            return at.isEmpty()
+                    ? new Bounded(List.of(), Reason.NO_LINES_DERIVED.status(),
+                            Reason.NO_LINES_DERIVED)
+                    : new Bounded(at, MeasurementStatus.COMPLETE, null);
+        }
+
+        static Bounded absent() {
+            return new Bounded(List.of(), Reason.NO_SUBJECT.status(), Reason.NO_SUBJECT);
+        }
+
+        public Bounded {
+            at = List.copyOf(at);
+            Unavailable.check(status, reason);
+        }
     }
 
     /**
@@ -67,16 +177,27 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryAssessment
                             int unknown, boolean truncated, MeasurementStatus status, Reason reason) {
 
         /** Why the combinations have no numbers. */
-        public enum Reason {
+        public enum Reason implements souther.compiler.observe.MeasureReason {
             /** No row names this behavior, so nothing sits anywhere. */
-            NO_ROWS
+            NO_ROWS(MeasurementStatus.NOT_MEASURED);
+
+            private final MeasurementStatus status;
+
+            Reason(MeasurementStatus status) {
+                this.status = status;
+            }
+
+            @Override
+            public MeasurementStatus status() {
+                return status;
+            }
         }
 
         public static final PairSpace NONE =
                 new PairSpace(0, 0, 0, 0, 0, false, MeasurementStatus.COMPLETE, null);
 
         public static PairSpace unavailable(int total, Reason reason) {
-            return new PairSpace(total, 0, 0, 0, total, false, MeasurementStatus.UNAVAILABLE, reason);
+            return new PairSpace(total, 0, 0, 0, total, false, reason.status(), reason);
         }
 
         public PairSpace {
@@ -118,10 +239,21 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryAssessment
                                MeasurementStatus status, Reason reason) {
 
         /** Why a position has no coverage numbers. */
-        public enum Reason {
+        public enum Reason implements souther.compiler.observe.MeasureReason {
             /** No row names this behavior. An absence of evidence is not a set of gaps, so the classes
              *  nothing sits in are not classes nothing reaches. */
-            NO_ROWS
+            NO_ROWS(MeasurementStatus.NOT_MEASURED);
+
+            private final MeasurementStatus status;
+
+            Reason(MeasurementStatus status) {
+                this.status = status;
+            }
+
+            @Override
+            public MeasurementStatus status() {
+                return status;
+            }
         }
 
         /** What the body rules out is still said. Which classes there are and which the body answers
@@ -129,7 +261,7 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryAssessment
         public static AxisCoverage unavailable(String axis, String path, List<String> classes,
                                                List<ExcludedClass> excluded, Reason reason) {
             return new AxisCoverage(axis, path, classes, Set.of(), excluded, 0,
-                    MeasurementStatus.UNAVAILABLE, reason);
+                    reason.status(), reason);
         }
 
         public AxisCoverage {

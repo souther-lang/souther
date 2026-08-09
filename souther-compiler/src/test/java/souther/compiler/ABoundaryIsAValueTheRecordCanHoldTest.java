@@ -514,9 +514,16 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 let f (n) = Ok
                 """);
 
-        assertTrue(report.contains("boundary    0/0"), () -> report);
-        assertFalse(report.contains("not measured"),
-                () -> "10 and 0 are not measurements waiting for a row:\n" + report);
+        // No row is owed here, which is the whole of it: 10 and 0 are not values this type holds.
+        assertFalse(report.contains("no row is at"),
+                () -> "10 and 0 are not rows anybody is owed:\n" + report);
+        // The measure says it derived nothing rather than showing a nought that reads as a
+        // measurement. `not applicable` would be the truer word — two rules that contradict leave
+        // no value to be at any line — and nothing here reads them together and says so, so the
+        // measure may only report what it observed. The proof exists inside the partitioning, where
+        // a position whose rules contradict is already known; carrying it out to the measure is
+        // what would let this say `not applicable` honestly.
+        assertTrue(report.contains("boundary    not measured"), () -> report);
     }
 
     /** The same two fields with the rule removed keep the whole of their type's range, so the
