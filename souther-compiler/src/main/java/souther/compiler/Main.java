@@ -3,6 +3,8 @@ package souther.compiler;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.JsonRenderer;
@@ -603,7 +605,43 @@ public final class Main {
             return e.exitCode;
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
+            sayHowRunReachesAModule(e, render);
             return 1;
+        }
+    }
+
+    /**
+     * Says how {@code run} is given a module to resolve against, where that is what the reader is
+     * missing.
+     *
+     * <p>Beside the diagnostic and not inside it. E1504 states what the compile observed — that the
+     * module is in neither the sources nor the path — and that is true of every compile, however it
+     * was started. Which option widens the path is a fact about this command line, so a diagnostic
+     * carrying it would be the compiler holding the command line's knowledge, and would be carried by
+     * every other caller of the same compile.
+     *
+     * <p>Once per run rather than per diagnostic. An error carrying several is what a pass reporting
+     * each of its independent failures produces, and however many of them went unresolved there is
+     * one thing to do about it. And it says what the option is for rather than that it would fix this
+     * import — a misspelled module name is the same E1504, and a line promising that a class path
+     * resolves it would send that author to build something they do not need.
+     *
+     * <p>Not under {@code --format json}, for the reason {@link #refused} is not: a reader taking one
+     * object per line cannot tell a sentence among them from output it should have understood. A
+     * remediation JSON carries is a field of the diagnostic schema, which is a thing to design rather
+     * than a line to print.
+     */
+    private static void sayHowRunReachesAModule(CompileException e, RenderOptions render) {
+        if (render.json()) {
+            return;
+        }
+        for (Diagnostic d : e.diagnostics()) {
+            if (DiagnosticCode.E1504.name().equals(d.code())) {
+                Locale locale = render.locale();
+                System.err.println(Messages.get("diag.hint.label", locale) + " "
+                        + Messages.get("cli.run.classpath", locale));
+                return;
+            }
         }
     }
 

@@ -135,4 +135,78 @@ class ARunReachesTheModulesItWasCompiledAgainstTest {
         assertEquals(1, said.code());
         assertTrue(said.err().contains("E1504"), said.err());
     }
+
+    /**
+     * The refusal says how {@code run} is given a module, which the diagnostic itself does not: what
+     * E1504 states is that the module is in neither the sources nor the path, and which option
+     * widens the path is this command line's to say.
+     */
+    @Test
+    void aModuleRunCouldNotReachIsAnsweredWithHowToGiveItOne() throws Exception {
+        Said said = cli("run", source("enrollment.sou", ENROLLMENT).toString(),
+                "--lang", "en", "--behavior", "register", "--input", "\"c-1\"");
+
+        assertTrue(said.err().contains("Unknown module `enrollment.catalog`"), said.err());
+        assertTrue(said.err().contains("-cp"), said.err());
+        assertTrue(said.err().contains("--class-path"), said.err());
+    }
+
+    /**
+     * One line, whatever went unresolved.
+     *
+     * <p>Two unresolved imports are still one thing to do about them. This compile raises the first
+     * error, so what arrives here is one diagnostic either way and the count is the line's own
+     * arithmetic; an error carrying several — which the {@code example} rows already produce — is
+     * what the guard in the CLI is written for.
+     */
+    @Test
+    void theWayToGiveRunAModuleIsSaidOnce() throws Exception {
+        String twoImports = """
+                module enrollment.registration exposing (register)
+
+                import enrollment.catalog ( CourseId, Title )
+                import enrollment.term ( TermId )
+
+                behavior register : (id: CourseId) -> Title
+                    constructs Title
+
+                let register (id) = Title("Intro")
+                """;
+        Said said = cli("run", source("enrollment.sou", twoImports).toString(),
+                "--lang", "en", "--behavior", "register", "--input", "\"c-1\"");
+
+        assertEquals(1, said.err().split("--class-path", -1).length - 1, said.err());
+    }
+
+    /**
+     * Not into the JSON, where a reader takes one object per line and a sentence among them is a
+     * line that parses as nothing. What a machine reader gets is the diagnostic and the exit code.
+     */
+    @Test
+    void theHintIsNotWrittenIntoTheJsonOutput() throws Exception {
+        Said said = cli("run", source("enrollment.sou", ENROLLMENT).toString(),
+                "--format", "json", "--behavior", "register", "--input", "\"c-1\"");
+
+        assertEquals(1, said.code());
+        assertTrue(said.err().contains("E1504"), said.err());
+        assertFalse(said.err().contains("--class-path"), said.err());
+    }
+
+    /** An error that is not an unresolved module is not answered with a class path. */
+    @Test
+    void anErrorThatIsNotAnUnreachedModuleGetsNoClassPathHint() throws Exception {
+        String noSuchBehavior = """
+                module enrollment.registration exposing (register)
+
+                behavior register : (id: String) -> Title
+                    constructs Title
+
+                let register (id) = Title("Intro")
+                """;
+        Said said = cli("run", source("enrollment.sou", noSuchBehavior).toString(),
+                "--lang", "en", "--behavior", "register", "--input", "\"c-1\"");
+
+        assertEquals(1, said.code());
+        assertFalse(said.err().contains("--class-path"), said.err());
+    }
 }
