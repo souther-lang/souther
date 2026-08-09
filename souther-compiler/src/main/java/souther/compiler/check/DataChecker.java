@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.CodecMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -366,8 +367,9 @@ public final class DataChecker {
             for (Ast.Variant v : disc.variants()) {
                 Ast.Def caseDef = symbols.get(v.caseType().denotes());
                 if (!dispatchable.contains(v.caseType().denotes())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.notcase")
-                                    .at(v.pos()).args(v.caseType().written(), sum.name()).build());
+                    throw CompileException.of(Diagnostic.at(v.pos())
+                            .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
+                            .build());
                 }
                 // a unit-data case has an implicit (field-less) decoder generated on its class;
                 // a case may itself be a sum (spec 8.3's nested `自社負担 | 先方負担`)
@@ -375,8 +377,9 @@ public final class DataChecker {
                         || (caseDef instanceof Ast.Data d && d.decoder().isPresent())
                         || (caseDef instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!caseDecodes) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.needdecoder")
-                                    .at(v.pos()).args(v.caseType().written()).build());
+                    throw CompileException.of(Diagnostic.at(v.pos())
+                            .say(new CodecMessage.CaseNeedsADecoder(v.caseType().written()))
+                            .build());
                 }
             }
         });
@@ -395,23 +398,26 @@ public final class DataChecker {
             Set<TypeName> encodable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
             for (Ast.EncVariant v : enc.variants()) {
                 if (!encodable.contains(v.caseType().denotes())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.notcase")
-                                    .at(v.pos()).args(v.caseType().written(), sum.name()).build());
+                    throw CompileException.of(Diagnostic.at(v.pos())
+                            .say(new CodecMessage.NotACaseOf(v.caseType().written(), sum.name()))
+                            .build());
                 }
                 Ast.Def caseDef = symbols.get(v.caseType().denotes());
                 boolean caseEncodes = caseDef instanceof Ast.UnitData
                         || (caseDef instanceof Ast.Data d && d.encoder().isPresent())
                         || (caseDef instanceof Ast.SumData s && s.encoder().isPresent());
                 if (!caseEncodes) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.needencoder")
-                                    .at(v.pos()).args(v.caseType().written()).build());
+                    throw CompileException.of(Diagnostic.at(v.pos())
+                            .say(new CodecMessage.CaseNeedsAnEncoder(v.caseType().written()))
+                            .build());
                 }
                 covered.add(v.caseType().denotes());
             }
             for (TypeName caseName : encodable) {
                 if (!covered.contains(caseName)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.missingcase")
-                                    .at(enc.pos()).args(sum.name(), caseName.name()).build());
+                    throw CompileException.of(Diagnostic.at(enc.pos())
+                            .say(new CodecMessage.TheEncoderIsMissingACase(sum.name(), caseName.name()))
+                            .build());
                 }
             }
         });
@@ -576,8 +582,9 @@ public final class DataChecker {
                 boolean hasDecoder = (def instanceof Ast.Data dd && dd.decoder().isPresent())
                         || (def instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!hasDecoder) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2202, "check.codec.nodecoder")
-                                    .at(d.pos()).args(d.typeName().written()).build());
+                    throw CompileException.of(Diagnostic.at(d.pos())
+                            .say(new CodecMessage.HasNoDecoder(d.typeName().written()))
+                            .build());
                 }
                 yield Type.ref(d.typeName().denotes());
             }
@@ -590,8 +597,10 @@ public final class DataChecker {
     private static void checkConstruct(Ast.Construct c, CheckContext ctx, Map<String, Type> fields,
                                        Scope env) {
         if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.mustconstruct")
-                            .at(c.pos()).args(ctx.data().name(), c.typeName().written()).build());
+            throw CompileException.of(Diagnostic.at(c.pos())
+                    .say(new CodecMessage.TheDecoderBuildsAnotherType(ctx.data().name(),
+                            c.typeName().written()))
+                    .build());
         }
         // a decoder's construction gives every field a value of its own; nothing builds one with a
         // spread, so there is no binding to copy from here
@@ -727,15 +736,17 @@ public final class DataChecker {
             case Ast.IsoTextRaw t -> {
                 Type at = Elaborator.typeOf(t.arg(), env, ctx);
                 if (at != Type.DATE && at != Type.DATETIME) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.iso")
-                                    .at(t.pos()).args(Type.show(at)).build());
+                    throw CompileException.of(Diagnostic.at(t.pos())
+                            .say(new CodecMessage.AnIsoTextEncoderTakesATemporalValue(Type.show(at)))
+                            .build());
                 }
             }
             case Ast.OptionRaw o -> {
                 Type at = Elaborator.typeOf(o.access(), env, ctx);
                 if (!(at instanceof Type.OptionOf oo)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.option")
-                                    .at(o.pos()).args(Type.show(at)).build());
+                    throw CompileException.of(Diagnostic.at(o.pos())
+                            .say(new CodecMessage.AnOptionalEncoderTakesAnOptional(Type.show(at)))
+                            .build());
                 }
                 checkRawExpr(o.inner(), env.with(o.elem(), oo.element()), ctx);
             }
@@ -749,8 +760,9 @@ public final class DataChecker {
                 boolean hasEncoder = (encDef instanceof Ast.Data ed && ed.encoder().isPresent())
                         || (encDef instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!hasEncoder) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2202, "check.codec.noencoder")
-                                    .at(e.pos()).args(e.typeName().written()).build());
+                    throw CompileException.of(Diagnostic.at(e.pos())
+                            .say(new CodecMessage.HasNoEncoder(e.typeName().written()))
+                            .build());
                 }
                 Elaborator.requireType(e.arg(), Type.ref(e.typeName().denotes()), env, ctx,
                         "argument of " + e.typeName().written() + ".encode");
@@ -758,24 +770,27 @@ public final class DataChecker {
             case Ast.ListEnc le -> {
                 Type st = Elaborator.typeOf(le.source(), env, ctx);
                 if (!(st instanceof Type.ListOf lo)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.listsource")
-                                    .at(le.pos()).args(Type.show(st)).build());
+                    throw CompileException.of(Diagnostic.at(le.pos())
+                            .say(new CodecMessage.AListEncoderTakesAList(Type.show(st)))
+                            .build());
                 }
                 checkEncElem(le.elem(), lo.element(), le.pos(), ctx.symbols());
             }
             case Ast.SetEnc se -> {
                 Type st = Elaborator.typeOf(se.source(), env, ctx);
                 if (!(st instanceof Type.SetOf so)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.setsource")
-                                    .at(se.pos()).args(Type.show(st)).build());
+                    throw CompileException.of(Diagnostic.at(se.pos())
+                            .say(new CodecMessage.ASetEncoderTakesASet(Type.show(st)))
+                            .build());
                 }
                 checkEncElem(se.elem(), so.element(), se.pos(), ctx.symbols());
             }
             case Ast.MapEnc me -> {
                 Type st = Elaborator.typeOf(me.source(), env, ctx);
                 if (!(st instanceof Type.MapOf mo)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.mapsource")
-                                    .at(me.pos()).args(Type.show(st)).build());
+                    throw CompileException.of(Diagnostic.at(me.pos())
+                            .say(new CodecMessage.AMapEncoderTakesAMap(Type.show(st)))
+                            .build());
                 }
                 checkEncElem(me.elem(), mo.value(), me.pos(), ctx.symbols());
             }
@@ -824,8 +839,10 @@ public final class DataChecker {
     /** The element encoder and the element type disagree, both named as they are written — the
      * encoder by the type it encodes (`String`, `商品ID`, `List`), the element by {@link Type#show}. */
     private static CompileException elemEncMismatch(String encoder, Type elemType, SourcePos pos) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E2201, "check.codec.elemenc")
-                        .at(pos).args("`" + encoder + "`", Type.show(elemType)).build());
+        return CompileException.of(Diagnostic.at(pos)
+                .say(new CodecMessage.TheElementEncoderIsNotForTheElementType(
+                        "`" + encoder + "`", Type.show(elemType)))
+                .build());
     }
 
 }
