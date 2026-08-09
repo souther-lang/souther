@@ -1,11 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -371,7 +373,7 @@ class CompileExampleCompositionTest {
                   | (A { v = "in" }) -> C { v = "out" }
                 """);
         assertEquals("E1908", e.diagnostic().code());
-        assertEquals("example.a-dependency-reached-through-has-no-fake", e.diagnostic().messageKey());
+        assertInstanceOf(ExampleMessage.ADependencyReachedThroughHasNoFake.class, e.diagnostic().said());
         assertEquals(List.of("both", "bossOf", "`two`"),
                 List.copyOf(e.diagnostic().values().values()));
     }
@@ -396,7 +398,7 @@ class CompileExampleCompositionTest {
                 example one
                   | (A { v = "in" }) -> B { v = "out" }
                 """);
-        assertEquals("example.a-dependency-has-no-fake", e.diagnostic().messageKey());
+        assertInstanceOf(ExampleMessage.ADependencyHasNoFake.class, e.diagnostic().said());
     }
 
     /** An injected behavior has nothing to run yet, so its rows are recorded rather than refused. */

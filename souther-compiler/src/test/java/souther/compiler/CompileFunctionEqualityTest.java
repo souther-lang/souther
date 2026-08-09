@@ -1,10 +1,12 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -34,7 +36,7 @@ class CompileFunctionEqualityTest {
                     R { same = p == q }
                 }
                 """);
-        assertEquals("type.a-function-has-no-value-to-compare", d.messageKey());
+        assertInstanceOf(TypeMessage.AFunctionHasNoValueToCompare.class, d.said());
     }
 
     @Test
@@ -50,7 +52,7 @@ class CompileFunctionEqualityTest {
                     R { n = Set.size(s) }
                 }
                 """);
-        assertEquals("type.a-set-element-is-compared-and-a-function-is-not", d.messageKey());
+        assertInstanceOf(TypeMessage.ASetElementIsComparedAndAFunctionIsNot.class, d.said());
     }
 
     @Test
@@ -66,7 +68,7 @@ class CompileFunctionEqualityTest {
                     R { n = Map.size(m) }
                 }
                 """);
-        assertEquals("type.a-map-key-is-compared-and-a-function-is-not", d.messageKey());
+        assertInstanceOf(TypeMessage.AMapKeyIsComparedAndAFunctionIsNot.class, d.said());
     }
 
     // The set `distinct` grows to remember what it has seen is never written down, so only the
@@ -84,7 +86,7 @@ class CompileFunctionEqualityTest {
                     R { n = List.length(List.distinct(fs)) }
                 }
                 """);
-        assertEquals("type.a-set-element-is-compared-and-a-function-is-not", d.messageKey());
+        assertInstanceOf(TypeMessage.ASetElementIsComparedAndAFunctionIsNot.class, d.said());
     }
 
     // A Set asks whether two elements are equal and a Map whether two keys are. Those are different
@@ -101,7 +103,7 @@ class CompileFunctionEqualityTest {
                     R { n = Map.size(Map.singleton(p, 1)) }
                 }
                 """);
-        assertEquals("type.a-map-key-is-compared-and-a-function-is-not", d.messageKey());
+        assertInstanceOf(TypeMessage.AMapKeyIsComparedAndAFunctionIsNot.class, d.said());
     }
 
     @Test
@@ -117,6 +119,6 @@ class CompileFunctionEqualityTest {
                     R { n = Map.size(List.groupBy((i) -> p, xs)) }
                 }
                 """);
-        assertEquals("type.a-map-key-is-compared-and-a-function-is-not", d.messageKey());
+        assertInstanceOf(TypeMessage.AMapKeyIsComparedAndAFunctionIsNot.class, d.said());
     }
 }

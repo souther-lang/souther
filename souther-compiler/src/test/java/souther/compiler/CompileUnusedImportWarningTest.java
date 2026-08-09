@@ -77,7 +77,7 @@ class CompileUnusedImportWarningTest {
         List<String> found = new ArrayList<>();
         for (Db.Found report : compilation.db().allReports()) {
             Diagnostic d = report.report().diagnostic();
-            found.add(d.code() != null ? d.code() : d.messageKey());
+            found.add(d.code() != null ? d.code() : d.said().entry());
         }
         return found;
     }

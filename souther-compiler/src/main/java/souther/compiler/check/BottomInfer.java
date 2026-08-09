@@ -118,11 +118,9 @@ public final class BottomInfer {
                         || standalone.matcher(d.diff().expectedType()).find())) {
             return true;
         }
-        if (d.args() != null) {
-            for (Object a : d.args()) {
-                if (a != null && standalone.matcher(a.toString()).find()) {
-                    return true;
-                }
+        for (Object value : d.values().values()) {
+            if (value != null && standalone.matcher(value.toString()).find()) {
+                return true;
             }
         }
         return false;

@@ -1,8 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.CodecMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,7 +27,7 @@ class CompileRoundingModeBoundaryTest {
 
                 data Policy = { mode: RoundingMode }
                 """));
-        assertEquals("codec.has-no-decoder", e.diagnostic().messageKey());
+        assertInstanceOf(CodecMessage.HasNoDecoder.class, e.diagnostic().said());
         assertTrue(e.getMessage().contains("RoundingMode"), e.getMessage());
     }
 

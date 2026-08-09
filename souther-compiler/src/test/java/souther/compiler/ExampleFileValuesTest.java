@@ -1,11 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -100,7 +102,7 @@ class ExampleFileValuesTest {
                             | "x" : (In { n = 1 }) -> Out { m = 1 }
                         """)));
         assertEquals("E1906", e.diagnostic().code());
-        assertEquals("example.an-examples-file-holds-only-examples", e.diagnostic().messageKey());
+        assertInstanceOf(ExampleMessage.AnExamplesFileHoldsOnlyExamples.class, e.diagnostic().said());
     }
 
     @Test
@@ -115,7 +117,7 @@ class ExampleFileValuesTest {
                             | "x" : (In { n = 1 }) -> Out { m = 1 }
                         """)));
         assertEquals("E1906", e.diagnostic().code());
-        assertEquals("example.an-examples-file-holds-only-examples", e.diagnostic().messageKey());
+        assertInstanceOf(ExampleMessage.AnExamplesFileHoldsOnlyExamples.class, e.diagnostic().said());
     }
 
     @Test
@@ -137,7 +139,7 @@ class ExampleFileValuesTest {
                         """)));
 
         assertEquals("E1906", e.diagnostic().code());
-        assertEquals("example.the-name-is-already-declared", e.diagnostic().messageKey());
+        assertInstanceOf(ExampleMessage.TheNameIsAlreadyDeclared.class, e.diagnostic().said());
         assertEquals("1", e.sourceId(), "the declaration is in the attached file");
         assertEquals(3, e.diagnostic().pos().line(), "and at its own line");
     }

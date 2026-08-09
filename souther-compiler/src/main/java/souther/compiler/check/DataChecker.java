@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -520,8 +521,8 @@ public final class DataChecker {
             // being reached from somewhere is not a permission a representation gave.
             Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx.inAnotherRepresentation());
             if (t != Type.BOOL) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1101, "e1101.msg").at(clause.expr().pos())
-                                .args(Type.show(t)).build());
+                throw CompileException.of(Diagnostic.at(clause.expr().pos())
+                                .say(new DeclarationMessage.AnInvariantExpressionIsBool(Type.show(t))).build());
             }
         }
         checkClauseNames(ctx.data(), ctx.symbols());

@@ -1,30 +1,31 @@
 package souther.compiler.cst;
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.msg.Message;
 
 /**
  * A syntax problem recorded during lexing or parsing, positioned by absolute offset so it does not
  * depend on a {@link LineIndex} yet. A driver turns it into a
  * {@link souther.compiler.diag.Diagnostic} once the line index is known.
  *
- * <p>{@code code} is the rule the text broke and {@code messageKey}/{@code args} feed the localized
- * catalog; {@code legacyMessage} preserves the English text the pre-CST throw sites produced, so
- * existing callers and tests see the same {@code getMessage()}.
- *
- * <p>The code is recorded here rather than decided by the driver because what a reader is told to
- * look up is a property of what they wrote — a `+let+` written with an empty parameter list and a
- * type variable written outside the core are both refused while parsing, and they are not one rule.
+ * <p>{@code said} is the message, which carries both the values the reader is shown and the rule
+ * they look up. Which part of the language did not read is a property of what is being read and not
+ * of the token that was missing — a {@code let} written with an empty parameter list and a type
+ * variable written outside the core are both refused while parsing, and they are not one rule — so
+ * the message the site says is what decides it.
  */
-public record CstError(int offset, int width, DiagnosticCode code, String messageKey,
-                       String legacyMessage, Object[] args) {
+public record CstError(int offset, int width, Message said) {
 
     public CstError {
-        java.util.Objects.requireNonNull(code, "a syntax error says which part of the language did"
-                + " not read, and that is a code");
+        java.util.Objects.requireNonNull(said, "a syntax error says what did not read");
     }
 
-    public static CstError of(int offset, int width, DiagnosticCode code, String messageKey,
-                              String legacyMessage, Object... args) {
-        return new CstError(offset, width, code, messageKey, legacyMessage, args);
+    /** The rule the text broke. */
+    public DiagnosticCode code() {
+        return said.reports();
+    }
+
+    public static CstError of(int offset, int width, Message said) {
+        return new CstError(offset, width, said);
     }
 }

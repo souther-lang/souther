@@ -53,7 +53,7 @@ class ANameThatDenotesNothingCostsOneDefinitionTest {
     }
 
     private static List<String> messageKeys(String source) {
-        return diagnosed(source).stream().map(l -> l.diagnostic().messageKey()).toList();
+        return diagnosed(source).stream().map(l -> l.diagnostic().said().entry()).toList();
     }
 
     @Test

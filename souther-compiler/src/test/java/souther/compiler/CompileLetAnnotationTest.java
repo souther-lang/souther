@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -103,7 +106,7 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.type.mismatch.title", d.titleKey());
-        assertEquals("name.the-binding-declares-another-type", d.messageKey());
+        assertInstanceOf(NameMessage.TheBindingDeclaresAnotherType.class, d.said());
         assertEquals("String", d.diff().actualType());
         assertEquals("Int", d.diff().expectedType());
     }
@@ -143,7 +146,7 @@ class CompileLetAnnotationTest {
                     Out { v = f(i.v) }
                 }
                 """);
-        assertEquals("helper.the-lambda-is-applied-with-another-number-of-arguments", d.messageKey());
+        assertInstanceOf(HelperMessage.TheLambdaIsAppliedWithAnotherNumberOfArguments.class, d.said());
     }
 
     // The annotated type is the binding's type for everything downstream: the value reaches a helper
@@ -186,7 +189,7 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.fn.title", d.titleKey());
-        assertEquals("helper.a-function-type-is-written-outside-a-helper-parameter", d.messageKey());
+        assertInstanceOf(HelperMessage.AFunctionTypeIsWrittenOutsideAHelperParameter.class, d.said());
         assertEquals("f", d.values().get("binding"));
     }
 
@@ -205,7 +208,7 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.fn.title", d.titleKey());
-        assertEquals("helper.a-function-type-is-written-outside-a-helper-parameter", d.messageKey());
+        assertInstanceOf(HelperMessage.AFunctionTypeIsWrittenOutsideAHelperParameter.class, d.said());
     }
 
     // A sum annotation widens a case value to its sum, so the body's `match` sees both arms.

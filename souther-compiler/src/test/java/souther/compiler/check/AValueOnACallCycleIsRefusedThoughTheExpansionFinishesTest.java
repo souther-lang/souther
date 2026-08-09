@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.Diagnostic;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -66,7 +68,7 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
         List<Diagnostic> found = diagnose(CYCLE);
 
         assertEquals(1, found.size(), "one mistake, one report: " + found);
-        assertEquals("name.a-value-reaches-itself", found.get(0).messageKey());
+        assertInstanceOf(NameMessage.AValueReachesItself.class, found.get(0).said());
     }
 
     /** And the helper it goes round is not what is wrong with it: on its own it compiles. */

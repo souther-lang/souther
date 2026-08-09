@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -56,10 +57,10 @@ class ASecondaryRegionNamesItsFileTest {
     }
 
     private static Diagnostic withSecondary(String secondarySourceId) {
-        return Diagnostic.of(DiagnosticCode.E1023, "name.no-value-of-that-name-in-scope")
+        return Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
                 .secondaryIn(secondarySourceId, Region.ofWidth(new SourcePos(3, 3), 4),
-                        "diag.hint.label")
+                        new NameMessage.WriteItOnItsOwn("x"))
                 .build();
     }
 
@@ -101,10 +102,12 @@ class ASecondaryRegionNamesItsFileTest {
     @Test
     void aSourceIsReadOnceHoweverManyRegionsAreInIt() {
         Asked asked = resolver();
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "name.no-value-of-that-name-in-scope")
+        Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4), "diag.hint.label")
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4), "diag.hint.label")
+                .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4),
+                        new NameMessage.WriteItOnItsOwn("x"))
+                .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4),
+                        new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
         new HumanRenderer(false).render(new Located(d, "rows"), asked.resolver(), Locale.ENGLISH);
@@ -172,10 +175,12 @@ class ASecondaryRegionNamesItsFileTest {
 
     @Test
     void whereOneFileHoldsSeveralRegionsTheFirstWrittenIsTheAnchor() {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "name.no-value-of-that-name-in-scope")
+        Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(3, 3), 5)
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4), "diag.hint.label")
-                .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4), "diag.hint.label")
+                .secondaryIn("fakes", Region.ofWidth(new SourcePos(3, 3), 4),
+                        new NameMessage.WriteItOnItsOwn("x"))
+                .secondaryIn("fakes", Region.ofWidth(new SourcePos(2, 1), 4),
+                        new NameMessage.WriteItOnItsOwn("x"))
                 .build();
 
         DiagnosticView view = DiagnosticView.of(d, "rows", "fakes");
@@ -197,7 +202,7 @@ class ASecondaryRegionNamesItsFileTest {
     void aLabelAndItsRegionCannotNameTwoFiles() {
         assertThrows(IllegalArgumentException.class,
                 () -> new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "rows"), 4),
-                        "fakes", "diag.hint.label", null));
+                        "fakes", new NameMessage.WriteItOnItsOwn("x")));
     }
 
     /** A region built from a hand-made position knows no file, and a label that names one is how it
@@ -205,7 +210,7 @@ class ASecondaryRegionNamesItsFileTest {
     @Test
     void aLabelMayNameTheFileWhenItsRegionDoesNot() {
         assertEquals("fakes", new LabeledRegion(Region.ofWidth(new SourcePos(3, 3), 4),
-                "fakes", "diag.hint.label", null).sourceId());
+                "fakes", new NameMessage.WriteItOnItsOwn("x")).sourceId());
     }
 
     /** A label that names nothing means the diagnostic's own file, whatever its region was read
@@ -213,7 +218,7 @@ class ASecondaryRegionNamesItsFileTest {
     @Test
     void aLabelMayNameNothingWhileItsRegionKnowsItsFile() {
         LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "rows"), 4),
-                null, "diag.hint.label", null);
+                null, new NameMessage.WriteItOnItsOwn("x"));
 
         assertEquals("rows", label.sourceIdOr("rows"));
     }

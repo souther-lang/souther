@@ -1,5 +1,8 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
@@ -11,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -38,7 +42,7 @@ class OneProblemOneDiagnosticTest {
                 """).get("a.sou");
 
         assertEquals(1, found.size(), "one unknown import, one diagnostic: " + found);
-        assertEquals("module.unknown-module", found.get(0).messageKey());
+        assertInstanceOf(ModuleMessage.UnknownModule.class, found.get(0).said());
     }
 
     @Test
@@ -107,7 +111,7 @@ class OneProblemOneDiagnosticTest {
         // The duplicate, and the name that denotes nothing. Not "unknown type A" as well: the first
         // A is still a declaration, so B's field still means something.
         assertEquals(2, found.size(), "the duplicate and the unknown name, and no more: " + found);
-        assertTrue(found.stream().anyMatch(d -> "data.a-data-is-already-defined".equals(d.messageKey())));
-        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())));
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof DataMessage.ADataIsAlreadyDefined));
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof NameMessage.NoTypeOfThatName));
     }
 }

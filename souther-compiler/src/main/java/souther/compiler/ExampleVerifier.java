@@ -167,10 +167,7 @@ public final class ExampleVerifier {
         // A diff-less failure (an input fixture that could not be built, a missing fake, a
         // non-termination): render the diagnostic's own catalog message so the reason travels
         // through the annotation processor, rather than collapsing to a bare "example failed".
-        if (d.messageKey() != null) {
-            return DiagnosticRenderer.legacyBody(d);
-        }
-        return "example failed";
+        return d.said() == null ? "example failed" : DiagnosticRenderer.legacyBody(d);
     }
 
     private final Ast.Module module;

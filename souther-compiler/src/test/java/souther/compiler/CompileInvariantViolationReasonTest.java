@@ -20,7 +20,7 @@ class CompileInvariantViolationReasonTest {
     private static String reasonOf(String module) {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(module));
         assertEquals("E2010", e.diagnostic().code(), e.getMessage());
-        return e.diagnostic().messageKey();
+        return e.diagnostic().said().entry();
     }
 
     @Test

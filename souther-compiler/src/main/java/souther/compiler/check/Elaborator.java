@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.TypeMessage;
@@ -415,8 +416,8 @@ public final class Elaborator {
             }
             throw CompileException.of(d.say(new ModuleMessage.CannotReadAFieldOnASum(fa.field(), Type.show(target))).build());
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1321, "check.access")
-                        .at(fa.name().region()).args(fa.field()).build());
+        throw CompileException.of(Diagnostic
+                        .at(fa.name().region()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
     }
 
     /**
@@ -1318,8 +1319,8 @@ public final class Elaborator {
             case null, default -> null;
         };
         if (denotes != null) {
-            return CompileException.of(Diagnostic.of(DiagnosticCode.E1024, "check.notavalue")
-                            .at(v.written().region()).args(v.name(), denotes).build());
+            return CompileException.of(Diagnostic
+                            .at(v.written().region()).say(new DeclarationMessage.ItCannotBeHeldAsAValueHere(v.name(), denotes)).build());
         }
         return CompileException.of(Diagnostic
                         .at(v.written().region())
@@ -1341,9 +1342,12 @@ public final class Elaborator {
         if (!some && !name.equals("None")) {
             return;
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1303, some ? "e1303.some" : "e1303.none")
-                        .at(pos, name.length())
-                        .hint(some ? "e1303.some.hint" : "e1303.none.hint").build());
+        throw CompileException.of(Diagnostic.at(pos, name.length())
+                .say(some ? new DeclarationMessage.SomeIsNotACall()
+                        : new DeclarationMessage.NothingHereIsAskingForNone())
+                .hint(some ? new DeclarationMessage.WriteTheValueOnItsOwn()
+                        : new DeclarationMessage.MakeAbsenceACaseOfItsOwnSum())
+                .build());
     }
 
     /**

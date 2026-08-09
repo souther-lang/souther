@@ -7,6 +7,7 @@ import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 
@@ -84,7 +85,7 @@ final class JvmLimits {
                 }
                 // the record constructor takes them all, and it is an instance method
                 if (slots > INSTANCE_SLOTS) {
-                    throw tooWide("e2101.data", data.written(), slots, INSTANCE_SLOTS,
+                    throw tooWide(Wide.DATA, data.written(), slots, INSTANCE_SLOTS,
                             "data `" + data.name() + "` needs " + slots + " JVM parameter slots, but the"
                                     + " constructor generated for it takes at most " + INSTANCE_SLOTS);
                 }
@@ -103,7 +104,7 @@ final class JvmLimits {
             Sig sig = sigs.get(bd.name());
             // a composition whose stage names nothing has no signature, and nothing is emitted for it
             if (sig != null && sig.inputTypes().size() > INSTANCE_SLOTS) {
-                throw tooWide("e2101.behavior.parameters", bd.written(), sig.inputTypes().size(),
+                throw tooWide(Wide.BEHAVIOR_PARAMETERS, bd.written(), sig.inputTypes().size(),
                         INSTANCE_SLOTS, "behavior `" + bd.name() + "` takes " + sig.inputTypes().size()
                                 + " parameters, but the `apply` generated for it takes at most "
                                 + INSTANCE_SLOTS);
@@ -111,7 +112,7 @@ final class JvmLimits {
             int dependencies = dependencyCount(bd, implemented, requirements);
             // the $Impl constructor holds one field per dependency, and it is an instance method
             if (dependencies > INSTANCE_SLOTS) {
-                throw tooWide("e2101.behavior.dependencies", bd.written(), dependencies,
+                throw tooWide(Wide.BEHAVIOR_DEPENDENCIES, bd.written(), dependencies,
                         INSTANCE_SLOTS, "behavior `" + bd.name() + "` is built with " + dependencies
                                 + " dependencies, but the constructor generated for it takes at most "
                                 + INSTANCE_SLOTS);
@@ -120,7 +121,7 @@ final class JvmLimits {
         for (Ast.FnDef helper : recursiveHelpers.values()) {
             // a recursive helper is a static method on $Fns, so nothing is spent on `this`
             if (helper.params().size() > SLOTS) {
-                throw tooWide("e2101.helper", helper.written(), helper.params().size(),
+                throw tooWide(Wide.HELPER, helper.written(), helper.params().size(),
                         SLOTS, "let `" + helper.name() + "` takes " + helper.params().size()
                                 + " parameters, but the method generated for it takes at most " + SLOTS);
             }
@@ -150,16 +151,14 @@ final class JvmLimits {
      * wanted, and refusing to write the pool out says how many entries there are.
      */
     enum Limit {
-        CODE_SIZE(DiagnosticCode.E2102, "e2102.msg"),
-        CONSTANT_POOL_INDEX(DiagnosticCode.E2103, "e2103.index"),
-        CONSTANT_POOL_SIZE(DiagnosticCode.E2103, "e2103.size");
+        CODE_SIZE(DiagnosticCode.E2102),
+        CONSTANT_POOL_INDEX(DiagnosticCode.E2103),
+        CONSTANT_POOL_SIZE(DiagnosticCode.E2103);
 
         private final DiagnosticCode code;
-        private final String messageKey;
 
-        Limit(DiagnosticCode code, String messageKey) {
+        Limit(DiagnosticCode code) {
             this.code = code;
-            this.messageKey = messageKey;
         }
     }
 
@@ -211,21 +210,52 @@ final class JvmLimits {
         Limit limit = exceeded.limit();
         String name = written.canonical();
         String measured = String.valueOf(exceeded.measured());
-        Diagnostic.Builder said =
-                Diagnostic.of(limit.code, limit.messageKey).at(written.region());
+        Diagnostic.Builder said = Diagnostic.at(written.region());
         return switch (limit) {
-            case CODE_SIZE -> CompileException.of(said.args(name, exceeded.method(), measured, String.valueOf(CODE_BYTES))
-                            .hint("e2102.hint").build());
-            case CONSTANT_POOL_INDEX -> CompileException.of(said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build());
-            case CONSTANT_POOL_SIZE -> CompileException.of(said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build());
+            case CODE_SIZE -> CompileException.of(said
+                    .say(new DeclarationMessage.AMethodIsLargerThanTheJvmHolds(name,
+                            exceeded.method(), measured, String.valueOf(CODE_BYTES)))
+                    .hint(new DeclarationMessage.SplitTheWorkOrMoveTheTable()).build());
+            case CONSTANT_POOL_INDEX -> CompileException.of(said
+                    .say(new DeclarationMessage.AClassRefersPastTheConstantPool(name, measured,
+                            String.valueOf(POOL_ENTRIES)))
+                    .hint(new DeclarationMessage.MoveTheTableOutOfTheSource()).build());
+            case CONSTANT_POOL_SIZE -> CompileException.of(said
+                    .say(new DeclarationMessage.AClassNeedsMoreConstantsThanItHolds(name, measured,
+                            String.valueOf(POOL_ENTRIES)))
+                    .hint(new DeclarationMessage.MoveTheTableOutOfTheSource()).build());
         };
     }
 
-    private static CompileException tooWide(String key, WrittenName written, int needed,
+    /** Which definition ran out of parameter slots. */
+    private enum Wide { DATA, BEHAVIOR_PARAMETERS, BEHAVIOR_DEPENDENCIES, HELPER }
+
+    private static CompileException tooWide(Wide what, WrittenName written, int needed,
                                             int limit, String message) {
         String name = written.canonical();
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E2101, key).at(written.region())
-                        .args(name, String.valueOf(needed), String.valueOf(limit))
-                        .hint(key + ".hint").build());
+        String has = String.valueOf(needed);
+        String holds = String.valueOf(limit);
+        return CompileException.of(Diagnostic.at(written.region())
+                .say(switch (what) {
+                    case DATA -> new DeclarationMessage.ADataNeedsMoreSlotsThanAConstructorHolds(
+                            name, has, holds);
+                    case HELPER ->
+                            new DeclarationMessage.AHelperTakesMoreParametersThanAMethodHolds(name,
+                                    has, holds);
+                    case BEHAVIOR_PARAMETERS ->
+                            new DeclarationMessage.ABehaviorTakesMoreParametersThanApplyHolds(name,
+                                    has, holds);
+                    case BEHAVIOR_DEPENDENCIES ->
+                            new DeclarationMessage
+                                    .ABehaviorHasMoreDependenciesThanAConstructorHolds(name, has,
+                                            holds);
+                })
+                .hint(switch (what) {
+                    case DATA -> new DeclarationMessage.SplitTheDataAndHoldThemAsFields(name);
+                    case BEHAVIOR_DEPENDENCIES ->
+                            new DeclarationMessage.GroupTheDependenciesBehindABehavior();
+                    default -> new DeclarationMessage.GroupTheParametersIntoAData();
+                })
+                .build());
     }
 }

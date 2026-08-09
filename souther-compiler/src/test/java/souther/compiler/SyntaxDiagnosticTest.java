@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.diag.CompileException;
 
 import souther.compiler.diag.Diagnostic;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -35,7 +37,7 @@ class SyntaxDiagnosticTest {
     @Test
     void expectedFoundUsesFriendlyTokenNamesAndLocalizes() {
         Diagnostic d = diagnosticOf("module demo\ndata M = { name String }\n");
-        assertEquals("parse.expected", d.messageKey());
+        assertInstanceOf(ParseMessage.ADeclarationExpectedSomethingElse.class, d.said());
         SourceContext src = new SourceContext("m.sou", "module demo\ndata M = { name String }\n");
         String en = new HumanRenderer(false).render(d, src, Locale.ENGLISH);
         String ja = new HumanRenderer(false).render(d, src, Locale.JAPANESE);
@@ -54,7 +56,7 @@ class SyntaxDiagnosticTest {
                 """;
         Diagnostic d = diagnosticOf(source);
         assertEquals("parse.title", d.titleKey());
-        assertEquals("parse.block.noresult", d.messageKey());
+        assertInstanceOf(ParseMessage.ABlockEndsInOneExpression.class, d.said());
         SourceContext src = new SourceContext("m.sou", source);
         String en = new HumanRenderer(false).render(d, src, Locale.ENGLISH);
         String ja = new HumanRenderer(false).render(d, src, Locale.JAPANESE);
@@ -88,6 +90,6 @@ class SyntaxDiagnosticTest {
     void lexerErrorIsLocalized() {
         Diagnostic d = diagnosticOf("module demo\ndata M = Int\nlet x = 1.5\n");
         assertEquals("parse.title", d.titleKey());
-        assertEquals("lex.decimal.m", d.messageKey());
+        assertInstanceOf(ParseMessage.AFractionalLiteralNeedsTheMSuffix.class, d.said());
     }
 }

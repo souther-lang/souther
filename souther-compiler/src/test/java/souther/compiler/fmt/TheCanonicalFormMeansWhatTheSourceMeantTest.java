@@ -134,7 +134,7 @@ class TheCanonicalFormMeansWhatTheSourceMeantTest {
         try {
             module = CstFrontend.parse(source);
         } catch (CompileException e) {
-            return "refused " + e.diagnostic().code() + " " + e.diagnostic().messageKey();
+            return "refused " + e.diagnostic().code() + " " + e.diagnostic().said().entry();
         }
         StringBuilder out = new StringBuilder();
         write(module, out);

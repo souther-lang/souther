@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
@@ -39,10 +41,8 @@ class UnresolvedNamesTest {
                 """);
 
         assertEquals(2, found.size(), "both, not the first: " + found);
-        assertTrue(found.stream().anyMatch(d -> d.args() != null
-                && List.copyOf(d.values().values()).contains("Nowhere")));
-        assertTrue(found.stream().anyMatch(d -> d.args() != null
-                && List.copyOf(d.values().values()).contains("Elsewhere")));
+        assertTrue(found.stream().anyMatch(d -> List.copyOf(d.values().values()).contains("Nowhere")));
+        assertTrue(found.stream().anyMatch(d -> List.copyOf(d.values().values()).contains("Elsewhere")));
     }
 
     @Test
@@ -94,7 +94,7 @@ class UnresolvedNamesTest {
 
         assertEquals(1, found.size(),
                 "the name that denotes nothing, and nothing about constructing it: " + found);
-        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof NameMessage.NoTypeOfThatName),
                 "the construction names nothing, and that is said: " + found);
         assertEquals(Map.of(), c.classes(),
                 "a construction of a type nobody could name is not emitted");
@@ -119,7 +119,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown name, and g's own mistake — nothing about what f does: " + found);
-        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof NameMessage.NoTypeOfThatName),
                 "the name that denotes nothing: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and a type mismatch in the definition that has one: " + found);
@@ -145,7 +145,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown behavior, and g's own mistake: " + found);
-        assertTrue(found.stream().anyMatch(d -> "name.no-behavior-of-that-name-in-this-pipeline".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof NameMessage.NoBehaviorOfThatNameInThisPipeline),
                 "the stage that names no behavior: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);
@@ -166,7 +166,7 @@ class UnresolvedNamesTest {
                 """);
 
         assertEquals(2, found.size(), "both, not the first: " + found);
-        assertTrue(found.stream().allMatch(d -> "name.no-value-of-that-name-in-scope".equals(d.messageKey())),
+        assertTrue(found.stream().allMatch(d -> d.said() instanceof NameMessage.NoValueOfThatNameInScope),
                 found.toString());
     }
 
@@ -186,7 +186,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown name, and g's own mistake — nothing about what f does: " + found);
-        assertTrue(found.stream().anyMatch(d -> "name.no-value-of-that-name-in-scope".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof NameMessage.NoValueOfThatNameInScope),
                 "the name that denotes nothing: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);
@@ -270,7 +270,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown name, and g's own mistake: " + found);
-        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof NameMessage.NoTypeOfThatName),
                 "the name that denotes nothing: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);
@@ -305,7 +305,7 @@ class UnresolvedNamesTest {
         assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get("a.sou"),
                 "the reserved module name is x's mistake, not this one's");
         assertTrue(Located.diagnosticsOf(c.diagnostics()).get("x.sou").stream()
-                        .anyMatch(d -> "module.the-module-is-in-the-reserved-namespace".equals(d.messageKey())),
+                        .anyMatch(d -> d.said() instanceof ModuleMessage.TheModuleIsInTheReservedNamespace),
                 "and it is reported there: " + Located.diagnosticsOf(c.diagnostics()).get("x.sou"));
         assertEquals(Map.of(), c.classes(),
                 "a composition whose stage nobody can name is not emitted");

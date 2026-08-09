@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import souther.compiler.cst.CstError;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.cst.CstParser;
 
 import java.util.ArrayList;
@@ -114,17 +116,13 @@ class DeepSyntaxTest {
         onSmallStack(() -> errors.set(CstParser.parse(shape.source()).errors()));
 
         assertNotNull(errors.get(), "the parse did not come back with an answer");
-        String said = errors.get().stream().map(CstError::legacyMessage)
-                .filter(m -> m.contains("deep")).findFirst().orElse(null);
-        assertNotNull(said, "expected a depth diagnostic, got: " + errors.get().stream()
-                .map(CstError::legacyMessage).toList());
         // The bound is the tree's, so the diagnostic is too. `List<List<…<Int>…>>` reaches it
-        // without an expression in sight, and `let` is not what splits it up; a message that names
+        // without an expression in sight, and `let` is not what splits it up; a message about
         // either is telling the author to do something that does not apply to what they wrote.
-        assertFalse(said.contains("expression"),
-                "the depth diagnostic calls every shape an expression: " + said);
-        assertFalse(said.contains("let"),
-                "the depth diagnostic offers `let` to a type or a pattern: " + said);
+        assertTrue(errors.get().stream().map(CstError::said)
+                        .anyMatch(m -> m instanceof DeclarationMessage.ItNestsDeeperThanIsRead),
+                "expected the nesting diagnostic, got: " + errors.get().stream()
+                        .map(CstError::said).toList());
     }
 
     /**
@@ -173,9 +171,9 @@ class DeepSyntaxTest {
     @Test
     void theAnswerIsTheSameOnEveryRun() throws InterruptedException {
         String source = moduleWith("1 + ".repeat(20000) + "1");
-        List<String> answers = new ArrayList<>();
+        List<Message> answers = new ArrayList<>();
         for (int i = 0; i < RUNS; i++) {
-            AtomicReference<String> answer = new AtomicReference<>();
+            AtomicReference<Message> answer = new AtomicReference<>();
             onSmallStack(() -> answer.set(firstErrorOf(source)));
             answers.add(answer.get());
         }
@@ -206,9 +204,9 @@ class DeepSyntaxTest {
     }
 
     /** The parse's first complaint, or null where it had none. */
-    private static String firstErrorOf(String source) {
+    private static Message firstErrorOf(String source) {
         List<CstError> errors = CstParser.parse(source).errors();
-        return errors.isEmpty() ? null : errors.get(0).legacyMessage();
+        return errors.isEmpty() ? null : errors.get(0).said();
     }
 
     /** Runs {@code work} on a thread with {@link #STACK_BYTES} of stack and returns what it threw,

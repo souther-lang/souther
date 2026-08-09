@@ -1,5 +1,7 @@
 package souther.compiler.diag.msg;
 
+import souther.compiler.diag.DiagnosticCode;
+
 /**
  * What a diagnostic says, as the values it is about.
  *
@@ -17,9 +19,9 @@ package souther.compiler.diag.msg;
  * shown only in a hint belongs to the hint's own message, and a wording that turns on a value is two
  * messages rather than one entry that selects between two sentences.
  */
-public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage, CodecMessage, DataMessage, ExampleMessage, HelperMessage,
+public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage, CodecMessage, DataMessage, DeclarationMessage, ExampleMessage, HelperMessage,
         ImportMessage, InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage,
-        NameMessage, TypeMessage {
+        NameMessage, ParseMessage, TypeMessage {
 
     /**
      * The catalog entry this renders through, read off where the message is declared.
@@ -31,5 +33,21 @@ public sealed interface Message permits ArithmeticMessage, AttemptMessage, Behav
      */
     default String entry() {
         return MessageKeys.of(getClass());
+    }
+
+    /**
+     * The rule this reports, read off {@link Code} where the message is declared.
+     *
+     * <p>A message with no code is refused here rather than rendered without one, because a
+     * diagnostic a reader cannot look up is the thing the code exists to prevent. The build refuses
+     * it earlier still.
+     */
+    default DiagnosticCode reports() {
+        Code code = getClass().getAnnotation(Code.class);
+        if (code == null) {
+            throw new IllegalStateException("a message reports a rule, and "
+                    + getClass().getName() + " names no code");
+        }
+        return code.value();
     }
 }

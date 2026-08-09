@@ -64,7 +64,7 @@ class ARefusedMapKeyStatesItsRuleOnceTest {
     private static String hintKey(CompileException e) {
         List<Note> notes = e.diagnostic().notes();
         assertEquals(1, notes.size(), e.getMessage());
-        return notes.get(0).messageKey();
+        return notes.get(0).said().entry();
     }
 
     /** One rule, one place it is written down. Three hint keys were three chances to say it

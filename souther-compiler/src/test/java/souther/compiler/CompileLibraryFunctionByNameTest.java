@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -127,7 +129,7 @@ class CompileLibraryFunctionByNameTest {
                 let go (i) = Out { ns = List.map(Decimal.toInt, i.ds) }
                 """));
 
-        assertEquals("helper.the-block-takes-another-number-of-arguments", e.diagnostic().messageKey());
+        assertInstanceOf(HelperMessage.TheBlockTakesAnotherNumberOfArguments.class, e.diagnostic().said());
     }
 
     /** An empty collection is a declaration with no parameter list, so it is already the value it

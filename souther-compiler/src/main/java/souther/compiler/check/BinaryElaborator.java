@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -116,10 +117,8 @@ public final class BinaryElaborator {
                 if (!(lt instanceof Type.ListOf lo) || !(rt instanceof Type.ListOf ro)) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2)
-                                    .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
-                                            "check.operand", Type.show(lt, rt))
-                                    .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
-                                            "check.operand", Type.show(rt, lt))
+                                    .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
+                                    .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)))
                                     
                                     .say(new TypeMessage.JoinsTwoListsOrTwoStrings(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
@@ -159,10 +158,8 @@ public final class BinaryElaborator {
                         && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2)
-                                    .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
-                                            "check.operand", Type.show(lt, rt))
-                                    .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
-                                            "check.operand", Type.show(rt, lt))
+                                    .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
+                                    .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)))
                                     
                                     .say(new TypeMessage.TheseTwoCannotBeCompared(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
@@ -217,10 +214,8 @@ public final class BinaryElaborator {
         }
         if (refusal.side() == ArithmeticCheck.Side.BOTH) {
             d = d.at(bin.pos())
-                    .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
-                            "check.operand", Type.show(lt, rt))
-                    .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
-                            "check.operand", Type.show(rt, lt));
+                    .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))
+                    .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())), new DeclarationMessage.ThisOperandIs(Type.show(rt, lt)));
         } else {
             Ast.Expr faulted = refusal.side() == ArithmeticCheck.Side.LEFT ? bin.left() : bin.right();
             d = d.at(Region.ofWidth(faulted.pos(), Elaborator.width(faulted)));

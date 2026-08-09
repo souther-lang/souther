@@ -558,6 +558,32 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
                 "a message is a record whose components are its values, and it reports a rule");
     }
 
+    /**
+     * Every rule a reader can be told to look up has something that tells them.
+     *
+     * <p>A code with no message is a chapter of the manual nothing sends anyone to. It is how a rule
+     * gets documented and then quietly stops being reported: the code stays, the site that raised it
+     * moves to another one, and nothing says the first is now unreachable. Held from the codes'
+     * side, because the messages' side is already held — a message names a code or it does not
+     * compile.
+     */
+    @Test
+    void everyCodeIsReportedByAMessage() {
+        Set<DiagnosticCode> reported = new java.util.HashSet<>();
+        for (Class<? extends Message> message : messages()) {
+            reported.add(message.getAnnotation(souther.compiler.diag.msg.Code.class).value());
+        }
+        List<String> unreported = new ArrayList<>();
+        for (DiagnosticCode code : DiagnosticCode.values()) {
+            if (!reported.contains(code)) {
+                unreported.add(code.name());
+            }
+        }
+        unreported.sort(String::compareTo);
+        assertEquals(List.of(), unreported,
+                "a code names a rule a reader looks up, and nothing reports these");
+    }
+
     private static Set<String> ownedByAMessage() {
         Set<String> keys = new TreeSet<>();
         for (Class<? extends Message> message : messages()) {

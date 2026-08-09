@@ -5,8 +5,8 @@ import souther.compiler.diag.msg.Message;
 /**
  * A secondary source region with a note. Used when one error points at more than one place — the
  * left behavior's output and the right behavior's input of a failed composition, or the two
- * branches of an {@code if} that disagree. {@code labelKey} is a catalog key (its prose follows the
- * locale); {@code labelArgs} fill its placeholders.
+ * branches of an {@code if} that disagree. {@code said} is what the label says, and carries the
+ * values it names.
  *
  * <p>{@code sourceId} names the source this region is in, and is null for the ordinary case where
  * that is the diagnostic's own. A problem written in two files — a stand-in in one and the row it
@@ -14,20 +14,10 @@ import souther.compiler.diag.msg.Message;
  * line that happens to sit at that number in the first. Read it through
  * {@link #sourceIdOr(String)}: a resolver is asked about a source that is named, never about null.
  */
-public record LabeledRegion(Region region, String sourceId, String labelKey, Object[] labelArgs,
-                            Message said) {
-
-    /** A label written as a message. */
-    public LabeledRegion(Region region, String sourceId, Message said) {
-        this(region, sourceId, said.entry(), new Object[0], said);
-    }
-
-    /** A label written as a key and its arguments. */
-    public LabeledRegion(Region region, String sourceId, String labelKey, Object[] labelArgs) {
-        this(region, sourceId, labelKey, labelArgs, null);
-    }
+public record LabeledRegion(Region region, String sourceId, Message said) {
 
     public LabeledRegion {
+        java.util.Objects.requireNonNull(said, "a secondary region says why it is pointed at");
         // Two things can say which file this is in — what the label was given, and what the region's
         // own position was read from — and a reader takes the first. So they are allowed to differ
         // only by one of them saying nothing: a region built from a hand-made position knows no
@@ -45,15 +35,5 @@ public record LabeledRegion(Region region, String sourceId, String labelKey, Obj
     /** The source this region is in, inheriting {@code diagnosticSourceId} when it names none. */
     public String sourceIdOr(String diagnosticSourceId) {
         return sourceId == null ? diagnosticSourceId : sourceId;
-    }
-
-    /** What makes two labels the same label. A record compares an array component by identity, and
-     * {@code labelArgs} is one. */
-    public record Of(Region region, String sourceId, String labelKey,
-                     java.util.List<Object> labelArgs, Message said) {}
-
-    public Of identity() {
-        return new Of(region, sourceId, labelKey,
-                labelArgs == null ? java.util.List.of() : java.util.Arrays.asList(labelArgs), said);
     }
 }

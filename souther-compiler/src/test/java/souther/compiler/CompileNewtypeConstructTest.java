@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
 
 import souther.runtime.ConstraintViolation;
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -142,7 +144,7 @@ class CompileNewtypeConstructTest {
                 let make (x) = Code("AB")
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("data.the-written-value-violates-the-clause", e.diagnostics().get(0).messageKey());
+        assertInstanceOf(DataMessage.TheWrittenValueViolatesTheClause.class, e.diagnostics().get(0).said());
         assertEquals("lower", e.diagnostics().get(0).values().get("clause"),
                 "the first clause the constant breaks, in declaration order");
     }

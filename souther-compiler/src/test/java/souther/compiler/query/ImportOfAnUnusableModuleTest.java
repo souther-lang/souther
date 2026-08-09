@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
@@ -48,7 +49,7 @@ class ImportOfAnUnusableModuleTest {
         assertEquals(1, found.get("evil.sou").size(),
                 "the module that took a reserved name is what is wrong: " + found.get("evil.sou"));
         assertTrue(found.get("evil.sou").stream()
-                        .anyMatch(d -> "module.the-module-is-in-the-reserved-namespace".equals(d.messageKey())));
+                        .anyMatch(d -> d.said() instanceof ModuleMessage.TheModuleIsInTheReservedNamespace));
         assertEquals(List.of(), found.get("main.sou"),
                 "app.main can see the module; what is wrong with it is not app.main's to hear: "
                         + found.get("main.sou"));

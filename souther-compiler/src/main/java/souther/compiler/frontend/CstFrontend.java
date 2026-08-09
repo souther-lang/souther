@@ -122,8 +122,8 @@ public final class CstFrontend {
      * mistake still reported against whatever file the reader guessed at. */
     private static CompileException firstError(String source, String sourceId, CstError e) {
         LineIndex lines = new LineIndex(source, sourceId);
-        Diagnostic diag = Diagnostic.of(e.code(), e.messageKey())
-                .at(lines.posOf(e.offset()), e.width()).args(e.args()).build();
+        Diagnostic diag = Diagnostic.say(e.said())
+                .at(lines.posOf(e.offset()), e.width()).build();
         return CompileException.of(diag);
     }
 }

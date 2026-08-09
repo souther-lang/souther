@@ -1,11 +1,14 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -220,7 +223,7 @@ class CompileDestructuringTest {
                 behavior countTags : (t: Tags) -> Int
                 let countTags (Labels(xs)) = length(xs)
                 """));
-        assertEquals("type.the-pattern-opens-another-type", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternOpensAnotherType.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -234,7 +237,7 @@ class CompileDestructuringTest {
                 behavior countTags : (t: Tags) -> Int
                 let countTags (t: Tags) = length(t.value)
                 """));
-        assertEquals("behavior.an-implementations-parameters-take-their-types-from-it", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(BehaviorMessage.AnImplementationsParametersTakeTheirTypesFromIt.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -286,7 +289,7 @@ class CompileDestructuringTest {
                     Out { v = x }
                 }
                 """));
-        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -305,7 +308,7 @@ class CompileDestructuringTest {
                     Out { v = 1 }
                 }
                 """));
-        assertEquals("type.the-pattern-opens-another-type", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternOpensAnotherType.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -324,7 +327,7 @@ class CompileDestructuringTest {
                     Out { v = 1 }
                 }
                 """));
-        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class, e.diagnostic().said(), e.getMessage());
         assertTrue(e.getMessage().contains("match") || e.diagnostic().notes().toString().contains("match"),
                 "the report points at `match`: " + e.getMessage());
     }
@@ -366,7 +369,7 @@ class CompileDestructuringTest {
                             1
                         }
                         """)));
-        assertEquals("type.the-pattern-opens-another-type", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.ThePatternOpensAnotherType.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -406,7 +409,7 @@ class CompileDestructuringTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = Out { v = map((Paid(x)) -> 1, i.ss) }
                 """));
-        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -423,6 +426,6 @@ class CompileDestructuringTest {
                     Out { v = s }
                 }
                 """));
-        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.NotANewtypeToOpenInABinding.class, e.diagnostic().said(), e.getMessage());
     }
 }

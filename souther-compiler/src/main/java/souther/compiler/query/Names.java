@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -268,10 +269,10 @@ public final class Names {
          * name denote — asked of a clause rather than of a stage.
          */
         Ast.Var required(Ast.Var ref, String by) {
-            return behavior(ref, (name, candidates) -> Report.raised(Diagnostic.of(DiagnosticCode.E1607, "e1607.unknown")
-                            .at(name.written().region()).args(by, name.name())
+            return behavior(ref, (name, candidates) -> Report.raised(Diagnostic
+                            .at(name.written().region())
                             .suggestion(Suggest.candidate(name.name(), candidates))
-                            .hint("e1607.unknown.hint").build()));
+                            .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name())).say(new DeclarationMessage.DependsOnNamesNoSuchBehavior(by, name.name())).build()));
         }
 
         /** A name that must denote a behavior, with what to say when none does. */
@@ -1358,7 +1359,7 @@ public final class Names {
                     // The reference that closes the cycle is written here, so this is the file to
                     // quote. Everything from the module it names round to this one is in the cycle,
                     // and none of them can be compiled — each needs an answer from the next.
-                    found.putIfAbsent(name, Report.raised(Diagnostic.of(DiagnosticCode.E1501, "e1501.msg").at(dep.pos()).build()));
+                    found.putIfAbsent(name, Report.raised(Diagnostic.at(dep.pos()).say(new DeclarationMessage.CyclicModuleDependency()).build()));
                     members.addAll(stack.subList(closes, stack.size()));
                     continue;
                 }

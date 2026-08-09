@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -341,8 +342,8 @@ public final class TypeChecker {
                 // one is meaningless: nothing calls those behaviors, and nothing injects them. The
                 // behavior that composes or calls this one carries the requirement instead (13.2).
                 if (!spec.dependsOn().isEmpty()) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1612, "check.inject.depends")
-                                    .at(spec.pos()).args(spec.name()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(spec.pos()).say(new DeclarationMessage.AnInjectionTargetCannotDependOnAnything(spec.name())).build());
                 }
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
                 injectionTargets.add(spec.name());

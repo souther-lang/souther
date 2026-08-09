@@ -44,7 +44,7 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
      * the path each diagnostic names, asked for by name. */
     private static List<String> pathsOf(String source, String key) {
         return diagnosed(source).stream()
-                .filter(d -> key.equals(d.messageKey()))
+                .filter(d -> key.equals(d.said().entry()))
                 .map(d -> String.valueOf(d.values().get("through")))
                 .toList();
     }

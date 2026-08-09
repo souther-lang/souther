@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -48,7 +50,7 @@ class ASignatureThatDoesNotBuildTest {
         List<Db.Found> found = compiled().db().allReports();
 
         assertEquals(1, found.size(), "one signature that does not build, one diagnostic: " + found);
-        assertEquals("type.not-a-union-member", found.get(0).report().diagnostic().messageKey());
+        assertInstanceOf(TypeMessage.NotAUnionMember.class, found.get(0).report().diagnostic().said());
     }
 
     @Test

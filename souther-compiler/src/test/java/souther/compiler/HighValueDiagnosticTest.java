@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.CompileException;
 
 import souther.compiler.types.Type;
@@ -174,7 +175,7 @@ class HighValueDiagnosticTest {
                     | A as a -> a
                 """);
         assertEquals("E1201", d.code());
-        assertTrue(d.notes().stream().anyMatch(n -> "e1201.hint".equals(n.messageKey())),
+        assertTrue(d.notes().stream().anyMatch(n -> n.said() instanceof DeclarationMessage.AddACaseFor),
                 "the missing cases should be listed in a hint");
     }
 }

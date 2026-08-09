@@ -164,7 +164,8 @@ public final class Analyzer {
         List<LspDiagnostic> found = new ArrayList<>();
         for (CstError e : CstParser.parse(text).errors()) {
             found.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
-                    LspDiagnostic.ERROR, e.code().name(), e.legacyMessage()));
+                    LspDiagnostic.ERROR, e.code().name(),
+                    Messages.render(e.said(), EDITOR_LANGUAGE)));
         }
         return found;
     }
@@ -1923,7 +1924,7 @@ public final class Analyzer {
             }
             related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.region()),
                     other.labelled()
-                            ? Messages.get(other.labelKey(), EDITOR_LANGUAGE, other.labelArgs())
+                            ? Messages.render(other.said(), EDITOR_LANGUAGE)
                             : message));
         }
         Range range = view.anchor().region() != null

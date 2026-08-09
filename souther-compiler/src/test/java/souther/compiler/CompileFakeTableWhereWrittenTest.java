@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -76,7 +78,7 @@ class CompileFakeTableWhereWrittenTest {
                 """);
 
         assertEquals("E1908", one.code());
-        assertEquals("example.the-fake-could-not-be-built", one.messageKey());
+        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, one.said());
         assertEquals("find", one.values().get("dependency"),
                 "the behavior the table stands in for");
         assertEquals(15, one.pos().line(), "at the fake, which is where the table is written");
@@ -102,7 +104,7 @@ class CompileFakeTableWhereWrittenTest {
                 """);
 
         assertEquals("E1908", one.code());
-        assertEquals("example.the-fake-could-not-be-built", one.messageKey());
+        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, one.said());
     }
 
     @Test
@@ -114,7 +116,7 @@ class CompileFakeTableWhereWrittenTest {
                 """);
 
         assertEquals("E1908", one.code());
-        assertEquals("example.the-fake-could-not-be-built", one.messageKey());
+        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, one.said());
         assertEquals(16, one.pos().line(), "at the row whose input count is wrong");
     }
 
@@ -167,7 +169,7 @@ class CompileFakeTableWhereWrittenTest {
                 """));
 
         assertEquals(List.of("E1908"), codesOf(e), e.getMessage());
-        assertEquals("example.the-fake-could-not-be-built", e.diagnostics().get(0).messageKey());
+        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, e.diagnostics().get(0).said());
     }
 
     /** A fake written in an attached file is built for that file, and said in it. */

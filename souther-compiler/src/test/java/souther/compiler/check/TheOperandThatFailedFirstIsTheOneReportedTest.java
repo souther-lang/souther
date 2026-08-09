@@ -36,7 +36,7 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 %s
                 """.formatted(NOWHERE, body)));
         return found.getOrDefault("demo", List.of()).stream()
-                .map(l -> l.diagnostic().messageKey()).toList();
+                .map(l -> l.diagnostic().said().entry()).toList();
     }
 
     @Test

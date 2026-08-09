@@ -140,18 +140,38 @@ already written in the language the sites are written in.
 
 ### Migration
 
-Three hundred and ten declarations and 257 sites have to move, and the old constructors go when the
-last of them does — until then `of(DiagnosticCode, String)` and `args(Object...)` stand beside the
-new form and the rules bind only what has moved. Rule 6 cannot be turned on before the last area.
+Three hundred and ten declarations and 257 sites moved, and `of(DiagnosticCode, String)`,
+`args(Object...)`, the keyed `hint`, `secondary` and `secondaryIn`, and the `labelKey`/`labelArgs`
+pair that carried a secondary label are gone with them. A diagnostic now holds one thing that says
+what it is about, and there is no second way to build one.
 
 A migration this wide is not reviewable as a Java diff, so what is reviewed is the rendered output:
 every diagnostic the test corpus emits is captured before a change, in both locales and both
-formats, and has to come back byte-identical except where the wording was deliberately fixed.
+formats, and has to come back byte-identical except where the wording was deliberately fixed. Over
+2,197 compilations that is 26,912 rendered lines, and they came back unchanged.
 
-The areas move by rule rather than by file — an area is what a key's first segment names, and one
-file raises diagnostics of several. The parse area goes last: two of its sites take the code and the
-key as arguments and one reads both off a parse exception, so what they say is chosen while the
-compiler runs rather than where it is written.
+The areas moved by rule rather than by file — an area is what a key's first segment names, and one
+file raises diagnostics of several. The parse area went last, because what it says is chosen while
+the parser runs rather than written at a site. Three things had to be settled there.
+
+`expect(kind, rule)` took the code as an argument: which part of the language is being read decides
+which rule a missing token breaks, and 89 sites passed one of four codes. That parameter is now the
+reading itself — a declaration, an expression, a pattern, an example — and the message follows from
+it. The four messages say one sentence under four codes, which is the shape the model asks for: the
+wording is the same and the chapter the reader is sent to is not.
+
+`parse.expr` was raised with three codes for four mistakes, and said "I expected an expression here."
+for all of them — including the one about a pattern. It is four messages now, each saying what was
+wanted where it was wanted.
+
+Two entries could not say what they carried. `parse.behavior.colon` wrote `behavior {0} :` and its
+one site passed no arguments, so a reader was shown the placeholder; the sentence no longer names
+the behavior. `parse.option.positional` was raised for two different mistakes and could state only
+the first, so the second was invisible; it is two entries.
+
+What stays keyed is not a diagnostic. `run.*` is what the `run` subcommand answers a shell with,
+and `tok.*`, `kind.*` and `diag.*` are phrases written into the sentences above — a token category
+is localized where the sentence is rendered, because the parser that names it has no language.
 
 ### Once it has moved
 
@@ -165,8 +185,12 @@ than separately.
 A message whose wording turns on a value becomes two records and two catalog entries. The catalog
 grows; the sentences become readable in the source.
 
-Rule 5 will find catalog keys no record names. Each is either a message that stopped being raised —
-delete — or one whose site was never migrated — declare. The count is not known until the rules run.
+Rule 6 is held from the codes' side, and it is what says a rule stopped being reported: a code
+whose site moved to another number leaves nothing that sends a reader to its chapter, and the
+number alone does not say so.
+
+Rule 5 found catalog keys no record names. Each was either a message that had stopped being raised
+or one whose site was never migrated.
 
 ## References
 

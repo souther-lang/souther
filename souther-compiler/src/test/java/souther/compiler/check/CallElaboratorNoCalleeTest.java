@@ -1,5 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
@@ -44,7 +47,7 @@ class CallElaboratorNoCalleeTest {
     void aBehaviorIsToldItIsABehavior() {
         RuntimeException e = answerFor(new ValueName.Behavior("m", "f"));
         assertEquals("E1818", assertInstanceOf(CompileException.class, e).code());
-        assertEquals("behavior.a-behavior-cannot-be-called-from-here", ((CompileException) e).diagnostic().messageKey());
+        assertInstanceOf(BehaviorMessage.ABehaviorCannotBeCalledFromHere.class, ((CompileException) e).diagnostic().said());
     }
 
     /**
@@ -59,7 +62,7 @@ class CallElaboratorNoCalleeTest {
         RuntimeException e = answerFor(
                 new ValueName.OfType("Yen", new TypeName("m", "Yen"), null));
         CompileException c = assertInstanceOf(CompileException.class, e);
-        assertEquals("data.a-construction-cannot-be-written-here", c.diagnostic().messageKey());
+        assertInstanceOf(DataMessage.AConstructionCannotBeWrittenHere.class, c.diagnostic().said());
         assertEquals(List.of("Yen"), List.copyOf(c.diagnostic().values().values()));
     }
 
@@ -74,7 +77,7 @@ class CallElaboratorNoCalleeTest {
         RuntimeException e = answerFor(new ValueName.Local("f",
                 new BindingId(new BindingOwner.OfValue("m.a", "g"), 0)));
         assertEquals("name.it-is-not-a-function-here",
-                assertInstanceOf(CompileException.class, e).diagnostic().messageKey());
+                assertInstanceOf(CompileException.class, e).diagnostic().said().entry());
     }
 
     /**
@@ -86,7 +89,7 @@ class CallElaboratorNoCalleeTest {
     void aBuiltinIsToldItIsNotAFunction() {
         RuntimeException e = answerFor(new ValueName.Builtin("HALF_UP"));
         CompileException c = assertInstanceOf(CompileException.class, e);
-        assertEquals("name.a-name-the-language-gives-is-not-a-function", c.diagnostic().messageKey());
+        assertInstanceOf(NameMessage.ANameTheLanguageGivesIsNotAFunction.class, c.diagnostic().said());
         assertEquals(List.of("HALF_UP"), List.copyOf(c.diagnostic().values().values()));
     }
 

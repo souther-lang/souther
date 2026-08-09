@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
@@ -26,16 +27,16 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  */
 class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
 
-    private static final String KEY = "example.the-row-reached-an-unreachable-point";
-    private static final String REASON = "no branch states this";
+    private static final ExampleMessage SAID =
+            new ExampleMessage.TheRowReachedAnUnreachablePoint("no branch states this");
 
     @Test
     void aFailingExampleSaysWhatTheEnglishCatalogSays() {
-        Diagnostic failure = Diagnostic.of(DiagnosticCode.E1911, KEY).args(REASON).build();
+        Diagnostic failure = Diagnostic.say(SAID).build();
 
         String said = ExampleVerifier.legacySummary(List.of(failure));
 
-        assertEquals(Messages.get(KEY, Locale.ENGLISH, REASON), said);
+        assertEquals(Messages.render(SAID, Locale.ENGLISH), said);
     }
 
     /**
@@ -44,10 +45,10 @@ class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
      */
     @Test
     void theCatalogWouldHaveSaidSomethingElseInJapanese() {
-        Diagnostic failure = Diagnostic.of(DiagnosticCode.E1911, KEY).args(REASON).build();
+        Diagnostic failure = Diagnostic.say(SAID).build();
 
         String said = ExampleVerifier.legacySummary(List.of(failure));
 
-        assertNotEquals(Messages.get(KEY, Locale.JAPANESE, REASON), said);
+        assertNotEquals(Messages.render(SAID, Locale.JAPANESE), said);
     }
 }

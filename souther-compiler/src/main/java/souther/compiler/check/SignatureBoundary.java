@@ -243,11 +243,6 @@ final class SignatureBoundary {
             return new Where(false, behavior, null, pos);
         }
 
-        Diagnostic.Builder diagnostic(DiagnosticCode code, String key) {
-            Diagnostic.Builder builder = Diagnostic.of(code, key);
-            return region == null ? builder.at(pos) : builder.at(region);
-        }
-
         CompileException refusal(souther.compiler.diag.msg.Message said) {
             Diagnostic.Builder builder = Diagnostic.say(said);
             return CompileException.of(

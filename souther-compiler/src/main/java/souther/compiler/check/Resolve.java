@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -937,7 +938,7 @@ public final class Resolve {
     private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
         String name = written.canonical();
         if (name.equals("null")) {
-            return CompileException.of(Diagnostic.of(DiagnosticCode.E1301, "e1301.msg").at(written.region()).build());
+            return CompileException.of(Diagnostic.at(written.region()).say(new DeclarationMessage.NullIsNotPartOfTheLanguage()).build());
         }
         CompileException notALibraryMember = notALibraryMember(written);
         if (notALibraryMember != null) {
@@ -974,10 +975,10 @@ public final class Resolve {
             return bareLibraryName;
         }
         List<String> candidates = reachable(bound);
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1401, "e1401.msg").at(written.region())
-                        .args(written.quoted())
+        return CompileException.of(Diagnostic.at(written.region())
+                        
                         .suggestion(Suggest.candidate(name, candidates))
-                        .hint("e1401.hint").build());
+                        .hint(new DeclarationMessage.ImplementItFromJavaInstead()).say(new DeclarationMessage.NotABehaviorOrABuiltin(written.quoted())).build());
     }
 
     /**

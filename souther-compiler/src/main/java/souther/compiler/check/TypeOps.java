@@ -1571,8 +1571,14 @@ public final class TypeOps {
     private static Type typeArg(Ast.TypeRef ref, Symbols symbols, String key, int width,
                                 String message) {
         if (ref.arg() == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1316, "type.a-" + key + "-needs-its-type")
-                            .at(ref.pos(), width).build());
+            throw CompileException.of(Diagnostic.at(ref.pos(), width)
+                    .say(switch (key) {
+                        case "list" -> new TypeMessage.AListNeedsItsElementType();
+                        case "set" -> new TypeMessage.ASetNeedsItsElementType();
+                        case "map" -> new TypeMessage.AMapNeedsItsValueType();
+                        default -> new TypeMessage.AnOptionNeedsItsTypeArgument();
+                    })
+                    .build());
         }
         return resolveTerm(ref.arg(), symbols);
     }

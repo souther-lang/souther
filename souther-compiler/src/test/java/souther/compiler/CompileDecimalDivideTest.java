@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,6 +118,6 @@ class CompileDecimalDivideTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { n = HALF_UP(i.n) }
                 """));
-        assertEquals("data.a-construction-cannot-be-written-here", e.diagnostic().messageKey());
+        assertInstanceOf(DataMessage.AConstructionCannotBeWrittenHere.class, e.diagnostic().said());
     }
 }

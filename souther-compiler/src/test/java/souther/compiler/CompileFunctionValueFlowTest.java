@@ -1,10 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.HelperMessage;
+import souther.compiler.diag.msg.DeclarationMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -137,7 +140,7 @@ class CompileFunctionValueFlowTest {
                                     Result { ns = List.map(f, o.xs) }
                                 }
                                 """));
-        assertEquals("helper.the-functions-type-cannot-be-read", e.diagnostic().messageKey());
+        assertInstanceOf(HelperMessage.TheFunctionsTypeCannotBeRead.class, e.diagnostic().said());
     }
 
     // Reading the applications must not swallow what is wrong inside one. A mistake in an argument is
@@ -161,7 +164,7 @@ class CompileFunctionValueFlowTest {
                                     R { n = f(i.noSuchField) }
                                 }
                                 """));
-        assertEquals("check.access", e.diagnostic().messageKey());
+        assertInstanceOf(DeclarationMessage.CannotReadAFieldOnThisValue.class, e.diagnostic().said());
     }
 
     // An application whose arguments this scope can read is still a constraint, even inside a lambda:

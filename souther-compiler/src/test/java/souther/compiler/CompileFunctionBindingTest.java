@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -7,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -281,7 +283,7 @@ class CompileFunctionBindingTest {
 
         for (String src : List.of(lambda, libraryName)) {
             CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-            assertEquals("helper.the-functions-type-cannot-be-read", e.diagnostic().messageKey(), e.getMessage());
+            assertInstanceOf(HelperMessage.TheFunctionsTypeCannotBeRead.class, e.diagnostic().said(), e.getMessage());
         }
     }
 }

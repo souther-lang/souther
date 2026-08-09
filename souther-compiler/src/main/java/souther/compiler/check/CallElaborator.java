@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -485,9 +486,9 @@ public final class CallElaborator {
         if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
             Prelude.Signature intrinsic = entry.signature();
             if (args.size() != intrinsic.params().size()) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.arity")
+                throw CompileException.of(Diagnostic
                                 .at(call.name().region())
-                                .args(call.written(), intrinsic.params().size(), args.size()).build());
+                                .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.params().size()), String.valueOf(args.size()))).build());
             }
             Applied applied = applySignature(call,
                     new Type.FnOf(intrinsic.params(), intrinsic.result()), ca, expected, env, ctx);
@@ -523,9 +524,9 @@ public final class CallElaborator {
                 // is the denotation's to say, and only one of them is bound here
                 if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
-                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.arity")
+                        throw CompileException.of(Diagnostic
                                         .at(call.name().region())
-                                        .args(call.written(), fn.params().size(), args.size()).build());
+                                        .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
                     }
                     yield applySignature(call, fn, ca, expected, env, ctx).result();
                 }
@@ -612,8 +613,8 @@ public final class CallElaborator {
      * {@code kindKey} (a localized phrase such as "a List"), but got {@code actual}. */
     static CompileException expects(SourcePos pos, String subject, String kindKey, Type actual,
                                             String legacy) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.expects").at(pos)
-                        .args(subject, Localizable.of(kindKey), Type.show(actual)).build());
+        return CompileException.of(Diagnostic.at(pos)
+                        .say(new DeclarationMessage.ItExpectsAnotherType(subject, Localizable.of(kindKey), Type.show(actual))).build());
     }
 
     /**
@@ -654,10 +655,10 @@ public final class CallElaborator {
                             
                             .hint(new TypeMessage.ANewtypeIsBuiltFromTheResult(call.written())).say(new TypeMessage.ItAnswersANumberAndThisPositionNeedsAnother(call.written(), Type.show(position))).build());
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1817, "check.numeric")
+        throw CompileException.of(Diagnostic
                         .at(call.name().region())
-                        .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
-                        .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).build());
+                        
+                        .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).say(new DeclarationMessage.ItNeedsANumericElement(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))).build());
     }
 
     /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
@@ -669,9 +670,9 @@ public final class CallElaborator {
 
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
     static CompileException needsOrdered(SourcePos pos, String subject, Type element, String legacy) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1816, "check.ordered").at(pos)
-                        .args(subject, Localizable.of("kind.ordered.list"), Type.show(element))
-                        .hint(new TypeMessage.MapToAnOrderedFieldFirst()).build());
+        return CompileException.of(Diagnostic.at(pos)
+                        
+                        .hint(new TypeMessage.MapToAnOrderedFieldFirst()).say(new DeclarationMessage.ItNeedsAnOrderedElement(subject, Localizable.of("kind.ordered.list"), Type.show(element))).build());
     }
 
     /** A written date — {@code Date("2026-07-01")} / {@code DateTime("2026-07-01T09:00")}. The
@@ -704,9 +705,10 @@ public final class CallElaborator {
 
     static void arity(Ast.Apply call, int n) {
         if (call.args().size() != n) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.arity")
+            throw CompileException.of(Diagnostic
                             .at(call.name().region())
-                            .args(call.written(), n, call.args().size()).build());
+                            .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(n),
+                                    String.valueOf(call.args().size()))).build());
         }
     }
 }
