@@ -15,14 +15,15 @@ import java.util.Set;
  * reported as not derivable rather than filled in with values nobody asked for. The choice matters:
  * a made-up partition measures a rule the model does not have, and reports coverage of it.
  *
- * @param classes  exclusive and exhaustive over the position's values, or empty where the model does
+ * @param term     the number this axis is of: a location's own content, or something taken of it
+ * @param classes  exclusive and exhaustive over the term's values, or empty where the model does
  *                 not divide them
  * @param cuts     the values the classes meet at, each carrying every rule that drew it there
  * @param excluded the ids of the classes the body says it does not answer for. Still classes — the
  *                 position's values are still divided this way, and a report says so — and not ones a
  *                 row can be written at, since reaching one is E1911
  */
-public record Axis(AxisId id, TermPath path, Type type, List<PartitionClass> classes,
+public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
                    List<Cut> cuts, Set<String> excluded) {
 
     public Axis {
@@ -31,13 +32,21 @@ public record Axis(AxisId id, TermPath path, Type type, List<PartitionClass> cla
         excluded = Set.copyOf(excluded);
     }
 
-    public Axis(AxisId id, TermPath path, Type type, List<PartitionClass> classes, List<Cut> cuts) {
-        this(id, path, type, classes, cuts, Set.of());
+    public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
+                List<Cut> cuts) {
+        this(id, term, type, classes, cuts, Set.of());
     }
 
     /** A position the model does not divide. Kept, so a report can name what it could not measure. */
-    public static Axis notDerivable(AxisId id, TermPath path, Type type) {
-        return new Axis(id, path, type, List.of(), List.of());
+    public static Axis notDerivable(AxisId id, NumericTerm term, Type type) {
+        return new Axis(id, term, type, List.of(), List.of());
+    }
+
+    /** Where the value this axis is about sits, which is where a row is walked to before the term is
+     * read off it. Not what the axis is: two terms can be taken of one location, and {@link #id()}
+     * is the one that tells them apart. */
+    public TermPath path() {
+        return term.path();
     }
 
     /** The same position, with what the body rules out marked.
@@ -48,7 +57,7 @@ public record Axis(AxisId id, TermPath path, Type type, List<PartitionClass> cla
     public Axis excluding(Collection<String> ids) {
         Set<String> here = ids.stream().filter(id -> classOf(id) != null)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        return here.isEmpty() ? this : new Axis(id, path, type, classes, cuts, here);
+        return here.isEmpty() ? this : new Axis(id, term, type, classes, cuts, here);
     }
 
     /**

@@ -246,7 +246,7 @@ final class Coverages {
                 .toList();
         if (readings.noRows() && !readings.someRowsUnseen()) {
             return PartitionEvidence.AxisCoverage.unavailable(axis.id().toString(),
-                    axis.path().toString(), classes, ruled,
+                    axis.term().toString(), classes, ruled,
                     PartitionEvidence.AxisCoverage.Reason.NO_ROWS);
         }
         Set<String> covered = new LinkedHashSet<>();
@@ -256,7 +256,7 @@ final class Coverages {
                 covered.add(in);
             }
         }
-        return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.path().toString(),
+        return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.term().toString(),
                 classes, covered, ruled, readings.couldNotSay(axis),
                 readings.status(List.of(axis)), null);
     }
@@ -489,8 +489,8 @@ final class Coverages {
                                    ObservedValue boundary, OriginRef.GuardOrigin origin) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            ObservedValue at = RowClasses.valueAt(row, parameters, axis.path());
-            if (!readable(at)) {
+            java.math.BigDecimal at = numberFor(axis, parameters, row);
+            if (at == null) {
                 unreadable = true;
                 continue;
             }
@@ -507,8 +507,8 @@ final class Coverages {
                                  ObservedValue boundary) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            ObservedValue at = RowClasses.valueAt(row, parameters, axis.path());
-            if (readable(at)) {
+            java.math.BigDecimal at = numberFor(axis, parameters, row);
+            if (at != null) {
                 if (sameNumber(at, boundary)) {
                     return Met.YES;
                 }
@@ -520,21 +520,24 @@ final class Coverages {
     }
 
     /**
-     * Whether an observation says what number was at this position.
+     * The number this row put on the line's own term, or null where it did not put a readable one
+     * there.
      *
-     * <p>Asked of the number rather than of the shape, because a boundary is only ever on a numeric
-     * position and the truncation can be one layer in. A newtype is observed as a construction holding
-     * its value, and a limit reached inside it leaves the construction readable with a truncation
-     * where the number should be — which, read by shape, is a value that is simply not the boundary.
+     * <p>Asked of the term and not of the shape of what sits at the position. A boundary is on a
+     * number, and which number a value carries is the term's to say: the content of a location where
+     * the line is on that, and how long the string is where it is on that. Read as "is this
+     * observation a number", a string was unreadable at every position and every length boundary was
+     * undecided for every row. The truncation can be one layer in — a newtype is observed as a
+     * construction holding its value — which is why the term is asked rather than the outer shape.
      */
-    private static boolean readable(ObservedValue at) {
-        return numberOf(at) != null;
+    private static java.math.BigDecimal numberFor(Axis axis, List<String> parameters,
+                                                  RowOutcome row) {
+        return axis.term().numberAt(RowClasses.valueAt(row, parameters, axis.path()));
     }
 
     /** A newtype and the number it wraps are the same value at this position, which is how the row
      * writes it and how the boundary was read. */
-    private static boolean sameNumber(ObservedValue a, ObservedValue b) {
-        java.math.BigDecimal left = numberOf(a);
+    private static boolean sameNumber(java.math.BigDecimal left, ObservedValue b) {
         java.math.BigDecimal right = numberOf(b);
         return left != null && right != null && left.compareTo(right) == 0;
     }

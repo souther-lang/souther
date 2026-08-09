@@ -22,24 +22,29 @@ import java.math.BigDecimal;
  * @param guard the {@code if} this is one arm of, which is also what says which behavior it is in
  * @param site  the probe number of that arm, the same identity a branch obligation is counted by
  */
-public record GuardEdge(CoverageSites.GuardRef guard, int site, TermPath path,
+public record GuardEdge(CoverageSites.GuardRef guard, int site, NumericTerm term,
                         BigDecimal low, boolean lowInclusive,
                         BigDecimal high, boolean highInclusive) {
 
     /** The values above {@code value}, including it where {@code inclusive}. */
-    public static GuardEdge above(CoverageSites.GuardRef guard, int site, TermPath path,
+    public static GuardEdge above(CoverageSites.GuardRef guard, int site, NumericTerm term,
                                   BigDecimal value, boolean inclusive) {
-        return new GuardEdge(guard, site, path, value, inclusive, null, false);
+        return new GuardEdge(guard, site, term, value, inclusive, null, false);
     }
 
     /** The values below {@code value}, including it where {@code inclusive}. */
-    public static GuardEdge below(CoverageSites.GuardRef guard, int site, TermPath path,
+    public static GuardEdge below(CoverageSites.GuardRef guard, int site, NumericTerm term,
                                   BigDecimal value, boolean inclusive) {
-        return new GuardEdge(guard, site, path, null, false, value, inclusive);
+        return new GuardEdge(guard, site, term, null, false, value, inclusive);
     }
 
     public String behavior() {
         return guard.behavior();
+    }
+
+    /** Where the value this edge is about sits. Not what it is about: that is {@link #term()}. */
+    public TermPath path() {
+        return term.path();
     }
 
     /**

@@ -141,8 +141,10 @@ class GeneratorTest {
     /** Two positions, each a bare number, so a hand-made class is the whole of what is at each. */
     private static Generator.Subject twoNumbers(Symbols symbols, List<PartitionClass> left,
                                                 List<PartitionClass> right) {
-        Axis a = new Axis(new AxisId("f", "a"), TermPath.of("a"), Type.INT, left, List.of());
-        Axis b = new Axis(new AxisId("f", "b"), TermPath.of("b"), Type.INT, right, List.of());
+        Axis a = new Axis(new AxisId("f", "a"), new NumericTerm.ValueOf(TermPath.of("a")), Type.INT, left,
+                List.of());
+        Axis b = new Axis(new AxisId("f", "b"), new NumericTerm.ValueOf(TermPath.of("b")), Type.INT, right,
+                List.of());
         return new Generator.Subject(List.of("a", "b"), List.of(Type.INT, Type.INT), List.of(a, b),
                 symbols);
     }
@@ -254,7 +256,7 @@ class GeneratorTest {
     @Test
     void onePositionHasNoPairsAndItsClassesStillOweRows() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
-        Axis only = new Axis(new AxisId("f", "a"), TermPath.of("a"), Type.INT,
+        Axis only = new Axis(new AxisId("f", "a"), new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
                 List.of(number("low", 1), number("high", 9)), List.of());
         Generator.Subject subject = new Generator.Subject(List.of("a"), List.of(Type.INT),
                 List.of(only), symbols);

@@ -498,8 +498,8 @@ public final class Adequacy {
                     continue;
                 }
                 out.addAll(Coverages.assess(axis, parameters, observed, symbols, armsAsked,
-                        partitioning.edgeIsKnownWritable(axis.path().toString()), probe,
-                        partitioning.domains().get(axis.path().toString())));
+                        partitioning.edgeIsKnownWritable(axis.term().toString()), probe,
+                        partitioning.domains().get(axis.term().toString())));
             }
             return List.copyOf(out);
         }

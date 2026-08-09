@@ -2,7 +2,9 @@
 
 Status: Accepted. Fixes what the compiler may derive as an equivalence class, and what it may not.
 Revised in place for #427: what a threshold is intersected with is what the *position* admits, which
-is the field's type read under the rules of the record holding it.
+is the field's type read under the rules of the record holding it. Revised again for #510: what a
+line is drawn on is a numeric *term*, not a position — the content of a location, or a size taken of
+one.
 
 ## Context
 
@@ -67,10 +69,30 @@ one on the top does; and not into what a construction need not make, because a r
 or a collection is a rule about a value that can be left out. The depth a report takes an input apart
 to is a limit on what is worth measuring and cannot stand in for this.
 
+A line is drawn on a number, and the number is not always what a position holds. The terms are the
+ones the discharge procedure already names: the content of a location, and `List.length`,
+`String.length`, `Set.size`, `Map.size` taken of one. Identifying the two was a defect and not a
+restriction — a length bound is the commonest invariant in the specification's own examples, and
+every position carrying one came back as a position the model draws no line through, which is a
+false sentence rather than a narrow reading. It was said of a `guard` comparing a length too, in a
+report of the very behavior that wrote the comparison.
+
+So the term is what an axis, a cut, and a coverage question are all keyed on. `ValueOf` is one term
+among them rather than the default beside a special case: keeping the plain path as the identity is
+what let three separate readers each answer "is this observation a number" and each be right about
+the positions it was written against. What is spaced like an `Int`, what its own values are, and how
+it is read off a row are three properties of the term — a size needs no boundary domain of its own,
+and its non-negativity is its own rather than something a rule has to state.
+
+A position no rule measures keeps its own name. A `String` nothing says anything about is not
+derivable and is reported as the position, because naming its length there would put a term in the
+report that nobody wrote.
+
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both
 sides, so it gives a partition *and* boundaries — the value, and its neighbour where the type has
-one.
+one. That is a question about the rule and not about the term: a length bound is owed one row at its
+edge, and a guard on a length is owed the value and its neighbour, for the same reasons a number is.
 
 Only a comparison that is the whole of a `guard`'s condition is read. A condition built with `&&`,
 `||` or `!` contributes no threshold.
@@ -86,8 +108,20 @@ model is underspecified, and it must not: a `String` a behavior ignores entirely
 that is a perfectly good model. What the compiler can say is what it can derive, and the diagnostic
 is named for that.
 
-Measured across the models in `souther-examples`, 398 positions come back not derivable. That is a
-lot of prose about nothing being wrong, which is why it is reported and never warned about
+Reading the size terms turned 232 of those reported positions into measured ones across
+`souther-examples`, and the boundaries owed went from 197 to 304. Two modules moved from
+`undetermined` to `not satisfied`, which is the answer they should have had: the obligations were
+always there and nothing was asking for them. No position gained a not-derivable line it did not
+have, because a term is only taken of a position some rule measures.
+
+Deriving the line and writing a value at it are separate abilities, and only the first is here.
+Nothing composes a string of a given length (#528), so those edges are reported as unmet with the
+reason saying that this compiler has no way to write one — not that the edge cannot be written at,
+which is the sentence this ADR exists to keep out of the report.
+
+Measured across the models in `souther-examples`, 398 positions came back not derivable when this
+was first written. That is a lot of prose about nothing being wrong, which is why it is reported and
+never warned about
 (ADR-0089's grading, and the warning policy on top of it). Had the alternative been taken — divide an
 `Int` at zero — those 398 would have become 398 rules nobody wrote, each with a coverage gap
 attached, and an author working through them would be writing rows against a specification that does

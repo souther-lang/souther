@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -56,7 +57,42 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (bound == null || (base == Type.INT && bound.stripTrailingZeros().scale() > 0)) {
             return Optional.empty();
         }
-        boolean whole = base == Type.INT;
+        return ordered(op, bound, base == Type.INT);
+    }
+
+    /**
+     * What {@code clause} says about the number {@code measure} takes of the value, or empty where it
+     * says nothing a range can hold.
+     *
+     * <p>The same reading one operand in. A size is a whole number, so a strict bound names the
+     * adjacent one exactly as an {@code Int}'s does, and which size call this is does not come into
+     * it — every one of them counts something.
+     */
+    public static Optional<InvariantBound> ofSize(Ast.Expr clause, ValueName measure) {
+        if (!(clause instanceof Ast.Binary bin)) {
+            return Optional.empty();
+        }
+        Ast.Expr left = bin.left();
+        Ast.Expr right = bin.right();
+        Ast.BinOp op = bin.op();
+        if (!takesSizeOfValue(left, measure) && takesSizeOfValue(right, measure)) {
+            Ast.Expr swap = left;
+            left = right;
+            right = swap;
+            op = mirrored(op);
+        }
+        if (!takesSizeOfValue(left, measure)) {
+            return Optional.empty();
+        }
+        BigDecimal bound = literal(right);
+        if (bound == null || bound.stripTrailingZeros().scale() > 0) {
+            return Optional.empty();
+        }
+        return ordered(op, bound, true);
+    }
+
+    /** One end, from the comparison and whether the values step. */
+    private static Optional<InvariantBound> ordered(Ast.BinOp op, BigDecimal bound, boolean whole) {
         return switch (op) {
             case GE -> Optional.of(new InvariantBound(true, Endpoint.inclusive(bound)));
             case LE -> Optional.of(new InvariantBound(false, Endpoint.inclusive(bound)));
@@ -66,6 +102,18 @@ public record InvariantBound(boolean lower, Endpoint end) {
                     : Optional.of(new InvariantBound(false, Endpoint.exclusive(bound)));
             default -> Optional.empty();
         };
+    }
+
+    /**
+     * Whether the expression is {@code measure} applied to the newtype's value.
+     *
+     * <p>Asked of the name the application resolved to, not of how it was spelled: an import lets a
+     * library operation be written without its qualifier, and a reader comparing text would miss
+     * every clause written that way while looking as though it had read them.
+     */
+    private static boolean takesSizeOfValue(Ast.Expr e, ValueName measure) {
+        return e instanceof Ast.Apply call && call.args().size() == 1 && isValue(call.args().get(0))
+                && call.function() instanceof Ast.Var fn && measure.equals(fn.denotes());
     }
 
     /** A whole number's strict bound moved onto the value beside it — where the type has one. At the

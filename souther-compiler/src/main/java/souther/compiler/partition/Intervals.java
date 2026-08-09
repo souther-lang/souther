@@ -4,7 +4,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
-import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -112,21 +111,35 @@ final class Intervals {
         return out.size() < 2 ? List.of() : List.copyOf(out);
     }
 
-    /** The classes those ranges are, on a position of {@code type}. */
-    static List<PartitionClass> classesOf(List<Interval> intervals, TermPath path, Type type,
+    /**
+     * The classes those ranges are, on the term {@code of} at a position of {@code type}.
+     *
+     * <p>The term says how a row's value is read into a number and how its numbers are spaced; the
+     * type says what a value written at one of them looks like. A range of lengths has the first and
+     * not the second — a string five characters long is a value nothing here can write (#528) — so
+     * those classes are named and left without a representative rather than given the number itself.
+     */
+    static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
                                           Symbols symbols) {
-        boolean decimal = TypeOps.base(type, symbols) == Type.DECIMAL;
+        boolean decimal = of.decimal(type, symbols);
         souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
                 && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
+        boolean writable = of instanceof NumericTerm.ValueOf;
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
-            String id = path + "/" + range.label();
+            String id = of + "/" + range.label();
             BigDecimal inside = representative(range, decimal);
-            Classifier is = v -> switch (read(v)) {
-                case Read.Number number -> Membership.of(range.holds(number.value()));
-                case Read.Missing missing -> new Membership.Incomplete(missing.code());
-                case Read.NotNumber _ -> Membership.NO_MATCH;
+            Classifier is = v -> switch (of.read(v)) {
+                case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
+                case NumericTerm.Reading.Missing missing ->
+                        new Membership.Incomplete(missing.code());
+                case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
             };
+            if (!writable) {
+                classes.add(PartitionClass.ungeneratable(id, range.label(), is,
+                        "nothing here writes a value whose " + measureOf(of) + " is in this range"));
+                continue;
+            }
             classes.add(inside == null
                     ? PartitionClass.ungeneratable(id, range.label(), is,
                             "no value of this range can be written without a smallest step")
@@ -136,6 +149,10 @@ final class Intervals {
         return List.copyOf(classes);
     }
 
+    private static String measureOf(NumericTerm of) {
+        return of instanceof NumericTerm.SizeOf size ? size.measure().qualified() : "value";
+    }
+
     /** A value inside a range, or null where it holds none. Asked of the ends, which is where whether
      * the range holds the value it stops at is written down. */
     private static BigDecimal representative(Interval range, boolean decimal) {
@@ -143,47 +160,6 @@ final class Intervals {
                 range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
                 range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
                 decimal ? Granularity.DENSE : Granularity.DISCRETE);
-    }
-
-    /** The number a value holds, or why it holds none — and those are two different reasons. */
-    private sealed interface Read {
-
-        record Number(BigDecimal value) implements Read {}
-
-        /** There was no value to read, and this is what stopped there being one. */
-        record Missing(souther.compiler.observe.Incompleteness.Code code) implements Read {}
-
-        /** The value was read and is not a number. Which is an answer about the value and not about
-         * the observation: a {@code Text} at a numeric position is a class this does not hold, and
-         * calling it unreadable would report a partition that does not fit its position as a row
-         * nobody could read. */
-        record NotNumber() implements Read {}
-    }
-
-    /**
-     * The number at a value, keeping why there is none where there is none.
-     *
-     * <p>A newtype is not a step in a path, so the value at a position may be the construction and
-     * the number one inside it. Which is why this walk exists, and why the reason it stops has to
-     * come back with it: read as a bare {@code null}, an observation a limit stopped is the same
-     * answer as a value that is not a number.
-     */
-    private static Read read(ObservedValue v) {
-        Membership.Incomplete unread = Membership.unread(v);
-        if (unread != null) {
-            return new Read.Missing(unread.code());
-        }
-        return switch (v) {
-            case ObservedValue.Integer i -> new Read.Number(BigDecimal.valueOf(i.value()));
-            case ObservedValue.Decimal d -> new Read.Number(d.value());
-            case ObservedValue.Constructed c when c.field("value") != null -> read(c.field("value"));
-            default -> new Read.NotNumber();
-        };
-    }
-
-    /** The number at a value, for a caller that has nothing to say about why there is none. */
-    static BigDecimal numberOf(ObservedValue v) {
-        return read(v) instanceof Read.Number number ? number.value() : null;
     }
 
     private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,

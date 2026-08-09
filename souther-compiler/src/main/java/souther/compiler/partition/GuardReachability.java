@@ -43,15 +43,15 @@ public final class GuardReachability {
      * itself, for a caller that needs to say.
      *
      * @param edges      both arms of every guard whose comparison could be read
-     * @param admissible what each position can hold, keyed the way a {@link TermPath} prints — which
-     *                   is {@code Partitions.Partitioning#domains()}, and any other reading of the
-     *                   same question
+     * @param admissible what the values of each term can be, keyed the way a {@link NumericTerm}
+     *                   prints — which is {@code Partitions.Partitioning#domains()}, and any other
+     *                   reading of the same question
      */
     public static GuardReachability of(List<GuardEdge> edges,
                                        Map<String, NumericDomain.Bounds> admissible) {
         Set<Integer> out = new LinkedHashSet<>();
         for (GuardEdge edge : edges) {
-            if (edge.provenDisjoint(admissible.get(edge.path().toString()))) {
+            if (edge.provenDisjoint(admissible.get(edge.term().toString()))) {
                 out.add(edge.site());
             }
         }

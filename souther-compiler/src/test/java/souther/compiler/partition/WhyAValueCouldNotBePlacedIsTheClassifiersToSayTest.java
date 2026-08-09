@@ -216,7 +216,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
             classes.add(PartitionClass.of("c" + i, "c" + i, classifiers[i],
                     RepresentativeSource.none()));
         }
-        return List.of(new Axis(real.id(), real.path(), real.type(), classes, real.cuts()));
+        return List.of(new Axis(real.id(), real.term(), real.type(), classes, real.cuts()));
     }
 
     /**
