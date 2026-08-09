@@ -1268,9 +1268,11 @@ public final class Formatter {
                 }
             }
         }
-        return TokenDoc.node(n.kind(), concat(TokenDoc.at(run,
-                delimited(run, SyntaxKind.FN_TYPE, LPAREN, withEndComments(run, params), RPAREN)),
-                        GAP, ARROW, GAP, result));
+        // The place is the whole function type and not the bracketed run alone: the result is
+        // written at a place under it, and a place holds what is written at the places beneath it.
+        return TokenDoc.node(n.kind(), TokenDoc.at(run, concat(
+                delimited(run, SyntaxKind.FN_TYPE, LPAREN, withEndComments(run, params), RPAREN),
+                GAP, ARROW, GAP, result)));
     }
 
     private TokenDoc retType(SyntaxNode n, Place at) {
