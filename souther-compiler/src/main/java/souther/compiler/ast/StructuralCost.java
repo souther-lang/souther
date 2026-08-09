@@ -30,12 +30,12 @@ import java.util.List;
  * one, like any other construct. What is counted is what the compiler will build, and a call it
  * will not splice builds nothing per argument.
  *
- * <p>A block has an algebra of its own, and it is not written here: it is the steps its statements
- * take and what each of them holds from where it stands, which is a fact about statements, and by
- * the time this class sees one they are a spine of bindings. Whoever folded them works it out and
- * says so through {@link Known}. What is left for this to do with a block is what the rule for a
- * construct does with anything, which is a level at a time — and folding writes a level per step,
- * so the two agree, which is held by a test rather than by luck.
+ * <p>A block and a pattern have algebras of their own — a block the steps its statements take, a
+ * pattern the bindings it introduces and the one level it takes them out of a value at — and
+ * neither is written here. Folding either of them writes exactly what its algebra says it costs, so
+ * what is left for this to do is what the rule for a construct does with anything, a level at a
+ * time. That the folds do write exactly that is held by a test for each of them, which is what
+ * makes reading the tree the same thing as reading the source rather than an approximation of it.
  *
  * <p>Neither number is read off the tree: both are counted from what the author wrote, and the tree
  * is only where they are read from.
@@ -75,67 +75,20 @@ public final class StructuralCost {
      * What {@code e} costs as written, with nothing substituted into it — so no application is an
      * expanded one, and none of them costs more than a construct.
      *
-     * <p>What a block costs is read off the shape it was folded into. That shape is a level per
-     * step by construction and a test holds it to that, so the number is the block's — but the
-     * number is arrived at from the tree, and a caller that has the block's own answer should hand
-     * it over rather than let this work one out. {@link #of(Ast.Expr, Known)} is how.
+     * <p>Measured on the tree, which is what the rules are about. A construct the source writes and
+     * the compiler keeps is a level either way; a construct the compiler folds — a block into
+     * bindings, a pattern into the bindings it takes out of a value — is required to fold into
+     * exactly what the rule says it costs, and a test holds each of them to that. So there is one
+     * number and one way of arriving at it, rather than a rule and a measurement that have to be
+     * kept in step.
      */
     public static int of(Ast.Expr e) {
-        return of(e, _ -> UNKNOWN);
+        return composed(e, _ -> null).costs();
     }
 
-    /** What {@link #of(Ast.Expr, Known)} is told where the cost of a subtree is not to be counted
-     *  off the subtree. */
-    public static final int UNKNOWN = -1;
-
-    /**
-     * What a subtree costs, where something already knows and this must not work it out again.
-     *
-     * <p>A block is the case there is. What it costs is the steps its statements take and what they
-     * hold from where they stand, which is a fact about the statements the source wrote — and by the
-     * time this could walk one, they are a spine of bindings, so walking it would be reading the
-     * shape they were folded into. Whoever folded them says what they cost, and this takes that
-     * answer rather than deriving one.
-     */
-    @FunctionalInterface
-    public interface Known {
-        int costOf(Ast.Expr e);
-    }
-
-    /** As {@link #of(Ast.Expr)}, taking {@code known}'s answer for any subtree it has one for. */
-    public static int of(Ast.Expr e, Known known) {
-        if (e == null) {
-            return 0;
-        }
-        List<Ast.Expr> nodes = new ArrayList<>();
-        List<Integer> above = new ArrayList<>();
-        nodes.add(e);
-        above.add(0);
-        int most = 0;
-        while (!nodes.isEmpty()) {
-            Ast.Expr node = nodes.remove(nodes.size() - 1);
-            int here = above.remove(above.size() - 1);
-            if (node == null) {
-                continue;
-            }
-            int said = known.costOf(node);
-            if (said != UNKNOWN) {
-                most = Math.max(most, here + said);
-                continue;
-            }
-            int at = here + here(node, false);
-            most = Math.max(most, at);
-            Ast.forEachChild(node, child -> {
-                nodes.add(child);
-                above.add(at);
-            });
-        }
-        return most;
-    }
-
-    /** What one node costs where it stands. A block's statements are a binding each by the time
-     *  this reads them, so they are counted by the rule for a construct rather than by one of
-     *  their own. */
+    /** What one node costs where it stands. A block's statements and a pattern's bindings are
+     *  bindings by the time this reads them, so the rule for a construct counts them a level each,
+     *  which is what those rules say they cost. */
     private static int here(Ast.Expr e, boolean expanded) {
         return expanded && e instanceof Ast.Apply apply ? Math.max(1, apply.args().size()) : 1;
     }
