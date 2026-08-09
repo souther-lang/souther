@@ -1,7 +1,7 @@
 package souther.compiler.cst;
 
 import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.MessageCodes;
 
 /**
@@ -15,7 +15,7 @@ import souther.compiler.diag.msg.MessageCodes;
  * variable written outside the core are both refused while parsing, and they are not one rule — so
  * the message the site says is what decides it.
  */
-public record CstError(int offset, int width, Message said) {
+public record CstError(int offset, int width, Reported said) {
 
     public CstError {
         java.util.Objects.requireNonNull(said, "a syntax error says what did not read");
@@ -26,7 +26,7 @@ public record CstError(int offset, int width, Message said) {
         return MessageCodes.of(said);
     }
 
-    public static CstError of(int offset, int width, Message said) {
+    public static CstError of(int offset, int width, Reported said) {
         return new CstError(offset, width, said);
     }
 }

@@ -8,18 +8,17 @@ public sealed interface ImportMessage extends Message {
 
     /** The module publishes no operation of that name. */
     @Code(DiagnosticCode.E1506)
-    record NameIsNotAStandardLibraryFunction(String name, String module) implements ImportMessage {}
+    record NameIsNotAStandardLibraryFunction(String name, String module) implements ImportMessage, Reported {}
 
     /** The imported name is also declared here, so it would stand for two things. */
     @Code(DiagnosticCode.E1508)
-    record ImportedNameCollidesWithADeclaration(String name) implements ImportMessage {}
+    record ImportedNameCollidesWithADeclaration(String name) implements ImportMessage, Reported {}
 
     /** What to do about a name that would stand for two things. */
-    @Code(DiagnosticCode.E1508)
     record RenameOrQualifyTheCollidingName() implements ImportMessage {}
 
     /** Two modules publish the name, so importing both leaves it saying neither. */
     @Code(DiagnosticCode.E1508)
     record NameIsPublishedByTwoModules(String name, String publishedBy, String andBy)
-            implements ImportMessage {}
+            implements ImportMessage, Reported {}
 }

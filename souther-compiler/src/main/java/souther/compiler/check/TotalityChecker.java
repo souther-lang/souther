@@ -462,11 +462,11 @@ final class TotalityChecker {
 
     /** Said at the helper's own name: `let` comes first, and a report anchored at the definition
      *  underlines the keyword rather than what it is about. */
-    private static CompileException error(Ast.FnDef h, souther.compiler.diag.msg.Message said) {
+    private static CompileException error(Ast.FnDef h, souther.compiler.diag.msg.Reported said) {
         return CompileException.of(Diagnostic.at(h.written().region()).say(said).build());
     }
 
-    private static CompileException error(Ast.Apply call, souther.compiler.diag.msg.Message said) {
+    private static CompileException error(Ast.Apply call, souther.compiler.diag.msg.Reported said) {
         return CompileException.of(Diagnostic.at(call.name().region()).say(said).build());
     }
 

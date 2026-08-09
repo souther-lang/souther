@@ -81,9 +81,16 @@ Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, hel
 `Diagnostic.of(DiagnosticCode, String)`, `Builder#args(Object...)` and the `legacyBody` parameter
 are removed. `getMessage()` renders the same record in English, so a message exists once.
 
+A hint and a secondary label are messages too — they render, and they carry values of their own —
+but they are not what a diagnostic is about. Only the subject reports a rule, so only the subject
+carries a code: those messages are `Reported`, `say` takes one, and `hint` and `secondary` take any
+message. Without that split the code on a hint is a number nothing reads, and a rule whose subjects
+had all moved to another number would go on looking reported by the repair written under it.
+
 The build holds every message to seven rules, over every shipped locale:
 
-1. every message is a record and names the rule it reports;
+1. every message is a record, a `Reported` one names the rule it reports, and one that is not names
+   no rule;
 2. every record's derived key is in the catalog;
 3. **every component of a record appears in its own text as `{name}`**;
 4. every `{name}` in a text is a component of that record, and a brace holding anything else is
@@ -98,6 +105,14 @@ carrying it — which stays true when the sites that reported a rule move to ano
 record they used is left behind. Read off the records some site *builds*, it says what it is meant
 to: nothing sends a reader to that chapter any more. A declared message nothing builds is also a
 sentence shipped in every catalog that no compile can produce, which is rule 6 on its own.
+
+What makes "built" mean "built as the subject" is the type and not the scan. Every message renders,
+so reading the source for what reaches `say` finds a quarter of the subjects — the rest arrive
+through a helper that takes the message and positions it. A hint carries no code, so no hint can
+answer for one, and the scan does not have to tell them apart. What is left is narrow and named
+rather than checked: a message declared `Reported` and then written only as a hint would answer for
+its code without reporting it. The name is the claim, and a mislabel is one the type invites nobody
+to make.
 
 Rule 1 is why the messages are records at all rather than a convention: a leaf of the hierarchy that
 is not one carries no components, so every rule under it is silent about it. Rule 4 reads the entry

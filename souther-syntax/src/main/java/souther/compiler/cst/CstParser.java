@@ -1,7 +1,7 @@
 package souther.compiler.cst;
 
 import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.ParseMessage;
 
 import java.util.ArrayDeque;
@@ -1739,7 +1739,7 @@ public final class CstParser {
         return SyntaxKind.EOF;
     }
 
-    private void error(Message said) {
+    private void error(Reported said) {
         int i = mi(0);
         int width = Math.max(1, tokens.get(i).width());
         errors.add(new CstError(offset[i], width, said));

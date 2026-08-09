@@ -1,5 +1,6 @@
 package souther.compiler.frontend;
 
+import souther.compiler.diag.msg.Reported;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.LineIndex;
@@ -1510,12 +1511,12 @@ public final class AstBuilder {
         return sb.toString();
     }
 
-    private CompileException error(SourcePos pos, Message said) {
+    private CompileException error(SourcePos pos, Reported said) {
         return CompileException.of(Diagnostic.say(said).at(pos).build());
     }
 
     /** As {@link #error}, with a hint under it naming the way out. */
-    private CompileException errorWithHint(SourcePos pos, Message said, Message hint) {
+    private CompileException errorWithHint(SourcePos pos, Reported said, Message hint) {
         return CompileException.of(Diagnostic.say(said).at(pos).hint(hint).build());
     }
 

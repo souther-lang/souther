@@ -6,59 +6,56 @@ import souther.compiler.diag.DiagnosticCode;
 public sealed interface NameMessage extends Message {
 
     @Code(DiagnosticCode.E1803)
-    record ItIsNotAFunctionHere(String name) implements NameMessage {}
+    record ItIsNotAFunctionHere(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1809)
-    record ABlockIsNotAValue() implements NameMessage {}
+    record ABlockIsNotAValue() implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1803)
-    record ANameTheLanguageGivesIsNotAFunction(String name) implements NameMessage {}
+    record ANameTheLanguageGivesIsNotAFunction(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1019)
-    record ABindingMayNotShadowABuiltIn(String name) implements NameMessage {}
+    record ABindingMayNotShadowABuiltIn(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E2104)
-    record TheExpressionNestsTooDeeply() implements NameMessage {}
+    record TheExpressionNestsTooDeeply() implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1815)
-    record TheElementTypeCannotBeInferredHere() implements NameMessage {}
+    record TheElementTypeCannotBeInferredHere() implements NameMessage, Reported {}
 
-    @Code(DiagnosticCode.E1815)
     record TheAccumulatorsTypeStaysUnknown() implements NameMessage {}
 
     @Code(DiagnosticCode.E1317)
-    record TheBindingDeclaresAnotherType(String binding, String declares, String value) implements NameMessage {}
+    record TheBindingDeclaresAnotherType(String binding, String declares, String value) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1814)
-    record ARecursiveHelperIsPure(String helper, String injected) implements NameMessage {}
+    record ARecursiveHelperIsPure(String helper, String injected) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1813)
-    record ARecursiveHelperMustDeclareItsReturnType(String helper) implements NameMessage {}
+    record ARecursiveHelperMustDeclareItsReturnType(String helper) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1506)
-    record NotAStandardLibraryFunction(String name) implements NameMessage {}
+    record NotAStandardLibraryFunction(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1025)
-    record WriteAStandardLibraryNameQualified(String name, String qualified) implements NameMessage {}
+    record WriteAStandardLibraryNameQualified(String name, String qualified) implements NameMessage, Reported {}
 
-    @Code(DiagnosticCode.E1025)
     record WriteItOnItsOwn(String name) implements NameMessage {}
 
     @Code(DiagnosticCode.E1023)
-    record NoBehaviorOfThatNameInThisPipeline(String name) implements NameMessage {}
+    record NoBehaviorOfThatNameInThisPipeline(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1023)
-    record NoValueOfThatNameInScope(String name) implements NameMessage {}
+    record NoValueOfThatNameInScope(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1023)
-    record NoTypeOfThatName(String name) implements NameMessage {}
+    record NoTypeOfThatName(String name) implements NameMessage, Reported {}
 
     @Code(DiagnosticCode.E1307)
-    record NothingSaysWhatThisPositionHolds() implements NameMessage {}
+    record NothingSaysWhatThisPositionHolds() implements NameMessage, Reported {}
 
-    @Code(DiagnosticCode.E1307)
     record WriteItWhereTheTypeIsStated() implements NameMessage {}
 
     @Code(DiagnosticCode.E1022)
-    record AValueReachesItself(String name, String through) implements NameMessage {}
+    record AValueReachesItself(String name, String through) implements NameMessage, Reported {}
 }

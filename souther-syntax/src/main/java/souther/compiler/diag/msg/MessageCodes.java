@@ -17,7 +17,7 @@ public final class MessageCodes {
     }
 
     /** The rule {@code message} reports. */
-    public static DiagnosticCode of(Class<? extends Message> message) {
+    public static DiagnosticCode of(Class<? extends Reported> message) {
         Code code = message.getAnnotation(Code.class);
         if (code == null) {
             throw new IllegalArgumentException("a message reports a rule, and " + message.getName()
@@ -27,7 +27,7 @@ public final class MessageCodes {
     }
 
     /** The rule {@code message} reports. */
-    public static DiagnosticCode of(Message message) {
-        return of(message.getClass().asSubclass(Message.class));
+    public static DiagnosticCode of(Reported message) {
+        return of(message.getClass().asSubclass(Reported.class));
     }
 }

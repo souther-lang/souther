@@ -6,177 +6,158 @@ import souther.compiler.diag.DiagnosticCode;
 public sealed interface DeclarationMessage extends Message {
 
     @Code(DiagnosticCode.E1321)
-    record CannotReadAFieldOnThisValue(String field) implements DeclarationMessage {}
+    record CannotReadAFieldOnThisValue(String field) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1802)
-    record AppliedToAnotherNumberOfArguments(String what, String takes, String got) implements DeclarationMessage {}
+    record AppliedToAnotherNumberOfArguments(String what, String takes, String got) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1317)
-    record ItExpectsAnotherType(String what, Object expects, String got) implements DeclarationMessage {}
+    record ItExpectsAnotherType(String what, Object expects, String got) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1612)
-    record AnInjectionTargetCannotDependOnAnything(String behavior) implements DeclarationMessage {}
+    record AnInjectionTargetCannotDependOnAnything(String behavior) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1024)
-    record ItCannotBeHeldAsAValueHere(String name, String what) implements DeclarationMessage {}
+    record ItCannotBeHeldAsAValueHere(String name, String what) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1817)
-    record ItNeedsANumericElement(String call, souther.compiler.diag.Localizable needs, String element) implements DeclarationMessage {}
+    record ItNeedsANumericElement(String call, souther.compiler.diag.Localizable needs, String element) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1324)
     record ThisOperandIs(String type) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1816)
-    record ItNeedsAnOrderedElement(String call, souther.compiler.diag.Localizable needs, String element) implements DeclarationMessage {}
+    record ItNeedsAnOrderedElement(String call, souther.compiler.diag.Localizable needs, String element) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1002)
-    record ItConstructsWithoutDeclaringIt(String behavior, String data) implements DeclarationMessage {}
+    record ItConstructsWithoutDeclaringIt(String behavior, String data) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1002)
     record AddTheConstructsEntry(String behavior, String data) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1006)
-    record ItDeclaresConstructsAndNeverBuilds(String behavior, String data) implements DeclarationMessage {}
+    record ItDeclaresConstructsAndNeverBuilds(String behavior, String data) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1006)
     record RemoveTheConstructsEntry(String data) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1101)
-    record AnInvariantExpressionIsBool(String given) implements DeclarationMessage {}
+    record AnInvariantExpressionIsBool(String given) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1201)
-    record TheMatchDoesNotCoverEveryCase(String subject) implements DeclarationMessage {}
+    record TheMatchDoesNotCoverEveryCase(String subject) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1201)
     record AddACaseFor(String cases) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1301)
-    record NullIsNotPartOfTheLanguage() implements DeclarationMessage {}
+    record NullIsNotPartOfTheLanguage() implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1303)
-    record NothingHereIsAskingForNone() implements DeclarationMessage {}
+    record NothingHereIsAskingForNone() implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1303)
     record MakeAbsenceACaseOfItsOwnSum() implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1303)
-    record SomeIsNotACall() implements DeclarationMessage {}
+    record SomeIsNotACall() implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1303)
     record WriteTheValueOnItsOwn() implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1305)
-    record AnInjectedBehaviorConstructsWhatIsKept(String behavior, String data) implements DeclarationMessage {}
+    record AnInjectedBehaviorConstructsWhatIsKept(String behavior, String data) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1305)
     record ExposeItOrMakeItAUnitData(String data) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1401)
-    record NotABehaviorOrABuiltin(String name) implements DeclarationMessage {}
+    record NotABehaviorOrABuiltin(String name) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1401)
     record ImplementItFromJavaInstead() implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1501)
-    record CyclicModuleDependency() implements DeclarationMessage {}
+    record CyclicModuleDependency() implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1602)
-    record ItCallsSomethingWithNoImplementation(String let, String called, String behavior) implements DeclarationMessage {}
+    record ItCallsSomethingWithNoImplementation(String let, String called, String behavior) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1602)
     record AddTheDependsOnEntry(String called, String behavior) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1603)
-    record ItDeclaresDependsOnAndNeverCallsIt(String behavior, String dependency, String let) implements DeclarationMessage {}
+    record ItDeclaresDependsOnAndNeverCallsIt(String behavior, String dependency, String let) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1603)
     record RemoveTheDependsOnEntry(String dependency) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1604)
-    record TheDeclaredOutputIsNotWhatThePipelineProduces(String behavior, String declared, String produces) implements DeclarationMessage {}
+    record TheDeclaredOutputIsNotWhatThePipelineProduces(String behavior, String declared, String produces) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1604)
     record UpdateTheOutputOrHandleTheCase() implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1605)
-    record AnExposedCompositionDeclaresItsOutput(String composition) implements DeclarationMessage {}
+    record AnExposedCompositionDeclaresItsOutput(String composition) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1605)
     record WriteTheOutputSignature(String composition, String output) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1605)
-    record OnlyACompositionTakesAnOutputSignature(String name) implements DeclarationMessage {}
+    record OnlyACompositionTakesAnOutputSignature(String name) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1607)
-    record DependsOnNamesNoSuchBehavior(String behavior, String dependency) implements DeclarationMessage {}
+    record DependsOnNamesNoSuchBehavior(String behavior, String dependency) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1607)
     record DeclareItHereOrImportIt(String dependency) implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1607)
-    record DependsOnNamesAComposition(String behavior, String dependency) implements DeclarationMessage {}
+    record DependsOnNamesAComposition(String behavior, String dependency) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1607)
-    record DependsOnNamesSomethingThatDependsOnNothing(String behavior, String dependency) implements DeclarationMessage {}
+    record DependsOnNamesSomethingThatDependsOnNothing(String behavior, String dependency) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E1608)
-    record ABehaviorReachesItself(String behavior, String through) implements DeclarationMessage {}
+    record ABehaviorReachesItself(String behavior, String through) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1608)
     record ABehaviorDoesNotRecurse() implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E1701)
-    record TheseBehaviorsCannotBeComposed() implements DeclarationMessage {}
+    record TheseBehaviorsCannotBeComposed() implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E1701)
     record MakeTheLeftOutputACaseTheRightAccepts() implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E2101)
-    record ADataNeedsMoreSlotsThanAConstructorHolds(String data, String needs, String holds) implements DeclarationMessage {}
+    record ADataNeedsMoreSlotsThanAConstructorHolds(String data, String needs, String holds) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2101)
-    record AHelperTakesMoreParametersThanAMethodHolds(String helper, String takes, String holds) implements DeclarationMessage {}
+    record AHelperTakesMoreParametersThanAMethodHolds(String helper, String takes, String holds) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2101)
-    record ABehaviorTakesMoreParametersThanApplyHolds(String behavior, String takes, String holds) implements DeclarationMessage {}
+    record ABehaviorTakesMoreParametersThanApplyHolds(String behavior, String takes, String holds) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2101)
-    record ABehaviorHasMoreDependenciesThanAConstructorHolds(String behavior, String has, String holds) implements DeclarationMessage {}
+    record ABehaviorHasMoreDependenciesThanAConstructorHolds(String behavior, String has, String holds) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2102)
-    record AMethodIsLargerThanTheJvmHolds(String owner, String method, String bytes, String holds) implements DeclarationMessage {}
+    record AMethodIsLargerThanTheJvmHolds(String owner, String method, String bytes, String holds) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E2102)
     record SplitTheWorkOrMoveTheTable() implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E2103)
-    record AClassNeedsMoreConstantsThanItHolds(String owner, String needs, String holds) implements DeclarationMessage {}
+    record AClassNeedsMoreConstantsThanItHolds(String owner, String needs, String holds) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2103)
-    record AClassRefersPastTheConstantPool(String owner, String refersTo, String holds) implements DeclarationMessage {}
+    record AClassRefersPastTheConstantPool(String owner, String refersTo, String holds) implements DeclarationMessage, Reported {}
 
-    @Code(DiagnosticCode.E2103)
     record MoveTheTableOutOfTheSource() implements DeclarationMessage {}
 
-    @Code(DiagnosticCode.E1607)
     record RemoveItAndCallItDirectly(String dependency) implements DeclarationMessage {}
 
-    @Code(DiagnosticCode.E1607)
     record ACompositionsRequirementsAreNotWritten(String dependency)
             implements DeclarationMessage {}
 
     @Code(DiagnosticCode.E2104)
-    record ItNestsDeeperThanIsRead() implements DeclarationMessage {}
+    record ItNestsDeeperThanIsRead() implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2302)
-    record TheRightSideOfAValuePipeIsACall() implements DeclarationMessage {}
+    record TheRightSideOfAValuePipeIsACall() implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2101)
-    record SplitTheDataAndHoldThemAsFields(String data) implements DeclarationMessage {}
+    record SplitTheDataAndHoldThemAsFields(String data) implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2101)
-    record GroupTheParametersIntoAData() implements DeclarationMessage {}
+    record GroupTheParametersIntoAData() implements DeclarationMessage, Reported {}
 
     @Code(DiagnosticCode.E2101)
-    record GroupTheDependenciesBehindABehavior() implements DeclarationMessage {}
+    record GroupTheDependenciesBehindABehavior() implements DeclarationMessage, Reported {}
 }

@@ -21,116 +21,116 @@ public sealed interface ParseMessage extends Message {
      * raised this has no language to write it in.
      */
     @Code(DiagnosticCode.E2301)
-    record ADeclarationExpectedSomethingElse(Object expected, Object found) implements ParseMessage {}
+    record ADeclarationExpectedSomethingElse(Object expected, Object found) implements ParseMessage, Reported {}
 
     /** The same, while reading an expression. */
     @Code(DiagnosticCode.E2302)
-    record AnExpressionExpectedSomethingElse(Object expected, Object found) implements ParseMessage {}
+    record AnExpressionExpectedSomethingElse(Object expected, Object found) implements ParseMessage, Reported {}
 
     /** The same, while reading a pattern. */
     @Code(DiagnosticCode.E2303)
-    record APatternExpectedSomethingElse(Object expected, Object found) implements ParseMessage {}
+    record APatternExpectedSomethingElse(Object expected, Object found) implements ParseMessage, Reported {}
 
     /** The same, while reading an example. */
     @Code(DiagnosticCode.E2304)
-    record AnExampleExpectedSomethingElse(Object expected, Object found) implements ParseMessage {}
+    record AnExampleExpectedSomethingElse(Object expected, Object found) implements ParseMessage, Reported {}
 
     /** Nothing here can begin an expression. */
     @Code(DiagnosticCode.E2302)
-    record AnExpressionWasExpected() implements ParseMessage {}
+    record AnExpressionWasExpected() implements ParseMessage, Reported {}
 
     /** Nothing here can be a literal. */
     @Code(DiagnosticCode.E2305)
-    record ALiteralWasExpected() implements ParseMessage {}
+    record ALiteralWasExpected() implements ParseMessage, Reported {}
 
     /** Nothing here can be a line of a block. */
     @Code(DiagnosticCode.E2302)
-    record AStatementWasExpected() implements ParseMessage {}
+    record AStatementWasExpected() implements ParseMessage, Reported {}
 
     /** Nothing here can be a pattern. */
     @Code(DiagnosticCode.E2303)
-    record APatternWasExpected() implements ParseMessage {}
+    record APatternWasExpected() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2301)
-    record ASourceFileStartsWithAModuleDeclaration() implements ParseMessage {}
+    record ASourceFileStartsWithAModuleDeclaration() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2301)
-    record ATopLevelDefinitionStartsWithAKeyword() implements ParseMessage {}
+    record ATopLevelDefinitionStartsWithAKeyword() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2301)
-    record ABehaviorIsWrittenWithAColonOrAnEquals() implements ParseMessage {}
+    record ABehaviorIsWrittenWithAColonOrAnEquals() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1402)
-    record IntrinsicIsACorePrivilege() implements ParseMessage {}
+    record IntrinsicIsACorePrivilege() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1402)
-    record PrivateIsACorePrivilege() implements ParseMessage {}
+    record PrivateIsACorePrivilege() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1402)
-    record ATypeVariableIsOnlyAllowedInTheCore(String variable) implements ParseMessage {}
+    record ATypeVariableIsOnlyAllowedInTheCore(String variable) implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1402)
-    record AnOptionalIsOnlyWrittenOnAFieldOrInTheCore() implements ParseMessage {}
+    record AnOptionalIsOnlyWrittenOnAFieldOrInTheCore() implements ParseMessage, Reported {}
 
     /** What to write instead. */
     @Code(DiagnosticCode.E1402)
-    record LeaveTheTypeOffAndTheOptionalIsInferred() implements ParseMessage {}
+    record LeaveTheTypeOffAndTheOptionalIsInferred() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1308)
-    record AQuestionMarkFollowsASumOfCases(String cases) implements ParseMessage {}
+    record AQuestionMarkFollowsASumOfCases(String cases) implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1310)
-    record UnreachableStatesItsReasonAsAString() implements ParseMessage {}
+    record UnreachableStatesItsReasonAsAString() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2302)
-    record ABlockEndsInOneExpression() implements ParseMessage {}
+    record ABlockEndsInOneExpression() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2303)
-    record OptionsWrappedValueIsBoundPositionally() implements ParseMessage {}
+    record OptionsWrappedValueIsBoundPositionally() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2303)
-    record ACaseValueIsBoundWithAs(String caseName, String bound) implements ParseMessage {}
+    record ACaseValueIsBoundWithAs(String caseName, String bound) implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2303)
-    record ARecordsFieldsAreDestructuredDirectly() implements ParseMessage {}
+    record ARecordsFieldsAreDestructuredDirectly() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1007)
-    record ANewtypeCannotWrapATuple() implements ParseMessage {}
+    record ANewtypeCannotWrapATuple() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1007)
-    record ANewtypeCannotWrapAFunction() implements ParseMessage {}
+    record ANewtypeCannotWrapAFunction() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E1020)
-    record ASumsCasesAreDeclaredNamedData() implements ParseMessage {}
+    record ASumsCasesAreDeclaredNamedData() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2304)
-    record AnExampleOnlyFileStartsWithItsModule() implements ParseMessage {}
+    record AnExampleOnlyFileStartsWithItsModule() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2301)
-    record ADependencyClauseIsTwoWords() implements ParseMessage {}
+    record ADependencyClauseIsTwoWords() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2301)
-    record ALetWithNoParametersIsWrittenWithoutParens(String name) implements ParseMessage {}
+    record ALetWithNoParametersIsWrittenWithoutParens(String name) implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2304)
-    record AnExampleNeedsAtLeastOneRow() implements ParseMessage {}
+    record AnExampleNeedsAtLeastOneRow() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2304)
-    record AFakeNeedsAtLeastOneRow() implements ParseMessage {}
+    record AFakeNeedsAtLeastOneRow() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2306)
-    record ATypeVariableNeedsANameAfterTheApostrophe() implements ParseMessage {}
+    record ATypeVariableNeedsANameAfterTheApostrophe() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2305)
-    record AFractionalLiteralNeedsTheMSuffix(String literal) implements ParseMessage {}
+    record AFractionalLiteralNeedsTheMSuffix(String literal) implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2305)
-    record AStringLiteralIsNotClosed() implements ParseMessage {}
+    record AStringLiteralIsNotClosed() implements ParseMessage, Reported {}
 
     @Code(DiagnosticCode.E2306)
-    record AnUnexpectedCharacter(String character) implements ParseMessage {}
+    record AnUnexpectedCharacter(String character) implements ParseMessage, Reported {}
 
     /** `Some(v)` opens a wrapped newtype, and binding the whole value is written without parens. */
     @Code(DiagnosticCode.E2303)
-    record SomeParensOpenAWrappedNewtype(String newtype) implements ParseMessage {}
+    record SomeParensOpenAWrappedNewtype(String newtype) implements ParseMessage, Reported {}
 }

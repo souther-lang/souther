@@ -509,6 +509,11 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Message.class));
         while (!pending.isEmpty()) {
             Class<?> next = pending.poll();
+            if (next == souther.compiler.diag.msg.Reported.class) {
+                // Which of the messages report a rule, not one of the areas they are grouped into.
+                // Its implementors are reached through the area that declares them.
+                continue;
+            }
             Class<?>[] permitted = next.getPermittedSubclasses();
             if (permitted != null && permitted.length > 0) {
                 pending.addAll(List.of(permitted));
@@ -532,6 +537,10 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * rule below is silent about it. A missing {@code @Code} is the same shape of hole: it raises
      * where the message is built rather than where it is declared, which is a use site away from the
      * mistake.
+     *
+     * <p>Which messages must name one is {@link souther.compiler.diag.msg.Reported}: those are what
+     * a diagnostic can be about, and a hint or a secondary label is not. The code on a hint would be
+     * read by nothing and counted by the rule below as a rule something reports.
      */
     @Test
     void everyMessageIsARecordThatNamesItsRule() {
@@ -542,8 +551,15 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
                 wrong.add(leaf.getName() + " is not a record");
                 continue;
             }
-            if (leaf.getAnnotation(souther.compiler.diag.msg.Code.class) == null) {
-                wrong.add(leaf.getName() + " names no code");
+            boolean reports = souther.compiler.diag.msg.Reported.class.isAssignableFrom(leaf);
+            boolean named = leaf.getAnnotation(souther.compiler.diag.msg.Code.class) != null;
+            if (reports && !named) {
+                wrong.add(leaf.getName() + " reports a rule and names no code");
+            }
+            // A hint's code is read by nothing — a diagnostic's comes from its subject — so one
+            // written here is a number that looks reported and is not.
+            if (!reports && named) {
+                wrong.add(leaf.getName() + " is a hint or a label and names a code");
             }
         }
         wrong.sort(String::compareTo);
@@ -590,14 +606,22 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * <p>Read off the messages that are built rather than the ones that are declared, which is the
      * difference between this holding and it appearing to. A record kept beside the code it used to
      * report answers the declared question and not this one.
+     *
+     * <p>And read off the {@link souther.compiler.diag.msg.Reported} ones, which is what makes
+     * "built" mean "built as a diagnostic's subject". Every message renders, so a scan of the source
+     * cannot tell the subject from the hint written under it — three quarters of the subjects reach
+     * {@code say} through a helper and would read as unbuilt. The type says it instead: a hint
+     * carries no code, so no hint can answer for one.
      */
     @Test
     void everyCodeIsReportedByAMessage() throws IOException {
         Set<DiagnosticCode> reported = new java.util.HashSet<>();
         for (Class<? extends Message> message : messages()) {
-            if (built().contains(message.getEnclosingClass().getSimpleName() + "."
-                    + message.getSimpleName())) {
-                reported.add(MessageCodes.of(message));
+            if (souther.compiler.diag.msg.Reported.class.isAssignableFrom(message)
+                    && built().contains(message.getEnclosingClass().getSimpleName() + "."
+                            + message.getSimpleName())) {
+                reported.add(MessageCodes.of(
+                        message.asSubclass(souther.compiler.diag.msg.Reported.class)));
             }
         }
         List<String> unreported = new ArrayList<>();

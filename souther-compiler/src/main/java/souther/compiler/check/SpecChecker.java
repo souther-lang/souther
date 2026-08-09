@@ -566,7 +566,7 @@ public final class SpecChecker {
 
     private static void refuseHidden(Type written,
                                      java.util.function.Function<String,
-                                             souther.compiler.diag.msg.Message> say,
+                                             souther.compiler.diag.msg.Reported> say,
                                      java.util.function.Function<String,
                                              souther.compiler.diag.msg.Message> hint,
                                      SourcePos pos, Symbols symbols,

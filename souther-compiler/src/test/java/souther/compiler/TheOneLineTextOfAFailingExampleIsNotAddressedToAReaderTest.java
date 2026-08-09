@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  */
 class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
 
-    private static final ExampleMessage SAID =
+    private static final Reported SAID =
             new ExampleMessage.TheRowReachedAnUnreachablePoint("no branch states this");
 
     @Test

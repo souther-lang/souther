@@ -9,10 +9,11 @@ package souther.compiler.diag.msg;
  * language, so a value a diagnostic carries is a value its reader is shown. Carrying one and not
  * showing it is not expressible.
  *
- * <p>Which catalog entry a message renders through, and which code it reports, are read off the
- * message's own type — {@link MessageKeys} for the first, {@link MessageCodes} for the second.
- * Neither is a string a site chooses, so two messages cannot name one entry and a message cannot
- * name none.
+ * <p>Which catalog entry a message renders through is read off the message's own type
+ * ({@link MessageKeys}), so it is not a string a site chooses, two messages cannot name one entry
+ * and a message cannot name none. Which rule it reports is read the same way ({@link MessageCodes}),
+ * of the messages that report one: those are {@link Reported}, and a hint or a secondary label is
+ * not.
  *
  * <p>Both are functions of the type and not methods here. A record component generates an accessor,
  * so a method on this interface is one a message could answer for itself: a component named
@@ -27,5 +28,5 @@ package souther.compiler.diag.msg;
 public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage,
         CodecMessage, DataMessage, DeclarationMessage, ExampleMessage, HelperMessage, ImportMessage,
         InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage, NameMessage, ParseMessage,
-        TypeMessage {
+        Reported, TypeMessage {
 }

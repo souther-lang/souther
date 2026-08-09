@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
 
@@ -28,14 +29,14 @@ public final class Diagnostic {
     private final Region region;
     private final List<LabeledRegion> secondary;
     private final String literalMessage;
-    private final Message said;
+    private final Reported said;
     private final TypeComparison diff;
     private final List<Note> notes;
     private final String suggestion;
 
     private Diagnostic(Severity severity, DiagnosticCode code, Region region,
                        List<LabeledRegion> secondary, String literalMessage,
-                       TypeComparison diff, List<Note> notes, String suggestion, Message said) {
+                       TypeComparison diff, List<Note> notes, String suggestion, Reported said) {
         this.severity = severity;
         this.code = code;
         this.region = region;
@@ -48,7 +49,7 @@ public final class Diagnostic {
     }
 
     /** What this says, as the values it is about, or null for a {@link #literal}. */
-    public Message said() {
+    public Reported said() {
         return said;
     }
 
@@ -120,7 +121,7 @@ public final class Diagnostic {
      */
     public record Identity(Severity severity, String code, String titleKey, Region region,
                            List<LabeledRegion> secondary, String literalMessage,
-                           TypeComparison diff, List<Note> notes, String suggestion, Message said) {}
+                           TypeComparison diff, List<Note> notes, String suggestion, Reported said) {}
 
     public Identity identity() {
         return new Identity(severity, code(), titleKey(), region,
@@ -141,7 +142,7 @@ public final class Diagnostic {
      * reports and the title it is shown under are read off the message, so every site reporting one
      * rule agrees about both and neither is given here.
      */
-    public static Builder say(Message message) {
+    public static Builder say(Reported message) {
         return new Builder().say(message);
     }
 
@@ -163,7 +164,7 @@ public final class Diagnostic {
 
     public static final class Builder {
         private DiagnosticCode code;
-        private Message said;
+        private Reported said;
         private Region region;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private TypeComparison diff;
@@ -177,7 +178,7 @@ public final class Diagnostic {
          * What this diagnostic says. The rule it reports and the catalog entry it renders through
          * are read off {@code message}: neither is a string this site chooses.
          */
-        public Builder say(Message message) {
+        public Builder say(Reported message) {
             this.said = message;
             this.code = MessageCodes.of(message);
             return this;

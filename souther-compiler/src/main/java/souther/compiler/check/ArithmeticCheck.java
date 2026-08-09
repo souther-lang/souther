@@ -58,7 +58,7 @@ sealed interface ArithmeticCheck {
      * belong to the rule, so that adding a rule cannot leave the diagnostic behind.
      */
     sealed interface Refusal {
-        souther.compiler.diag.msg.Message said();
+        souther.compiler.diag.msg.Reported said();
 
         Side side();
 
@@ -76,7 +76,7 @@ sealed interface ArithmeticCheck {
 
     /** Not a number at all: the rule the newtype rules were carved out of. */
     record OperandNotArithmetic(Type operand, Side side) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.AnOperandIsNotANumber(Type.show(operand));
         }
     }
@@ -84,7 +84,7 @@ sealed interface ArithmeticCheck {
     /** A newtype whose value is not directly Int or Decimal — over another newtype, or over
      * something that was never a number. Arithmetic reaches one wrapping and no further. */
     record NoDirectNumericBase(Type newtype, Type wrapped, Side side) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.ANewtypeWithNoDirectNumericBase(
                     Type.show(newtype, wrapped), Type.show(wrapped, newtype));
         }
@@ -97,7 +97,7 @@ sealed interface ArithmeticCheck {
 
     /** Two unlike newtypes: nothing says a quantity of one is a quantity of the other. */
     record DifferentNewtypes(Type left, Type right) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.TwoDifferentNewtypes(Type.show(left, right),
                     Type.show(right, left));
         }
@@ -113,7 +113,7 @@ sealed interface ArithmeticCheck {
 
     /** A product of two newtypes is a quantity in neither of them. */
     record ProductChangesDimension(Type left, Type right) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.AProductChangesDimension(Type.show(left, right),
                     Type.show(right, left));
         }
@@ -131,7 +131,7 @@ sealed interface ArithmeticCheck {
      * same newtype, a quantity per quantity where they are not, and the language expresses
      * neither. */
     record QuotientChangesDimension(Type left, Type right) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.AQuotientChangesDimension(Type.show(left, right),
                     Type.show(right, left));
         }
@@ -148,7 +148,7 @@ sealed interface ArithmeticCheck {
     /** A value of some other base beside a newtype. Reading its own base is one rule of the
      * newtype, asked by every operator, and not a rule of scaling. */
     record ValueOfAnotherBase(Type newtype, Type base, Type value, Side side) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.AValueOfAnotherBase(Type.show(newtype, value),
                     Type.show(base), Type.show(value, newtype));
         }
@@ -162,7 +162,7 @@ sealed interface ArithmeticCheck {
     /** A value of the newtype's own base that was not written out: only a literal is read as the
      * newtype standing beside it. */
     record BareValueIsNotALiteral(Type newtype, Type value, Side side) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.OnlyALiteralIsReadAsTheNewtype(
                     Type.show(newtype, value), Type.show(value, newtype));
         }
@@ -176,7 +176,7 @@ sealed interface ArithmeticCheck {
     /** A number over a newtype is an inverse, so the dimension changes even though scaling does
      * not. */
     record ReciprocalChangesDimension(Type value, Type newtype) implements Refusal {
-        @Override public souther.compiler.diag.msg.Message said() {
+        @Override public souther.compiler.diag.msg.Reported said() {
             return new ArithmeticMessage.AReciprocalChangesDimension(
                     Type.show(value, newtype), Type.show(newtype, value));
         }
