@@ -9,17 +9,18 @@ package souther.compiler.diag;
  * <p>{@code labelKey} is null for the primary region, which has no note of its own: what it points
  * at is what the message is about.
  */
-public record Spot(String sourceId, Region region, String labelKey, Object[] labelArgs) {
+public record Spot(String sourceId, Region region, String labelKey, Object[] labelArgs,
+                   souther.compiler.diag.msg.Message said) {
 
     /** The primary region of {@code d}, in {@code sourceId}. */
     public static Spot primary(Diagnostic d, String sourceId) {
-        return new Spot(sourceId, d.region(), null, null);
+        return new Spot(sourceId, d.region(), null, null, null);
     }
 
     /** A secondary region, in its own source or the diagnostic's when it names none. */
     public static Spot secondary(LabeledRegion label, String diagnosticSourceId) {
         return new Spot(label.sourceIdOr(diagnosticSourceId), label.region(),
-                label.labelKey(), label.labelArgs());
+                label.labelKey(), label.labelArgs(), label.said());
     }
 
     /** Whether this spot carries a note — false for the primary region. */

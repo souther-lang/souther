@@ -47,7 +47,8 @@ public final class HumanRenderer implements DiagnosticRenderer {
             }
             snippet(out, other.region(), src, CYAN);
             if (other.labelled()) {
-                out.append(color(DIM, Messages.get(other.labelKey(), locale, other.labelArgs())))
+                out.append(color(DIM, other.said() != null ? Messages.render(other.said(), locale)
+                        : Messages.get(other.labelKey(), locale, other.labelArgs())))
                         .append('\n');
             }
         }

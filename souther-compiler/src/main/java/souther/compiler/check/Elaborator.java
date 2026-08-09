@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -470,9 +471,10 @@ public final class Elaborator {
         if (narrowGot == null) {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
-                        .at(stepArg.pos()).args(fnName, Type.show(narrowGot),
-                                Type.show(TypeOps.substitute(declaredStep.result(), bind))).build());
+        throw CompileException.of(Diagnostic.at(stepArg.pos())
+                .say(new HelperMessage.TheFunctionTakesAnotherType(fnName, Type.show(narrowGot),
+                        Type.show(TypeOps.substitute(declaredStep.result(), bind))))
+                .build());
     }
 
     /** Elaborates a block argument at {@code paramTypes}; the node it returns carries the
@@ -485,25 +487,31 @@ public final class Elaborator {
             Core value = elaborate(arg, env, ctx);
             if (value.type() instanceof Type.FnOf fn) {
                 if (fn.params().size() != paramTypes.size()) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.callarity")
-                                    .at(arg.pos()).args(fnName, paramTypes.size(), fn.params().size())
-                                    .build());
+                    throw CompileException.of(Diagnostic.at(arg.pos())
+                            .say(new HelperMessage.TheFunctionTakesAnotherNumberOfArguments(fnName,
+                                    String.valueOf(paramTypes.size()),
+                                    String.valueOf(fn.params().size())))
+                            .build());
                 }
                 for (int i = 0; i < paramTypes.size(); i++) {
                     if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), ctx.symbols())) {
-                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1806, "check.fn.argtype")
-                                        .at(arg.pos()).args(fnName, Type.show(paramTypes.get(i)),
-                                                Type.show(fn.params().get(i))).build());
+                        throw CompileException.of(Diagnostic.at(arg.pos())
+                                .say(new HelperMessage.TheFunctionTakesAnotherType(fnName,
+                                        Type.show(paramTypes.get(i)),
+                                        Type.show(fn.params().get(i))))
+                                .build());
                     }
                 }
                 return value;
             }
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1804, "check.fn.expectsblock")
-                            .at(arg.pos()).args(fnName).build());
+            throw CompileException.of(Diagnostic.at(arg.pos()).say(new HelperMessage.ThisExpectsABlock(fnName)).build());
         }
         if (block.params().size() != paramTypes.size()) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockarity")
-                            .at(block.pos()).args(paramTypes.size(), block.params().size()).build());
+            throw CompileException.of(Diagnostic.at(block.pos())
+                    .say(new HelperMessage.TheBlockIsWrittenWithAnotherNumberOfParameters(
+                            String.valueOf(paramTypes.size()),
+                            String.valueOf(block.params().size())))
+                    .build());
         }
         Scope inner = env;
         for (int i = 0; i < paramTypes.size(); i++) {
@@ -918,8 +926,10 @@ public final class Elaborator {
      * describes a function. Raised from the surface check below and from the value path, so the two
      * shapes a function binding takes (a bare lambda, one an {@code if} chooses) read the same. */
     static CompileException functionAnnotation(Ast.LetIn li) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1810, "check.fn.annotation")
-                        .at(li.pos()).args(li.name()).hint("check.fn.annotation.hint").build());
+        return CompileException.of(Diagnostic.at(li.pos())
+                .say(new HelperMessage.AFunctionTypeIsWrittenOutsideAHelperParameter(li.name()))
+                .hint(new HelperMessage.RemoveTheAnnotation())
+                .build());
     }
 
     /**
@@ -936,9 +946,11 @@ public final class Elaborator {
                 throw functionAnnotation(li);
             }
             if (declared.params().size() != lambda.params().size()) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
-                                .at(lambda.pos())
-                                .args(lambda.params().size(), declared.params().size()).build());
+                throw CompileException.of(Diagnostic.at(lambda.pos())
+                        .say(new HelperMessage.TheLambdaIsAppliedWithAnotherNumberOfArguments(
+                                String.valueOf(lambda.params().size()),
+                                String.valueOf(declared.params().size())))
+                        .build());
             }
         }
         TypeChecker.forEachChild(e, sub -> checkAnnotatedLambdaBindings(sub, symbols));
@@ -960,15 +972,17 @@ public final class Elaborator {
         List<List<Type>> uses = new ArrayList<>();
         collectApplications(binder, body, env, ctx, uses, Set.of());
         if (uses.isEmpty()) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1808, "check.fn.noinfer")
-                            .at(body.pos()).args(binder.name()).build());
+            throw CompileException.of(Diagnostic.at(body.pos())
+                    .say(new HelperMessage.TheFunctionsTypeCannotBeRead(binder.name()))
+                    .build());
         }
         List<Type> first = uses.get(0);
         for (List<Type> u : uses) {
             if (!u.equals(first)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1807, "check.fn.difftypes")
-                                .at(body.pos()).args(binder.name(), first.toString(), u.toString())
-                                .build());
+                throw CompileException.of(Diagnostic.at(body.pos())
+                        .say(new HelperMessage.TheFunctionIsAppliedAtTwoTypes(binder.name(),
+                                first.toString(), u.toString()))
+                        .build());
             }
         }
         return first;
@@ -1151,8 +1165,11 @@ public final class Elaborator {
         return switch (value) {
             case Ast.Block b -> {
                 if (b.params().size() != paramTypes.size()) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.lambdaarity")
-                                    .at(b.pos()).args(b.params().size(), paramTypes.size()).build());
+                    throw CompileException.of(Diagnostic.at(b.pos())
+                            .say(new HelperMessage.TheLambdaIsAppliedWithAnotherNumberOfArguments(
+                                    String.valueOf(b.params().size()),
+                                    String.valueOf(paramTypes.size())))
+                            .build());
                 }
                 Scope inner = env;
                 for (int i = 0; i < paramTypes.size(); i++) {
@@ -1168,8 +1185,10 @@ public final class Elaborator {
                 Type t = then.type();
                 Type f = els.type();
                 if (!t.equals(f)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1807, "check.fn.branchtypes")
-                                    .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build());
+                    throw CompileException.of(Diagnostic.at(iff.pos(), 2)
+                            .say(new HelperMessage.TheBranchesAnswerDifferentFunctionTypes(
+                                    Type.show(t), Type.show(f)))
+                            .build());
                 }
                 yield new Core.If(cond, then, els, t, iff.pos());
             }

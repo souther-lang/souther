@@ -70,6 +70,18 @@ public final class Diagnostic {
         return said;
     }
 
+    /**
+     * The values this is about, by the names its catalog entry writes them under, or empty for a
+     * site not yet written as a message.
+     *
+     * <p>What a reader is shown and what a caller reads are the same values under the same names —
+     * a test asking which helper was reported asks for `helper`, rather than looking for it inside a
+     * sentence or at a position in an array.
+     */
+    public java.util.Map<String, Object> values() {
+        return said == null ? java.util.Map.of() : souther.compiler.diag.msg.MessageValues.of(said);
+    }
+
     public Severity severity() {
         return severity;
     }
@@ -246,6 +258,12 @@ public final class Diagnostic {
 
         public Builder args(Object... args) {
             this.args = args;
+            return this;
+        }
+
+        /** A second place to point at, saying what it says as the values it is about. */
+        public Builder secondary(Region region, Message label) {
+            this.secondary.add(new LabeledRegion(region, null, label));
             return this;
         }
 

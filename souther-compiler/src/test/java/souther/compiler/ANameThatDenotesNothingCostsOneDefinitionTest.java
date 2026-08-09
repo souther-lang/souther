@@ -103,11 +103,11 @@ class ANameThatDenotesNothingCostsOneDefinitionTest {
     void aParameterTheBodyGenuinelyLeavesOpenIsStillReported() {
         // The signal is answered where it is raised for a broken name, not suppressed wholesale: a
         // body that names no type for its parameter is a different thing, and still says so.
-        assertEquals(List.of("check.helper.infer"), messageKeys("""
+        assertEquals(List.of("helper.a-parameter-is-not-determined-by-the-body"), messageKeys("""
                 module demo
                 let id (v) = v
                 """), "nothing in the body names a type for `v`, so the annotation is asked for");
-        assertEquals(List.of("check.helper.infer.field"), messageKeys("""
+        assertEquals(List.of("helper.a-parameter-is-only-read-through-a-field"), messageKeys("""
                 module demo
                 let g (r) = r.x
                 """), "a parameter only ever read through a field still says which it was");

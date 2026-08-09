@@ -137,7 +137,7 @@ class CompileFunctionValueFlowTest {
                                     Result { ns = List.map(f, o.xs) }
                                 }
                                 """));
-        assertEquals("check.fn.noinfer", e.diagnostic().messageKey());
+        assertEquals("helper.the-functions-type-cannot-be-read", e.diagnostic().messageKey());
     }
 
     // Reading the applications must not swallow what is wrong inside one. A mistake in an argument is

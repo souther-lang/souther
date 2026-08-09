@@ -54,7 +54,8 @@ public final class JsonRenderer implements DiagnosticRenderer {
                     }
                 }
                 s.put("region", region(other.region()));
-                s.put("label", Messages.get(other.labelKey(), locale, other.labelArgs()));
+                s.put("label", other.said() != null ? Messages.render(other.said(), locale)
+                        : Messages.get(other.labelKey(), locale, other.labelArgs()));
                 secs.add(s);
             }
             obj.put("secondary", secs);
