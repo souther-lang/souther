@@ -83,7 +83,7 @@ public final class StructuralCost {
      * kept in step.
      */
     public static int of(Ast.Expr e) {
-        return composed(e, _ -> null).costs();
+        return counted(e, _ -> null, Integer.MAX_VALUE).costs();
     }
 
     /** What one node costs where it stands. A block's statements and a pattern's bindings are
@@ -106,12 +106,11 @@ public final class StructuralCost {
      * What {@code root} costs once everything it names is substituted into it, and the name the
      * count was inside when it passed {@link #MAX}.
      *
-     * @param costs how much of the bound this takes where it stayed inside it. Where it did not,
-     *              this is what the count had reached when it stopped, which is past the bound and
-     *              is not the whole of what the definition would come to: the walk gives up at the
-     *              first way down that goes past, and an expanded application can go past by its
-     *              argument count at once. What is being asked is which side of the bound this
-     *              falls on, and that is all this says
+     * @param costs what this comes to, where nothing gave up counting it. Where {@link #composed}
+     *              did — it stops at the first way down that goes past the bound — this is what the
+     *              count had reached there, which is past the bound and is not the whole of what the
+     *              definition comes to. What is being asked of that walk is which side of the bound
+     *              this falls on, and that is all it answers. {@link #of} counts the whole way
      * @param past the name whose substitution took it past, or null where it did not go past
      */
     public record Composed(int costs, Ast.Var past) {
@@ -140,6 +139,13 @@ public final class StructuralCost {
      * than the expansion that finds the cycle by re-entering it.
      */
     public static Composed composed(Ast.Expr root, Reaches reaches) {
+        return counted(root, reaches, MAX);
+    }
+
+    /** As above, giving up once the count is past {@code cap} — which is the bound where what is
+     *  being asked is which side of it this falls on, and nothing where the number itself is the
+     *  answer. */
+    private static Composed counted(Ast.Expr root, Reaches reaches, int cap) {
         List<Step> todo = new ArrayList<>();
         todo.add(new Step(root, 0, null, null));
         int most = 0;
@@ -161,7 +167,7 @@ public final class StructuralCost {
             }
             int at = step.above() + here(node, isExpanded(node, reaches));
             most = Math.max(most, at);
-            if (at > MAX) {
+            if (at > cap) {
                 return new Composed(at, step.by());
             }
             Ast.forEachChild(node, child ->

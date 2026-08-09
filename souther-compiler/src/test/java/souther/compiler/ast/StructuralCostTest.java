@@ -11,10 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** The cost is a number over what the source wrote, and it composes. */
 class StructuralCostTest {
 
-    /** What a lowered pattern costs besides its bindings: the {@code $t.0} or {@code $r.field} a
-     *  binding takes its value from, which is a read off a name. */
-    private static final int READING_THE_VALUE_OUT = 2;
-
     private static int costOf(String body) {
         Ast.Module m = CstFrontend.parse("module m exposing (f)\n\n"
                 + "behavior f : (x: Int) -> Int\nlet f (x) = " + body + "\n");
@@ -49,15 +45,6 @@ class StructuralCostTest {
     void anApplicationThatIsNotExpandedCostsOne() {
         assertEquals(costOf("g(x)"), costOf("g(x, x, x)"));
     }
-
-
-
-
-
-
-
-
-
 
     /** Every definition the language ships is far inside the bound; a bound that the prelude was
      *  already past would be one nothing could be written under. */

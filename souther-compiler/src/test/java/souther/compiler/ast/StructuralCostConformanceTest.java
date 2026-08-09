@@ -42,11 +42,16 @@ class StructuralCostConformanceTest {
     private record Pattern(String written, String declarations, int binds) {}
 
     /**
-     * A pattern costs the bindings it introduces and one for taking the value apart — and a name,
-     * which takes nothing apart, costs nothing beyond itself.
+     * A pattern on its own is one deeper than it binds: the bindings, and taking a part out of the
+     * value. A name, which takes nothing apart, costs nothing beyond itself.
+     *
+     * <p>This is the pattern's own depth, which is not what it encloses. Taking a part out is on
+     * the part and not on what comes after the pattern — {@link #aBlockStatementCostsTheStepsItTakes}
+     * is the other number, and a destructuring statement encloses what follows it in the bindings
+     * alone.
      */
     @Test
-    void aPatternCostsWhatItBindsAndOneForTakingTheValueApart() {
+    void aPatternIsOneDeeperThanItBinds() {
         String three = "data R = { f0: String, f1: String, f2: String }";
         String eight = "data R = { f0: String, f1: String, f2: String, f3: String, f4: String,"
                 + " f5: String, f6: String, f7: String }";
@@ -83,8 +88,15 @@ class StructuralCostConformanceTest {
 
     private record Statement(String what, String written, int steps) {}
 
-    /** A block's statements cost a step each, and a `let` written with a pattern costs what that
-     *  pattern costs. */
+    /**
+     * A block's statements cost a step each, and a {@code let} written with a pattern costs one per
+     * name it binds.
+     *
+     * <p>The bindings and not one more. What a pattern takes out of a value is written on the part,
+     * so it is a level of the pattern and not of what comes after it —
+     * {@link #aPatternIsOneDeeperThanItBinds} is that one. Ten destructurings enclose what follows
+     * them in thirty levels, not forty.
+     */
     @Test
     void aBlockStatementCostsTheStepsItTakes() {
         List<Statement> statements = List.of(
