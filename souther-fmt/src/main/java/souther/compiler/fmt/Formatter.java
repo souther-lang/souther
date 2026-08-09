@@ -717,8 +717,10 @@ public final class Formatter {
         if (intrinsic.isPresent()) {
             SyntaxToken body = intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow();
             return TokenDoc.node(n.kind(), concat(head, GAP, ASSIGN,
-                    group(nest(INDENT, concat(SOFT_GAP, TokenDoc.node(intrinsic.get().kind(),
-                            concat(ident("intrinsic"), GAP, token(body))))))));
+                    group(nest(INDENT, concat(SOFT_GAP, aboveOf(intrinsic.get()),
+                            TokenDoc.node(intrinsic.get().kind(),
+                                    concat(ident("intrinsic"), GAP, token(body))),
+                            afterOf(intrinsic.get()))))));
         }
         var block = n.child(SyntaxKind.BLOCK_EXPR);
         if (block.isPresent()) {
@@ -726,12 +728,13 @@ public final class Formatter {
         }
         SyntaxNode body = lifted == null ? onlyExpr(n) : lastExprChild(lifted);
         return TokenDoc.node(n.kind(),
-                concat(head, GAP, ASSIGN, group(nest(INDENT, concat(SOFT_GAP, expr(body))))));
+                concat(head, GAP, ASSIGN, group(nest(INDENT,
+                        concat(SOFT_GAP, aboveOf(body), expr(body), afterOf(body))))));
     }
 
     /** The lambda a parameter-less definition was written as, or null when its body is an ordinary
      * expression and the definition is a value. */
-    private SyntaxNode liftedLambda(SyntaxNode n) {
+    private static SyntaxNode liftedLambda(SyntaxNode n) {
         if (n.child(SyntaxKind.BLOCK_EXPR).isPresent() || n.child(SyntaxKind.INTRINSIC_BODY).isPresent()) {
             return null;
         }
@@ -930,7 +933,7 @@ public final class Formatter {
 
     /** The bracketed argument list of a call or an application. */
     private TokenDoc arguments(SyntaxNode n) {
-        List<SyntaxNode> args = n.child(SyntaxKind.ARG_LIST).map(this::exprChildren).orElse(List.of());
+        List<SyntaxNode> args = n.child(SyntaxKind.ARG_LIST).map(Formatter::exprChildren).orElse(List.of());
         SyntaxNode argList = n.child(SyntaxKind.ARG_LIST).orElse(null);
         if (args.isEmpty()) {
             List<Member> only = argList == null ? List.of() : withEndComments(argList, List.of());
@@ -1035,11 +1038,13 @@ public final class Formatter {
         TokenDoc departures = elseArms(n);
         return TokenDoc.node(n.kind(), group(concat(TokenDoc.token(SyntaxKind.IF_KW, "if"), GAP,
                 expr(parts.get(0)), attemptBinder(n), GAP, TokenDoc.token(SyntaxKind.THEN_KW, "then"),
-                nest(INDENT, concat(SOFT_GAP, expr(parts.get(1)))),
+                nest(INDENT, concat(SOFT_GAP, aboveOf(parts.get(1)), expr(parts.get(1)),
+                        afterOf(parts.get(1)))),
                 SOFT_GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"),
                 departures != TokenDoc.NIL
                         ? departures
-                        : nest(INDENT, concat(SOFT_GAP, expr(parts.get(2)))))));
+                        : nest(INDENT, concat(SOFT_GAP, aboveOf(parts.get(2)), expr(parts.get(2)),
+                                afterOf(parts.get(2)))))));
     }
 
     /** An attempt's per-clause departures, one to a line under the {@code else}, or nothing where the
@@ -1393,7 +1398,7 @@ public final class Formatter {
         // unless a member begins at that bracket itself, as a `fake` row does at its `(`, in which
         // case the comment is above the member and not above what the member opens with.
         boolean opensSomethingElse = begins != null && begins.parent() != null
-                && !takesALineOf(begins.parent().kind(), begins.kind());
+                && !takesALineOf(begins.parent(), begins);
         if (next != null && opens(next) && opensSomethingElse) {
             SyntaxElement first = firstMemberOf(next.parent());
             if (first instanceof SyntaxNode node) {
@@ -1559,7 +1564,7 @@ public final class Formatter {
             // writing that line — a condition's `then`, a call's `)`.
             boolean endsTheOutermostRun = isSpine(c.parent()) && c.end() == c.parent().end()
                     && !isSpine(c.parent().parent());
-            if (takesALineOf(c.parent().kind(), c.kind()) && !endsTheOutermostRun) {
+            if (takesALineOf(c.parent(), c) && !endsTheOutermostRun) {
                 best = c;
             }
         }
@@ -1575,7 +1580,7 @@ public final class Formatter {
      * belongs to whatever wrote the prefix.
      */
     private static boolean opensALine(SyntaxNode c) {
-        if (!takesALineOf(c.parent().kind(), c.kind())) {
+        if (!takesALineOf(c.parent(), c)) {
             return false;
         }
         SyntaxKind parent = c.parent().kind();
@@ -1621,7 +1626,7 @@ public final class Formatter {
             from = lastSegmentOf(from);
         }
         for (SyntaxNode c = from; c != null && c.parent() != null; c = c.parent()) {
-            if (above ? opensALine(c) : takesALineOf(c.parent().kind(), c.kind())) {
+            if (above ? opensALine(c) : takesALineOf(c.parent(), c)) {
                 return c;
             }
         }
@@ -1736,7 +1741,7 @@ public final class Formatter {
      * Nothing where it has no members: an empty construct's brackets open and close one line. */
     private static SyntaxElement firstMemberOf(SyntaxNode container) {
         for (SyntaxElement e : container.children()) {
-            if (e instanceof SyntaxNode c && takesALineOf(container.kind(), c.kind())) {
+            if (e instanceof SyntaxNode c && takesALineOf(container, c)) {
                 return c;
             }
             if (e instanceof SyntaxToken t && isBareMember(t)) {
@@ -1826,17 +1831,42 @@ public final class Formatter {
      */
     private static SyntaxNode hasALine(SyntaxToken t) {
         for (SyntaxNode c = t.parent(); c != null && c.parent() != null; c = c.parent()) {
-            if (takesALineOf(c.parent().kind(), c.kind())) {
+            if (takesALineOf(c.parent(), c)) {
                 return c;
             }
         }
         return null;
     }
 
-    /** Whether a {@code child} of {@code parent} is written on a line of its own. */
-    private static boolean takesALineOf(SyntaxKind parent, SyntaxKind child) {
-        java.util.function.Predicate<SyntaxKind> children = linesOf(parent);
-        return children != null && children.test(child);
+    /**
+     * Whether a {@code child} of {@code parent} is written on a line of its own.
+     *
+     * <p>Asked of the two nodes rather than of their kinds, because for two constructs the kinds do
+     * not answer it. An {@code if} writes three expressions and only the two after the condition open
+     * a line — written {@code if flag then p else q} all three are a {@code VAR_EXPR}. And a
+     * definition written as a lambda has its parameters moved to the left of the {@code =}, so what
+     * the canonical form writes after the {@code =} is that lambda's body rather than the child the
+     * source has there; the child here is not what is written, and a comment about the body is not
+     * this construct's to carry. Filing one against what the canonical form writes needs a canonical
+     * structure to file it against, which is issue #444.
+     */
+    private static boolean takesALineOf(SyntaxNode parent, SyntaxNode child) {
+        java.util.function.Predicate<SyntaxKind> children = linesOf(parent.kind());
+        if (children == null || !children.test(child.kind())) {
+            return false;
+        }
+        return switch (parent.kind()) {
+            case IF_EXPR -> !isTheConditionOf(parent, child);
+            case FN_DEF -> liftedLambda(parent) == null;
+            default -> true;
+        };
+    }
+
+    /** Whether {@code child} is the expression an {@code if} tests, which is the one it writes on
+     * its header line. */
+    private static boolean isTheConditionOf(SyntaxNode ifExpr, SyntaxNode child) {
+        List<SyntaxNode> exprs = exprChildren(ifExpr);
+        return !exprs.isEmpty() && exprs.get(0) == child;
     }
 
     /** Whether {@code parent} writes any of its children on lines of their own, so that what closes
@@ -1882,6 +1912,9 @@ public final class Formatter {
             case BLOCK_EXPR -> _ -> true;
             case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> Formatter::isExprKind;
             case PIPE_EXPR -> k -> isExprKind(k) && k != SyntaxKind.PIPE_EXPR;
+            case FN_DEF -> k -> k == SyntaxKind.INTRINSIC_BODY
+                    || isExprKind(k) && k != SyntaxKind.BLOCK_EXPR;
+            case IF_EXPR -> Formatter::isExprKind;
             default -> null;
         };
     }
@@ -2077,7 +2110,7 @@ public final class Formatter {
         return withEndComments(n, out);
     }
 
-    private List<SyntaxNode> exprChildren(SyntaxNode n) {
+    private static List<SyntaxNode> exprChildren(SyntaxNode n) {
         List<SyntaxNode> out = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             if (isExprKind(c.kind())) {
@@ -2087,7 +2120,7 @@ public final class Formatter {
         return out;
     }
 
-    private SyntaxNode firstExprChild(SyntaxNode n) {
+    private static SyntaxNode firstExprChild(SyntaxNode n) {
         return exprChildren(n).get(0);
     }
 
@@ -2101,7 +2134,7 @@ public final class Formatter {
         return c.get(c.size() - 1);
     }
 
-    private SyntaxNode onlyExpr(SyntaxNode n) {
+    private static SyntaxNode onlyExpr(SyntaxNode n) {
         return firstExprChild(n);
     }
 
