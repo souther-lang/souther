@@ -64,11 +64,6 @@ public sealed interface DeclarationMessage extends Message {
 
     record ExposeItOrMakeItAUnitData(String data) implements DeclarationMessage, Supporting {}
 
-    @Code(DiagnosticCode.E1401)
-    record NotABehaviorOrABuiltin(String name) implements DeclarationMessage, Reported {}
-
-    record ImplementItFromJavaInstead() implements DeclarationMessage, Supporting {}
-
     @Code(DiagnosticCode.E1501)
     record CyclicModuleDependency() implements DeclarationMessage, Reported {}
 

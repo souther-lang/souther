@@ -837,8 +837,7 @@ public final class Resolve {
         if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
         }
-        CompileException why = applied ? notCallable(written, bound)
-                : unknownIdentifier(written, bound);
+        CompileException why = unknownIdentifier(written, bound);
         ValueName resolved = answered(written, nothing(written.canonical(), why));
         return new Ast.Var(written, resolved,
                 ReachName.of(resolved, written.canonical(), values.module()));
@@ -879,11 +878,17 @@ public final class Resolve {
                 : nothing(written.canonical(), unknownIdentifier(written, bound));
     }
 
-    /** The same, for the name an application applies: what is not there is reported differently. */
+    /**
+     * The same, for the name an application applies.
+     *
+     * <p>How the lookup is made differs — an application may reach what a bare name may not — and
+     * what a miss means does not. A name that resolved to nothing resolved to nothing, and the
+     * position it was written in is a fact about the source rather than about the name.
+     */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
         ValueName denotes = lookup(call.written(), true, bound);
         return denotes != null ? denotes
-                : nothing(call.written(), notCallable(call.name(), bound));
+                : nothing(call.written(), unknownIdentifier(call.name(), bound));
     }
 
     /**
@@ -958,28 +963,6 @@ public final class Resolve {
                         .suggestion(Suggest.candidate(name, candidates)).say(new NameMessage.NoValueOfThatNameInScope(written.quoted())).build());
     }
 
-    /**
-     * A name applied to arguments that names nothing that can be applied. A standard-library
-     * function written bare is told apart: it exists, and is reached either qualified or by
-     * importing the name (spec §stdlib).
-     */
-    private CompileException notCallable(WrittenName written, Bindings bound) {
-        CompileException notALibraryMember = notALibraryMember(written);
-        if (notALibraryMember != null) {
-            return notALibraryMember;
-        }
-        String name = written.canonical();
-        CompileException bareLibraryName = StdlibNames.writtenBare(written.quoted(), name,
-                written.region());
-        if (bareLibraryName != null) {
-            return bareLibraryName;
-        }
-        List<String> candidates = reachable(bound);
-        return CompileException.of(Diagnostic.at(written.region())
-                        
-                        .suggestion(Suggest.candidate(name, candidates))
-                        .hint(new DeclarationMessage.ImplementItFromJavaInstead()).say(new DeclarationMessage.NotABehaviorOrABuiltin(written.quoted())).build());
-    }
 
     /**
      * The names bound at a point in a body, each with the binding it is. Persistent: extending it

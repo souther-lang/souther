@@ -24,7 +24,7 @@ class CompileErrorCodeTest {
     }
 
     @Test
-    void callingSomethingThatIsNotABehaviorIsE1401() {
+    void callingANameNothingDeclaresIsE1023() {
         String src = """
                 module demo
                 data N = Int
@@ -32,6 +32,6 @@ class CompileErrorCodeTest {
                 let f (n) = someJavaMethod(n)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("E1401", e.code());
+        assertEquals("E1023", e.code());
     }
 }
