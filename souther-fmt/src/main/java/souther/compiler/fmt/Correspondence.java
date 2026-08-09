@@ -27,10 +27,12 @@ final class Correspondence {
     private final Map<Place, List<Written>> wrote = new IdentityHashMap<>();
     private final Map<Written, List<Place>> at = new HashMap<>();
     private final Map<SyntaxNode, Span> spans = new IdentityHashMap<>();
+    private final List<Place> made = new ArrayList<>();
 
     /** Says what the source has at the file's own place. It is made before anything is written, so
      *  it is the one place that is told rather than asked. */
     Place fileOf(SyntaxNode source) {
+        made.add(file);
         wrote.put(file, List.of(new Written.Construct(source)));
         at.computeIfAbsent(new Written.Construct(source), _ -> new ArrayList<>()).add(file);
         return file;
@@ -45,6 +47,7 @@ final class Correspondence {
      */
     Place under(Place parent, SyntaxKind construct, Opening opening, Written... from) {
         Place place = new Place(parent, construct, opening);
+        made.add(place);
         if (from.length > 0) {
             wrote.put(place, List.of(from));
             for (Written w : from) {
@@ -52,6 +55,12 @@ final class Correspondence {
             }
         }
         return place;
+    }
+
+    /** Every place the construction made, the file's first. Each of them is written somewhere in
+     *  the document, which is what lets which of its parent's places it is be read off. */
+    List<Place> made() {
+        return List.copyOf(made);
     }
 
     /** Where a construct the canonical form writes no place of its own for begins and ends: the
@@ -83,8 +92,15 @@ final class Correspondence {
         return wrote.getOrDefault(place, List.of());
     }
 
-    /** The places {@code written} stands behind, in the order they were written. Empty where the
-     *  canonical form does not write it, and more than one where it stands behind more than one. */
+    /**
+     * The places {@code written} stands behind. Empty where the canonical form does not write it,
+     * and more than one where it stands behind more than one.
+     *
+     * <p>In no order. This is a relation, and the order the places were made is the order the
+     * formatter's methods happened to run in — the implementation trace that a place's own
+     * position was taken off {@link Place#orderedIn} to stop being. A caller that needs the places
+     * in the order they are written asks for that order.
+     */
     List<Place> placesOf(Written written) {
         return at.getOrDefault(written, List.of());
     }

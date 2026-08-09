@@ -803,6 +803,7 @@ public final class Formatter {
                 qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), at));
         Optional<SyntaxNode> alias = n.child(SyntaxKind.IMPORT_ALIAS);
         if (alias.isPresent()) {
+            places.within(alias.get(), at);
             d = concat(d, GAP, TokenDoc.node(alias.get().kind(),
                     concat(TokenDoc.token(SyntaxKind.AS_KW, "as"), GAP,
                             token(idents(alias.get()).get(0)))));
@@ -843,6 +844,7 @@ public final class Formatter {
         var product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
             if (isEmptyProduct(product.get())) {
+                places.within(product.get(), at);
                 return TokenDoc.node(n.kind(),
                         concat(TokenDoc.token(SyntaxKind.DATA_KW, "data"), GAP, ident(name), GAP,
                         ASSIGN, GAP, TokenDoc.node(product.get().kind(), concat(LBRACE, GAP, RBRACE)),
@@ -1008,8 +1010,9 @@ public final class Formatter {
             }
             return TokenDoc.node(n.kind(),
                     concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name),
-                            GAP, COLON, GAP, TokenDoc.node(s.kind(), concat(params, GAP, ARROW, GAP,
-                                    ret, nest(INDENT, concat(clauses))))));
+                            GAP, COLON, GAP, TokenDoc.at(ofTheSig,
+                                    TokenDoc.node(s.kind(), concat(params, GAP, ARROW, GAP,
+                                            ret, nest(INDENT, concat(clauses)))))));
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         Place ofThePipe = places.under(at, pipe.kind(), Opening.NONE, Written.of(pipe));
@@ -1034,7 +1037,8 @@ public final class Formatter {
                     last ? declaredOut : TokenDoc.endsTheLineOf(ofTheStage))));
         }
         return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name), GAP, ASSIGN,
-                TokenDoc.node(pipe.kind(), group(nest(INDENT, concat(parts))))));
+                TokenDoc.at(ofThePipe,
+                        TokenDoc.node(pipe.kind(), group(nest(INDENT, concat(parts)))))));
     }
 
     private TokenDoc paramList(SyntaxNode n, Place at) {
@@ -1112,11 +1116,15 @@ public final class Formatter {
     private TokenDoc fnDef(SyntaxNode n, Place at) {
         String name = firstIdent(n);
         // The modifiers are written back in the order the parser reads them: `private partial let`.
+        // Each modifier is written at the head of the definition's own line, so that is where it is
+        // written and there is no place of its own to record.
         List<TokenDoc> modifiers = new ArrayList<>();
-        if (n.child(SyntaxKind.PRIVATE_MODIFIER).isPresent()) {
+        for (SyntaxNode modifier : childNodes(n, SyntaxKind.PRIVATE_MODIFIER)) {
+            places.within(modifier, at);
             modifiers.add(concat(ident("private"), GAP));
         }
-        if (n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent()) {
+        for (SyntaxNode modifier : childNodes(n, SyntaxKind.PARTIAL_MODIFIER)) {
+            places.within(modifier, at);
             modifiers.add(concat(ident("partial"), GAP));
         }
         TokenDoc keyword = concat(concat(modifiers), TokenDoc.token(SyntaxKind.LET_KW, "let"), GAP);

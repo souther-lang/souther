@@ -121,9 +121,11 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
         List<Place> ofTheLambda = places.placesOf(new Written.Construct(lambda));
         List<Place> ofTheBody = places.placesOf(new Written.Construct(body));
 
-        assertEquals(SyntaxKind.FN_PARAM_LIST, ofTheLambda.get(0).construct(),
+        assertEquals(List.of(SyntaxKind.FN_PARAM_LIST),
+                ofTheLambda.stream().map(Place::construct).toList(),
                 "the lambda supplies the parameter list the definition writes on the left of `=`");
-        assertEquals(SyntaxKind.VAR_EXPR, ofTheBody.get(0).construct(),
+        assertEquals(List.of(SyntaxKind.VAR_EXPR),
+                ofTheBody.stream().map(Place::construct).toList(),
                 "and its last expression child supplies what is written after the `=`");
         assertSame(ofTheLambda.get(0).parent(), ofTheBody.get(0).parent(),
                 "both are places of the definition, which is what the canonical form writes here");
@@ -190,24 +192,59 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
      * it. The construction is not guessing: it knows which place it wrote each construct at as it
      * writes it, and a construct it recorded nothing for is a hole this fails on rather than a case
      * the walk quietly covers.
+     *
+     * <p>Asked of the corpus and not of a fixture written here. A fixture is the domain someone
+     * thought of, and this is a statement about every construct the grammar builds — an import's
+     * alias and a definition's modifiers were nodes no fixture held, and each was a legal source
+     * the formatter refused. What holds the corpus to the grammar is
+     * {@link WhatGoesBetweenTwoTokensOnALineTest#thereIsASourceForEveryKindOfNode}, and it is left
+     * there: a second copy of it here would be the same list kept in two places.
      */
     @Test
     void andEveryConstructOfTheSourceIsWrittenSomewhere() {
-        Formatter.Construction built = build(EVERY_FORM);
-
         List<String> unwritten = new ArrayList<>();
-        for (SyntaxNode n : allOf(root)) {
-            if (n.kind() == SyntaxKind.SOURCE_FILE) {
-                continue;
-            }
-            if (built.places().placesOf(new Written.Construct(n)).isEmpty()
-                    && built.places().spanOf(n) == null) {
-                unwritten.add(n.kind() + " at " + n.start());
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+            SyntaxNode file = CstParser.parse(source).root();
+            Formatter.Construction built = Formatter.build(file);
+            for (SyntaxNode n : allOf(file)) {
+                if (n.kind() == SyntaxKind.SOURCE_FILE) {
+                    continue;
+                }
+                if (built.places().placesOf(new Written.Construct(n)).isEmpty()
+                        && built.places().spanOf(n) == null) {
+                    unwritten.add(String.valueOf(n.kind()));
+                }
             }
         }
 
-        assertEquals(List.of(), unwritten,
+        assertEquals(List.of(), unwritten.stream().distinct().sorted().toList(),
                 "the construction records a place or a span for every construct it writes");
+    }
+
+    /**
+     * And every place the construction makes is written in the document.
+     *
+     * <p>The places and the document are two halves of one thing, so a place nothing in the
+     * document names is a place with no position: which of its parent's places it is cannot be
+     * read, because that is the order the document writes them. Two structural places were made
+     * that way — a behavior's signature and its pipeline — and each held places of its own while
+     * having no position itself.
+     */
+    @Test
+    void andEveryPlaceTheConstructionMakesIsWrittenInTheDocument() {
+        List<String> unmarked = new ArrayList<>();
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+            Formatter.Construction built = Formatter.build(CstParser.parse(source).root());
+            for (Place p : built.places().made()) {
+                if (built.order().get(p) == null) {
+                    unmarked.add(p.construct() + " under "
+                            + (p.parent() == null ? "-" : p.parent().construct()));
+                }
+            }
+        }
+
+        assertEquals(List.of(), unmarked.stream().distinct().sorted().toList(),
+                "every place the construction makes is written somewhere in the document");
     }
 
     /**
@@ -239,52 +276,6 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
                 built.places().sourcesOf(span.to()),
                 "the inner run ends at the stage its own right operand is written at");
     }
-
-    /** One of everything, so that the answer above is quantified over the forms rather than over
-     *  the ones someone thought to write down. */
-    private static final String EVERY_FORM = """
-            module m exposing ( A, S, run )
-            import other.mod ( Thing )
-
-            data A =
-                { id: Int
-                , pair: (Int, String)
-                }
-
-            data Small = Int
-                invariant value > 0
-
-            data One
-
-            data Two
-
-            data S = One | Two
-
-            behavior run : (a: A, n: Int) -> A | Small
-                constructs A, other.mod.Thing
-                depends on helper
-
-            let helper (n: Int) = n
-
-            let run (a, n, helper) = {
-                let doubled = helper(n) |> helper |> helper
-                let list = [x | x > 0]
-                guard doubled > 0 else Small(1)
-                match value(a) with
-                    | One -> A { ...a, id = doubled + 1 * 2 }
-                    | Two -> A { ...a, id = 0 }
-            }
-
-            let value (a: A) = if a.id > 0 then One else Two
-
-            let curried = (x) -> (y) -> x
-
-            example helper
-                | "it doubles" : (2) with n = 2 -> 2
-
-            fake helper
-                | (2) -> 4
-            """;
 
     // --- reading the tree ---
     //
