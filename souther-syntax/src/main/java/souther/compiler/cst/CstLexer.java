@@ -51,12 +51,12 @@ public final class CstLexer {
 
     /** The lexer's result: the token stream (trivia and a trailing {@code EOF} included) and any
      * lexical errors, positioned by offset. */
-    public record Result(List<GreenToken> tokens, List<CstError> errors) {}
+    public record Result(List<GreenToken> tokens, List<CstError<?>> errors) {}
 
     private final String src;
     private int pos = 0;
     private final List<GreenToken> tokens = new ArrayList<>();
-    private final List<CstError> errors = new ArrayList<>();
+    private final List<CstError<?>> errors = new ArrayList<>();
 
     private CstLexer(String src) {
         this.src = src;

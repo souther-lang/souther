@@ -486,10 +486,10 @@ public final class SpecChecker {
             // they are this data's fields on the generated class and carry their types with them.
             for (Map.Entry<String, Type> f : TypeOps.fieldTypes(data, symbols).entrySet()) {
                 refuseHidden(f.getValue(),
-                        hidden -> new ModuleMessage.AnExposedFieldRestsOnWhatIsKept(data.name(),
-                                f.getKey(), hidden),
-                        hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
-                                data.name()),
+                        hidden -> Diagnostic.say(new ModuleMessage.AnExposedFieldRestsOnWhatIsKept(data.name(),
+                                f.getKey(), hidden))
+                                .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                data.name())),
                         data.pos(), symbols, exposeAll, exposed);
             }
         }
@@ -512,10 +512,11 @@ public final class SpecChecker {
             }
             for (Ast.FnParam p : fn.params()) {
                 refuseHidden(TypeOps.resolveParamType(p.type(), symbols),
-                        hidden -> new ModuleMessage.AnExposedArgumentRestsOnWhatIsKept(fn.name(),
-                                p.name(), hidden),
-                        hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
-                                fn.name()),
+                        hidden -> Diagnostic
+                                .say(new ModuleMessage.AnExposedArgumentRestsOnWhatIsKept(fn.name(),
+                                        p.name(), hidden))
+                                .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                        fn.name())),
                         fn.pos(), symbols, exposeAll, exposed);
             }
             // A definition whose check did not settle a type has none to ask about: it failed its own
@@ -524,10 +525,10 @@ public final class SpecChecker {
             Type stands = definitionTypes.get(fn.name());
             if (stands != null) {
                 refuseHidden(stands,
-                        hidden -> new ModuleMessage.AnExposedValueRestsOnWhatIsKept(fn.name(),
-                                hidden),
-                        hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
-                                fn.name()),
+                        hidden -> Diagnostic.say(new ModuleMessage.AnExposedValueRestsOnWhatIsKept(fn.name(),
+                                hidden))
+                                .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                fn.name())),
                         fn.pos(), symbols, exposeAll, exposed);
             }
         }
@@ -540,35 +541,43 @@ public final class SpecChecker {
             if (sig == null || (!injected && !exposed.contains(b.name()))) {
                 continue;
             }
-            java.util.function.Function<String, souther.compiler.diag.msg.Supporting> hint =
-                    injected
-                            ? hidden -> new InjectionMessage
-                                    .TheBaseClassIsPublicWhateverExposingSays(hidden)
-                            : hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(
-                                    hidden, b.name());
+            // An injected behavior and an exposed one are refused for different reasons and told
+            // different things to do, so each says its refusal and its repair together rather than
+            // the two being chosen apart and paired up here.
             for (Type in : sig.inputTypes()) {
                 refuseHidden(in,
                         hidden -> injected
-                                ? new InjectionMessage.AnInjectedInputRestsOnWhatIsKept(b.name(),
-                                        hidden)
-                                : new ModuleMessage.AnExposedInputRestsOnWhatIsKept(b.name(),
-                                        hidden),
-                        hint, b.pos(), symbols, exposeAll, exposed);
+                                ? Diagnostic
+                                        .say(new InjectionMessage.AnInjectedInputRestsOnWhatIsKept(
+                                                b.name(), hidden))
+                                        .hint(new InjectionMessage
+                                                .TheBaseClassIsPublicWhateverExposingSays(hidden))
+                                : Diagnostic
+                                        .say(new ModuleMessage.AnExposedInputRestsOnWhatIsKept(
+                                                b.name(), hidden))
+                                        .hint(new ModuleMessage
+                                                .WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                                        b.name())),
+                        b.pos(), symbols, exposeAll, exposed);
             }
             refuseHidden(sig.outputType(),
                     hidden -> injected
-                            ? new InjectionMessage.AnInjectedOutputRestsOnWhatIsKept(b.name(),
-                                    hidden)
-                            : new ModuleMessage.AnExposedOutputRestsOnWhatIsKept(b.name(), hidden),
-                    hint, b.pos(), symbols, exposeAll, exposed);
+                            ? Diagnostic
+                                    .say(new InjectionMessage.AnInjectedOutputRestsOnWhatIsKept(
+                                            b.name(), hidden))
+                                    .hint(new InjectionMessage
+                                            .TheBaseClassIsPublicWhateverExposingSays(hidden))
+                            : Diagnostic
+                                    .say(new ModuleMessage.AnExposedOutputRestsOnWhatIsKept(
+                                            b.name(), hidden))
+                                    .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(
+                                            hidden, b.name())),
+                    b.pos(), symbols, exposeAll, exposed);
         }
     }
 
     private static void refuseHidden(Type written,
-                                     java.util.function.Function<String,
-                                             souther.compiler.diag.msg.Reported> say,
-                                     java.util.function.Function<String,
-                                             souther.compiler.diag.msg.Supporting> hint,
+                                     java.util.function.Function<String, Diagnostic.Builder> saying,
                                      SourcePos pos, Symbols symbols,
                                      boolean exposeAll, Set<String> exposed) {
         if (written == null) {
@@ -588,10 +597,7 @@ public final class SpecChecker {
             return;
         }
         String name = hidden[0].name();
-        throw CompileException.of(Diagnostic.at(pos)
-                .say(say.apply(name))
-                .hint(hint.apply(name))
-                .build());
+        throw CompileException.of(saying.apply(name).at(pos).build());
     }
 
     /** Whether a reader outside the declaring module can write {@code name}. */

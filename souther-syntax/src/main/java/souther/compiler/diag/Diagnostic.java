@@ -30,14 +30,14 @@ public final class Diagnostic {
     private final Region region;
     private final List<LabeledRegion> secondary;
     private final String literalMessage;
-    private final Reported said;
+    private final Message said;
     private final TypeComparison diff;
     private final List<Note> notes;
     private final String suggestion;
 
     private Diagnostic(Severity severity, DiagnosticCode code, Region region,
                        List<LabeledRegion> secondary, String literalMessage,
-                       TypeComparison diff, List<Note> notes, String suggestion, Reported said) {
+                       TypeComparison diff, List<Note> notes, String suggestion, Message said) {
         this.severity = severity;
         this.code = code;
         this.region = region;
@@ -50,7 +50,7 @@ public final class Diagnostic {
     }
 
     /** What this says, as the values it is about, or null for a {@link #literal}. */
-    public Reported said() {
+    public Message said() {
         return said;
     }
 
@@ -122,7 +122,7 @@ public final class Diagnostic {
      */
     public record Identity(Severity severity, String code, String titleKey, Region region,
                            List<LabeledRegion> secondary, String literalMessage,
-                           TypeComparison diff, List<Note> notes, String suggestion, Reported said) {}
+                           TypeComparison diff, List<Note> notes, String suggestion, Message said) {}
 
     public Identity identity() {
         return new Identity(severity, code(), titleKey(), region,
@@ -143,7 +143,7 @@ public final class Diagnostic {
      * reports and the title it is shown under are read off the message, so every site reporting one
      * rule agrees about both and neither is given here.
      */
-    public static Builder say(Reported message) {
+    public static <M extends Message & Reported> Builder say(M message) {
         return new Builder().say(message);
     }
 
@@ -165,7 +165,7 @@ public final class Diagnostic {
 
     public static final class Builder {
         private DiagnosticCode code;
-        private Reported said;
+        private Message said;
         private Region region;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private TypeComparison diff;
@@ -179,14 +179,14 @@ public final class Diagnostic {
          * What this diagnostic says. The rule it reports and the catalog entry it renders through
          * are read off {@code message}: neither is a string this site chooses.
          */
-        public Builder say(Reported message) {
+        public <M extends Message & Reported> Builder say(M message) {
             this.said = message;
             this.code = MessageCodes.of(message);
             return this;
         }
 
         /** A hint written as a message of its own. */
-        public Builder hint(Supporting hint) {
+        public <M extends Message & Supporting> Builder hint(M hint) {
             this.notes.add(new Note(hint));
             return this;
         }
@@ -207,13 +207,13 @@ public final class Diagnostic {
         }
 
         /** A second place to point at, saying what it says as the values it is about. */
-        public Builder secondary(Region region, Supporting label) {
+        public <M extends Message & Supporting> Builder secondary(Region region, M label) {
             this.secondary.add(new LabeledRegion(region, null, label));
             return this;
         }
 
         /** A second place to point at, in {@code sourceId}, saying what it says as a message. */
-        public Builder secondaryIn(String sourceId, Region region, Supporting label) {
+        public <M extends Message & Supporting> Builder secondaryIn(String sourceId, Region region, M label) {
             this.secondary.add(new LabeledRegion(region, sourceId, label));
             return this;
         }

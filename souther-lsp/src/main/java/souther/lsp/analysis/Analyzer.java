@@ -162,7 +162,7 @@ public final class Analyzer {
      */
     private List<LspDiagnostic> syntaxOf(String text, LineIndex lines) {
         List<LspDiagnostic> found = new ArrayList<>();
-        for (CstError e : CstParser.parse(text).errors()) {
+        for (CstError<?> e : CstParser.parse(text).errors()) {
             found.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
                     LspDiagnostic.ERROR, e.code().name(),
                     Messages.render(e.said(), EDITOR_LANGUAGE)));

@@ -1,6 +1,6 @@
 package souther.compiler.diag;
 
-import souther.compiler.diag.msg.Supporting;
+import souther.compiler.diag.msg.Message;
 
 /**
  * One place a diagnostic points at, with the source it is in resolved. A {@link Diagnostic} says
@@ -11,7 +11,7 @@ import souther.compiler.diag.msg.Supporting;
  * <p>{@code said} is null for the primary region, which has no note of its own: what it points at is
  * what the message is about.
  */
-public record Spot(String sourceId, Region region, Supporting said) {
+public record Spot(String sourceId, Region region, Message said) {
 
     /** The primary region of {@code d}, in {@code sourceId}. */
     public static Spot primary(Diagnostic d, String sourceId) {

@@ -1,6 +1,7 @@
 package souther.compiler.cst;
 
 import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.ParseMessage;
 
@@ -30,7 +31,7 @@ import java.util.List;
 public final class CstParser {
 
     /** The parse result: the red-tree root and the syntax errors gathered along the way. */
-    public record Result(SyntaxNode root, List<CstError> errors) {
+    public record Result(SyntaxNode root, List<CstError<?>> errors) {
         public GreenNode green() {
             return root.green();
         }
@@ -95,7 +96,7 @@ public final class CstParser {
     private final int[] offset;   // offset[i] = start offset of token i; offset[n] = source length
     private int pos = 0;          // index into tokens (may point at trivia)
     private final Deque<Frame> stack = new ArrayDeque<>();
-    private final List<CstError> errors = new ArrayList<>();
+    private final List<CstError<?>> errors = new ArrayList<>();
     /** The arm column of each match currently parsing its arms, innermost on top. A nested match
      * stops at a `|` that reaches back to one of these columns. */
     private final Deque<Integer> matchArmColumns = new ArrayDeque<>();
@@ -1739,9 +1740,9 @@ public final class CstParser {
         return SyntaxKind.EOF;
     }
 
-    private void error(Reported said) {
+    private <M extends Message & Reported> void error(M said) {
         int i = mi(0);
         int width = Math.max(1, tokens.get(i).width());
-        errors.add(new CstError(offset[i], width, said));
+        errors.add(CstError.of(offset[i], width, said));
     }
 }

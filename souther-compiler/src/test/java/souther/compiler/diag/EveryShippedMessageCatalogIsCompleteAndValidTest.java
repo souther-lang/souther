@@ -509,12 +509,6 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Message.class));
         while (!pending.isEmpty()) {
             Class<?> next = pending.poll();
-            if (next == souther.compiler.diag.msg.Reported.class
-                    || next == souther.compiler.diag.msg.Supporting.class) {
-                // Which role a message has, not one of the areas they are grouped into. Their
-                // implementors are reached through the area that declares them.
-                continue;
-            }
             Class<?>[] permitted = next.getPermittedSubclasses();
             if (permitted != null && permitted.length > 0) {
                 pending.addAll(List.of(permitted));
@@ -544,11 +538,12 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * {@link souther.compiler.diag.msg.Supporting}, and names none — a code there is read by
      * nothing, and counted by the rule below as a rule something reports.
      *
-     * <p>Every message is one of the two and never both, which is what makes being a
-     * {@code Reported} the same thing as being usable as one: the two are separate types and the
-     * builder takes each where it belongs, so a message written for a hint cannot reach {@code say}
-     * and one written as a subject cannot reach {@code hint}. Held here as well because a leaf could
-     * implement neither and fall through both.
+     * <p>Every message carries one of the two roles and never both, which is what makes being a
+     * {@code Reported} the same thing as being usable as one: the builder takes each where it
+     * belongs, so a message written for a hint cannot reach {@code say} and one written as a subject
+     * cannot reach {@code hint}. Held here as well because a leaf could carry neither and fall
+     * through both. The roles sit outside the {@link Message} hierarchy, so this walk never meets
+     * them and what may be a message stays what {@code Message} permits.
      */
     @Test
     void everyMessageIsARecordThatNamesItsRule() {
@@ -626,8 +621,8 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * cannot tell the subject from the hint written under it — three quarters of the subjects reach
      * {@code say} through a helper and would read as unbuilt, and a scan that classified them by
      * hand put thirteen hints on the wrong side. The types say it instead, and they are disjoint: a
-     * {@code Reported} is what {@code say} takes and nothing else takes it, so a message that is one
-     * is built as a subject or is not built at all.
+     * {@code Message & Reported} is what {@code say} takes and nothing else takes it, so a message
+     * that carries the role is built as a subject or is not built at all.
      */
     @Test
     void everyCodeIsReportedByAMessage() throws IOException {

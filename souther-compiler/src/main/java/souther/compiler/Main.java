@@ -532,7 +532,7 @@ public final class Main {
             try {
                 CstParser.Result parsed = CstParser.parse(source);
                 if (!parsed.errors().isEmpty()) {
-                    CstError first = parsed.errors().get(0);
+                    CstError<?> first = parsed.errors().get(0);
                     System.err.println(file + ": syntax error: "
                             + Messages.render(first.said(), locale));
                     failed = true;

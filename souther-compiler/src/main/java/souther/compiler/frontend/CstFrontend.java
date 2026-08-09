@@ -120,7 +120,7 @@ public final class CstFrontend {
      * taken off the builder — the build never ran — so this is the one position of a source that
      * would otherwise not say which file it is in, and a syntax error would be the single kind of
      * mistake still reported against whatever file the reader guessed at. */
-    private static CompileException firstError(String source, String sourceId, CstError e) {
+    private static CompileException firstError(String source, String sourceId, CstError<?> e) {
         LineIndex lines = new LineIndex(source, sourceId);
         Diagnostic diag = Diagnostic.say(e.said())
                 .at(lines.posOf(e.offset()), e.width()).build();

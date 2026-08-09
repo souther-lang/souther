@@ -208,10 +208,7 @@ public final class BinaryElaborator {
      * unrelated types is. */
     private static CompileException refused(Ast.Binary bin, ArithmeticCheck.Refusal refusal,
                                             Type lt, Type rt) {
-        Diagnostic.Builder d = Diagnostic.say(refusal.said());
-        if (refusal.hint() != null) {
-            d = d.hint(refusal.hint());
-        }
+        Diagnostic.Builder d = refusal.saying();
         if (refusal.side() == ArithmeticCheck.Side.BOTH) {
             d = d.at(bin.pos())
                     .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())), new DeclarationMessage.ThisOperandIs(Type.show(lt, rt)))

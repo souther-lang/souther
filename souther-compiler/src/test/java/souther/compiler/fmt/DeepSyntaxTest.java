@@ -112,7 +112,7 @@ class DeepSyntaxTest {
     @ParameterizedTest
     @MethodSource("shapes")
     void theDepthIsWhatIsReported(Shape shape) throws InterruptedException {
-        AtomicReference<List<CstError>> errors = new AtomicReference<>();
+        AtomicReference<List<CstError<?>>> errors = new AtomicReference<>();
         onSmallStack(() -> errors.set(CstParser.parse(shape.source()).errors()));
 
         assertNotNull(errors.get(), "the parse did not come back with an answer");
@@ -186,7 +186,7 @@ class DeepSyntaxTest {
      *  from further out, and an editor that listed them all would bury the one worth reading. */
     @Test
     void theDepthIsReportedOnce() throws InterruptedException {
-        AtomicReference<List<CstError>> errors = new AtomicReference<>();
+        AtomicReference<List<CstError<?>>> errors = new AtomicReference<>();
         onSmallStack(() -> errors.set(
                 CstParser.parse(moduleWith("(".repeat(5000) + "1" + ")".repeat(5000))).errors()));
 
@@ -197,7 +197,7 @@ class DeepSyntaxTest {
     @Test
     void anOrdinarySourceIsUnaffected() throws InterruptedException {
         String source = moduleWith("((1 + 2) * (3 + n.value)) - 4");
-        AtomicReference<List<CstError>> errors = new AtomicReference<>();
+        AtomicReference<List<CstError<?>>> errors = new AtomicReference<>();
         onSmallStack(() -> errors.set(CstParser.parse(source).errors()));
 
         assertEquals(List.of(), errors.get(), "an ordinary expression was refused");
@@ -205,7 +205,7 @@ class DeepSyntaxTest {
 
     /** The parse's first complaint, or null where it had none. */
     private static Message firstErrorOf(String source) {
-        List<CstError> errors = CstParser.parse(source).errors();
+        List<CstError<?>> errors = CstParser.parse(source).errors();
         return errors.isEmpty() ? null : errors.get(0).said();
     }
 

@@ -1,14 +1,19 @@
 package souther.compiler.diag.msg;
 
 /**
- * A message that reports a rule — what a diagnostic is about, as opposed to what to write instead.
+ * The role of being what a diagnostic is about — as opposed to what is said beside one.
  *
  * <p>Only these carry a {@link Code}, and only these can be a diagnostic's subject: {@code say}
- * takes one and a hint or a secondary label takes any {@link Message}. The distinction is here
- * rather than in a convention because a diagnostic's code comes from its subject and from nothing
- * else. A hint carrying a code carries one nothing reads, and the build, counting the codes that
- * something reports, would count that one — so a rule whose sites had all moved to another number
- * would go on looking reported by the repair written under it.
+ * takes a {@code Message & Reported} and a hint or a secondary label takes a
+ * {@code Message & Supporting}. The two roles are disjoint, so being one is the same thing as being
+ * usable as one — which is what the build's count of the rules something reports rests on. A hint
+ * carrying a code would carry one nothing reads, and counted, a rule whose subjects had all moved to
+ * another number would go on looking reported by the repair written under it.
+ *
+ * <p>Outside the {@link Message} hierarchy on purpose. A role admitted into it as a {@code
+ * non-sealed} branch is a door out of the sealing: anything at all could implement the role and be a
+ * message by doing so, past every rule the build holds the declared ones to. A role names what a
+ * message is for, and a message is still only what {@code Message} permits.
  */
-public non-sealed interface Reported extends Message {
+public interface Reported {
 }

@@ -82,13 +82,26 @@ Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, hel
 are removed. `getMessage()` renders the same record in English, so a message exists once.
 
 A hint and a secondary label are messages too — they render, and they carry values of their own —
-but they are not what a diagnostic is about. That is a second role and it is a second type: a
+but they are not what a diagnostic is about. That is a second role, and the roles are types: a
 `Reported` is the subject and names a rule, a `Supporting` is what is said beside one and names
-none. `say` takes the first, `hint` and `secondary` take the second, and every message is one or the
-other and never both. Being a `Reported` and being usable as one are then the same thing, which is
-the property rule 7 rests on: the code on a hint would be a number nothing reads, and counted, a
-rule whose subjects had all moved to another number would go on looking reported by the repair
-written under it.
+none. `say` takes a `Message & Reported`, `hint` and `secondary` take a `Message & Supporting`, and
+every message carries one role and never both. Being a `Reported` and being usable as one are then
+the same thing, which is the property rule 7 rests on: the code on a hint would be a number nothing
+reads, and counted, a rule whose subjects had all moved to another number would go on looking
+reported by the repair written under it.
+
+The roles sit outside the `Message` hierarchy, and a message is written as both — `record X(...)
+implements DataMessage, Reported`. Admitting a role into the hierarchy as a `non-sealed` branch is a
+door out of the sealing: anything at all could implement the role and be a message by doing so, past
+every rule the build holds the declared ones to. What may be a message stays what `Message` permits,
+and what a message is for is said beside it.
+
+A role that is not a supertype cannot be a field or a parameter type on its own, and the two places
+that carried a message for someone else to build with — a syntax error, and a rule of arithmetic —
+say so differently now. `CstError` holds its message as a type variable and is read as
+`CstError<?>`. A `Refusal` hands back the diagnostic it has already said itself, rather than a
+subject and a repair for the caller to pair up: the rule knows which of its sentences is which, and
+the caller has no type it could keep them apart in.
 
 The build holds every message to seven rules, over every shipped locale:
 

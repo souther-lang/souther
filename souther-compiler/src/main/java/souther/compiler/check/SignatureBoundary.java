@@ -243,14 +243,16 @@ final class SignatureBoundary {
             return new Where(false, behavior, null, pos);
         }
 
-        CompileException refusal(souther.compiler.diag.msg.Reported said) {
+        <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
+                CompileException refusal(M said) {
             Diagnostic.Builder builder = Diagnostic.say(said);
             return CompileException.of(
                     (region == null ? builder.at(pos) : builder.at(region)).build());
         }
 
-        CompileException hinted(souther.compiler.diag.msg.Reported said,
-                                souther.compiler.diag.msg.Supporting hint) {
+        <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported,
+                H extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Supporting>
+                CompileException hinted(M said, H hint) {
             Diagnostic.Builder builder = Diagnostic.say(said).hint(hint);
             return CompileException.of(
                     (region == null ? builder.at(pos) : builder.at(region)).build());

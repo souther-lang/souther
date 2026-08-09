@@ -1512,12 +1512,13 @@ public final class AstBuilder {
         return sb.toString();
     }
 
-    private CompileException error(SourcePos pos, Reported said) {
+    private <M extends Message & Reported> CompileException error(SourcePos pos, M said) {
         return CompileException.of(Diagnostic.say(said).at(pos).build());
     }
 
     /** As {@link #error}, with a hint under it naming the way out. */
-    private CompileException errorWithHint(SourcePos pos, Reported said, Supporting hint) {
+    private <M extends Message & Reported, H extends Message & Supporting>
+            CompileException errorWithHint(SourcePos pos, M said, H hint) {
         return CompileException.of(Diagnostic.say(said).at(pos).hint(hint).build());
     }
 
