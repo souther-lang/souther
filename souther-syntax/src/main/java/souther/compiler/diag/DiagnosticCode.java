@@ -206,6 +206,23 @@ public enum DiagnosticCode {
     }
 
     /** The catalog key of the header category this code is shown under. Shared across codes. */
+    /**
+     * Whether this rule is reported as an error or a warning.
+     *
+     * <p>A property of the rule and not of the site that raises it. A code raised as an error in one
+     * place and a warning in another is two rules wearing one number, which is what the reader looks
+     * up; and a site free to choose is a site that can be written to say what the author of that one
+     * site wanted rather than what the rule is.
+     */
+    public Severity severity() {
+        return WARNINGS.contains(this) ? Severity.WARNING : Severity.ERROR;
+    }
+
+    /** The rules that are reported without failing the build. */
+    private static final java.util.Set<DiagnosticCode> WARNINGS =
+            java.util.EnumSet.of(E1913, E1915, E1916, E1918, E1919, E1920, E1921, E1922,
+                    E2011);
+
     public String titleKey() {
         return titleKey;
     }

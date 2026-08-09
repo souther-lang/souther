@@ -822,7 +822,7 @@ public final class Names {
                             || used.contains(new Use(imported.text(), imp.module(), imported.text()))) {
                         continue;
                     }
-                    reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1922, "check.import.unused").warning()
+                    reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1922, "check.import.unused")
                             .at(imported.written().region())
                             .args(imported.written().quoted())
                             .hint("check.import.unused.hint")

@@ -2,6 +2,7 @@ package souther.compiler.diag;
 
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageKeys;
+import souther.compiler.diag.msg.MessageTemplate;
 import souther.compiler.diag.msg.MessageValues;
 
 import org.junit.jupiter.api.Test;
@@ -499,21 +500,54 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * <p>Read off the hierarchy rather than listed, so a message that is declared is a message the
      * checks below are asked about — a list here would be one more thing to keep in step.
      */
+    private static final List<Class<?>> LEAVES = new ArrayList<>();
+
     private static List<Class<? extends Message>> messages() {
         List<Class<? extends Message>> found = new ArrayList<>();
+        List<Class<?>> leaves = new ArrayList<>();
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Message.class));
         while (!pending.isEmpty()) {
             Class<?> next = pending.poll();
             Class<?>[] permitted = next.getPermittedSubclasses();
-            if (permitted == null || permitted.length == 0) {
-                if (next.isRecord() && Message.class.isAssignableFrom(next)) {
-                    found.add(next.asSubclass(Message.class));
-                }
+            if (permitted != null && permitted.length > 0) {
+                pending.addAll(List.of(permitted));
                 continue;
             }
-            pending.addAll(List.of(permitted));
+            leaves.add(next);
+            if (next.isRecord() && Message.class.isAssignableFrom(next)) {
+                found.add(next.asSubclass(Message.class));
+            }
         }
+        LEAVES.clear();
+        LEAVES.addAll(leaves);
         return found;
+    }
+
+    /**
+     * Every message is a record that names the rule it reports.
+     *
+     * <p>The walk above takes the records and passes over anything else, so without this a leaf that
+     * is not one — a class implementing the interface, an enum — carries no values to check and every
+     * rule below is silent about it. A missing {@code @Code} is the same shape of hole: it raises
+     * where the message is built rather than where it is declared, which is a use site away from the
+     * mistake.
+     */
+    @Test
+    void everyMessageIsARecordThatNamesItsRule() {
+        messages();   // fills LEAVES
+        List<String> wrong = new ArrayList<>();
+        for (Class<?> leaf : LEAVES) {
+            if (!leaf.isRecord()) {
+                wrong.add(leaf.getName() + " is not a record");
+                continue;
+            }
+            if (leaf.getAnnotation(souther.compiler.diag.msg.Code.class) == null) {
+                wrong.add(leaf.getName() + " names no code");
+            }
+        }
+        wrong.sort(String::compareTo);
+        assertEquals(List.of(), wrong,
+                "a message is a record whose components are its values, and it reports a rule");
     }
 
     private static Set<String> ownedByAMessage() {
@@ -589,11 +623,14 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
                     continue;
                 }
                 Set<String> carried = new TreeSet<>(MessageValues.namesOf(owned.getValue()));
-                Matcher named = NAMED_PLACEHOLDER.matcher(written);
-                while (named.find()) {
-                    if (!carried.contains(named.group(1))) {
-                        unknown.add(catalog.name() + ": " + owned.getKey() + " names `"
-                                + named.group(1) + "`, which it does not carry");
+                MessageTemplate parsed = MessageTemplate.parse(written);
+                for (String malformed : parsed.malformations()) {
+                    unknown.add(catalog.name() + ": " + owned.getKey() + " has " + malformed);
+                }
+                for (String named : parsed.names()) {
+                    if (!carried.contains(named)) {
+                        unknown.add(catalog.name() + ": " + owned.getKey() + " names `" + named
+                                + "`, which it does not carry");
                     }
                 }
             }
@@ -601,8 +638,6 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         unknown.sort(String::compareTo);
         assertEquals(List.of(), unknown, "an entry names a value nothing fills");
     }
-
-    private static final Pattern NAMED_PLACEHOLDER = Pattern.compile("\\{([a-zA-Z][a-zA-Z0-9]*)}");
 
     private static final Pattern KEY_LITERAL =
             Pattern.compile("\"([a-z][a-z0-9]*(?:\\.[a-z0-9]+)+)\"");

@@ -818,7 +818,7 @@ public final class InvariantChecker {
             case UNKNOWN -> {
                 if (!attempted) {
                     warnings.add(Diagnostic.of(DiagnosticCode.E2011, "check.invariant.unproven").at(pos).args(type.name())
-                            .hint("check.invariant.reify", type.name()).warning().build());
+                            .hint("check.invariant.reify", type.name()).build());
                 }
             }
             // Nothing was asked here, so nothing is said. Whether that is the right thing to say of a

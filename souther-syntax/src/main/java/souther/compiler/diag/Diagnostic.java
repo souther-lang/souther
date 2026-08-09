@@ -132,11 +132,17 @@ public final class Diagnostic {
      * compares an array component by identity — so two diagnostics built the same way from the same
      * values are never equal. The arguments are the difference between "expected A, found B" and
      * "expected C, found B", which is two problems and not one, so they are in here.
+     *
+     * <p>{@code said} is here for the same reason and is the one that matters now: a message carries
+     * its values as record components rather than in {@code args}, so two diagnostics of one rule at
+     * one place, about different values, are told apart by nothing else. What reads this is the
+     * store's own de-duplication, which keeps one report per identity — so leaving the values out
+     * drops a real diagnostic rather than a repeat of one.
      */
     public record Identity(Severity severity, String code, String titleKey, Region region,
                            List<LabeledRegion.Of> secondary, String messageKey, List<Object> args,
                            String literalMessage, TypeComparison diff, List<Note.Of> notes,
-                           String suggestion) {}
+                           String suggestion, Message said) {}
 
     public Identity identity() {
         List<LabeledRegion.Of> labels = new ArrayList<>();
@@ -149,7 +155,7 @@ public final class Diagnostic {
         }
         return new Identity(severity, code(), titleKey(), region, labels, messageKey,
                 args == null ? List.of() : java.util.Arrays.asList(args), literalMessage, diff,
-                hints, suggestion);
+                hints, suggestion, said);
     }
 
     /** A pre-formatted English message wrapped verbatim — the compatibility path for a site that
@@ -190,7 +196,6 @@ public final class Diagnostic {
         private TypeComparison diff;
         private final List<Note> notes = new ArrayList<>();
         private String suggestion;
-        private Severity severity = Severity.ERROR;
 
         private Builder(DiagnosticCode code, String messageKey) {
             this.code = code;
@@ -216,12 +221,6 @@ public final class Diagnostic {
         /** A hint written as a message of its own. */
         public Builder hint(Message hint) {
             this.notes.add(new Note(hint));
-            return this;
-        }
-
-        /** Marks this a warning: it is reported but does not fail the build. */
-        public Builder warning() {
-            this.severity = Severity.WARNING;
             return this;
         }
 
@@ -278,7 +277,7 @@ public final class Diagnostic {
             if (code == null) {
                 throw new IllegalStateException("a diagnostic reports a rule; call `say`");
             }
-            return new Diagnostic(severity, code, region, List.copyOf(secondary),
+            return new Diagnostic(code.severity(), code, region, List.copyOf(secondary),
                     messageKey, args, null, diff, List.copyOf(withMessageArgs(notes)), suggestion,
                     said);
         }

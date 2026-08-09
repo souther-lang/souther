@@ -3,6 +3,8 @@ package souther.compiler.diag;
 
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.diag.msg.MessageValues;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +60,17 @@ public final class JsonRenderer implements DiagnosticRenderer {
             obj.put("secondary", secs);
         }
         obj.put("message", DiagnosticRenderer.body(d, locale));
+        if (d.said() != null) {
+            // The values the message is about, by the names its entry writes them under. A tool
+            // reads `clause` or `field` rather than looking for it in a sentence, and reads it in
+            // whatever language the sentence came out in: the names are the message's, not the
+            // catalog's, and each value is written as the text it renders as, so what a component's
+            // Java type is stays a fact about the compiler rather than part of this interface.
+            Map<String, Object> values = new LinkedHashMap<>();
+            MessageValues.of(d.said()).forEach((name, value) ->
+                    values.put(name, String.valueOf(value)));
+            obj.put("values", values);
+        }
         if (d.diff() != null) {
             obj.put("actualType", d.diff().actualType());
             obj.put("expectedType", d.diff().expectedType());

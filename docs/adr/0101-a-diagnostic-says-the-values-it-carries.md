@@ -75,13 +75,20 @@ Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, hel
 `Diagnostic.of(DiagnosticCode, String)`, `Builder#args(Object...)` and the `legacyBody` parameter
 are removed. `getMessage()` renders the same record in English, so a message exists once.
 
-The build holds every message to five rules, over every shipped locale:
+The build holds every message to six rules, over every shipped locale:
 
-1. every record's derived key is in the catalog;
-2. **every component of a record appears in its own text as `{name}`**;
-3. every `{name}` in a text is a component of that record;
-4. no catalog key is unreferenced by any record;
-5. every code has at least one record.
+1. every message is a record and names the rule it reports;
+2. every record's derived key is in the catalog;
+3. **every component of a record appears in its own text as `{name}`**;
+4. every `{name}` in a text is a component of that record, and a brace holding anything else is
+   refused rather than shown;
+5. no catalog key is unreferenced by any record;
+6. every code has at least one record.
+
+Rule 1 is why the messages are records at all rather than a convention: a leaf of the hierarchy that
+is not one carries no components, so every rule under it is silent about it. Rule 4 reads the entry
+through the same parser the renderer reads it through — written twice, the two disagree about
+`{held_by}` and about a brace nothing closes, which is the drift this whole area exists to remove.
 
 Rule 2 is the new one and the reason for the rest. A value a diagnostic holds is a value a reader
 sees, and the alternative — carrying it and not showing it — is not expressible. Rules 1, 3 and part
@@ -97,11 +104,19 @@ a value shown only in a hint belongs to the hint's own record, and a value that 
 wordings makes two records. The last of these is deliberate — `%select{...}` and its equivalents buy
 one catalog entry at the cost of a sentence no reader of the source can read.
 
-Severity moves onto the code. The five warning codes are each raised once and always as a warning,
+Severity moves onto the code, and `Builder#warning()` is deleted. The nine warning codes — E1913,
+E1915, E1916, E1918, E1919 through E1922, and E2011 — are each raised once and always as a warning,
 so a rule is an error or a warning by its identity and not by the site that raises it.
 
 `--format json` gains a `values` object beside the rendered `message`, keyed by component name. A
-tool that wants the clause reads `clause`; today it would have to parse English.
+tool that wants the clause reads `clause`; before this it would have had to parse English. Each value
+is written as the text it renders as, so what a component's Java type is stays a fact about the
+compiler rather than part of that interface.
+
+What tells two diagnostics apart carries the message too. The store keeps one report per identity,
+and a message holds its values as components rather than in the old array, so an identity that read
+only the code, the place and that array answered that two reports of one rule about different values
+were one and dropped one of them.
 
 ### What was weighed
 

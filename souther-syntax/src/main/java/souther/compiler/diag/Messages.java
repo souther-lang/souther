@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.MessageTemplate;
 import souther.compiler.diag.msg.MessageValues;
 
 import java.text.MessageFormat;
@@ -125,23 +126,16 @@ public final class Messages {
         }
         Map<String, Object> values = MessageValues.of(message);
         StringBuilder out = new StringBuilder(template.length() + 32);
-        int at = 0;
-        while (at < template.length()) {
-            int open = template.indexOf('{', at);
-            if (open < 0) {
-                out.append(template, at, template.length());
-                break;
+        for (MessageTemplate.Part part : MessageTemplate.parse(template).parts()) {
+            switch (part) {
+                case MessageTemplate.Part.Text text -> out.append(text.written());
+                case MessageTemplate.Part.Value value ->
+                        out.append(String.valueOf(values.get(value.name())));
+                // The build refuses these, so what is left here is a catalog that got past it. Show
+                // it as written rather than raising: a compiler reporting an error is the worst
+                // place to raise another one.
+                case MessageTemplate.Part.Malformed bad -> out.append(bad.written());
             }
-            int close = template.indexOf('}', open);
-            if (close < 0) {
-                out.append(template, at, template.length());
-                break;
-            }
-            String named = template.substring(open + 1, close);
-            out.append(template, at, open);
-            out.append(values.containsKey(named) ? String.valueOf(values.get(named))
-                    : template.substring(open, close + 1));
-            at = close + 1;
         }
         return out.toString();
     }

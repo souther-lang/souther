@@ -693,7 +693,6 @@ public final class Output {
                             : why.isSteps() ? "check.example.disagreement.unread.steps"
                             : why.isStack() ? "check.example.disagreement.unread.stack"
                             : "check.example.disagreement.unread.unanswered")
-                    .warning()
                     .at(f.at().pos(), f.width())
                     .args(f.target(), why.limitShown());
             return (why.isDepth()
@@ -721,7 +720,7 @@ public final class Output {
             // there is nothing to say, and the renderer would quote the same name twice.
             String elsewhere = standIn.at().sourceId().equals(recorded.at().sourceId())
                     ? null : standIn.at().sourceId();
-            return Diagnostic.of(DiagnosticCode.E1919, key).warning()
+            return Diagnostic.of(DiagnosticCode.E1919, key)
                     .at(recorded.at().pos(), recorded.width())
                     .args(d.behavior())
                     .secondaryIn(elsewhere,

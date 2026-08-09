@@ -866,7 +866,6 @@ public final class ExampleStatements {
                         : why.isSteps() ? "check.fake.unchecked.steps"
                         : why.isStack() ? "check.fake.unchecked.stack"
                         : "check.fake.unchecked.unanswered")
-                .warning()
                 .at(fk.pos(), fk.target().length())
                 .args(fk.target(), why.limitShown());
         return (why.isDepth() ? said.hint("check.fake.unchecked.deep.hint", fk.target())
