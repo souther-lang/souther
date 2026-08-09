@@ -92,6 +92,11 @@ class AnOperatorReadsEachOperandOnceTest {
      * Compiles {@code source} on a thread of its own and fails where it took longer than
      * {@link #BUDGET_MS}. The wait is bounded well above the budget: a compile that never comes back
      * is the failure this is about, and it fails with a name on it rather than sitting there.
+     *
+     * <p>The thread is a daemon and is interrupted where the wait ran out, because a run that
+     * regressed leaves five of these behind and the cases after them would be timed against a
+     * machine those are still using. The compiler does not read the interruption, so what actually
+     * bounds them is that the JVM does not wait for a daemon to finish.
      */
     private static void compilesWithinTheBudget(String source) {
         AtomicReference<Throwable> thrown = new AtomicReference<>();
@@ -102,6 +107,7 @@ class AnOperatorReadsEachOperandOnceTest {
                 thrown.set(x);
             }
         }, "operand-cost");
+        work.setDaemon(true);
         long started = System.nanoTime();
         work.start();
         try {
@@ -111,8 +117,12 @@ class AnOperatorReadsEachOperandOnceTest {
             throw new AssertionError("interrupted while waiting for the compile", interrupted);
         }
         long took = (System.nanoTime() - started) / 1_000_000;
+        boolean stillRunning = work.isAlive();
+        if (stillRunning) {
+            work.interrupt();
+        }
 
-        assertFalse(work.isAlive(), "the compile did not come back within " + (6 * BUDGET_MS) + "ms");
+        assertFalse(stillRunning, "the compile did not come back within " + (6 * BUDGET_MS) + "ms");
         assertNull(thrown.get(), "this source is correct and should compile");
         assertTrue(took < BUDGET_MS, "compiling took " + took + "ms, which is what reading an operand"
                 + " more than once costs at this depth");

@@ -50,6 +50,40 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 "the operand that said what was wrong with it is reported: " + keys);
     }
 
+    /**
+     * `&&` and `||` are the operators that ask something of an operand on its own, so an operand
+     * they refuse has failed where it stands and the operand beside it is not reached. The rest ask
+     * about the pair, and cannot answer until both have been read.
+     */
+    @Test
+    void anOperandTheOperatorRefusesOnItsOwnComesBeforeWhatStandsBesideIt() {
+        List<String> keys = messageKeys("""
+                behavior f : (a: A) -> Bool
+                let f (a) = 1 && ("x" ++ 1)
+                """);
+
+        assertTrue(keys.contains("check.type.mismatch.msg"),
+                "`1` is not a Bool, and that is what `&&` was given first: " + keys);
+        assertFalse(keys.contains("check.concat.msg"),
+                "the operand beside it was never read: " + keys);
+    }
+
+    /**
+     * The same rule where what stands beside it is an operand with no type. Abandoning the
+     * definition is for what follows from a name that denotes nothing, and an operand the operator
+     * refuses before reaching that name does not follow from it.
+     */
+    @Test
+    void anOperandTheOperatorRefusesIsReportedThoughTheOneBesideItHasNoType() {
+        List<String> keys = messageKeys("""
+                behavior f : (a: A) -> Bool
+                let f (a) = 1 && a.n
+                """);
+
+        assertTrue(keys.contains("check.type.mismatch.msg"),
+                "`1` is not a Bool, whatever stands beside it: " + keys);
+    }
+
     @Test
     void anOperandWithNoTypeStopsTheOneBesideItFromBeingRead() {
         List<String> keys = messageKeys("""

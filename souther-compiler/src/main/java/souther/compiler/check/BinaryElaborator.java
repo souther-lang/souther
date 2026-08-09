@@ -30,6 +30,10 @@ public final class BinaryElaborator {
      * the operand's type reaches the message as `?`, which names nothing the author could go looking
      * for.
      *
+     * <p>{@code &&} and {@code ||} are the operators that ask something of an operand on its own,
+     * and that is asked here, before the operand beside it is read: an operand is finished where it
+     * stands. The rest ask about the pair and cannot answer until both have been read.
+     *
      * <p>What this answers with is what the operator's rule then reads. Asking the question of a
      * reading of its own cost the expression twice its own subtree, and an operand of an operand
      * twice again, so a chain of operators nested one inside the last cost two to the power of its
@@ -39,6 +43,10 @@ public final class BinaryElaborator {
         Core read = Elaborator.elaborate(e, env, ctx);
         if (read.type() instanceof Type.Erroneous) {
             throw new Unanswerable(bin.pos());
+        }
+        if (bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR) {
+            Elaborator.requireType(e, read.type(), Type.BOOL, ctx.symbols(),
+                    "operand of logical operator");
         }
         return read;
     }
@@ -50,13 +58,8 @@ public final class BinaryElaborator {
         Core left = operand(bin.left(), bin, env, ctx);
         Core right = operand(bin.right(), bin, env, ctx);
         return switch (bin.op()) {
-            case AND, OR -> {
-                Elaborator.requireType(bin.left(), left.type(), Type.BOOL, ctx.symbols(),
-                        "operand of logical operator");
-                Elaborator.requireType(bin.right(), right.type(), Type.BOOL, ctx.symbols(),
-                        "operand of logical operator");
-                yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
-            }
+            // both operands were asked for a Bool where they were read
+            case AND, OR -> new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             case LT, LE, GT, GE -> {
                 // The ordered primitives: Int numerically, String lexicographically, Decimal by
                 // value, Date/DateTime in time. Unlike Elm (which orders only Int/Float/Char/String
