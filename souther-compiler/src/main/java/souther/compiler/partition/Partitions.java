@@ -820,12 +820,7 @@ public final class Partitions {
      * row that was written has no reason to pay for that.
      */
     static Generator.UnresolvedCombination.Reason notBuilt(Type type, Symbols symbols) {
-        Type carrier = TypeOps.base(type, symbols);
-        if (Witnesses.pastWhatIsBuilt(carrier, leastHeld(type, symbols))) {
-            return Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
-        }
-        return Witnesses.moreThanIsPaired(carrier, symbols)
-                ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null;
+        return Witnesses.heldBackFor(TypeOps.base(type, symbols), leastHeld(type, symbols), symbols);
     }
 
     /**

@@ -69,14 +69,51 @@ final class Witnesses {
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
                                          Set<TypeName> expanding) {
-        if (carrier == null || least <= 0 || pastWhatIsBuilt(carrier, least)) {
-            return List.of();
+        return decide(carrier, least, symbols, expanding).proposals();
+    }
+
+    /**
+     * Why a value of {@code carrier} holding {@code least} was not built in full, or null where it was.
+     *
+     * <p>The same decision {@link #holding} reads, asked for its other half. Written once because the
+     * two have to agree: a reader was told a search stopped short of pairings nothing had asked to
+     * build, back when this was a second reading of the same conditions.
+     */
+    static Generator.UnresolvedCombination.Reason heldBackFor(Type carrier, int least, Symbols symbols) {
+        return decide(carrier, least, symbols, Set.of()).heldBack();
+    }
+
+    /** What a value of {@code carrier} holding {@code least} comes to: what was built, and what was
+     * not. */
+    private record Built(List<FixtureTemplate> proposals,
+                         Generator.UnresolvedCombination.Reason heldBack) {
+
+        static final Built NONE = new Built(List.of(), null);
+
+        static Built of(List<FixtureTemplate> proposals) {
+            return new Built(List.copyOf(proposals), null);
+        }
+    }
+
+    private static Built decide(Type carrier, int least, Symbols symbols, Set<TypeName> expanding) {
+        if (carrier == null || least <= 0) {
+            return Built.NONE;
         }
         // A string is counted by its characters, and one character is as good as another where the
         // rule is about how many there are. What a format asks for instead is a proposal of its own,
         // put beside this one by the caller.
         if (carrier == Type.STRING) {
-            return List.of(FixtureTemplate.string("x".repeat(least)));
+            return least > MOST_CHARACTERS
+                    ? new Built(List.of(), Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
+                    : Built.of(List.of(FixtureTemplate.string("x".repeat(least))));
+        }
+        if (!(carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
+                || carrier instanceof Type.MapOf)) {
+            return Built.NONE;
+        }
+        if (least > MOST_ELEMENTS) {
+            return new Built(List.of(),
+                    Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         // A list may hold the same element as many times as it needs to.
         if (carrier instanceof Type.ListOf list) {
@@ -88,7 +125,7 @@ final class Witnesses {
                 }
                 out.add(FixtureTemplate.collection(elements));
             }
-            return List.copyOf(out);
+            return Built.of(out);
         }
         // A set of three is three elements no two of which are equal, and a map of three is three
         // entries no two of which share a key. The values under a map's keys are free to repeat.
@@ -96,67 +133,37 @@ final class Witnesses {
             List<FixtureTemplate> out = new ArrayList<>();
             for (FixtureTemplate seed : proposalsFor(set.element(), symbols, expanding)) {
                 out.add(FixtureTemplate.collection(
-                        distinctFrom(seed, set.element(), least, symbols)));
+                        distinctFrom(seed, set.element(), least, symbols, expanding)));
             }
-            return List.copyOf(out);
+            return Built.of(out);
         }
-        if (carrier instanceof Type.MapOf map) {
-            List<FixtureTemplate> keys = proposalsFor(map.key(), symbols, expanding);
-            List<FixtureTemplate> values = proposalsFor(map.value(), symbols, expanding);
-            if (keys.isEmpty() || values.isEmpty()) {
-                return List.of();
-            }
-            List<FixtureTemplate> out = new ArrayList<>();
-            // Every pair, nearest first. A key's rules and a value's are answered together or not at
-            // all — the pair is inside one position, so no search outside can put a key's second
-            // proposal beside a value's first — and taking them in step would offer only the pairs
-            // whose two proposals happen to have been read in the same order. Nearest first is what
-            // makes the bound below cost the least: what it drops is the pairs furthest from what
-            // either side proposed first.
-            for (int apart = 0;
-                    apart <= keys.size() + values.size() - 2 && out.size() < MOST_PAIRINGS; apart++) {
-                for (int i = Math.max(0, apart - values.size() + 1);
-                        i <= Math.min(apart, keys.size() - 1) && out.size() < MOST_PAIRINGS; i++) {
-                    FixtureTemplate value = values.get(apart - i);
-                    List<FixtureTemplate> entries = new ArrayList<>();
-                    for (FixtureTemplate key
-                            : distinctFrom(keys.get(i), map.key(), least, symbols)) {
-                        entries.add(FixtureTemplate.entry(key, value));
-                    }
-                    out.add(FixtureTemplate.collection(entries));
+        Type.MapOf map = (Type.MapOf) carrier;
+        List<FixtureTemplate> keys = proposalsFor(map.key(), symbols, expanding);
+        List<FixtureTemplate> values = proposalsFor(map.value(), symbols, expanding);
+        if (keys.isEmpty() || values.isEmpty()) {
+            return Built.NONE;
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        // Every pair, nearest first. A key's rules and a value's are answered together or not at all —
+        // the pair is inside one position, so no search outside can put a key's second proposal beside
+        // a value's first — and taking them in step would offer only the pairs whose two proposals
+        // happen to have been read in the same order. Nearest first is what makes the bound below cost
+        // the least: what it drops is the pairs furthest from what either side proposed first.
+        for (int apart = 0;
+                apart <= keys.size() + values.size() - 2 && out.size() < MOST_PAIRINGS; apart++) {
+            for (int i = Math.max(0, apart - values.size() + 1);
+                    i <= Math.min(apart, keys.size() - 1) && out.size() < MOST_PAIRINGS; i++) {
+                FixtureTemplate value = values.get(apart - i);
+                List<FixtureTemplate> entries = new ArrayList<>();
+                for (FixtureTemplate key
+                        : distinctFrom(keys.get(i), map.key(), least, symbols, expanding)) {
+                    entries.add(FixtureTemplate.entry(key, value));
                 }
+                out.add(FixtureTemplate.collection(entries));
             }
-            return List.copyOf(out);
         }
-        return List.of();
-    }
-
-    /**
-     * Whether a count a rule asks for is past what this builds a value at.
-     *
-     * <p>Asked here as well as used here, so that what a reader is told about a position and what the
-     * position did are the same decision. A count past this is not a rule nothing satisfies — a list of
-     * a million exists and somebody could write one — so what it leaves is a fact about this rather
-     * than about the model, and it has to be reported as one.
-     */
-    static boolean pastWhatIsBuilt(Type carrier, int least) {
-        if (least <= 0) {
-            return false;
-        }
-        if (carrier == Type.STRING) {
-            return least > MOST_CHARACTERS;
-        }
-        return (carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
-                || carrier instanceof Type.MapOf) && least > MOST_ELEMENTS;
-    }
-
-    /** Whether a map's key and value propose more pairs between them than are built at once. */
-    static boolean moreThanIsPaired(Type carrier, Symbols symbols) {
-        if (!(carrier instanceof Type.MapOf map)) {
-            return false;
-        }
-        return proposalsFor(map.key(), symbols, Set.of()).size()
-                * proposalsFor(map.value(), symbols, Set.of()).size() > MOST_PAIRINGS;
+        return new Built(out, keys.size() * values.size() > out.size()
+                ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null);
     }
 
     /**
@@ -176,24 +183,19 @@ final class Witnesses {
     /**
      * {@code seed} and up to {@code least} values in all, no two of them equal.
      *
-     * <p>The ones past the seed come from inside the type's own rules rather than from a count started
-     * at nothing: a number stepped through the range its invariant leaves, a string one character
-     * longer than the minimum it has to meet. A second value the element itself refuses would have the
-     * collection refused for its elements while saying nothing about its size.
-     *
-     * <p>Fewer than asked where this runs out, which is not the same as failing. A set of three
+     * <p>Fewer than asked where the type runs out, which is not the same as failing: a set of three
      * booleans is a thing no value satisfies, and offering the two that exist is a proposal the decoder
      * answers the way it answers any other.
      */
     private static List<FixtureTemplate> distinctFrom(FixtureTemplate seed, Type type, int least,
-                                                      Symbols symbols) {
+                                                      Symbols symbols, Set<TypeName> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
         written.add(seed.text());
         out.add(seed);
-        for (int i = 0; out.size() < least; i++) {
-            FixtureTemplate each = varied(type, i, symbols);
-            if (each == null) {
+        // One more than needed, since the seed is likely to be among them.
+        for (FixtureTemplate each : distinctValuesOf(type, least + 1, symbols, expanding)) {
+            if (out.size() >= least) {
                 break;
             }
             if (written.add(each.text())) {
@@ -204,13 +206,88 @@ final class Witnesses {
     }
 
     /**
-     * The {@code index}th value of {@code type} this can name, or null where the carrier has no order
-     * it can walk.
+     * Up to {@code many} values of {@code type}, no two of them equal.
+     *
+     * <p>One place that answers what a type's values are, in the order a collection should reach for
+     * them. Written once because it was written three times: a set of a carrier this could not step was
+     * offered one element, and adding a carrier meant remembering every reader that walked one.
+     *
+     * <p>What the type divides into comes first. A {@code Bool} is two values and a sum is its cases,
+     * and each of those is a value of the type rather than a proposal about it — a set of two booleans
+     * is built from both of them or from nothing. Then values made by stepping the carrier, which stay
+     * inside the rules the type carries. The type's own proposals come last: each is what one rule
+     * asked for and any of them may be one the whole of the rules refuses, so a collection filled from
+     * them is refused for its elements — which is still better than a collection short of its size,
+     * and is all there is where the carrier neither divides nor steps.
+     */
+    private static List<FixtureTemplate> distinctValuesOf(Type type, int many, Symbols symbols,
+                                                          Set<TypeName> expanding) {
+        Set<String> written = new LinkedHashSet<>();
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (FixtureTemplate each : dividesInto(type, symbols)) {
+            if (out.size() >= many) {
+                return List.copyOf(out);
+            }
+            if (written.add(each.text())) {
+                out.add(each);
+            }
+        }
+        for (int i = 0; out.size() < many; i++) {
+            FixtureTemplate each = varied(type, i, symbols);
+            if (each == null) {
+                break;
+            }
+            if (written.add(each.text())) {
+                out.add(each);
+            }
+        }
+        for (FixtureTemplate each : Partitions.representativesOf(type, symbols, null, expanding)) {
+            if (out.size() >= many) {
+                break;
+            }
+            if (written.add(each.text())) {
+                out.add(each);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** The values a type divides into, under every name it wears: a {@code Bool} is two of them and a
+     * sum is its cases. Empty where the type is not divided, which is where a range or a length is
+     * what tells its values apart instead. */
+    private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols) {
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (PartitionClass each : Partitions.classesOf(type, symbols)) {
+            if (each.generatable()) {
+                out.addAll(each.representatives().candidates());
+            }
+        }
+        if (!out.isEmpty()) {
+            return out;
+        }
+        // A newtype divides where what it wraps does, and the values are written under its name.
+        Type carrier = TypeOps.base(type, symbols);
+        if (carrier == null || carrier.equals(type)) {
+            return List.of();
+        }
+        for (PartitionClass each : Partitions.classesOf(carrier, symbols)) {
+            if (each.generatable()) {
+                for (FixtureTemplate value : each.representatives().candidates()) {
+                    out.add(wrapped(type, value, symbols));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The {@code index}th value of {@code type} made by stepping its carrier, or null where the carrier
+     * has no order to step.
      *
      * <p>A string grows by a character from the length its rules ask for, and a whole number steps
      * through the range they leave. A date or a record has no such step that keeps every rule the
      * position carries, and inventing one would put a value in a row the type's own chooser had reason
-     * not to offer.
+     * not to offer — which is what the values a type divides into are for, above.
      */
     private static FixtureTemplate varied(Type type, int index, Symbols symbols) {
         Type carrier = TypeOps.base(type, symbols);

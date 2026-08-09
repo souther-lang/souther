@@ -161,6 +161,46 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         assertEquals("T { kind = Overseas, props = Props([(\"x\", \"x\"), (\"xx\", \"x\")]) }", row);
     }
 
+    /**
+     * A carrier with two values in it is a carrier a set of two can be built from.
+     *
+     * <p>Nothing is being solved here: the rule is read, the carrier's values are known, and the two
+     * facts have to meet. They meet only where the second value is invented by stepping something, so a
+     * carrier that is not counted or spelled has no second element and a set of two is refused for
+     * holding one.
+     */
+    @Test
+    void aSetOfACarrierWithTwoValuesIsBuiltFromBoth() {
+        String row = generatedRow(model("""
+                data Flags = Set<Bool>
+                    invariant both = Set.size(value) >= 2
+                """, "flags: Flags", "flags = Flags([true, false])"));
+
+        assertEquals("T { kind = Overseas, flags = Flags([true, false]) }", row);
+    }
+
+    /**
+     * A sum divides into its cases, and a set of two is built from two of them.
+     *
+     * <p>Nothing here was written for sums. What a type divides into is asked of the one reader that
+     * answers it, so a carrier reaches this by being divided rather than by being remembered — which is
+     * the difference between covering a carrier and having covered the carriers somebody thought of.
+     */
+    @Test
+    void aSetOfASumIsBuiltFromItsCases() {
+        String row = generatedRow(model("""
+                data Red
+                data Green
+                data Blue
+                data Color = Red | Green | Blue
+
+                data Palette = Set<Color>
+                    invariant enough = Set.size(value) >= 2
+                """, "palette: Palette", "palette = Palette([Red, Blue])"));
+
+        assertEquals("T { kind = Overseas, palette = Palette([Red, Green]) }", row);
+    }
+
     // --- a string the rules give a length ----------------------------------------------------------
 
     /**
@@ -456,6 +496,49 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
                 "and the pairings this did not build are said as a search that stopped: "
+                        + filled.unresolved());
+    }
+
+    /**
+     * A map nothing was paired for is not a search that stopped.
+     *
+     * <p>{@code /= 0} says the map is not empty and no range holds it, so no minimum is read and no
+     * pairing is built — the position offers the empty map and it is refused. How many pairs the key
+     * and the value could have made between them says nothing about that, and a reader told the search
+     * stopped would be told about a search nothing here ran.
+     */
+    @Test
+    void aMapNothingWasPairedForIsSaidAsARefusalAndNotASearch() {
+        String formats = "";
+        for (int i = 1; i <= 8; i++) {
+            formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
+        }
+        Generator.GenerationResult filled = generated("""
+                module nd.gen
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
+                data K = String
+                %s
+                data V = String
+                %s
+                data M = Map<K, V>
+                    invariant notEmpty = Map.size(value) /= 0
+
+                data T = { kind: Kind, m: M }
+
+                behavior look : (t: T) -> Int
+
+                let look (t) = 1
+                """.formatted(formats, formats));
+
+        assertEquals(List.of(), filled.rows(), "the empty map is what was offered and it is refused");
+        assertTrue(filled.unresolved().stream().allMatch(left ->
+                        left.reason() == Generator.UnresolvedCombination.Reason
+                                .ALL_CANDIDATES_REJECTED),
+                "refused, because no pairing was built to be stopped short of: "
                         + filled.unresolved());
     }
 
