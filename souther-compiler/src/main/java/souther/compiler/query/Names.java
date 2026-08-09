@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -1566,8 +1567,10 @@ public final class Names {
     private static Report importCollision(String name, Ast.Import imp, Ast.Import earlier) {
         if (earlier == null) {
             return Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1508, "check.import.conflict")
-                            .at(imp.pos()).args(name).hint("check.import.conflict.hint").build(),
+                    Diagnostic.at(imp.pos())
+                            .say(new ImportMessage.ImportedNameCollidesWithADeclaration(name))
+                            .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
+                            .build(),
                     "imported `" + name + "` conflicts with a local definition");
         }
         Diagnostic.Builder b = Diagnostic.of(DiagnosticCode.E1508, "check.import.duplicate").at(imp.pos()).args(name, earlier.module(), imp.module())

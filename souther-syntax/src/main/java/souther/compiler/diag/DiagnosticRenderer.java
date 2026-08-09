@@ -61,7 +61,9 @@ public interface DiagnosticRenderer {
                     .append(' ').append(d.diff().expectedType());
         }
         for (Note note : d.notes() == null ? List.<Note>of() : d.notes()) {
-            said.append(' ').append(Messages.get(note.messageKey(), written, note.args()));
+            said.append(' ').append(note.said() != null
+                    ? Messages.render(note.said(), written)
+                    : Messages.get(note.messageKey(), written, note.args()));
         }
         if (d.suggestion() != null) {
             said.append(' ').append(Messages.get("diag.suggestion", written, d.suggestion()));
@@ -74,6 +76,9 @@ public interface DiagnosticRenderer {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
         if (d.literalMessage() != null) {
             return d.literalMessage();
+        }
+        if (d.said() != null) {
+            return Messages.render(d.said(), locale);
         }
         if (d.messageKey() != null) {
             return Messages.get(d.messageKey(), locale, d.args());

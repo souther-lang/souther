@@ -1,7 +1,11 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.MessageValues;
+
 import java.text.MessageFormat;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
@@ -100,6 +104,46 @@ public final class Messages {
         } catch (IllegalArgumentException _) {
             return template;
         }
+    }
+
+    /**
+     * Renders {@code message} by putting each value it carries where its catalog entry names it.
+     *
+     * <p>The names are the message's own components — {@code {field}}, not {@code {0}} — so a
+     * reader of the entry can tell what goes where, and the build can hold the entry to naming every
+     * one of them. Two entries take five values and thirteen take four; at that width a number is a
+     * spelling only the site it was written beside can decode.
+     *
+     * <p>A missing entry renders as its key, as a keyed lookup does: a compiler reporting an error
+     * is the worst place to raise another one.
+     */
+    public static String render(Message message, Locale locale) {
+        Objects.requireNonNull(locale, NEEDS_A_LANGUAGE);
+        String template = lookup(message.key(), locale);
+        if (template == null) {
+            return message.key();
+        }
+        Map<String, Object> values = MessageValues.of(message);
+        StringBuilder out = new StringBuilder(template.length() + 32);
+        int at = 0;
+        while (at < template.length()) {
+            int open = template.indexOf('{', at);
+            if (open < 0) {
+                out.append(template, at, template.length());
+                break;
+            }
+            int close = template.indexOf('}', open);
+            if (close < 0) {
+                out.append(template, at, template.length());
+                break;
+            }
+            String named = template.substring(open + 1, close);
+            out.append(template, at, open);
+            out.append(values.containsKey(named) ? String.valueOf(values.get(named))
+                    : template.substring(open, close + 1));
+            at = close + 1;
+        }
+        return out.toString();
     }
 
     /** Whether the catalog defines {@code key} for {@code locale} (or its English base). */

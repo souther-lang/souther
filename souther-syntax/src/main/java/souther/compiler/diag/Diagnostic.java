@@ -1,6 +1,9 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.Code;
+import souther.compiler.diag.msg.Message;
+
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.List;
@@ -35,6 +38,7 @@ public final class Diagnostic {
     private final String messageKey;
     private final Object[] args;
     private final String literalMessage;
+    private final Message said;
     private final TypeComparison diff;
     private final List<Note> notes;
     private final String suggestion;
@@ -42,7 +46,7 @@ public final class Diagnostic {
     private Diagnostic(Severity severity, DiagnosticCode code, Region region,
                        List<LabeledRegion> secondary, String messageKey, Object[] args,
                        String literalMessage, TypeComparison diff, List<Note> notes,
-                       String suggestion) {
+                       String suggestion, Message said) {
         this.severity = severity;
         this.code = code;
         this.region = region;
@@ -53,6 +57,17 @@ public final class Diagnostic {
         this.diff = diff;
         this.notes = notes;
         this.suggestion = suggestion;
+        this.said = said;
+    }
+
+    /**
+     * What this says, as the values it is about, or null for a site not yet written that way.
+     *
+     * <p>A renderer reads this rather than the key and the arguments: the entry names each value,
+     * so the text is filled by name.
+     */
+    public Message said() {
+        return said;
     }
 
     public Severity severity() {
@@ -142,13 +157,23 @@ public final class Diagnostic {
      * either of those has a catalog key by now. {@code pos} may be null for a position-less error. */
     public static Diagnostic literal(SourcePos pos, String message) {
         return new Diagnostic(Severity.ERROR, null, pos == null ? null : Region.point(pos),
-                List.of(), null, null, message, null, List.of(), null);
+                List.of(), null, null, message, null, List.of(), null, null);
     }
 
     /**
      * A builder for a diagnostic that reports a known rule. The code carries the title, so the two
      * agree at every site reporting that rule and neither is given here.
      */
+    /** A diagnostic about a place, which {@link Builder#say} then gives what it says. */
+    public static Builder at(Region region) {
+        return new Builder(null, null).at(region);
+    }
+
+    /** A diagnostic about a position, which {@link Builder#say} then gives what it says. */
+    public static Builder at(SourcePos pos) {
+        return new Builder(null, null).at(pos);
+    }
+
     public static Builder of(DiagnosticCode code, String messageKey) {
         return new Builder(Objects.requireNonNull(code, "a diagnostic reports a rule, and a rule has"
                 + " a code; `literal` is the one path without one"), messageKey);
@@ -156,8 +181,9 @@ public final class Diagnostic {
 
 
     public static final class Builder {
-        private final DiagnosticCode code;
-        private final String messageKey;
+        private DiagnosticCode code;
+        private String messageKey;
+        private Message said;
         private Region region;
         private final List<LabeledRegion> secondary = new ArrayList<>();
         private Object[] args = new Object[0];
@@ -169,6 +195,28 @@ public final class Diagnostic {
         private Builder(DiagnosticCode code, String messageKey) {
             this.code = code;
             this.messageKey = messageKey;
+        }
+
+        /**
+         * What this diagnostic says. The rule it reports and the catalog entry it renders through
+         * are read off {@code message}: neither is a string this site chooses.
+         */
+        public Builder say(Message message) {
+            Code reports = message.getClass().getAnnotation(Code.class);
+            if (reports == null) {
+                throw new IllegalArgumentException("a message reports a rule, and "
+                        + message.getClass().getName() + " names no code");
+            }
+            this.said = message;
+            this.code = reports.value();
+            this.messageKey = message.key();
+            return this;
+        }
+
+        /** A hint written as a message of its own. */
+        public Builder hint(Message hint) {
+            this.notes.add(new Note(hint));
+            return this;
         }
 
         /** Marks this a warning: it is reported but does not fail the build. */
@@ -227,8 +275,12 @@ public final class Diagnostic {
         }
 
         public Diagnostic build() {
+            if (code == null) {
+                throw new IllegalStateException("a diagnostic reports a rule; call `say`");
+            }
             return new Diagnostic(severity, code, region, List.copyOf(secondary),
-                    messageKey, args, null, diff, List.copyOf(withMessageArgs(notes)), suggestion);
+                    messageKey, args, null, diff, List.copyOf(withMessageArgs(notes)), suggestion,
+                    said);
         }
 
         /** A hint's text is written against the same numbered arguments as the message it follows

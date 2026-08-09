@@ -121,20 +121,20 @@ class CompileImportCollisionTest {
                 let twice (n: Int) = n * 2
                 """;
 
-        assertEquals("check.import.conflict", refused(List.of(up, """
+        assertEquals("import.imported-name-collides-with-a-declaration", refused(List.of(up, """
                 module probe.c
                 import up ( twice )
                 behavior twice : (a: Int, b: Int) -> Int
                 let twice (a, b) = a * b
                 data Line = { a: Int }
                 """)));
-        assertEquals("check.import.conflict", refused(List.of(upValue, """
+        assertEquals("import.imported-name-collides-with-a-declaration", refused(List.of(upValue, """
                 module probe.c
                 import up ( twice )
                 let twice (a: Int, b: Int) = a * b
                 data Line = { a: Int }
                 """)));
-        assertEquals("check.import.conflict", refused(List.of(up, """
+        assertEquals("import.imported-name-collides-with-a-declaration", refused(List.of(up, """
                 module probe.c
                 import up ( Thing )
                 let Thing (n: Int) = n
@@ -147,7 +147,7 @@ class CompileImportCollisionTest {
      * own definition on the next. */
     @Test
     void aLibraryImportBesideADeclarationIsRefused() {
-        assertEquals("check.import.conflict", refused(List.of("""
+        assertEquals("import.imported-name-collides-with-a-declaration", refused(List.of("""
                 module probe.c
                 import List ( map )
                 let map (n: Int) = n + 1
@@ -164,7 +164,7 @@ class CompileImportCollisionTest {
      */
     @Test
     void aValueAnAttachedFileDeclaresCollidesWithALibraryImport() {
-        assertEquals("check.import.conflict", refused(List.of("""
+        assertEquals("import.imported-name-collides-with-a-declaration", refused(List.of("""
                 module f25
                 import List ( map )
                 data In  = { n: Int }
@@ -242,7 +242,7 @@ class CompileImportCollisionTest {
                         data Broken = { a: NoSuchType }
                         """)));
 
-        assertEquals(List.of("check.import.conflict"),
+        assertEquals(List.of("import.imported-name-collides-with-a-declaration"),
                 diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
         assertEquals(List.of("check.unknown.type.msg"),
                 diagnostics.get("d.sou").stream().map(Diagnostic::messageKey).toList());

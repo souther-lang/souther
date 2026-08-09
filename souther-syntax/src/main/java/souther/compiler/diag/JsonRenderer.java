@@ -64,7 +64,8 @@ public final class JsonRenderer implements DiagnosticRenderer {
         }
         List<String> hints = new ArrayList<>();
         for (Note note : d.notes()) {
-            hints.add(Messages.get(note.messageKey(), locale, note.args()));
+            hints.add(note.said() != null ? Messages.render(note.said(), locale)
+                            : Messages.get(note.messageKey(), locale, note.args()));
         }
         if (!hints.isEmpty()) {
             obj.put("hints", hints);
