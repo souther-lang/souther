@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Compilation;
 import souther.compiler.query.Adequacy;
 
 import java.util.ArrayList;
@@ -11,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -51,14 +53,15 @@ class CompileDeepExpressionTest {
     }
 
     /**
-     * A source the parser accepts and the walks after it cannot finish: a chain of values, each
-     * naming the one before, which substitution splices into one tree as long as the chain.
+     * A source that once ran the walks out of stack: a chain of values, each naming the one before,
+     * which substitution splices into one tree as long as the chain.
      *
-     * <p>Written nesting will not do here. The parser bounds that and refuses it with a position
-     * (issue #524), so a source deep enough to overflow never reaches the walks — what a written
-     * nest tests is the parser's limit, not this boundary.
+     * <p>It no longer reaches the stack. What a definition may say is bounded now, and this chain
+     * says more than the bound, so the expansion is refused before it runs. It is kept as what it
+     * shows: every door answers it the same way. Which answer that is has moved once already and
+     * may move again — what is asked of it here is that it is an answer.
      */
-    private static String aCompilationThatRunsOutOfStack() {
+    private static String aCompilationThatOnceRanOutOfStack() {
         StringBuilder sb = new StringBuilder("module m exposing (f)\n\nlet v0 = 1\n");
         for (int i = 1; i <= 1000; i++) {
             sb.append("let v").append(i).append(" = v").append(i - 1).append(" + 1\n");
@@ -66,10 +69,13 @@ class CompileDeepExpressionTest {
         return sb.append("\nbehavior f : (x: Int) -> Int\nlet f (x) = x + v1000\n").toString();
     }
 
-    /** Every entry point that drives a compilation, by the name a reader would call it. */
-    private static Map<String, Runnable> everyEntryPoint(String source) {
+    /** Every entry point that drives a compilation, by the name a reader would call it. What a
+     *  door hands back is kept: the analysing ones answer with a compilation carrying the reports
+     *  rather than by raising, which is what they promise, so what counts as an answer differs by
+     *  door even though whether there is one does not. */
+    private static Map<String, Supplier<Object>> everyEntryPoint(String source) {
         List<String> sources = List.of(source);
-        Map<String, Runnable> doors = new LinkedHashMap<>();
+        Map<String, Supplier<Object>> doors = new LinkedHashMap<>();
         doors.put("compile(source)", () -> Compiler.compile(source));
         doors.put("compile(source, name)", () -> Compiler.compile(source, "m"));
         doors.put("compileWithWarnings(source)", () -> Compiler.compileWithWarnings(source));
@@ -96,12 +102,10 @@ class CompileDeepExpressionTest {
     /**
      * The boundary itself, asked with the one thing it is for.
      *
-     * <p>Apart from the case below, which reaches it by compiling a source deep enough to exhaust a
-     * walk. That is the reachability, and it is a different question: it holds while nothing before
-     * the walks refuses such a source, and issue #524 is about giving the producers of that depth a
-     * bound of their own, after which no source reaches here at all. On the day that lands, the case
-     * below stops exercising this and starts passing on the new diagnostic — and if this one were
-     * not written, removing the recovery entirely would leave both of them green.
+     * <p>Nothing reaches it by compiling any more. What a definition may say is bounded at the
+     * producers of the depth now, so a source deep enough to exhaust a walk is refused before it
+     * runs — which is what issue #524 asked for, and what makes this the only case that holds the
+     * recovery. Without it, removing the recovery outright would leave every other case green.
      */
     @Test
     void theBoundaryTurnsAnExhaustedStackIntoADiagnostic() {
@@ -119,24 +123,26 @@ class CompileDeepExpressionTest {
      * says one name where the question is which of them agree, and the door that had the recovery
      * already is among the first — so a run that stopped there would report the one door that was
      * never in doubt.
+     *
+     * <p>What is asked is that each door answers, not what it answers with. Where the answer comes
+     * from has moved — it was the recovery, and it is the bound on what a definition may say — and
+     * a door that agreed before agrees still.
      */
     @Test
-    void everyEntryPointAnswersAnExhaustedStackWithADiagnostic() throws InterruptedException {
-        String source = aCompilationThatRunsOutOfStack();
+    void everyEntryPointAnswersTheSameWay() throws InterruptedException {
+        String source = aCompilationThatOnceRanOutOfStack();
         List<String> wrong = new ArrayList<>();
 
-        for (Map.Entry<String, Runnable> door : everyEntryPoint(source).entrySet()) {
-            Throwable thrown = run(door.getValue(), STACK_BYTES);
-            String said = thrown == null ? "compiled"
-                    : thrown instanceof CompileException && thrown.getMessage().contains("deep")
-                            ? null
-                            : thrown.getClass().getName();
+        for (Map.Entry<String, Supplier<Object>> door : everyEntryPoint(source).entrySet()) {
+            AtomicReference<Object> answered = new AtomicReference<>();
+            Throwable thrown = run(() -> answered.set(door.getValue().get()), STACK_BYTES);
+            String said = whatIsWrong(thrown, answered.get());
             if (said != null) {
                 wrong.add(door.getKey() + " -> " + said);
             }
         }
 
-        assertTrue(wrong.isEmpty(), "these entry points did not answer with a depth diagnostic:\n  "
+        assertTrue(wrong.isEmpty(), "these entry points did not answer with a diagnostic:\n  "
                 + String.join("\n  ", wrong));
     }
 
@@ -179,6 +185,22 @@ class CompileDeepExpressionTest {
         long took = (System.nanoTime() - started) / 1_000_000;
 
         assertTrue(took < 30_000, "compiling a 5000-deep nest took " + took + "ms");
+    }
+
+    /** What is wrong with a door's answer, or null where it answered: a raising door throws a
+     *  diagnostic, an analysing one hands back a compilation with the diagnostic in its reports. */
+    private static String whatIsWrong(Throwable thrown, Object handedBack) {
+        if (thrown instanceof CompileException) {
+            return null;
+        }
+        if (thrown != null) {
+            return thrown.getClass().getName();
+        }
+        if (handedBack instanceof Compilation compilation
+                && !compilation.errors(compilation.db().allReports()).isEmpty()) {
+            return null;
+        }
+        return "compiled";
     }
 
     /** Runs {@code work} on a thread with {@link #STACK_BYTES} of stack and asserts it came back

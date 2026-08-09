@@ -3642,7 +3642,13 @@ The model author does not write this type name in Souther source; they only writ
 [#compiler-pipeline]
 == Compiler structure
 
-[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler walks. Every later reading of it — checking, formatting, compiling — descends it the same way, so a text that is too deep for one is too deep for all of them, and the limit is stated as the compiler's rather than as any one pass's. Naming the parts with `+let+` flattens it.
+[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler reads. The limit is stated as the compiler's rather than as any one pass's, and it is reached while reading, so it is reported at the token that reached it — including by the formatter, which reads sources it cannot compile. Breaking the nesting into named parts is how a text past it is written instead.
+
+[[source-structural-complexity-is-bounded]]A definition MUST NOT be structurally more complex than the compiler holds. Its complexity is counted over what the source wrote: a name or a literal is one, a construct is one more than the deepest thing it holds, an application is its argument count more than the deepest of what it applies and is applied to, and a name that reaches a value counts that value's complexity where the value is substituted (<<fn-value-semantics>>). A block needs no rule of its own — each of its statements is a binding the ones after it are written inside — so a long block and a deeply written expression are counted the same way, and what a statement holds is counted from where that statement stands.
+
+This is a separate limit from the one above, and neither implies the other. Nesting is bounded as the source is read; complexity is bounded over what the source says, which the reading does not settle: a module writes its declarations flat and substitution composes them, so a source that nests barely at all can be arbitrarily complex. It is reported at the construct that exceeded it — the block, the definition, or the value whose substitution composed it — and never as a nesting to flatten, since naming parts is what composes complexity rather than what reduces it.
+
+The limit is a property of the language, not of a compiler's internal representation. What a compiler builds from a definition, and how deep that is, is its own choice; what a definition may say is this.
 
 [,text]
 ----
@@ -5377,7 +5383,30 @@ An expression in this source nests too deeply for the compiler to walk. Name its
 flatten it.
 ----
 
-Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). Every pass descends the same text the same way, so this is not one pass's limit; it is reported wherever the descent is made, including by the formatter, which reads sources it cannot compile.
+Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). It is reached while reading, so it is reported wherever the reading is done, including by the formatter, which reads sources it cannot compile. What a pass built from the source may be deeper than the source was; that is <<e2107>>, and this limit says nothing about it.
+
+[#e2107]
+=== A definition is more complex than the compiler holds
+
+[,text]
+----
+This block has {statements} statements, and a definition holds at most {holds} levels of structure.
+----
+
+[,text]
+----
+`let {definition}` is {costs} levels of structure, and a definition holds at most {holds}.
+----
+
+[,text]
+----
+Substituting `{value}` here makes {costs} levels of structure, and a definition holds at most
+{holds}. A value is substituted where it is named, so what it is worth is added to what names it.
+----
+
+Reported where a definition says more than the compiler holds (<<source-structural-complexity-is-bounded>>), at whichever construct exceeded it: the block, the definition as written, or the value whose substitution composed it. The three are one limit counted one way, and which of them is reported is where the count first passed it.
+
+Naming parts with `+let+` is not the answer to this one — it is what a block and a substitution are made of, and both are counted. What reduces it is writing less structure: a behavior of its own, which is a definition of its own and counted on its own.
 
 [#e2105]
 === Two declarations become one class

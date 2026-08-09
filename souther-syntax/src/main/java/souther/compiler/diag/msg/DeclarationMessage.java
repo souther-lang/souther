@@ -149,6 +149,20 @@ public sealed interface DeclarationMessage extends Message {
     @Code(DiagnosticCode.E2104)
     record ItNestsDeeperThanIsRead() implements DeclarationMessage, Reported {}
 
+    @Code(DiagnosticCode.E2107)
+    record ABlockHasMoreStatementsThanADefinitionHolds(int statements, int holds)
+            implements DeclarationMessage, Reported {}
+
+    @Code(DiagnosticCode.E2107)
+    record ADefinitionIsMoreStructureThanIsHeld(String definition, int costs, int holds)
+            implements DeclarationMessage, Reported {}
+
+    @Code(DiagnosticCode.E2107)
+    record SubstitutingAValueIsMoreStructureThanIsHeld(String value, int costs, int holds)
+            implements DeclarationMessage, Reported {}
+
+    record WriteItAsABehaviorOfItsOwn() implements DeclarationMessage, Supporting {}
+
     @Code(DiagnosticCode.E2302)
     record TheRightSideOfAValuePipeIsACall() implements DeclarationMessage, Reported {}
 

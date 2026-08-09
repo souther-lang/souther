@@ -179,6 +179,7 @@ public enum DiagnosticCode {
     E2104("source-nesting-is-bounded", "e2104.title"),
     E2105("no-two-declarations-become-one-class", "check.duplicate.title"),
     E2106("a-field-does-not-collide-with-an-object-method", "check.reserved.title"),
+    E2107("source-structural-complexity-is-bounded", "e2107.title"),
 
     // --- the external representation ---
     E2201("a-custom-codec-agrees-with-its-type", "check.codec.title"),

@@ -3,6 +3,7 @@ package souther.compiler.frontend;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.LineIndex;
 import souther.compiler.cst.SyntaxElement;
@@ -459,6 +460,16 @@ public final class AstBuilder {
                 SourcePos at = pos(pat);
                 body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at), body, at);
             }
+        }
+        // What the definition says, as written. A block was counted above by its statements alone,
+        // which is what the fold needed to know before it ran; this is the whole of it, and holds
+        // what a statement carries as well as how many there are.
+        int costs = StructuralCost.of(body);
+        if (costs > StructuralCost.MAX) {
+            throw errorWithHint(pos,
+                    new DeclarationMessage.ADefinitionIsMoreStructureThanIsHeld(
+                            declared.spelling(), costs, StructuralCost.MAX),
+                    new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
         }
         return new Ast.FnDef(declared, moduleName, params, declaredReturn,
                 new Ast.FnBody.Written(body), modifiers, pos);
@@ -1094,6 +1105,15 @@ public final class AstBuilder {
     }
 
     private Ast.Expr foldStatements(List<SyntaxNode> stmts, int index, SyntaxNode result) {
+        // Before the fold and not after it. Each statement is a binding the ones after it are
+        // written inside, so folding them descends once per statement — a block long enough to be
+        // refused is a block long enough to run this out on the way to saying so.
+        if (index == 0 && stmts.size() > StructuralCost.MAX) {
+            throw errorWithHint(pos(stmts.get(StructuralCost.MAX)),
+                    new DeclarationMessage.ABlockHasMoreStatementsThanADefinitionHolds(
+                            stmts.size(), StructuralCost.MAX),
+                    new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
+        }
         if (index == stmts.size()) {
             return expr(result);   // a block always ends in a result expression
         }
