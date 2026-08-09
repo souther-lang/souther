@@ -80,7 +80,7 @@ class EveryTokenTheDocumentLaysOutIsOneTokenOfTheOutputTest {
     void theyAreTheTokensOfTheOutput() {
         List<String> wrong = new ArrayList<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
-            List<TokenDoc.Token> laid = laidOut(Formatter.document(CstParser.parse(source).root()));
+            List<TokenDoc.Token> laid = laidOut(Formatter.canonicalize(CstParser.parse(source).root()).construction().doc());
             List<SyntaxToken> output = written(Formatter.format(source));
             if (laid.size() != output.size()) {
                 wrong.add("the document lays out " + laid.size() + " tokens and the output has "
@@ -118,7 +118,7 @@ class EveryTokenTheDocumentLaysOutIsOneTokenOfTheOutputTest {
                 let spread (p: P): R = R { ...p.inner, b = 1 }
                 """;
         Set<String> laid = new LinkedHashSet<>();
-        for (TokenDoc.Token t : laidOut(Formatter.document(CstParser.parse(source).root()))) {
+        for (TokenDoc.Token t : laidOut(Formatter.canonicalize(CstParser.parse(source).root()).construction().doc())) {
             laid.add(t.kind() + " " + t.lexeme());
         }
         for (String token : List.of(

@@ -75,7 +75,7 @@ class TheConstructABoundaryNamesIsTheOneTheOutputHasTest {
         List<String> wrong = new ArrayList<>();
         int compared = 0;
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
-            List<Gaps.Boundary> said = boundaries(Formatter.document(CstParser.parse(source).root()));
+            List<Gaps.Boundary> said = boundaries(Formatter.canonicalize(CstParser.parse(source).root()).construction().doc());
             List<SyntaxToken> output = written(Formatter.format(source));
             assertEquals(output.size() - 1, said.size(),
                     "one boundary for each adjacency of the canonical form of:\n" + source);

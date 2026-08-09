@@ -119,7 +119,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
     @Test
     void andOverASourceTheyAreTheSameGroups() {
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
-            Doc doc = Formatter.document(CstParser.parse(source).root()).resolve();
+            Doc doc = Formatter.canonicalize(CstParser.parse(source).root()).construction().doc().resolve();
             List<Doc.GroupRef> written = new ArrayList<>();
             groupsOf(doc, written);
             List<Doc.GroupRef> decided = doc.layout(100).decisions().stream()

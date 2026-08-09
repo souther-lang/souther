@@ -113,15 +113,6 @@ public final class Formatter {
     }
 
     /**
-     * The document this formatter builds for {@code file}. For a test that has to see the tokens
-     * the formatter lays out rather than the text they render to — what is written between two of
-     * them is decided from the document, so a check on that decision reads the document.
-     */
-    static TokenDoc document(SyntaxNode file) {
-        return canonicalize(file).construction().doc();
-    }
-
-    /**
      * What one canonicalization of {@code file} came to: everything it made, and the text it came
      * to, from the one run that made them.
      *

@@ -24,13 +24,13 @@ class ALayoutSaysWhatEachBreakWroteTest {
     /** A blank line is two breaks and comes back as two. */
     @Test
     void aBlankLineIsTwoBreaks() {
-        Layout layout = Formatter.document(CstParser.parse("""
+        Layout layout = Formatter.canonicalize(CstParser.parse("""
                 module m
 
                 data A
 
                 data B
-                """).root()).resolve().layout(100);
+                """).root()).layout();
 
         List<Integer> offsets = layout.breaks().stream().map(Newline::offset).toList();
         String text = layout.text();
