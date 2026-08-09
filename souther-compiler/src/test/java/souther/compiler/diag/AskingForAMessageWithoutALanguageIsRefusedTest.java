@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AskingForAMessageWithoutALanguageIsRefusedTest {
 
-    private static final String KEY = "check.example.unreachable";
+    private static final String KEY = "example.the-row-reached-an-unreachable-point";
 
     @Test
     void aMessageLookupWithNoLanguageIsRefused() {

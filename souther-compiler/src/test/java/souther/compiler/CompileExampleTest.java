@@ -181,7 +181,8 @@ class CompileExampleTest {
         CompileException e = err(bad);
         assertEquals("E1904", e.diagnostic().code());
         // the hint names the cases, not the sum, since those are what a row may expect
-        String hint = String.valueOf(e.diagnostic().notes().get(0).args()[0]);
+        String hint = String.valueOf(souther.compiler.diag.msg.MessageValues
+                .of(e.diagnostic().notes().get(0).said()).get("cases"));
         assertTrue(hint.contains("Small") && hint.contains("Large"), hint);
         assertFalse(hint.contains("Tier"), hint);
     }

@@ -273,6 +273,12 @@ public final class Diagnostic {
             return this;
         }
 
+        /** A second place to point at, in {@code sourceId}, saying what it says as a message. */
+        public Builder secondaryIn(String sourceId, Region region, Message label) {
+            this.secondary.add(new LabeledRegion(region, sourceId, label));
+            return this;
+        }
+
         /** A second place to point at, in {@code sourceId} — for a problem written in two files,
          * where quoting the second against the first would draw a caret under the wrong text. */
         public Builder secondaryIn(String sourceId, Region region, String labelKey,

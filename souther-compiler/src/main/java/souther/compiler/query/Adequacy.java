@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ExampleVerifier;
 import souther.compiler.FixtureReader;
@@ -1333,29 +1334,36 @@ public final class Adequacy {
          * this method's.
          */
         private static Report warning(Finding finding) {
-            DiagnosticCode code = finding.code().orElseThrow();
-            souther.compiler.diag.Diagnostic.Builder built =
-                    souther.compiler.diag.Diagnostic.of(code, messageKey(finding.kind()))
-                            .at(finding.at())
-                            .args(finding.args().toArray());
+            List<Object> said = finding.args();
+            souther.compiler.diag.Diagnostic.Builder built = souther.compiler.diag.Diagnostic
+                    .at(finding.at())
+                    .say(switch (finding.kind()) {
+                        case OUTPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowExpectsThatCase(
+                                text(said, 0), text(said, 1));
+                        case INPUT_CASE_UNSPECIFIED -> new ExampleMessage.NoRowAppliesItToThatCase(
+                                text(said, 0), text(said, 1), text(said, 2));
+                        case BOUNDARY_UNMET -> new ExampleMessage.NoRowIsAtThatBoundary(
+                                text(said, 0), text(said, 1), text(said, 2));
+                        case ARM_UNREACHED -> new ExampleMessage.NoRowGoesThroughThatArm(
+                                text(said, 0), text(said, 1));
+                        default -> throw new IllegalArgumentException(
+                                "no message for " + finding.kind());
+                    });
             switch (finding.kind()) {
                 case OUTPUT_CASE_UNSPECIFIED ->
-                        built.hint("check.example.witness.out.hint", finding.args().get(0));
-                case BOUNDARY_UNMET -> built.hint("check.example.boundary.hint");
-                case ARM_UNREACHED -> built.hint("check.example.unreachedarm.hint");
+                        built.hint(new ExampleMessage.WriteARowExpectingThatCase(text(said, 0)));
+                case BOUNDARY_UNMET ->
+                        built.hint(new ExampleMessage.ARowOnTheLineTellsTwoRulesApart());
+                case ARM_UNREACHED ->
+                        built.hint(new ExampleMessage.EitherARowIsMissingOrNothingReachesIt());
                 default -> { }   // the message says all there is to say
             }
             return Report.of(built.build());
         }
 
-        private static String messageKey(Kind kind) {
-            return switch (kind) {
-                case OUTPUT_CASE_UNSPECIFIED -> "check.example.witness.out";
-                case INPUT_CASE_UNSPECIFIED -> "check.example.witness.in";
-                case BOUNDARY_UNMET -> "check.example.boundary";
-                case ARM_UNREACHED -> "check.example.unreachedarm";
-                default -> throw new IllegalArgumentException("no message for " + kind);
-            };
+        /** What a finding put at {@code at}, as the text a message carries. */
+        private static String text(List<Object> said, int at) {
+            return at < said.size() ? String.valueOf(said.get(at)) : "";
         }
     }
 

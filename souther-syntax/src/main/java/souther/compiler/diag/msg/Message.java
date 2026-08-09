@@ -17,8 +17,8 @@ package souther.compiler.diag.msg;
  * shown only in a hint belongs to the hint's own message, and a wording that turns on a value is two
  * messages rather than one entry that selects between two sentences.
  */
-public sealed interface Message permits AttemptMessage, CodecMessage, DataMessage, HelperMessage, ImportMessage,
-        InvariantMessage, MatchMessage {
+public sealed interface Message permits AttemptMessage, CodecMessage, DataMessage, ExampleMessage, HelperMessage,
+        ImportMessage, InvariantMessage, MatchMessage {
 
     /** The catalog entry this renders through, read off where the message is declared. */
     default String key() {

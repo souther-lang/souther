@@ -371,8 +371,9 @@ class CompileExampleCompositionTest {
                   | (A { v = "in" }) -> C { v = "out" }
                 """);
         assertEquals("E1908", e.diagnostic().code());
-        assertEquals("check.fake.missing.through", e.diagnostic().messageKey());
-        assertEquals(List.of("both", "bossOf", "`two`"), List.of(e.diagnostic().args()));
+        assertEquals("example.a-dependency-reached-through-has-no-fake", e.diagnostic().messageKey());
+        assertEquals(List.of("both", "bossOf", "`two`"),
+                List.copyOf(e.diagnostic().values().values()));
     }
 
     /** A behavior asking for its own dependency reads as it did: there is no other stage to name. */
@@ -395,7 +396,7 @@ class CompileExampleCompositionTest {
                 example one
                   | (A { v = "in" }) -> B { v = "out" }
                 """);
-        assertEquals("check.fake.missing", e.diagnostic().messageKey());
+        assertEquals("example.a-dependency-has-no-fake", e.diagnostic().messageKey());
     }
 
     /** An injected behavior has nothing to run yet, so its rows are recorded rather than refused. */
@@ -427,7 +428,8 @@ class CompileExampleCompositionTest {
                   | (2) -> 4
                 """);
         assertEquals("E1902", e.diagnostic().code());
-        String hint = String.valueOf(e.diagnostic().notes().get(0).args()[0]);
+        String hint = String.valueOf(souther.compiler.diag.msg.MessageValues
+                .of(e.diagnostic().notes().get(0).said()).values().iterator().next());
         assertTrue(hint.contains("helper"), hint);
         assertFalse(hint.contains("injected"), hint);
     }

@@ -1,0 +1,265 @@
+package souther.compiler.diag.msg;
+
+import souther.compiler.diag.DiagnosticCode;
+
+/** What an example row, the file it is written in, and the fakes it runs against are told. */
+public sealed interface ExampleMessage extends Message {
+
+    // --- the target ---
+
+    /** The example names something this module does not declare as a behavior. */
+    @Code(DiagnosticCode.E1901)
+    record NoBehaviorOfThatName(String target) implements ExampleMessage {}
+
+    /** The target is a behavior nothing can evaluate. */
+    @Code(DiagnosticCode.E1902)
+    record TheTargetCannotBeEvaluated(String target) implements ExampleMessage {}
+
+    /** What an example can run, and what this one is. */
+    @Code(DiagnosticCode.E1902)
+    record WhatAnExampleRuns(String here) implements ExampleMessage {}
+
+    /** `examples for` names a module that is not being compiled. */
+    @Code(DiagnosticCode.E1907)
+    record TheModuleIsNotBeingCompiled(String module) implements ExampleMessage {}
+
+    // --- the row ---
+
+    /** The row hands over a different number of inputs than the behavior takes. */
+    @Code(DiagnosticCode.E1903)
+    record TheRowHandsOverAnotherNumberOfInputs(String target, String takes, String given)
+            implements ExampleMessage {}
+
+    /** An input of the row could not be built. */
+    @Code(DiagnosticCode.E1903)
+    record AnInputCouldNotBeBuilt(String target, String at, String why) implements ExampleMessage {}
+
+    /** The expected value could not be built. */
+    @Code(DiagnosticCode.E1903)
+    record TheExpectedValueCouldNotBeBuilt(String target, String why) implements ExampleMessage {}
+
+    /** The row expects a case the behavior does not answer with. */
+    @Code(DiagnosticCode.E1904)
+    record NotOneOfTheResultCases(String expected, String target) implements ExampleMessage {}
+
+    /** Which cases it does answer with. */
+    @Code(DiagnosticCode.E1904)
+    record TheResultCasesAre(String cases) implements ExampleMessage {}
+
+    /** The row does not hold. */
+    @Code(DiagnosticCode.E1905)
+    record TheRowDoesNotHold() implements ExampleMessage {}
+
+    /** What the row said and what came back. */
+    @Code(DiagnosticCode.E1905)
+    record WhatTheRowSaid(String said) implements ExampleMessage {}
+
+    /** The row reached a point the model says cannot arise. */
+    @Code(DiagnosticCode.E1911)
+    record TheRowReachedAnUnreachablePoint(String reason) implements ExampleMessage {}
+
+    /** Which of the two that is. */
+    @Code(DiagnosticCode.E1911)
+    record EitherTheRowOrTheReasonIsWrong() implements ExampleMessage {}
+
+    // --- the file ---
+
+    /** An `examples for` file holds only what belongs in one. */
+    @Code(DiagnosticCode.E1906)
+    record AnExamplesFileHoldsOnlyExamples() implements ExampleMessage {}
+
+    /** A value the file names is already declared by the module it is about. */
+    @Code(DiagnosticCode.E1906)
+    record TheNameIsAlreadyDeclared(String name, String module) implements ExampleMessage {}
+
+    // --- the fakes ---
+
+    /** A dependency has no fake. */
+    @Code(DiagnosticCode.E1908)
+    record ADependencyHasNoFake(String behavior, String dependency) implements ExampleMessage {}
+
+    /** The same, where the dependency is reached through something else. */
+    @Code(DiagnosticCode.E1908)
+    record ADependencyReachedThroughHasNoFake(String behavior, String dependency, String through)
+            implements ExampleMessage {}
+
+    /** What to write for it. */
+    @Code(DiagnosticCode.E1908)
+    record WriteAFakeLikeThis(String shown) implements ExampleMessage {}
+
+    /** The fake's value could not be built. */
+    @Code(DiagnosticCode.E1908)
+    record TheFakeValueCouldNotBeBuilt(String dependency, String why) implements ExampleMessage {}
+
+    /** The fake itself could not be built. */
+    @Code(DiagnosticCode.E1908)
+    record TheFakeCouldNotBeBuilt(String dependency, String why) implements ExampleMessage {}
+
+    /** A fake was asked for an input its table has no output for. */
+    @Code(DiagnosticCode.E1909)
+    record AFakeHadNoOutputForAnInput(String input) implements ExampleMessage {}
+
+    // --- what the evaluation could not finish ---
+
+    /** The evaluation did not answer in time. */
+    @Code(DiagnosticCode.E1923)
+    record TheEvaluationDidNotAnswer(String within) implements ExampleMessage {}
+
+    /** The same, naming what it was in when it stopped. */
+    @Code(DiagnosticCode.E1923)
+    record TheEvaluationDidNotAnswerWhileCalling(String within, String calling)
+            implements ExampleMessage {}
+
+    /** What that says and what it does not. */
+    @Code(DiagnosticCode.E1923)
+    record NotAnsweringIsNotNotTerminating() implements ExampleMessage {}
+
+    /** The evaluation spent its step budget. */
+    @Code(DiagnosticCode.E1910)
+    record TheEvaluationSpentItsSteps(String budget) implements ExampleMessage {}
+
+    /** What that says and what it does not. */
+    @Code(DiagnosticCode.E1910)
+    record SpendingTheBudgetIsNotDiverging() implements ExampleMessage {}
+
+    /** The evaluation reached its recursion-depth limit. */
+    @Code(DiagnosticCode.E1910)
+    record TheEvaluationReachedItsDepthLimit(String limit) implements ExampleMessage {}
+
+    /** What that says and what it does not. */
+    @Code(DiagnosticCode.E1910)
+    record ReachingTheDepthLimitIsNotDiverging() implements ExampleMessage {}
+
+    /** The JVM stack ran out before the depth limit did. */
+    @Code(DiagnosticCode.E1924)
+    record TheStackRanOutBeforeTheDepthLimit(String stack, String limit)
+            implements ExampleMessage {}
+
+    /** What to do about it. */
+    @Code(DiagnosticCode.E1924)
+    record TheDepthLimitIsWhatShouldStopIt() implements ExampleMessage {}
+
+    // --- what the rows do not cover ---
+
+    /** No row expects a case the signature declares. */
+    @Code(DiagnosticCode.E1913)
+    record NoRowExpectsThatCase(String caseName, String behavior) implements ExampleMessage {}
+
+    /** What to write for it. */
+    @Code(DiagnosticCode.E1913)
+    record WriteARowExpectingThatCase(String caseName) implements ExampleMessage {}
+
+    /** No row applies the behavior to a case one of its inputs declares. */
+    @Code(DiagnosticCode.E1915)
+    record NoRowAppliesItToThatCase(String caseName, String at, String behavior)
+            implements ExampleMessage {}
+
+    /** No row sits on a boundary an invariant draws. */
+    @Code(DiagnosticCode.E1916)
+    record NoRowIsAtThatBoundary(String at, String value, String rule) implements ExampleMessage {}
+
+    /** What a row on the line tells apart. */
+    @Code(DiagnosticCode.E1916)
+    record ARowOnTheLineTellsTwoRulesApart() implements ExampleMessage {}
+
+    /** No row goes through an arm of the body. */
+    @Code(DiagnosticCode.E1918)
+    record NoRowGoesThroughThatArm(String arm, String behavior) implements ExampleMessage {}
+
+    /** Which of the two that is. */
+    @Code(DiagnosticCode.E1918)
+    record EitherARowIsMissingOrNothingReachesIt() implements ExampleMessage {}
+
+    // --- a stand-in and a row that disagree ---
+
+    /** A row and a fake state different answers for one input. */
+    @Code(DiagnosticCode.E1919)
+    record TheRowAndTheFakeDisagree(String behavior) implements ExampleMessage {}
+
+    /** The same, where the stand-in is a `with`. */
+    @Code(DiagnosticCode.E1919)
+    record TheRowAndTheWithDisagree(String behavior) implements ExampleMessage {}
+
+    /** What each of them says. */
+    @Code(DiagnosticCode.E1919)
+    record WhatTheRowSaysAndWhatTheFakeSays(String row, String fake) implements ExampleMessage {}
+
+    /** The same, for a `with`. */
+    @Code(DiagnosticCode.E1919)
+    record WhatTheRowSaysAndWhatTheWithSays(String row, String with) implements ExampleMessage {}
+
+    /** Where the fake that disagrees is written. */
+    @Code(DiagnosticCode.E1919)
+    record TheFakeRowIsHere(String behavior) implements ExampleMessage {}
+
+    /** Where the `with` that disagrees is written. */
+    @Code(DiagnosticCode.E1919)
+    record TheWithIsHere(String behavior) implements ExampleMessage {}
+
+    // --- a table that could not be built, so nothing it states was checked ---
+
+    /** Building the fake's table spent its step budget. */
+    @Code(DiagnosticCode.E1921)
+    record TheTableSpentItsSteps(String fake, String budget) implements ExampleMessage {}
+
+    /** Building the fake's table reached the depth limit. */
+    @Code(DiagnosticCode.E1921)
+    record TheTableReachedItsDepthLimit(String fake, String limit) implements ExampleMessage {}
+
+    /** Building the fake's table ran out of JVM stack. */
+    @Code(DiagnosticCode.E1921)
+    record TheTableRanOutOfStack(String fake, String limit) implements ExampleMessage {}
+
+    /** Building the fake's table did not answer in time. */
+    @Code(DiagnosticCode.E1921)
+    record TheTableDidNotAnswer(String fake, String within) implements ExampleMessage {}
+
+    /** What a table over its steps says. */
+    @Code(DiagnosticCode.E1921)
+    record TheTableGoesRoundTooManyTimes(String fake) implements ExampleMessage {}
+
+    /** What a table past the depth limit says. */
+    @Code(DiagnosticCode.E1921)
+    record TheTableRecursesTooDeeply(String fake) implements ExampleMessage {}
+
+    /** What a table that overran the stack says. */
+    @Code(DiagnosticCode.E1921)
+    record TheStackGotThereFirst(String fake) implements ExampleMessage {}
+
+    /** What a table that did not answer says. */
+    @Code(DiagnosticCode.E1921)
+    record TheTableNotAnsweringIsNotTheTableBeingWrong(String fake) implements ExampleMessage {}
+
+    /** The fake could not be compared with the rows: its table spent its steps. */
+    @Code(DiagnosticCode.E1920)
+    record NotComparedTheTableSpentItsSteps(String behavior, String budget)
+            implements ExampleMessage {}
+
+    /** The same, at the depth limit. */
+    @Code(DiagnosticCode.E1920)
+    record NotComparedTheTableReachedItsDepthLimit(String behavior, String limit)
+            implements ExampleMessage {}
+
+    /** The same, out of stack. */
+    @Code(DiagnosticCode.E1920)
+    record NotComparedTheTableRanOutOfStack(String behavior, String limit)
+            implements ExampleMessage {}
+
+    /** The same, unanswered. */
+    @Code(DiagnosticCode.E1920)
+    record NotComparedTheTableDidNotAnswer(String behavior, String within)
+            implements ExampleMessage {}
+
+    /** What each of those says, in turn. */
+    @Code(DiagnosticCode.E1920)
+    record TheTableComparedGoesRoundTooManyTimes(String behavior) implements ExampleMessage {}
+
+    @Code(DiagnosticCode.E1920)
+    record TheTableComparedRecursesTooDeeply(String behavior) implements ExampleMessage {}
+
+    @Code(DiagnosticCode.E1920)
+    record TheStackGotThereFirstWhenComparing(String behavior) implements ExampleMessage {}
+
+    @Code(DiagnosticCode.E1920)
+    record NotAnsweringIsNotTwoAnswers(String behavior) implements ExampleMessage {}
+}

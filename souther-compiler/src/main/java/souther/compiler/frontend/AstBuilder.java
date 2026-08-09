@@ -10,6 +10,7 @@ import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.AttemptMessage;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -154,8 +155,7 @@ public final class AstBuilder {
     }
 
     private CompileException onlyExamples(SyntaxNode n) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1906, "check.example.file.only")
-                        .at(pos(n)).build());
+        return CompileException.of(Diagnostic.at(pos(n)).say(new ExampleMessage.AnExamplesFileHoldsOnlyExamples()).build());
     }
 
     /** {@code example <target> | rows...}. The contextual {@code example} lexes as an identifier, so

@@ -61,7 +61,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1903", d.code(), "an expected value that cannot be built is a fixture error");
-        assertEquals("check.example.expected", d.messageKey());
+        assertEquals("example.the-expected-value-could-not-be-built", d.messageKey());
         assertEquals(null, d.diff(), "there is no value to show against the behavior's result");
     }
 
@@ -73,7 +73,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.value", d.messageKey(),
+        assertEquals("example.the-fake-value-could-not-be-built", d.messageKey(),
                 "the row supplies a fake; what failed is building its value");
     }
 
@@ -85,7 +85,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.missing", d.messageKey());
+        assertEquals("example.a-dependency-has-no-fake", d.messageKey());
     }
 
     @Test
@@ -99,7 +99,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.unbuildable", d.messageKey(),
+        assertEquals("example.the-fake-could-not-be-built", d.messageKey(),
                 "the module supplies a fake table; what failed is building one of its rows");
     }
 
@@ -114,8 +114,8 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.unbuildable", d.messageKey());
-        assertEquals("quote", d.args()[0], "the dependency the row fakes, named once");
+        assertEquals("example.the-fake-could-not-be-built", d.messageKey());
+        assertEquals("quote", d.values().get("dependency"), "the dependency the row fakes, named once");
     }
 
     @Test

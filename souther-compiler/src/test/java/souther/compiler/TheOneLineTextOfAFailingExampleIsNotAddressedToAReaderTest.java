@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  */
 class TheOneLineTextOfAFailingExampleIsNotAddressedToAReaderTest {
 
-    private static final String KEY = "check.example.unreachable";
+    private static final String KEY = "example.the-row-reached-an-unreachable-point";
     private static final String REASON = "no branch states this";
 
     @Test

@@ -4,6 +4,7 @@ import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
@@ -610,8 +611,9 @@ public final class Front {
             }
             SourcePos pos = db.ask(new Parsed(id)).present()
                     ? db.ask(new Parsed(id)).value().module().pos() : null;
-            return Answer.absent(Report.raised(Diagnostic.of(DiagnosticCode.E1907, "check.example.notarget")
-                            .at(pos).args(target).build()));
+            return Answer.absent(Report.raised(Diagnostic.at(pos)
+                    .say(new ExampleMessage.TheModuleIsNotBeingCompiled(target))
+                    .build()));
         }
     }
 

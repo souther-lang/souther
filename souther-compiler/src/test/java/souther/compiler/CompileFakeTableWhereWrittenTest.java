@@ -76,8 +76,9 @@ class CompileFakeTableWhereWrittenTest {
                 """);
 
         assertEquals("E1908", one.code());
-        assertEquals("check.fake.unbuildable", one.messageKey());
-        assertEquals("find", one.args()[0], "the behavior the table stands in for");
+        assertEquals("example.the-fake-could-not-be-built", one.messageKey());
+        assertEquals("find", one.values().get("dependency"),
+                "the behavior the table stands in for");
         assertEquals(15, one.pos().line(), "at the fake, which is where the table is written");
     }
 
@@ -101,7 +102,7 @@ class CompileFakeTableWhereWrittenTest {
                 """);
 
         assertEquals("E1908", one.code());
-        assertEquals("check.fake.unbuildable", one.messageKey());
+        assertEquals("example.the-fake-could-not-be-built", one.messageKey());
     }
 
     @Test
@@ -113,7 +114,7 @@ class CompileFakeTableWhereWrittenTest {
                 """);
 
         assertEquals("E1908", one.code());
-        assertEquals("check.fake.unbuildable", one.messageKey());
+        assertEquals("example.the-fake-could-not-be-built", one.messageKey());
         assertEquals(16, one.pos().line(), "at the row whose input count is wrong");
     }
 
@@ -166,7 +167,7 @@ class CompileFakeTableWhereWrittenTest {
                 """));
 
         assertEquals(List.of("E1908"), codesOf(e), e.getMessage());
-        assertEquals("check.fake.unbuildable", e.diagnostics().get(0).messageKey());
+        assertEquals("example.the-fake-could-not-be-built", e.diagnostics().get(0).messageKey());
     }
 
     /** A fake written in an attached file is built for that file, and said in it. */
