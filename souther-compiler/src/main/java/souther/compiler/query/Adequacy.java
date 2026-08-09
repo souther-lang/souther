@@ -132,14 +132,30 @@ public final class Adequacy {
                                     MeasurementStatus status, Reason reason) {
 
         /** Why the signature has no numbers. */
-        public enum Reason {
+        public enum Reason implements souther.compiler.observe.MeasureReason {
             /** No row names this behavior, so nothing was established about it either way. */
-            NO_ROWS
+            NO_ROWS(MeasurementStatus.NOT_MEASURED),
+            /** Neither the output nor any input is a sum, so there is no case anywhere for a row to
+             *  cover and no row could make one. Held here rather than read back from the two empty
+             *  case sets below it: a reader that counted them would be answering a different
+             *  question — how many cases there are — and getting this one right by coincidence. */
+            NOT_A_SUM(MeasurementStatus.NOT_APPLICABLE);
+
+            private final MeasurementStatus status;
+
+            Reason(MeasurementStatus status) {
+                this.status = status;
+            }
+
+            @Override
+            public MeasurementStatus status() {
+                return status;
+            }
         }
 
         public static SignatureEvidence unavailable(OutputCaseEvidence output,
                                                     List<InputCaseEvidence> inputs, Reason reason) {
-            return new SignatureEvidence(output, inputs, MeasurementStatus.UNAVAILABLE, reason);
+            return new SignatureEvidence(output, inputs, reason.status(), reason);
         }
 
         public SignatureEvidence {
@@ -568,22 +584,32 @@ public final class Adequacy {
          * row can carry what it went through, and a row has to name the behavior before any of it is
          * about this one.
          */
-        public enum Reason {
+        public enum Reason implements souther.compiler.observe.MeasureReason {
             /** A {@code >->} composition or a behavior with no {@code let}. It has no arms of its own,
              *  so the measure does not apply rather than failing. */
-            NO_BODY,
+            NO_BODY(MeasurementStatus.NOT_APPLICABLE),
             /** The build did not ask for the arms, which cost a second run of every row. */
-            NOT_ASKED,
+            NOT_ASKED(MeasurementStatus.NOT_MEASURED),
             /** The rows ran without instrumentation, so what they went through went with it. */
-            UNREADABLE,
+            UNREADABLE(MeasurementStatus.NOT_MEASURED),
             /** No row names this behavior. The measurement is opted into by writing one, and reaching
              *  the behavior through somebody else's row is not opting in. */
-            NO_ROWS
+            NO_ROWS(MeasurementStatus.NOT_MEASURED);
+
+            private final MeasurementStatus status;
+
+            Reason(MeasurementStatus status) {
+                this.status = status;
+            }
+
+            @Override
+            public MeasurementStatus status() {
+                return status;
+            }
         }
 
         public static BranchEvidence unavailable(Reason reason) {
-            return new BranchEvidence(List.of(), Set.of(), Set.of(),
-                    MeasurementStatus.UNAVAILABLE, reason);
+            return new BranchEvidence(List.of(), Set.of(), Set.of(), reason.status(), reason);
         }
 
         /**
@@ -618,13 +644,12 @@ public final class Adequacy {
         /**
          * Whether this behavior has arms for the measure to be about.
          *
-         * <p>Asked instead of reading {@link Reason#NO_BODY} at each caller. Having nothing to measure
-         * is not the same as failing to measure, and {@link MeasurementStatus} has no word for the
-         * first; {@code NO_BODY} is where that distinction is kept until it does. A caller that read
-         * the constant would be holding the encoding rather than the question.
+         * <p>Read off the status, which now has a word for it. This used to ask after
+         * {@link Reason#NO_BODY} because {@code MeasurementStatus} had none, and every caller that
+         * needed the distinction had to know this measure's reasons to get it.
          */
         public boolean applicable() {
-            return reason != Reason.NO_BODY;
+            return status != MeasurementStatus.NOT_APPLICABLE;
         }
 
         public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
@@ -1197,7 +1222,7 @@ public final class Adequacy {
          *  claims. */
         private static void signatureFindings(Ast.BehaviorDef behavior, Ast.Module module,
                                               SignatureEvidence signature, List<Finding> out) {
-            if (signature == null || signature.status() == MeasurementStatus.UNAVAILABLE) {
+            if (signature == null || !signature.status().counted()) {
                 return;
             }
             MeasurementStatus status = signature.status();
@@ -1237,7 +1262,7 @@ public final class Adequacy {
                 // A class nothing sits in, where nothing was measured, is not a class no row is in.
                 // Stopped here rather than where the line is printed: a finding is something a measure
                 // established, and one from a measure that was never made is not established at all.
-                if (axis.status() == MeasurementStatus.UNAVAILABLE) {
+                if (!axis.status().counted()) {
                     continue;
                 }
                 for (String missing : axis.uncovered()) {
@@ -1480,6 +1505,14 @@ public final class Adequacy {
         // counted, above: its state is dropped rather than read, so it has no arm and no input case
         // and shows up as one nothing could classify.
         partial |= seen.someRowsUnseen();
+        // Asked before the rows are, because it is not about them. A signature with no sum anywhere
+        // in it has nothing for this measure to be about, and writing every row anybody could write
+        // would not give it one — so it is inapplicable rather than unmeasured, and a build is not
+        // told to go and do something about it.
+        if (output.declared().isEmpty()
+                && inputs.stream().allMatch(in -> in.declared().isEmpty())) {
+            return SignatureEvidence.unavailable(output, inputs, SignatureEvidence.Reason.NOT_A_SUM);
+        }
         if (rows.isEmpty() && seen.complete()) {
             return SignatureEvidence.unavailable(output, inputs, SignatureEvidence.Reason.NO_ROWS);
         }

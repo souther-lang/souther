@@ -111,30 +111,37 @@ class AMeasureWithNoNumberSaysWhyTest {
         assertEquals("""
                 example.repro                                            measurement: complete
                   widen                    implemented   rows 0    pending 0
-                    partition   axes 0   single-axis 0/0
-                    boundary    0/0
+                    signature   not applicable (this behavior's output is not a sum)
+                    partition   not measured (no partition axis was derived at any position)
+                    boundary    not measured (no line was derived at any position)
                       · not derivable: w.v
                   narrow                   implemented   rows 0    pending 0
-                    partition   axes 0   single-axis 0/0
-                    boundary    0/0
+                    signature   not applicable (this behavior's output is not a sum)
+                    partition   not measured (no partition axis was derived at any position)
+                    boundary    not measured (no line was derived at any position)
                       · not derivable: m.v
                   both                     implemented   rows 1    pending 0
+                    signature   not applicable (this behavior's output is not a sum)
                     branch      not applicable (this behavior has no body)
                   baseRate                 injected      rows 0    pending 0
-                    partition   axes 0   single-axis 0/0
+                    signature   not applicable (this behavior's output is not a sum)
+                    partition   not measured (no partition axis was derived at any position)
                     boundary    0/0   (2 not measured: no row names this behavior)
                     branch      not applicable (this behavior has no body)
                   rated                    implemented   rows 0    pending 0
-                    partition   axes 0   single-axis 0/0
+                    signature   not applicable (this behavior's output is not a sum)
+                    partition   not measured (no partition axis was derived at any position)
                     boundary    0/0   (2 not measured: no row names this behavior)
                   classify                 implemented   rows 1    pending 0
+                    signature   not applicable (this behavior's output is not a sum)
                     partition   axes 1   single-axis 1/2
                       · no row is in `No`
-                    boundary    0/0
+                    boundary    not measured (no line was derived at any position)
                     branch      0/0
                   sift                     implemented   rows 0    pending 0
+                    signature   not applicable (this behavior's output is not a sum)
                     partition   axes 2   single-axis 0/0   (2 not measured: no row names this behavior)
-                    boundary    0/0
+                    boundary    not measured (no line was derived at any position)
 
                 7 behaviors: 6 implemented, 1 injected; 0 rows waiting for a `let`.
                 adequacy: undetermined
@@ -182,7 +189,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     void thePairsOfABehaviorNoRowNamesAreNotCountedEither() {
         PartitionEvidence.PairSpace pairs = partitions().get("sift").pairs();
         assertEquals(4, pairs.total(), "two positions of two classes each");
-        assertEquals(MeasurementStatus.UNAVAILABLE, pairs.status());
+        assertEquals(MeasurementStatus.NOT_MEASURED, pairs.status());
         assertEquals(PartitionEvidence.PairSpace.Reason.NO_ROWS, pairs.reason());
         assertFalse(behaviorBlock(human(), "sift").contains("pairs"),
                 "untried is what nobody tried, and nobody was asked");
@@ -192,7 +199,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void aCompositionSaysItsArmsDoNotApply() {
         Adequacy.BranchEvidence branch = branches().get("both");
-        assertEquals(MeasurementStatus.UNAVAILABLE, branch.status());
+        assertEquals(MeasurementStatus.NOT_APPLICABLE, branch.status());
         assertEquals(Adequacy.BranchEvidence.Reason.NO_BODY, branch.reason());
         assertFalse(branch.applicable(), "nothing here is owed a branch measure");
     }
@@ -212,6 +219,21 @@ class AMeasureWithNoNumberSaysWhyTest {
         Adequacy.BranchEvidence branch = branches().get("rated");
         assertEquals(Adequacy.BranchEvidence.Reason.NO_ROWS, branch.reason());
         assertTrue(branch.applicable(), "there are arms here; nothing asked about them");
+    }
+
+    /**
+     * The two are different answers, and the status says which.
+     *
+     * <p>A measure with nothing to be about and a measure nobody asked ask opposite things of
+     * whoever reads them: the first wants nothing, and the second wants a row written. Held as one
+     * status apart by each measure's own reason, only a reader that knows that measure's reasons can
+     * tell them apart — so every reader that has to rebuilt it, and a measure whose reasons nobody
+     * had in mind was read as whichever the rebuild happened to favour.
+     */
+    @Test
+    void aMeasureThatDoesNotApplyIsNotTheSameStatusAsOneNobodyMade() {
+        assertNotEquals(branches().get("rated").status(), branches().get("both").status(),
+                "a body no row names and a composition with no arms are not one answer");
     }
 
     /** A line an invariant drew is met by writing the value, so it is never waiting on the arms.
@@ -325,14 +347,59 @@ class AMeasureWithNoNumberSaysWhyTest {
     }
 
     /**
-     * The contract, both ways, over every measure the model produced.
+     * A measure that answers with a number, or with which of the two kinds of no-number it is.
      *
-     * <p>Both ways because one way alone lets the opposite mistake in. Without the first a measure
-     * can go back to coming home empty and silent; without the second a measure can carry a reason
-     * beside a number, which says a value is missing and gives it in the same breath.
+     * <p>There is no fifth state and no way to build one: the reason a measure gives says which kind
+     * it is, and a measure with a number has no reason to give. Held over every measure of the model
+     * rather than over the ones a test remembered, so that a measure added later is in it.
      */
     @Test
-    void aMeasureWithNoNumberSaysWhyAndOneWithANumberDoesNot() {
+    void everyMeasureAnswersWithANumberOrWithWhichKindOfNoNumber() {
+        List<Object[]> measures = allMeasures();
+        assertTrue(measures.size() > 20, "the model produces every kind: " + measures.size());
+        for (Object[] measure : measures) {
+            MeasurementStatus status = (MeasurementStatus) measure[1];
+            souther.compiler.observe.MeasureReason reason =
+                    (souther.compiler.observe.MeasureReason) measure[2];
+            if (status.counted()) {
+                assertNull(reason, measure[0] + " has a number and says why it has none");
+            } else {
+                assertNotNull(reason, measure[0] + " has no number and does not say why");
+                assertEquals(status, reason.status(),
+                        measure[0] + " is one kind of no-number and its reason is the other");
+            }
+        }
+    }
+
+    /**
+     * What the verdict does with each kind.
+     *
+     * <p>The two are the whole reason for telling them apart. A measure nothing was ever going to be
+     * measured at is not a doubt anybody can act on; a measure that could have found a gap and was
+     * not made is exactly one. Asked of one model holding both, so that neither answer is the
+     * accident of a fixture with only one kind in it.
+     */
+    @Test
+    void aMeasureThatWasNotMadeHoldsTheVerdictOpenAndAnInapplicableOneDoesNot() {
+        AdequacyReport report = AdequacyReport.of(compiled());
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(), report.human());
+
+        List<Object[]> measures = allMeasures();
+        assertTrue(measures.stream().anyMatch(m -> m[1] == MeasurementStatus.NOT_APPLICABLE),
+                "the model holds an inapplicable measure");
+        assertTrue(measures.stream().anyMatch(m -> m[1] == MeasurementStatus.NOT_MEASURED),
+                "and one nobody made");
+
+        // Every behavior of the model whose signature does not apply still reads `satisfied` where
+        // the measures that were asked came to an answer — the inapplicable ones are not what holds
+        // this open. `classify` is the one whose positions were divided and whose arms were run.
+        String classify = behaviorBlock(human(), "classify");
+        assertTrue(classify.contains("not applicable"), classify);
+        assertTrue(classify.contains("branch      0/0"), classify);
+    }
+
+    /** Every measure the model produces, as (what it is, its status, its reason). */
+    private static List<Object[]> allMeasures() {
         List<Object[]> measures = new ArrayList<>();
         for (Map.Entry<String, Adequacy.BranchEvidence> each : branches().entrySet()) {
             measures.add(new Object[] {"branch " + each.getKey(),
@@ -348,35 +415,37 @@ class AMeasureWithNoNumberSaysWhyTest {
         }
         for (Map.Entry<String, PartitionEvidence> each : partitions().entrySet()) {
             PartitionEvidence partition = each.getValue();
+            measures.add(new Object[] {"partition " + each.getKey(),
+                    partition.partitioned().status(), partition.partitioned().reason()});
+            measures.add(new Object[] {"boundary " + each.getKey(),
+                    partition.bounded().status(), partition.bounded().reason()});
             measures.add(new Object[] {"pairs " + each.getKey(),
                     partition.pairs().status(), partition.pairs().reason()});
             partition.axes().forEach(a -> measures.add(
                     new Object[] {"axis " + each.getKey(), a.status(), a.reason()}));
             partition.boundaries().forEach(b -> measures.add(
-                    new Object[] {"boundary " + each.getKey(), b.status(), b.reason()}));
+                    new Object[] {"line " + each.getKey(), b.status(), b.reason()}));
         }
-        assertTrue(measures.size() > 20, "the model produces every kind: " + measures.size());
-        for (Object[] measure : measures) {
-            if (measure[1] == MeasurementStatus.UNAVAILABLE) {
-                assertNotNull(measure[2], measure[0] + " has no number and does not say why");
-            } else {
-                assertNull(measure[2], measure[0] + " has a number and says why it has none");
-            }
-        }
+        return measures;
     }
 
     /** Held where the value is built, so that no measure can be assembled without it. */
     @Test
     void aMeasureCannotBeBuiltWithoutKeepingThatContract() {
+        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.Partitioned(
+                List.of(), MeasurementStatus.NOT_MEASURED, null));
+        assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.Bounded(
+                List.of(), MeasurementStatus.COMPLETE,
+                PartitionEvidence.Bounded.Reason.NO_LINES_DERIVED));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
                 List.of(), java.util.Set.of(), java.util.Set.of(),
-                MeasurementStatus.UNAVAILABLE, null));
+                MeasurementStatus.NOT_MEASURED, null));
         assertThrows(IllegalArgumentException.class, () -> new Adequacy.BranchEvidence(
                 List.of(), java.util.Set.of(), java.util.Set.of(),
                 MeasurementStatus.COMPLETE, Adequacy.BranchEvidence.Reason.NO_BODY));
         assertThrows(IllegalArgumentException.class, () -> new PartitionEvidence.AxisCoverage(
                 "a", "a", List.of(), java.util.Set.of(), List.of(), 0,
-                MeasurementStatus.UNAVAILABLE, null));
+                MeasurementStatus.NOT_MEASURED, null));
     }
 
     private static String behaviorBlock(String human, String behavior) {

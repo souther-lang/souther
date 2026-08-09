@@ -14,7 +14,7 @@ import souther.compiler.observe.MeasurementStatus;
 final class Unavailable {
 
     static void check(MeasurementStatus status, Object reason) {
-        if ((status == MeasurementStatus.UNAVAILABLE) != (reason != null)) {
+        if (status.counted() == (reason != null)) {
             throw new IllegalArgumentException(status + " with " + reason);
         }
     }

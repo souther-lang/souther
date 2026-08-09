@@ -61,9 +61,20 @@ public record OutputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified
     }
 
     /** Why a behavior's output cases have no numbers. */
-    public enum Reason {
+    public enum Reason implements MeasureReason {
         /** The output is one data rather than a sum, so there is no case to cover and no row can
          *  fail to cover it. */
-        NOT_A_SUM
+        NOT_A_SUM(MeasurementStatus.NOT_APPLICABLE);
+
+        private final MeasurementStatus status;
+
+        Reason(MeasurementStatus status) {
+            this.status = status;
+        }
+
+        @Override
+        public MeasurementStatus status() {
+            return status;
+        }
     }
 }

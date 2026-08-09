@@ -87,7 +87,8 @@ final class Coverages {
                 divided.add(axis);
             }
         }
-        return new PartitionEvidence(axes, boundaries, pairsOf(divided, readings),
+        return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
+                PartitionEvidence.Bounded.of(boundaries), pairsOf(divided, readings),
                 notDerivable, partitioning.omitted(),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));

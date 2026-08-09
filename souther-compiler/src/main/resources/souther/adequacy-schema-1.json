@@ -222,8 +222,8 @@
       "properties": {
         "status": { "$ref": "#/$defs/status" },
         "reason": {
-          "description": "Why there is no number, present exactly where `status` is `unavailable`.",
-          "enum": ["no_rows"]
+          "description": "Why there is no number, present exactly where `status` is `unavailable`. `no_rows` is a behavior no row names; `not_a_sum` is a signature with no sum anywhere in it, which no row could give a case to cover.",
+          "enum": ["no_rows", "not_a_sum"]
         },
         "output": {
           "type": "object",

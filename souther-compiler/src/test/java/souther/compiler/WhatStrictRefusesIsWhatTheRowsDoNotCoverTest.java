@@ -258,7 +258,8 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
 
     private static PartitionEvidence partition(BoundaryAssessment boundary,
                                                Partitions.OmittedAxis... omitted) {
-        return new PartitionEvidence(List.of(), List.of(boundary), PartitionEvidence.PairSpace.NONE,
+        return new PartitionEvidence(PartitionEvidence.Partitioned.of(List.of()),
+                PartitionEvidence.Bounded.of(List.of(boundary)), PartitionEvidence.PairSpace.NONE,
                 List.of(), List.of(omitted), List.of());
     }
 

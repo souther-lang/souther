@@ -64,19 +64,34 @@ class EverySchemaWordIsAccountedForTest {
      * @param at the field, as the keys leading to it from the root of the schema
      */
     private record Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source,
-                              Set<String> retired) {
+                              Set<String> written, Set<String> retired) {
 
         Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source) {
-            this(label, at, source, Set.of());
+            this(label, at, source, null, Set.of());
+        }
+
+        Vocabulary(String label, List<String> at, Class<? extends Enum<?>> source,
+                   Set<String> retired) {
+            this(label, at, source, null, retired);
+        }
+
+        /** A field whose words are not an enum's own names. {@link #source} is what they are
+         * projected from, named so a reader knows where to look, and not what they are spelled by. */
+        Vocabulary(String label, List<String> at, Set<String> written) {
+            this(label, at, MeasurementStatus.class, written, Set.of());
         }
 
         /** Every word a document of this version may carry: what is written now, and what was. */
         Set<String> allowed() {
-            Set<String> out = new LinkedHashSet<>(wordsOf(source));
+            Set<String> out = new LinkedHashSet<>(written == null ? wordsOf(source) : written);
             out.addAll(retired);
             return out;
         }
     }
+
+    /** What a document may say a status is. Two of the compiler's four states share one of them. */
+    private static final Set<String> STATUS_WORDS =
+            new LinkedHashSet<>(List.of("complete", "partial", "unavailable"));
 
     /**
      * Every enumerated field the schema has.
@@ -88,8 +103,14 @@ class EverySchemaWordIsAccountedForTest {
     private static final List<Vocabulary> VOCABULARIES = List.of(
             new Vocabulary("adequacy", List.of("properties", "adequacy"),
                     AdequacyReport.AdequacyStatus.class),
-            new Vocabulary("status", List.of("$defs", "status"),
-                    MeasurementStatus.class),
+            // `status` is the one enumerated field written through a projection rather than off an
+            // enum's own names. The compiler tells a measure with nothing to be about from one nobody
+            // made; a document says `unavailable` for both and leaves which to the `reason` beside it.
+            // So the words here are the projection's image, which
+            // `theStatusWordsAreWhatTheWriterCanWrite` holds against the writer — naming a state
+            // inside the compiler is not a change to the contract, and would be one if this read
+            // the constants.
+            new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
             new Vocabulary("branch.reason", List.of("$defs", "branch", "properties", "reason"),
                     Adequacy.BranchEvidence.Reason.class),
             new Vocabulary("branch.unreached[].kind",
@@ -123,6 +144,23 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("incompleteness.code",
                     List.of("$defs", "incompleteness", "properties", "code"),
                     Incompleteness.Code.class, Set.of("probe_mapping_lost")));
+
+    /**
+     * The status words the schema allows are the ones the writer can write.
+     *
+     * <p>Held against the writer because that is what a document carries. The list above is what a
+     * consumer must handle, and a projection that started answering a fourth word would leave that
+     * list true of nothing — the schema and the enum would still agree, and the documents would
+     * agree with neither.
+     */
+    @Test
+    void theStatusWordsAreWhatTheWriterCanWrite() {
+        Set<String> written = new LinkedHashSet<>();
+        for (MeasurementStatus status : MeasurementStatus.values()) {
+            written.add(AdequacyReport.wire(status));
+        }
+        assertEquals(STATUS_WORDS, written);
+    }
 
     @Test
     void everyEnumeratedFieldNamesCurrentOrRetiredWords() {
