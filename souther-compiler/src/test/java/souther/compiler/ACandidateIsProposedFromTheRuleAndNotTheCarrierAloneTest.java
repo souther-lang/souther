@@ -177,6 +177,23 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         assertEquals("T { kind = Overseas, name = Name(\"xxxxx\") }", row);
     }
 
+    /**
+     * A string is counted in characters, and how many of those are worth writing is its own question.
+     *
+     * <p>A collection of sixty-five is sixty-five values each built in turn; a string of sixty-five is
+     * one literal. Holding the two to one number is holding a string to a limit nothing about it
+     * suggests, and the type here is one the model plainly admits.
+     */
+    @Test
+    void aStringsLengthIsNotBoundedByWhatACollectionHolds() {
+        String row = generatedRow(model("""
+                data Token = String
+                    invariant longEnough = String.length(value) >= 65
+                """, "token: Token", "token = Token(\"" + "a".repeat(65) + "\")"));
+
+        assertEquals("T { kind = Overseas, token = Token(\"" + "x".repeat(65) + "\") }", row);
+    }
+
     @Test
     void aStringWhoseMinimumIsOneIsStillOfferedTheOneCharacterValue() {
         String row = generatedRow(model("""
@@ -391,10 +408,54 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
 
         assertEquals(List.of(), filled.rows(),
                 "no row, rather than one carrying a million elements");
+        // Not `ALL_CANDIDATES_REJECTED`. A list of a million exists and somebody could write one; what
+        // happened is that this declined to build it, which is a fact about the generator. Reporting it
+        // as a refusal would send a reader to look for the rule that refuses a value nothing refuses.
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason
-                                .ALL_CANDIDATES_REJECTED),
-                "and refused, which is what a rule nothing can be built for is: "
+                                .NOTHING_COMPOSES_ONE),
+                "and said as this not composing one rather than as the model refusing it: "
+                        + filled.unresolved());
+    }
+
+    /**
+     * More pairings of what a map's parts propose than are built at once.
+     *
+     * <p>Every pair is built before any of them is tried, so the count is what this allocates and not
+     * what the search walks. Where it stops short the reader is owed that: values of the shape were
+     * built and refused, and more of them exist that nothing here got to.
+     */
+    @Test
+    void moreParingsThanAreBuiltIsSaidAsASearchThatStopped() {
+        String formats = "";
+        for (int i = 1; i <= 8; i++) {
+            formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
+        }
+        Generator.GenerationResult filled = generated("""
+                module nd.gen
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
+                data K = String
+                %s
+                data V = String
+                %s
+                data M = Map<K, V>
+                    invariant nonEmpty = Map.size(value) >= 1
+
+                data T = { kind: Kind, m: M }
+
+                behavior look : (t: T) -> Int
+
+                let look (t) = 1
+                """.formatted(formats, formats));
+
+        assertEquals(List.of(), filled.rows(), "no two of the eight formats hold at once");
+        assertTrue(filled.unresolved().stream().allMatch(left ->
+                        left.reason() == Generator.UnresolvedCombination.Reason.SEARCH_LIMIT),
+                "and the pairings this did not build are said as a search that stopped: "
                         + filled.unresolved());
     }
 

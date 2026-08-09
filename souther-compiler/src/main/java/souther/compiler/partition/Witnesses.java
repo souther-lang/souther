@@ -50,6 +50,15 @@ final class Witnesses {
      * and complete, and a minimum past this asks for one nobody would. */
     private static final int MOST_ELEMENTS = 64;
 
+    /** How many characters a proposed string is worth building. Its own number, because a string of
+     * sixty-five is one literal where a collection of sixty-five is sixty-five values each built in
+     * turn — holding the two to one figure bounds a string by something about collections. */
+    private static final int MOST_CHARACTERS = 4096;
+
+    /** How many pairings of what a map's key and value propose are built at once. Every pair is built
+     * before any of them is tried, so this bounds what is allocated rather than what is walked. */
+    private static final int MOST_PAIRINGS = 64;
+
     /**
      * Values of {@code carrier} holding at least {@code least} of whatever counts it, or none where
      * this can build none.
@@ -60,7 +69,7 @@ final class Witnesses {
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
                                          Set<TypeName> expanding) {
-        if (carrier == null || least <= 0 || least > MOST_ELEMENTS) {
+        if (carrier == null || least <= 0 || pastWhatIsBuilt(carrier, least)) {
             return List.of();
         }
         // A string is counted by its characters, and one character is as good as another where the
@@ -101,10 +110,13 @@ final class Witnesses {
             // Every pair, nearest first. A key's rules and a value's are answered together or not at
             // all — the pair is inside one position, so no search outside can put a key's second
             // proposal beside a value's first — and taking them in step would offer only the pairs
-            // whose two proposals happen to have been read in the same order.
-            for (int apart = 0; apart <= keys.size() + values.size() - 2; apart++) {
+            // whose two proposals happen to have been read in the same order. Nearest first is what
+            // makes the bound below cost the least: what it drops is the pairs furthest from what
+            // either side proposed first.
+            for (int apart = 0;
+                    apart <= keys.size() + values.size() - 2 && out.size() < MOST_PAIRINGS; apart++) {
                 for (int i = Math.max(0, apart - values.size() + 1);
-                        i <= Math.min(apart, keys.size() - 1); i++) {
+                        i <= Math.min(apart, keys.size() - 1) && out.size() < MOST_PAIRINGS; i++) {
                     FixtureTemplate value = values.get(apart - i);
                     List<FixtureTemplate> entries = new ArrayList<>();
                     for (FixtureTemplate key
@@ -117,6 +129,34 @@ final class Witnesses {
             return List.copyOf(out);
         }
         return List.of();
+    }
+
+    /**
+     * Whether a count a rule asks for is past what this builds a value at.
+     *
+     * <p>Asked here as well as used here, so that what a reader is told about a position and what the
+     * position did are the same decision. A count past this is not a rule nothing satisfies — a list of
+     * a million exists and somebody could write one — so what it leaves is a fact about this rather
+     * than about the model, and it has to be reported as one.
+     */
+    static boolean pastWhatIsBuilt(Type carrier, int least) {
+        if (least <= 0) {
+            return false;
+        }
+        if (carrier == Type.STRING) {
+            return least > MOST_CHARACTERS;
+        }
+        return (carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
+                || carrier instanceof Type.MapOf) && least > MOST_ELEMENTS;
+    }
+
+    /** Whether a map's key and value propose more pairs between them than are built at once. */
+    static boolean moreThanIsPaired(Type carrier, Symbols symbols) {
+        if (!(carrier instanceof Type.MapOf map)) {
+            return false;
+        }
+        return proposalsFor(map.key(), symbols, Set.of()).size()
+                * proposalsFor(map.value(), symbols, Set.of()).size() > MOST_PAIRINGS;
     }
 
     /**

@@ -807,6 +807,28 @@ public final class Partitions {
     }
 
     /**
+     * Why a position offered less than its rules allow, or null where it offered everything.
+     *
+     * <p>Two things are told apart from a refusal here, and both are facts about this rather than about
+     * the model. A count past what a row is built to carry means no value of the shape the rule asks
+     * for was built at all — a list of a million exists and somebody could write one — so a reader told
+     * "every value tried was refused" would go looking for the rule that refuses a value nothing
+     * refuses. More pairings between a map's key and value than are built at once means values of the
+     * shape were built and refused and more of them were never reached, which is a search that stopped.
+     *
+     * <p>Asked only where nothing was written. It re-reads what a position could have offered, and a
+     * row that was written has no reason to pay for that.
+     */
+    static Generator.UnresolvedCombination.Reason notBuilt(Type type, Symbols symbols) {
+        Type carrier = TypeOps.base(type, symbols);
+        if (Witnesses.pastWhatIsBuilt(carrier, leastHeld(type, symbols))) {
+            return Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+        }
+        return Witnesses.moreThanIsPaired(carrier, symbols)
+                ? Generator.UnresolvedCombination.Reason.SEARCH_LIMIT : null;
+    }
+
+    /**
      * The {@code index}th number the rules on {@code type} leave it able to hold, or null where it has
      * no such number.
      *
