@@ -58,4 +58,19 @@ sealed interface Witness {
      * would be telling an author to change a space that should be a line break.
      */
     record BetweenTwoTokens(Boundary unit, String canonical, String source) implements Witness {}
+
+    /**
+     * The separation rule's unit: two top-level items, one written after the other.
+     *
+     * <p>A pair, because what the rule says is what stands between them. A blank line is two breaks
+     * at one adjacency and the rule did not answer twice, so a witness per break would be counting
+     * the newlines the layout wrote.
+     */
+    record Items(Place previous, Place next) {}
+
+    /**
+     * The separation rule at one pair of items: how many blank lines the canonical form writes
+     * between them, and how many the source wrote.
+     */
+    record Separation(Items unit, int canonical, int source) implements Witness {}
 }

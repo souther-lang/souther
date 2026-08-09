@@ -130,6 +130,84 @@ final class Witnesses {
     }
 
     /**
+     * What the separation rule has against {@code source}.
+     *
+     * <p>One witness per pair of adjacent top-level items, and the answer is a count of blank
+     * lines. The canonical form's is read from the decision — whether it wrote the break it writes
+     * for that obligation — and the source's from the text, which is all a source has.
+     *
+     * <p>The gap is taken whole, comments and all. A comment written between two items is carried
+     * by the second, so what stands between the first and that comment is the separation, and blank
+     * lines anywhere in the gap are lines the canonical form does not write.
+     */
+    static List<Witness> separation(String source, Formatter.CanonicalForm canonical) {
+        List<Place> items = topLevel(canonical);
+        List<Witness> out = new ArrayList<>();
+        for (int i = 0; i + 1 < items.size(); i++) {
+            Place previous = items.get(i);
+            Place next = items.get(i + 1);
+            int writes = separates(canonical, previous, next) ? 1 : 0;
+            Integer has = blankLines(source, canonical, previous, next);
+            if (has != null && has != writes) {
+                out.add(new Witness.Separation(new Witness.Items(previous, next), writes, has));
+            }
+        }
+        return out;
+    }
+
+    /** The file's items, in the order the canonical form writes them. */
+    private static List<Place> topLevel(Formatter.CanonicalForm canonical) {
+        Place file = canonical.construction().places().file();
+        List<Place> out = new ArrayList<>();
+        for (Place p : canonical.construction().places().made()) {
+            if (p.parent() == file && canonical.layout().extents().containsKey(p)) {
+                out.add(p);
+            }
+        }
+        out.sort(java.util.Comparator.comparingInt(
+                p -> canonical.layout().extents().get(p).start()));
+        return out;
+    }
+
+    /** Whether the canonical form wrote the break it writes to separate two items. */
+    private static boolean separates(Formatter.CanonicalForm canonical, Place previous, Place next) {
+        int from = canonical.layout().extents().get(previous).end();
+        int to = canonical.layout().extents().get(next).start();
+        for (Newline n : canonical.layout().breaks()) {
+            if (n.offset() >= from && n.offset() < to
+                    && n.cause() instanceof Newline.Cause.Forced f
+                    && f.obligation() == Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** How many lines the source left blank between two items, or null where it has nothing for
+     *  one of them. */
+    private static Integer blankLines(String source, Formatter.CanonicalForm canonical,
+            Place previous, Place next) {
+        List<Written> before = canonical.construction().places().sourcesOf(previous);
+        List<Written> after = canonical.construction().places().sourcesOf(next);
+        if (before.isEmpty() || after.isEmpty()) {
+            return null;
+        }
+        int from = before.get(before.size() - 1).end();
+        int to = after.get(0).start();
+        if (from > to || to > source.length()) {
+            return null;
+        }
+        String[] lines = source.substring(from, to).split("\n", -1);
+        int blank = 0;
+        for (int i = 1; i + 1 < lines.length; i++) {
+            if (lines[i].isBlank()) {
+                blank++;
+            }
+        }
+        return blank;
+    }
+
+    /**
      * The boundaries of {@code doc} that stand between two of its code tokens, in the order they
      * are written and one per adjacency.
      *
