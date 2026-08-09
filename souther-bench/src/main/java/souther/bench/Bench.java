@@ -6,9 +6,9 @@ import java.util.List;
 /**
  * The benchmarks, run from the command line: {@code java -jar souther-bench.jar [measurement...]}.
  *
- * <p>With no argument it runs all four. Naming one runs only that, which is how a change is checked
- * against the thing it was meant to move without waiting for the rest — {@code scale} in particular
- * compiles two hundred modules five times over.
+ * <p>With no argument it runs all of them. Naming one runs only that, which is how a change is
+ * checked against the thing it was meant to move without waiting for the rest — {@code scale} in
+ * particular compiles two hundred modules five times over.
  *
  * <pre>
  *   cold    one compile in a JVM that has not compiled before
@@ -17,6 +17,7 @@ import java.util.List;
  *   edit    what an edit costs a store that already holds the answers
  *   run     what the generated code costs to run, per element
  *   scale   how a whole-workspace compile grows with the number of modules
+ *   values  how one module's compile grows with the number of values it declares
  * </pre>
  *
  * <p>Every corpus is compiled once and checked before anything is timed. A language change that
@@ -30,7 +31,7 @@ public final class Bench {
     public static void main(String[] args) {
         Report report = new Report(System.out);
         List<String> wanted = args.length == 0
-                ? List.of("cold", "warm", "phase", "edit", "run", "scale")
+                ? List.of("cold", "warm", "phase", "edit", "run", "scale", "values")
                 : new ArrayList<>(List.of(args));
 
         List<Corpus> corpora = Corpus.all();
@@ -73,6 +74,10 @@ public final class Bench {
         }
         if (wanted.contains("scale")) {
             Scale.measure(report);
+            report.blank();
+        }
+        if (wanted.contains("values")) {
+            Values.measure(report);
         }
     }
 }
