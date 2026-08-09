@@ -69,6 +69,15 @@ public record MessageTemplate(List<Part> parts) {
                 at += 2;
                 continue;
             }
+            // A closing brace on its own is refused for the same reason an opening one is: the two
+            // are the same rule, and a grammar that closed only one of them would take `{name}}` —
+            // a placeholder and a stray brace — for something a reader was meant to see.
+            if (c == '}') {
+                flush(text, parts);
+                parts.add(new Part.Malformed("}", "a closing brace nothing opens"));
+                at++;
+                continue;
+            }
             if (c != '{') {
                 text.append(c);
                 at++;
