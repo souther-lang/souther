@@ -27,7 +27,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
     /** Two documents laid out to one text, for two reasons. */
     @Test
     void aWidthBreakAndAForcedBreakWriteTheSameCharacters() {
-        Doc tooWide = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, Doc.text("cd")));
+        Doc tooWide = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd")));
         Doc forced = Doc.group(Doc.concat(Doc.text("ab"), Doc.hardline(), Doc.text("cd")));
 
         Layout byWidth = tooWide.layout(4);
@@ -48,7 +48,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
     /** And a group that fits says so, rather than saying nothing. */
     @Test
     void andAGroupThatFitsIsADecisionToo() {
-        Doc fits = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, Doc.text("cd")));
+        Doc fits = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd")));
 
         Layout layout = fits.layout(100);
 
@@ -61,8 +61,8 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
      * kind of group. */
     @Test
     void andTwoGroupsWrittenTheSameWayAreTwoDecisions() {
-        Doc one = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, Doc.text("cd")));
-        Doc other = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, Doc.text("cd")));
+        Doc one = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd")));
+        Doc other = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd")));
 
         Layout layout = Doc.concat(one, Doc.hardline(), other).layout(100);
 
@@ -76,7 +76,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
      * layout's to say and not something a reader counts off the line. */
     @Test
     void andTheColumnAGroupWasMeasuredAtIsItsOwn() {
-        Doc inner = Doc.group(Doc.concat(Doc.text("cd"), Doc.LINE, Doc.text("ef")));
+        Doc inner = Doc.group(Doc.concat(Doc.text("cd"), Doc.line(), Doc.text("ef")));
         Layout layout = Doc.concat(Doc.text("ab "), inner).layout(100);
 
         assertEquals("ab cd ef", layout.text());
@@ -90,8 +90,8 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
      */
     @Test
     void everyGroupIsOneDecisionAndMeasuringTakesNone() {
-        Doc inner = Doc.group(Doc.concat(Doc.text("cd"), Doc.LINE, Doc.text("ef")));
-        Doc outer = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, inner));
+        Doc inner = Doc.group(Doc.concat(Doc.text("cd"), Doc.line(), Doc.text("ef")));
+        Doc outer = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), inner));
 
         Layout layout = outer.layout(100);
 
@@ -104,8 +104,8 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
      * answered about a group it made up, which is why this reads the identities. */
     @Test
     void andADecisionNamesTheGroupThatWasLaidOut() {
-        Doc inner = Doc.group(Doc.concat(Doc.text("cd"), Doc.LINE, Doc.text("ef")));
-        Doc outer = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, inner));
+        Doc inner = Doc.group(Doc.concat(Doc.text("cd"), Doc.line(), Doc.text("ef")));
+        Doc outer = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), inner));
 
         List<Doc.GroupRef> laidOut = outer.layout(100).decisions().stream()
                 .map(GroupDecision::group).toList();
