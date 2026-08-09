@@ -1,5 +1,11 @@
 package souther.compiler.fmt;
 
+import souther.compiler.cst.CstParser;
+import souther.compiler.cst.SyntaxElement;
+import souther.compiler.cst.SyntaxKind;
+import souther.compiler.cst.SyntaxNode;
+import souther.compiler.cst.SyntaxToken;
+
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -77,6 +83,96 @@ final class Witnesses {
             }
         }
         return out;
+    }
+
+    /**
+     * What the spacing rule has against {@code source}.
+     *
+     * <p>One boundary of the canonical form at a time, and only the ones it writes on a line. Where
+     * it breaks a boundary there is no spacing it wrote, so a source that has a space there is not
+     * spacing it wrongly — it is breaking somewhere else, and the break rules answer for that. A
+     * report that skipped this said of twenty-one boundaries that a space should be another space
+     * when what belongs there is a line break.
+     *
+     * <p>The two token streams are held side by side, which is sound while they are the same
+     * stream. The canonicalization that rewrites a definition's lambda writes tokens the source has
+     * not, and there this refuses rather than pairing the wrong two: an alignment it cannot make is
+     * not one it should guess.
+     */
+    static List<Witness> spacing(String source, Formatter.CanonicalForm canonical) {
+        String text = canonical.layout().text();
+        List<SyntaxToken> had = code(CstParser.parse(source).root());
+        List<SyntaxToken> writes = code(CstParser.parse(text).root());
+        if (had.size() != writes.size()) {
+            throw new IllegalStateException(
+                    "the source has " + had.size() + " tokens and its canonical form "
+                            + writes.size() + "; the two cannot be held side by side and this rule"
+                            + " asks what the source has between the same two");
+        }
+        List<Gaps.Boundary> boundaries = between(canonical.construction().doc(), writes.size());
+        List<Witness> out = new ArrayList<>();
+        for (int i = 0; i + 1 < writes.size(); i++) {
+            String wrote = text.substring(writes.get(i).end(), writes.get(i + 1).start());
+            if (wrote.indexOf('\n') >= 0) {
+                continue;   // the canonical form breaks here, so it writes no spacing
+            }
+            String has = source.substring(had.get(i).end(), had.get(i + 1).start());
+            if (has.indexOf('\n') >= 0 || has.equals(wrote)) {
+                continue;   // the source broke here instead, or wrote the same
+            }
+            Gaps.Boundary b = boundaries.get(i);
+            out.add(new Witness.BetweenTwoTokens(
+                    new Witness.Boundary(i, b.joining(), writes.get(i).kind(),
+                            writes.get(i + 1).kind()),
+                    wrote, has));
+        }
+        return out;
+    }
+
+    /**
+     * The boundaries of {@code doc} that stand between two of its code tokens, in the order they
+     * are written and one per adjacency.
+     *
+     * <p>{@link Gaps#boundaries} reports the ones at the ends too — in front of a leading comment,
+     * and after the last token where the file's own break is — and those join nothing. Left in, the
+     * list is off by one from the adjacencies and every construct a witness names past that point
+     * is the wrong one. The count is held rather than assumed.
+     */
+    private static List<Gaps.Boundary> between(TokenDoc doc, int tokens) {
+        List<Gaps.Boundary> out = new ArrayList<>();
+        for (Gaps.Boundary b : Gaps.boundaries(doc)) {
+            if (b.left() != null && b.right() != null) {
+                out.add(b);
+            }
+        }
+        if (out.size() != tokens - 1) {
+            throw new IllegalStateException(
+                    "the canonical form has " + tokens + " tokens and " + out.size()
+                            + " boundaries between two of them; there is one per adjacency, and a"
+                            + " witness names the construct joining a boundary by that count");
+        }
+        return out;
+    }
+
+    /** The file's tokens, comments and whitespace left out. */
+    private static List<SyntaxToken> code(SyntaxNode node) {
+        List<SyntaxToken> out = new ArrayList<>();
+        collect(node, out);
+        return out;
+    }
+
+    private static void collect(SyntaxNode node, List<SyntaxToken> out) {
+        for (SyntaxElement e : node.children()) {
+            switch (e) {
+                case SyntaxNode n -> collect(n, out);
+                case SyntaxToken t -> {
+                    if (!t.isTrivia() && t.kind() != SyntaxKind.LINE_COMMENT
+                            && t.kind() != SyntaxKind.EOF) {
+                        out.add(t);
+                    }
+                }
+            }
+        }
     }
 
     /** How much further in the canonical form writes {@code inner} than {@code outer}, or null

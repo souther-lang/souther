@@ -1,5 +1,7 @@
 package souther.compiler.fmt;
 
+import souther.compiler.cst.SyntaxKind;
+
 /**
  * A rule, one of its units, what the canonical form has there and what the source has instead.
  *
@@ -36,4 +38,24 @@ sealed interface Witness {
      * two writes every line inside it in the wrong column, and what it got wrong is one step.
      */
     record Indentation(Levels unit, int canonical, int source) implements Witness {}
+
+    /**
+     * The spacing rule's unit: one boundary of the canonical form, named by which adjacency of its
+     * tokens it is and by what the rule was asked about there.
+     *
+     * <p>An occurrence and not a kind of boundary. One adjacency is one evaluation of this rule —
+     * which is what makes it the one family where a difference in the text and a decision are the
+     * same count — so two boundaries the rule answers the same way are two units.
+     */
+    record Boundary(int adjacency, SyntaxKind joining, SyntaxKind left, SyntaxKind right) {}
+
+    /**
+     * The spacing rule at one boundary: what the canonical form writes between the two tokens, and
+     * what the source wrote there.
+     *
+     * <p>Only where the canonical form writes both of them on one line. Where it breaks the
+     * boundary there is no spacing it writes, and a witness saying the source's space is wrong
+     * would be telling an author to change a space that should be a line break.
+     */
+    record BetweenTwoTokens(Boundary unit, String canonical, String source) implements Witness {}
 }
