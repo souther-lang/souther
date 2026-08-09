@@ -677,21 +677,25 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * sentence said it did.
      *
      * <p>An anchor is neither. It is what the reader types, and it moves with the section it names.
+     *
+     * <p>Asked of the resolver the reader's own lookup goes through, not of the headings it lists.
+     * A name is more than a heading's: a rule written mid-section carries its own anchor so a
+     * diagnostic can point at the rule rather than the chapter around it, a section answers to the
+     * codes in its {@code also-named}, and all of them are matched canonically. Held against the
+     * list of headings instead, this refuses `+no-two-declarations-become-one-class+` — which is
+     * exactly the kind of thing worth citing, and which {@code souther doc} reads out.
      */
     @Test
     void everySectionAMessageCitesIsOneAReaderCanRead() throws IOException {
-        Set<String> anchors = new TreeSet<>();
-        for (SpecDocument.Section section : SpecDocument.bundled().sections()) {
-            anchors.add(section.anchor());
-        }
-        assertFalse(anchors.isEmpty(), "found no sections at all — the spec did not load");
+        SpecDocument spec = SpecDocument.bundled();
+        assertFalse(spec.sections().isEmpty(), "found no sections at all — the spec did not load");
         List<String> dangling = new ArrayList<>();
         for (Catalog catalog : catalogs()) {
             Properties entries = load(catalog.path());
             for (String key : entries.stringPropertyNames()) {
                 Matcher cited = CITES.matcher(entries.getProperty(key));
                 while (cited.find()) {
-                    if (!anchors.contains(cited.group(1))) {
+                    if (spec.section(cited.group(1)) == null) {
                         dangling.add(catalog.path().getFileName() + ": " + key + " cites `"
                                 + cited.group(1) + "`");
                     }
