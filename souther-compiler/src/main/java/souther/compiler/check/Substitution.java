@@ -94,11 +94,9 @@ final class Substitution {
             return;
         }
         Type stated = settle(declared);
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1317, "check.expects")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.expects")
                         .at(pos).args(what, Type.show(stated, actual), Type.show(actual, stated))
-                        .diff(Type.show(actual, stated), Type.show(stated, actual)).build(),
-                what + " expects " + Type.show(stated) + ", but got " + Type.show(actual));
+                        .diff(Type.show(actual, stated), Type.show(stated, actual)).build());
     }
 
     /**
@@ -293,11 +291,9 @@ final class Substitution {
         if (TypeOps.assignable(at, stands, symbols) || TypeOps.assignable(stands, at, symbols)) {
             return;
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
                         .at(pos).args(what, Type.show(held, at), Type.show(at, held))
-                        .diff(Type.show(at, held), Type.show(held, at)).build(),
-                what + ": expected " + Type.show(held) + " but got " + Type.show(at));
+                        .diff(Type.show(at, held), Type.show(held, at)).build());
     }
 
     /** Every variable still open read as the bottom, at every depth. */

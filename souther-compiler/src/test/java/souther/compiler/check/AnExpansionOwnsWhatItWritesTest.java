@@ -131,7 +131,7 @@ class AnExpansionOwnsWhatItWritesTest {
                         let counts (ms: List<Map<String, Int>>) =
                             List.map((m) -> Map.size(Map.mapValues((k) -> k, m)), ms)
                         """));
-        assertTrue(e.getMessage().contains("takes 2 argument(s) but is written with 1"),
+        assertTrue(e.getMessage().contains("takes 2 argument(s), but is written with 1"),
                 e.getMessage());
         assertEquals(6, e.diagnostic().region().start().line(),
                 "the inner lambda's line, not the outer one's: " + e.getMessage());

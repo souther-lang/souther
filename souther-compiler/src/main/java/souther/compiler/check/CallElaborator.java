@@ -84,12 +84,9 @@ public final class CallElaborator {
                 || TypeOps.supportsOrdering(answered, ctx.symbols())) {
             return;
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1816, "check.ordered.key")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1816, "check.ordered.key")
                         .at(call.pos()).args(call.written(), Type.show(answered))
-                        .hint("check.ordered.hint").build(),
-                call.written() + "'s key must be an ordered value (Int, String, Decimal, Date, DateTime,"
-                        + " a newtype over one of these, or an enumeration), but returns " + answered);
+                        .hint("check.ordered.hint").build());
     }
 
     /**
@@ -345,40 +342,27 @@ public final class CallElaborator {
         return switch (call.denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
-            case ValueName.Behavior _ -> CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1818, "check.behavior.notcallablehere").at(call.name().region())
+            case ValueName.Behavior _ -> CompileException.of(Diagnostic.of(DiagnosticCode.E1818, "check.behavior.notcallablehere").at(call.name().region())
                             .args(call.written()).hint("check.behavior.notcallablehere.hint", call.written())
-                            .build(),
-                    "`" + call.written() + "` is a behavior, and it cannot be called from here: a helper"
-                            + " `let` does not reach one, and a `>->` composition is composed with"
-                            + " rather than called (spec [#calling-a-behavior])");
+                            .build());
             // A type applied to an argument is a construction, and every place a construction is
             // allowed rewrites it before the check reads it. Reaching here means it was written
             // somewhere no rewrite covers, so say what it is rather than what it is not.
-            case ValueName.OfType named -> CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1017, "check.construct.position")
-                            .at(call.name().region()).args(named.name()).build(),
-                    "`" + named.name() + "` is a type, so `" + named.name()
-                            + "(...)` constructs one, and a construction cannot be written here");
+            case ValueName.OfType named -> CompileException.of(Diagnostic.of(DiagnosticCode.E1017, "check.construct.position")
+                            .at(call.name().region()).args(named.name()).build());
             // A binding applied to arguments, whose type here is not a function. Either it is not one
             // — a value applied as though it were — or it has no type yet, which is what an inference
             // probe sees when it types a body before the binding it asks about has one and reads the
             // report to find out. The same sentence answers both: at the point of the report, this
             // name is not a function here.
-            case ValueName.Local _ -> CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
-                            .at(call.name().region()).args(call.written()).build(),
-                    "`" + call.written() + "` is not a function here, so it cannot be applied to"
-                            + " arguments");
+            case ValueName.Local _ -> CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
+                            .at(call.name().region()).args(call.written()).build());
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
             // A name the language itself gives (`None`), applied. `Some`/`None` applications are
             // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
-            case ValueName.Builtin b -> CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1803, "check.builtin.notfunction")
-                            .at(call.name().region()).args(b.name()).build(),
-                    "`" + b.name() + "` is a name the language gives, not a function, so it cannot"
-                            + " be applied to arguments");
+            case ValueName.Builtin b -> CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.builtin.notfunction")
+                            .at(call.name().region()).args(b.name()).build());
             // thrown out at the top of typeOfCall, before any of the work above
             case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
             case null -> unelaborated("nothing", call);
@@ -458,9 +442,7 @@ public final class CallElaborator {
             if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
                 b.secondary(stepError.diagnostic().region(), "check.fold.seed.here");
             }
-            throw CompileException.of(b.build(),
-                    "cannot infer the element type of the empty collection seeding `"
-                            + call.written() + "`; annotate the declaration it feeds");
+            throw CompileException.of(b.build());
         }
         for (int i = 0; i < args.size(); i++) {
             Type param = signature.params().get(i);
@@ -488,12 +470,9 @@ public final class CallElaborator {
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
         if (entry != null && entry.declaration().params().isEmpty()) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
                             .at(call.name().region()).args(call.written())
-                            .hint("check.stdlib.value.hint", call.written()).build(),
-                    "`" + call.written() + "` is a value, not a function, so it takes no `()` — write `"
-                            + call.written() + "` on its own");
+                            .hint("check.stdlib.value.hint", call.written()).build());
         }
         // A shipped kernel behaves like a built-in: check the call against the declared signature
         // and yield its result type; the backend emits the primitive for its key. A Souther-bodied
@@ -502,12 +481,9 @@ public final class CallElaborator {
         if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
             Prelude.Signature intrinsic = entry.signature();
             if (args.size() != intrinsic.params().size()) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1802, "check.arity")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.arity")
                                 .at(call.name().region())
-                                .args(call.written(), intrinsic.params().size(), args.size()).build(),
-                        call.written() + " takes " + intrinsic.params().size()
-                                + " argument(s) but is called with " + args.size());
+                                .args(call.written(), intrinsic.params().size(), args.size()).build());
             }
             Applied applied = applySignature(call,
                     new Type.FnOf(intrinsic.params(), intrinsic.result()), ca, expected, env, ctx);
@@ -543,12 +519,9 @@ public final class CallElaborator {
                 // is the denotation's to say, and only one of them is bound here
                 if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
-                        throw CompileException.of(
-                                Diagnostic.of(DiagnosticCode.E1802, "check.arity")
+                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.arity")
                                         .at(call.name().region())
-                                        .args(call.written(), fn.params().size(), args.size()).build(),
-                                "`" + call.written() + "` takes " + fn.params().size()
-                                        + " argument(s) but is applied to " + args.size());
+                                        .args(call.written(), fn.params().size(), args.size()).build());
                     }
                     yield applySignature(call, fn, ca, expected, env, ctx).result();
                 }
@@ -558,10 +531,8 @@ public final class CallElaborator {
                 // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
                 // what is wrong with it is that it is not a function, which the report below says.
                 if (call.reachedAs() instanceof ReachName.OfLibrary) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
-                                    .at(call.name().region()).args(call.written()).build(),
-                            "`" + call.written() + "` is not a standard-library function.");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
+                                    .at(call.name().region()).args(call.written()).build());
                 }
                 // A helper another module declares is expanded where it is called, or — where it
                 // recurses — bound as a signature and answered above. Reaching here it is neither,
@@ -620,22 +591,16 @@ public final class CallElaborator {
     static void validateRegexPattern(Ast.Expr e) {
         String pattern = ConstEval.evalString(e).orElse(null);
         if (pattern == null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1323, "check.matches.constant")
-                            .at(e.pos()).build(),
-                    "the pattern of `String.matches` must evaluate to a string at compile time — a"
-                            + " string literal, or literals and values named by a top-level `let`"
-                            + " joined with `++`");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1323, "check.matches.constant")
+                            .at(e.pos()).build());
         }
         try {
             java.util.regex.Pattern.compile(pattern);
         } catch (java.util.regex.PatternSyntaxException ex) {
             // getDescription() is the one-line reason ("Unclosed character class near index 3");
             // getMessage() would also dump the pattern and a caret, which the source region already shows.
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1323, "check.matches.regex")
-                            .at(e.pos()).args(ex.getDescription()).build(),
-                    "`String.matches` pattern is not a valid regular expression: " + ex.getDescription());
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1323, "check.matches.regex")
+                            .at(e.pos()).args(ex.getDescription()).build());
         }
     }
 
@@ -643,10 +608,8 @@ public final class CallElaborator {
      * {@code kindKey} (a localized phrase such as "a List"), but got {@code actual}. */
     static CompileException expects(SourcePos pos, String subject, String kindKey, Type actual,
                                             String legacy) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1317, "check.expects").at(pos)
-                        .args(subject, Localizable.of(kindKey), Type.show(actual)).build(),
-                legacy);
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.expects").at(pos)
+                        .args(subject, Localizable.of(kindKey), Type.show(actual)).build());
     }
 
     /**
@@ -678,33 +641,19 @@ public final class CallElaborator {
                 return position;
             }
             if (position == null || BottomInfer.isBottom(position)) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1815, "check.numeric.empty")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1815, "check.numeric.empty")
                                 .at(call.name().region()).args(call.written())
-                                .hint("check.numeric.empty.hint").build(),
-                        call.written() + " over the empty list answers with its seed, and whether that"
-                                + " seed is an Int or a Decimal follows from an element the empty"
-                                + " list does not have — annotate the position it feeds"
-                                + " (`let total: Decimal = " + call.written() + "([])`)");
+                                .hint("check.numeric.empty.hint").build());
             }
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1317, "check.numeric.result")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.numeric.result")
                             .at(call.name().region())
                             .args(call.written(), Type.show(position))
-                            .hint("check.numeric.result.hint").build(),
-                    call.written() + " answers with an Int or a Decimal, but this position needs "
-                            + Type.show(position) + " — a newtype over one of them is built from the"
-                            + " result (`Hours(" + call.written() + "(xs))`) rather than being it, and any"
-                            + " other type has no place for one");
+                            .hint("check.numeric.result.hint").build());
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1817, "check.numeric")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1817, "check.numeric")
                         .at(call.name().region())
                         .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
-                        .hint("check.numeric.hint").build(),
-                shortName(call.written()) + " needs a list of Int or Decimal, but the element is "
-                        + Type.show(element) + " — map to its numeric field first and apply "
-                        + call.written() + " to that");
+                        .hint("check.numeric.hint").build());
     }
 
     /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
@@ -716,11 +665,9 @@ public final class CallElaborator {
 
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
     static CompileException needsOrdered(SourcePos pos, String subject, Type element, String legacy) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1816, "check.ordered").at(pos)
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1816, "check.ordered").at(pos)
                         .args(subject, Localizable.of("kind.ordered.list"), Type.show(element))
-                        .hint("check.ordered.hint").build(),
-                legacy);
+                        .hint("check.ordered.hint").build());
     }
 
     /** A written date — {@code Date("2026-07-01")} / {@code DateTime("2026-07-01T09:00")}. The
@@ -731,11 +678,8 @@ public final class CallElaborator {
     static Type temporalLiteral(Ast.Apply call) {
         boolean isDate = "Date".equals(call.reaches());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1322, "check.temporal.literal")
-                            .at(call.name().region()).args(call.written()).build(),
-                    "`" + call.written() + "(...)` takes a written string, e.g. "
-                            + (isDate ? "Date(\"2026-07-01\")" : "DateTime(\"2026-07-01T09:00\")"));
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1322, "check.temporal.literal")
+                            .at(call.name().region()).args(call.written()).build());
         }
         parseTemporal(call.written(), lit.value(), call.pos());
         return isDate ? Type.DATE : Type.DATETIME;
@@ -749,21 +693,16 @@ public final class CallElaborator {
                     ? java.time.LocalDate.parse(text)
                     : java.time.LocalDateTime.parse(text);
         } catch (java.time.format.DateTimeParseException _) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1322, "check.temporal.malformed")
-                            .at(pos, fn.length()).args(fn, text).build(),
-                    "`" + text + "` is not a " + fn + " (expected "
-                            + (fn.equals("Date") ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm[:ss]") + ")");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1322, "check.temporal.malformed")
+                            .at(pos, fn.length()).args(fn, text).build());
         }
     }
 
     static void arity(Ast.Apply call, int n) {
         if (call.args().size() != n) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1802, "check.arity")
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.arity")
                             .at(call.name().region())
-                            .args(call.written(), n, call.args().size()).build(),
-                    call.written() + " expects " + n + " argument(s), got " + call.args().size());
+                            .args(call.written(), n, call.args().size()).build());
         }
     }
 }

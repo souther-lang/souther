@@ -52,7 +52,21 @@ public interface DiagnosticRenderer {
      * choose one. English is what this text is.
      */
     static String legacyBody(Diagnostic d) {
-        return body(d, Locale.ENGLISH);
+        Locale written = Locale.ENGLISH;
+        StringBuilder said = new StringBuilder(body(d, written));
+        if (d.diff() != null) {
+            said.append(' ').append(Messages.get("diag.diff.found", written))
+                    .append(' ').append(d.diff().actualType())
+                    .append(' ').append(Messages.get("diag.diff.expected", written))
+                    .append(' ').append(d.diff().expectedType());
+        }
+        for (Note note : d.notes() == null ? List.<Note>of() : d.notes()) {
+            said.append(' ').append(Messages.get(note.messageKey(), written, note.args()));
+        }
+        if (d.suggestion() != null) {
+            said.append(' ').append(Messages.get("diag.suggestion", written, d.suggestion()));
+        }
+        return said.toString();
     }
 
     /** The message body, from the catalog key or the compatibility literal. */

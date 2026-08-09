@@ -78,7 +78,7 @@ class CompileDecimalConversionTest {
 
                 let run (i) = Out { v = i.税抜 * i.税率 }
                 """));
-        assertTrue(e.getMessage().contains("INT") && e.getMessage().contains("DECIMAL"),
+        assertTrue(e.getMessage().contains("Int") && e.getMessage().contains("Decimal"),
                 e.getMessage());
     }
 

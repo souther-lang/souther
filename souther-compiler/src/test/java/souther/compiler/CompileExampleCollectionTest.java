@@ -167,8 +167,8 @@ class CompileExampleCollectionTest {
                 """));
         assertEquals("E1905", e.code(), e.getMessage());
         // both sides read in the notation the fixture is written in, elements named
-        assertTrue(e.getMessage().contains("expected [ Line { qty = 3 } ]"), e.getMessage());
-        assertTrue(e.getMessage().contains("but was [ Line { qty = 3 }, Line { qty = 3 } ]"),
+        assertTrue(e.getMessage().contains("But it needs to be: [ Line { qty = 3 } ]"), e.getMessage());
+        assertTrue(e.getMessage().contains("It is: [ Line { qty = 3 }, Line { qty = 3 } ]"),
                 e.getMessage());
     }
 

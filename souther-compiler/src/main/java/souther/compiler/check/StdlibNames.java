@@ -37,10 +37,7 @@ final class StdlibNames {
             return null;
         }
         String list = Prelude.candidateList(bare);
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1025, "check.stdlib.qualified.msg")
-                        .at(region).args(written, list).build(),
-                "`" + written + "` is a standard-library name. Write it qualified (" + list
-                        + ") or import the name you mean (spec §stdlib).");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1025, "check.stdlib.qualified.msg")
+                        .at(region).args(written, list).build());
     }
 }

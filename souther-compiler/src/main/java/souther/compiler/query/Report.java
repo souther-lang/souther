@@ -91,7 +91,7 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
      * moved.
      */
     public static Report raised(Diagnostic diagnostic, String body) {
-        return new Report(diagnostic, CompileException.of(diagnostic, body).getMessage(),
+        return new Report(diagnostic, CompileException.of(diagnostic).getMessage(),
                 Delivery.BY_KEY);
     }
 
@@ -148,7 +148,7 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
      * no language — see {@link DiagnosticRenderer#legacyBody}. */
     public CompileException asException() {
         return legacyMessage == null
-                ? CompileException.of(diagnostic, DiagnosticRenderer.legacyBody(diagnostic))
+                ? CompileException.of(diagnostic)
                 : new CompileException(diagnostic, legacyMessage);
     }
 }

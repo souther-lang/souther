@@ -138,7 +138,7 @@ class CrossProjectImportTest {
                         """), ModulePath.EMPTY));
 
         assertTrue(e.getMessage().contains("shared.money"), e.getMessage());
-        assertTrue(e.getMessage().contains("unknown module"), e.getMessage());
+        assertTrue(e.getMessage().contains("Unknown module"), e.getMessage());
     }
 
     /** A qualified behavior reference needs no import line, so it can be the only place a dependency

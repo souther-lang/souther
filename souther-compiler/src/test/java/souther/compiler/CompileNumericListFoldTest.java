@@ -222,7 +222,7 @@ class CompileNumericListFoldTest {
 
                 let run (i) = Out { total = sum(i.xs) }
                 """));
-        assertTrue(e.getMessage().contains("sum needs a list of Int or Decimal"), e.getMessage());
+        assertTrue(e.getMessage().contains("`sum` needs a list of Int or Decimal"), e.getMessage());
         assertTrue(e.getMessage().contains("Hours"), e.getMessage());
     }
 
@@ -264,7 +264,7 @@ class CompileNumericListFoldTest {
                 let run (i) = Out { total = product(i.xs) }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(module));
-        assertTrue(e.getMessage().contains("product needs a list of Int or Decimal"), e.getMessage());
+        assertTrue(e.getMessage().contains("`product` needs a list of Int or Decimal"), e.getMessage());
         assertTrue(e.getMessage().contains("String"), e.getMessage());
         assertProductIsNotCalledSum(e, module);
     }

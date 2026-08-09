@@ -69,7 +69,7 @@ class CompileHigherOrderIntrinsicTest {
 
                 let run (i) = Out { n = Option.withDefault(0, List.find((x) -> x ++ "!", i.xs)) }
                 """));
-        assertTrue(e.getMessage().contains("INT") && e.getMessage().contains("STRING"),
+        assertTrue(e.getMessage().contains("Int") && e.getMessage().contains("String"),
                 e.getMessage());
     }
 
@@ -138,7 +138,7 @@ class CompileHigherOrderIntrinsicTest {
 
                 let run (i) = Out { total = List.sum(i.xs) }
                 """));
-        assertTrue(e.getMessage().contains("sum needs a list of Int or Decimal"), e.getMessage());
+        assertTrue(e.getMessage().contains("`List.sum` needs a list of Int or Decimal"), e.getMessage());
     }
 
     /** A key answering something with no natural order is refused for what the key answers. */

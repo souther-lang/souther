@@ -776,12 +776,9 @@ final class BodyGen {
         private void unreachable(Core.Unreachable u, Type expected) {
             Type shape = expected != null ? expected : u.type();
             if (shape instanceof Type.Never) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1307, "check.unreachable.untyped")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1307, "check.unreachable.untyped")
                                 .at(u.pos(), "unreachable".length())
-                                .hint("check.unreachable.untyped.hint").build(),
-                        "nothing here says what this position holds, and `unreachable` answers no"
-                                + " value to say it with");
+                                .hint("check.unreachable.untyped.hint").build());
             }
             code.loadConstant(abortMessage(u));
             code.invokestatic(CD_UnreachableReached, "reached", MTD_reached);

@@ -87,7 +87,7 @@ class CompileOutputUnionMemberTest {
                         data Yen = String
                         behavior pick : (n: Int) -> up.Yen | Yen
                         """)));
-        assertTrue(e.getMessage().contains("two members written `Yen`"), e.getMessage());
+        assertTrue(e.getMessage().contains("`Yen` is written for two types in one union"), e.getMessage());
     }
 
     /** The check is on the effective members: a named sum contributes its leaves, and a leaf is what
@@ -106,7 +106,7 @@ class CompileOutputUnionMemberTest {
                         data Yen = String
                         behavior pay : (n: Int) -> Payment | Yen
                         """)));
-        assertTrue(e.getMessage().contains("two members written `Yen`"), e.getMessage());
+        assertTrue(e.getMessage().contains("`Yen` is written for two types in one union"), e.getMessage());
     }
 
     @Test
@@ -128,7 +128,7 @@ class CompileOutputUnionMemberTest {
                         import b ( Verdict )
                         behavior settle : (n: Int) -> Outcome | Verdict
                         """)));
-        assertTrue(e.getMessage().contains("two members written `Yen`"), e.getMessage());
+        assertTrue(e.getMessage().contains("`Yen` is written for two types in one union"), e.getMessage());
     }
 
     /**

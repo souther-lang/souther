@@ -89,7 +89,7 @@ class CompileIncludeTest {
                 data Invoice = { ...Common, total: Int }
                 """));
 
-        assertTrue(e.getMessage().contains("unknown type `Common`"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
         assertEquals(2, e.diagnostic().region().start().line());
         assertEquals(21, e.diagnostic().region().start().column(), "the caret is on the spread's name");
         assertEquals(27, e.diagnostic().region().end().column());
@@ -104,7 +104,7 @@ class CompileIncludeTest {
                 data Invoice = { c: Common, total: Int }
                 """));
 
-        assertTrue(e.getMessage().contains("unknown type `Common`"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
         assertEquals(21, e.diagnostic().region().start().column());
     }
 
@@ -137,7 +137,7 @@ class CompileIncludeTest {
                 data Invoice = { ...Common, total: Int } invariant total > 0
                 """}) {
             CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-            assertTrue(e.getMessage().contains("unknown type `Common`"), e.getMessage());
+            assertTrue(e.getMessage().contains("cannot find a type named `Common`"), e.getMessage());
         }
     }
 

@@ -75,7 +75,7 @@ class CompileDidYouMeanTest {
                 data Price = Int
                 data Order = { amount: Xyzzy }
                 """);
-        assertTrue(e.getMessage().contains("unknown type"), e.getMessage());
+        assertTrue(e.getMessage().contains("cannot find a type named"), e.getMessage());
         assertTrue(!e.getMessage().contains("did you mean"), e.getMessage());
     }
 }

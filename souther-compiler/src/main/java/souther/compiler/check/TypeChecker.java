@@ -249,10 +249,8 @@ public final class TypeChecker {
         Map<String, Ast.FnDef> fns = new HashMap<>();
         for (Ast.FnDef fn : module.fns()) {
             if (fns.put(fn.name(), fn) != null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.let")
-                                .at(fn.pos()).args(fn.name()).build(),
-                        "duplicate `let " + fn.name() + "`");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.let")
+                                .at(fn.pos()).args(fn.name()).build());
             }
         }
         Set<String> allBehaviors = new HashSet<>();
@@ -294,12 +292,8 @@ public final class TypeChecker {
             // could narrow. Reject it rather than accept a form that reads as a granularity that
             // does not exist.
             if (dot >= 0) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1610, "check.exposing.granular")
-                                .at(module.pos()).args(e.substring(0, dot), e).build(),
-                        "`exposing` is type-granular: a data's `decoder`/`encoder` are always public"
-                                + " once the data is exposed (spec 19.4). Write `" + e.substring(0, dot)
-                                + "`, not `" + e + "`");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1610, "check.exposing.granular")
+                                .at(module.pos()).args(e.substring(0, dot), e).build());
             }
             // an exposed name must be one of this module's own definitions. An imported name that is
             // merely visible here is not re-exported — importers reach it from its declaring module.
@@ -318,10 +312,8 @@ public final class TypeChecker {
                         ? " is imported into this module, not defined here; `exposing` lists a"
                           + " module's own definitions and does not re-export imported names"
                         : ", which is not a data or behavior of this module";
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1609, key)
-                                .at(module.pos()).args(e).build(),
-                        "`exposing` names `" + e + "`" + why);
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1609, key)
+                                .at(module.pos()).args(e).build());
             }
             exposed.add(e);
         }
@@ -341,12 +333,8 @@ public final class TypeChecker {
                 // one is meaningless: nothing calls those behaviors, and nothing injects them. The
                 // behavior that composes or calls this one carries the requirement instead (13.2).
                 if (!spec.dependsOn().isEmpty()) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1612, "check.inject.depends")
-                                    .at(spec.pos()).args(spec.name()).build(),
-                            "behavior `" + spec.name() + "` has no `let`, so it is an injection target"
-                                    + " (spec 13.2); it cannot declare `depends on` — the behavior that"
-                                    + " calls or composes it does");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1612, "check.inject.depends")
+                                    .at(spec.pos()).args(spec.name()).build());
                 }
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
                 injectionTargets.add(spec.name());
@@ -405,11 +393,8 @@ public final class TypeChecker {
         collect(errors, abandoned, () -> {
             for (Ast.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1614, "check.impl.compose")
-                                    .at(fn.pos()).args(fn.name()).build(),
-                            "`let " + fn.name() + "` cannot implement the composition `behavior " + fn.name()
-                                    + "`, which is already its own implementation (spec 13.1)");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1614, "check.impl.compose")
+                                    .at(fn.pos()).args(fn.name()).build());
                 }
             }
         });
@@ -467,17 +452,13 @@ public final class TypeChecker {
                 // Some/None are the built-in Option cases (ADR-0011); a user data of the same name
                 // would make a `| Some v` pattern ambiguous between Option and the user case, so the
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
-                rejected.add(CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1502, "check.sum.optioncase")
-                                .at(def.written().region()).args(def.name()).build(),
-                        "`" + def.name() + "` is a built-in Option case and cannot be declared as a data type"));
+                rejected.add(CompileException.of(Diagnostic.of(DiagnosticCode.E1502, "check.sum.optioncase")
+                                .at(def.written().region()).args(def.name()).build()));
                 continue;
             }
             if (symbols.containsKey(def.name())) {
-                rejected.add(CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1011, "check.dup.data")
-                                .at(def.pos()).args(def.name()).build(),
-                        "duplicate data `" + def.name() + "`"));
+                rejected.add(CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.data")
+                                .at(def.pos()).args(def.name()).build()));
                 continue;
             }
             symbols.put(def.name(), def);

@@ -94,11 +94,8 @@ public final class Exposing {
                 ValueName.Stdlib operation = new ValueName.Stdlib(imp.module(), name);
                 String qualified = operation.qualified();
                 if (!Prelude.isLibraryFunction(qualified)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1506, "check.import.notstdfn")
-                                    .at(imp.pos()).args(name, imp.module()).build(),
-                            "`" + name + "` is not a function in the standard library module `"
-                                    + imp.module() + "` (spec §stdlib).");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1506, "check.import.notstdfn")
+                                    .at(imp.pos()).args(name, imp.module()).build());
                 }
                 if (declaredData.contains(name) || ownNames.contains(name)) {
                     conflicts.add(Diagnostic.of(DiagnosticCode.E1508, "check.import.conflict").at(imp.pos()).args(name)
@@ -107,12 +104,8 @@ public final class Exposing {
                 }
                 ValueName.Stdlib prior = exposed.putIfAbsent(name, operation);
                 if (prior != null && !prior.equals(operation)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1508, "check.import.ambiguous")
-                                    .at(imp.pos()).args(name, prior.qualified(), qualified).build(),
-                            "`" + name + "` is exposed from both `" + prior.qualified() + "` and `"
-                                    + qualified
-                                    + "` — call it qualified instead of importing both (spec §stdlib).");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1508, "check.import.ambiguous")
+                                    .at(imp.pos()).args(name, prior.qualified(), qualified).build());
                 }
             }
         }

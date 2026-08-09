@@ -68,12 +68,8 @@ final class PartialHelperUse {
     private static CompileException reachesPartial(Ast.FnDef helper, List<String> path) {
         String reached = path.get(path.size() - 1);
         String rendered = PartialReachability.render(path);
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2001, "check.totality.reachespartial")
-                        .at(helper.written().region()).args(helper.name(), reached, rendered).build(),
-                "`let " + helper.name() + "` does not carry the termination guarantee it claims: it"
-                        + " reaches the `partial` helper `" + reached + "` (" + rendered + ")."
-                        + " Mark `" + helper.name() + "` `partial` as well, or stop reaching it");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E2001, "check.totality.reachespartial")
+                        .at(helper.written().region()).args(helper.name(), reached, rendered).build());
     }
 
     /**
@@ -112,12 +108,8 @@ final class PartialHelperUse {
                 // for a helper that takes arguments becomes a function value, and that is the one a
                 // function type would have to carry the guarantee for and cannot.
                 if (reachability.isPartialFunctionNamed(v)) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E2001, "check.totality.partialasvalue")
-                                    .at(v.written().region()).args(v.name()).build(),
-                            "the `partial` helper `" + v.name() + "` is written where a value goes."
-                                    + " A function type carries no termination guarantee, so a"
-                                    + " `partial` helper may be applied but not handed over");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2001, "check.totality.partialasvalue")
+                                    .at(v.written().region()).args(v.name()).build());
                 }
             }
             default -> Ast.forEachChild(e, child -> walkForNamedAsValue(child, reachability));

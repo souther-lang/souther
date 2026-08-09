@@ -153,12 +153,8 @@ public final class AstBuilder {
     }
 
     private CompileException onlyExamples(SyntaxNode n) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1906, "check.example.file.only")
-                        .at(pos(n)).build(),
-                "an `examples for` file holds examples, the fakes they run against and the values they"
-                        + " name; a data, a behavior, an import and a `let` with parameters belong in the"
-                        + " module itself");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1906, "check.example.file.only")
+                        .at(pos(n)).build());
     }
 
     /** {@code example <target> | rows...}. The contextual {@code example} lexes as an identifier, so
@@ -269,11 +265,9 @@ public final class AstBuilder {
             // built as `T {}` where a unit is built by name, so the two spellings mean the same
             // thing and reject each other's construction. One way to write it (spec §unit-data).
             if (includes.isEmpty() && fields.isEmpty()) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1008, "check.data.emptybody")
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1008, "check.data.emptybody")
                                 .at(bodyRegion(product.get())).args(name)
-                                .hint("check.data.emptybody.hint", name).build(),
-                        "data `" + name + "` has an empty body");
+                                .hint("check.data.emptybody.hint", name).build());
             }
             return new Ast.Data(declared, false, includes, fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
@@ -302,10 +296,8 @@ public final class AstBuilder {
         // clause that has nothing to constrain is refused — reaching `Ast.UnitData`, which has no
         // slot for one, would silently drop it and with it any error inside it.
         for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1102, "check.invariant.onunit")
-                            .at(pos(clause)).args(name).build(),
-                    "unit data `" + name + "` cannot carry an invariant");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1102, "check.invariant.onunit")
+                            .at(pos(clause)).args(name).build());
         }
         return new Ast.UnitData(declared, pos);
     }
@@ -329,18 +321,13 @@ public final class AstBuilder {
                 // `_` could not be answered by name at all: the arm reading it would be that wildcard.
                 // Refused here rather than left to be discovered at the attempt.
                 if (ident(label).equals("_")) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1104, "check.invariant.underscore")
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1104, "check.invariant.underscore")
                                     .at(posOf(label)).args(typeName)
-                                    .hint("check.invariant.underscore.hint").build(),
-                            "`_` cannot name an invariant clause");
+                                    .hint("check.invariant.underscore.hint").build());
                 }
                 if (!named.add(ident(label))) {
-                    throw CompileException.of(
-                            Diagnostic.of(DiagnosticCode.E1103, "check.invariant.duplicate")
-                                    .at(posOf(label)).args(ident(label), typeName).build(),
-                            "`" + typeName + "` declares two invariant clauses named `"
-                                    + ident(label) + "`");
+                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1103, "check.invariant.duplicate")
+                                    .at(posOf(label)).args(ident(label), typeName).build());
                 }
                 name = Optional.of(ident(label));
             }
@@ -754,9 +741,7 @@ public final class AstBuilder {
             return new Ast.Apply(fa, List.of(left), ConstructionOrigin.own(),
                     pos(operands.get(1)));
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2302, "parse.vpipe.right").at(right.pos()).build(),
-                "the right side of `|>` must be a function call or a function name");
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E2302, "parse.vpipe.right").at(right.pos()).build());
     }
 
     private Ast.Expr listComp(SyntaxNode n) {
@@ -796,20 +781,16 @@ public final class AstBuilder {
             return null;
         }
         if (binder == null) {
-            throw CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E2018, "check.attempt.armswithoutattempt").at(pos(node.get()))
-                            .hint("check.attempt.armswithoutattempt.hint").build(),
-                    "departure arms need an attempted construction to answer for");
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2018, "check.attempt.armswithoutattempt").at(pos(node.get()))
+                            .hint("check.attempt.armswithoutattempt.hint").build());
         }
         List<Ast.ElseArm> arms = new ArrayList<>();
         Set<String> answered = new HashSet<>();
         for (SyntaxNode arm : childNodes(node.get(), SyntaxKind.ELSE_ARM)) {
             SyntaxToken label = identTokens(arm).get(0);
             if (!answered.add(ident(label))) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E2019, "check.attempt.armtwice").at(posOf(label))
-                                .args(ident(label)).build(),
-                        "the arm `" + ident(label) + "` is written twice");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2019, "check.attempt.armtwice").at(posOf(label))
+                                .args(ident(label)).build());
             }
             Ast.Expr body = expr(onlyExpr(arm));
             arms.add(ident(label).equals("_")
@@ -1534,18 +1515,14 @@ public final class AstBuilder {
 
     private CompileException error(SourcePos pos, DiagnosticCode code, String messageKey,
                                    String legacyMessage, Object... args) {
-        return CompileException.of(
-                Diagnostic.of(code, messageKey).at(pos).args(args).build(),
-                legacyMessage);
+        return CompileException.of(Diagnostic.of(code, messageKey).at(pos).args(args).build());
     }
 
     /** As {@link #error}, with a hint under it naming the way out. */
     private CompileException errorWithHint(SourcePos pos, DiagnosticCode code, String messageKey, String hintKey,
                                            String legacyMessage, Object... args) {
-        return CompileException.of(
-                Diagnostic.of(code, messageKey).at(pos).args(args)
-                        .hint(hintKey).build(),
-                legacyMessage);
+        return CompileException.of(Diagnostic.of(code, messageKey).at(pos).args(args)
+                        .hint(hintKey).build());
     }
 
     /** Whether {@code name} sits in the compiler-shipped {@code souther} namespace (ADR-0028); only

@@ -123,7 +123,7 @@ class DbTest {
     @Test
     void raisesTheMessageAPassRaisedItWith() {
         Diagnostic d = Diagnostic.of(DiagnosticCode.E1503, "check.module.duplicate").build();
-        CompileException raised = CompileException.of(d, "duplicate module `a`");
+        CompileException raised = CompileException.of(d);
         List<Report> reports = Report.of(raised);
         assertEquals(raised.getMessage(), reports.get(0).asException().getMessage());
     }

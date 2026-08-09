@@ -281,12 +281,9 @@ public final class Deriver {
      * helps nobody.
      */
     private static CompileException badMapKey(Type key, Ast.Data d, String field, SourcePos pos) {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
                         .at(pos).args(where(d, field), Type.show(key))
-                        .hint("check.map.key.hint").build(),
-                "`" + where(d, field) + "` is keyed by " + Type.show(key) + ": "
-                        + TypeOps.MAP_KEY_RULE);
+                        .hint("check.map.key.hint").build());
     }
 
     /** How to name the place a boundary complaint belongs to. A newtype's single field is implicit —
@@ -329,18 +326,11 @@ public final class Deriver {
      */
     private static CompileException noCodec(Type t, Ast.Data d, String field, SourcePos pos) {
         if (t instanceof Type.TupleOf) {
-            return CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1311, "check.derive.tuplefield")
-                            .at(pos).args(where(d, field), Type.show(t)).build(),
-                    "`" + where(d, field) + "` is " + Type.show(t) + ": a tuple has"
-                            + " no external representation, so no codec can be derived (ADR-0036)."
-                            + " Use a named data.");
+            return CompileException.of(Diagnostic.of(DiagnosticCode.E1311, "check.derive.tuplefield")
+                            .at(pos).args(where(d, field), Type.show(t)).build());
         }
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1311, "check.derive.nocodec")
-                        .at(pos).args(where(d, field), Type.show(t)).build(),
-                "no codec can be derived for `" + where(d, field) + "`: "
-                        + Type.show(t) + " has no external representation");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1311, "check.derive.nocodec")
+                        .at(pos).args(where(d, field), Type.show(t)).build());
     }
 
     /** Where the field was written, for a diagnostic to point at. A field a data takes in through

@@ -414,10 +414,7 @@ public final class Formatter {
      * it was reached wherever the stack happened to end, which is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E2104, "parse.toodeep").build(),
-                "this source nests too deeply to format;"
-                        + " break the nesting into named parts to flatten it");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E2104, "parse.toodeep").build());
     }
 
     // --- layout ---

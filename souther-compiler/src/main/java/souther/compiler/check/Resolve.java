@@ -403,10 +403,8 @@ public final class Resolve {
             }
             TypeName denoted = symbols.resolve(c.written());
             if (denoted == null) {
-                throw CompileException.of(
-                        Diagnostic.of(DiagnosticCode.E1020, "check.sum.unknowncase")
-                                .at(s.pos()).args(c.written(), s.name()).build(),
-                        "unknown case `" + c.written() + "` in sum `" + s.name() + "`");
+                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1020, "check.sum.unknowncase")
+                                .at(s.pos()).args(c.written(), s.name()).build());
             }
             // Recorded like any other written name. A case is a name this module wrote and this pass
             // answered, so leaving it out made it a use nothing could see — an editor asked about it
@@ -930,18 +928,14 @@ public final class Resolve {
         if (dot < 0 || !Prelude.isQualifier(name.substring(0, dot))) {
             return null;
         }
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
-                        .at(written.region()).args(written.quoted()).build(),
-                "`" + written.quoted() + "` is not a standard-library function.");
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
+                        .at(written.region()).args(written.quoted()).build());
     }
 
     private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
         String name = written.canonical();
         if (name.equals("null")) {
-            return CompileException.of(
-                    Diagnostic.of(DiagnosticCode.E1301, "e1301.msg").at(written.region()).build(),
-                    "`null` is not part of the language. Use an optional field with `?`.");
+            return CompileException.of(Diagnostic.of(DiagnosticCode.E1301, "e1301.msg").at(written.region()).build());
         }
         CompileException notALibraryMember = notALibraryMember(written);
         if (notALibraryMember != null) {
@@ -956,11 +950,9 @@ public final class Resolve {
             return bareLibraryName;
         }
         List<String> candidates = reachable(bound);
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
                         .at(written.region()).args(written.quoted())
-                        .suggestion(Suggest.candidate(name, candidates)).build(),
-                "unknown identifier `" + written.quoted() + "`" + Suggest.hint(name, candidates));
+                        .suggestion(Suggest.candidate(name, candidates)).build());
     }
 
     /**
@@ -980,15 +972,10 @@ public final class Resolve {
             return bareLibraryName;
         }
         List<String> candidates = reachable(bound);
-        return CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1401, "e1401.msg").at(written.region())
+        return CompileException.of(Diagnostic.of(DiagnosticCode.E1401, "e1401.msg").at(written.region())
                         .args(written.quoted())
                         .suggestion(Suggest.candidate(name, candidates))
-                        .hint("e1401.hint").build(),
-                "`" + written.quoted() + "` is not a behavior or builtin"
-                        + Suggest.hint(name, candidates)
-                        + ". Calling arbitrary JVM methods is not allowed; declare a behavior"
-                        + " without a `let` and implement it from Java.");
+                        .hint("e1401.hint").build());
     }
 
     /**

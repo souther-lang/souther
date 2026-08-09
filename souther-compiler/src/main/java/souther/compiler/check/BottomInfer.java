@@ -177,11 +177,9 @@ public final class BottomInfer {
         if (joined != null) {
             return joined;
         }
-        throw CompileException.of(
-                Diagnostic.of(DiagnosticCode.E1318, "check.list.msg")
+        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1318, "check.list.msg")
                         .at(pos)
                         .hint("check.list.hint", Type.show(a), Type.show(b))
-                        .build(),
-                "list elements disagree on type: " + a + " vs " + b);
+                        .build());
     }
 }
