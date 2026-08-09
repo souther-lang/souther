@@ -53,12 +53,15 @@ public final class HelperTyping {
         Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
         for (Ast.FnDef h : valuesBeforeTheValuesThatNameThem(inliner)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
-            // Only while checking a value, because only a value is settled here: a helper is
-            // checked as though its body had been written inline, and what it names is expanded
-            // into it exactly as before.
-            boolean settling = h.params().isEmpty() && !recursive
-                    && h.declaredBy(inliner.moduleName());
-            ValueName settles = settling
+            // A helper reads a settled value as a value does. A helper's body is expanded into
+            // whoever calls it, and a value it names is expanded into that expansion, so a chain of
+            // values written through helpers reaches every link exactly as one written without them
+            // — and would copy every link, once per helper, for the same reason.
+            //
+            // What settles one is narrower: a value of this module, which is what has an answer to
+            // read. A helper settles nothing, and neither does a value the module took on to emit.
+            boolean settles = h.params().isEmpty() && h.declaredBy(inliner.moduleName());
+            ValueName settled = settles
                     ? new ValueName.Helper(inliner.moduleName(), h.name()) : null;
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
@@ -90,12 +93,15 @@ public final class HelperTyping {
             // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
             // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
             Ast.Expr emitted = loweredBodies.get(h.name());
+            // Not what the backend emits, and not a recursive helper's own body: a value is
+            // substituted at each of its references, and those two are trees that run.
+            boolean reading = emitted == null && !recursive;
             Ast.Expr body = emitted != null ? emitted
-                    : inliner.readingSettledValues(settling ? standing : Preserved.NONE,
-                                    settling ? settledConstants::get : _ -> null)
+                    : inliner.readingSettledValues(reading ? standing : Preserved.NONE,
+                                    reading ? settledConstants::get : _ -> null)
                             .inline(h.writtenBody(), inliner.bodyOf(h.name()));
             // Back for everything below, which reads a body with every value copied into it as it
-            // always was: the checks of a helper, and the arguments checked against the surface.
+            // always was: the arguments checked against the surface, and every other reader.
             inliner.readingSettledValues(Preserved.NONE, _ -> null);
             if (recursive && body == null) {
                 // Lower keeps every recursive helper as a fn of the lowered module, and the backend
@@ -137,16 +143,16 @@ public final class HelperTyping {
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn(), symbols);
             Core elaboratedBody = Elaborator.elaborate(body, tenv,
                     new CheckContext(symbols, null, reqSigs)
-                            .preserving(settling ? standing : Preserved.NONE),
+                            .preserving(reading ? standing : Preserved.NONE),
                     declaredReturn);
             Type bodyType = elaboratedBody.type();
             elaborated.definitionTypes.put(h.name(), bodyType);
-            if (settles != null) {
-                settledTypes.put(settles, bodyType);
+            if (settled != null) {
+                settledTypes.put(settled, bodyType);
                 // What it is a constant of, read off the body it was checked as. A reference to it
                 // is written out as that constant, so every position that asks whether an
                 // expression is known at compile time goes on reading a literal.
-                ConstEval.eval(body).ifPresent(c -> settledConstants.put(settles, c));
+                ConstEval.eval(body).ifPresent(c -> settledConstants.put(settled, c));
             }
             if (emitted != null) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
@@ -175,28 +181,39 @@ public final class HelperTyping {
      * declared above the one that reads it — and the order they are checked in is not the order
      * they are written in for that reason alone.
      *
-     * <p>Stable otherwise: two values that name neither the other stay in the order the module
-     * wrote them, and a helper stays where it was. What is checked does not depend on the order —
-     * a value not yet settled is copied, as it was before any of this — so this decides what is
-     * worked out twice and nothing else.
+     * <p>Reaching is not only writing the name. A value reaches another by reading it and by
+     * calling a helper that reads it — the two kinds of edge {@link ValueCycles} follows together,
+     * for the same reason: a body's expansion goes through the helpers it calls, so what is behind
+     * one is reached exactly as a name written outright is. Following only the first would leave a
+     * chain written through helpers settling in the order it was declared, and a chain written
+     * bottom to top copied again per link.
+     *
+     * <p>Every declaration is a node, a helper as much as a value, because a helper is what carries
+     * the second kind of edge and is itself checked against what it reaches.
+     *
+     * <p>Stable otherwise: two declarations that reach neither the other stay in the order the
+     * module wrote them. What is checked does not depend on the order — what is not yet settled is
+     * copied, as it was before any of this — so this decides what is worked out twice and nothing
+     * else.
      *
      * <p>A cycle has no such order, and there is none to find: {@link ValueCycles} refuses a value
-     * that reaches itself before a body of this module is expanded. What a cycle would do here is
-     * leave its members in the order they were written, each copying the other, which is the answer
-     * this pass gave before there was an order at all.
+     * that reaches itself before a body of this module is expanded, and a cycle of helpers alone is
+     * a recursion the language allows. Either way its members are left in the order they were
+     * written, each copying the other, which is the answer this pass gave before there was an order
+     * at all.
      */
     private static List<Ast.FnDef> valuesBeforeTheValuesThatNameThem(HelperInliner inliner) {
         Map<String, Ast.FnDef> held = inliner.held();
         Map<String, Set<String>> names = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.FnDef> e : held.entrySet()) {
-            if (!e.getValue().params().isEmpty()
-                    || !(e.getValue().body() instanceof Ast.FnBody.Written written)) {
+            if (!(e.getValue().body() instanceof Ast.FnBody.Written written)) {
                 continue;
             }
-            Set<String> read = new LinkedHashSet<>();
-            ValueCycles.valuesRead(written.expr(), held, read);
-            read.retainAll(held.keySet());
-            names.put(e.getKey(), read);
+            Set<String> reached = new LinkedHashSet<>();
+            HelperInliner.helperCallsIn(written.expr(), held, reached);
+            ValueCycles.valuesRead(written.expr(), held, reached);
+            reached.retainAll(held.keySet());
+            names.put(e.getKey(), reached);
         }
         // Depth-first with its own stack. A module's values chain as deeply as the author wrote
         // them, and the chain is what this is for, so the call stack is the wrong one to walk it on.

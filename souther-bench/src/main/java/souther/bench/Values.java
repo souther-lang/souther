@@ -14,14 +14,14 @@ import java.util.List;
  * two have different answers: a value is substituted where it is named, so what a module declares
  * can cost more than the sum of its declarations while what a workspace holds does not.
  *
- * <p>Three shapes, held the same apart from what a value names and where it is written. Each value
- * of the chain names the one before it, so the last of them stands for the whole chain and the
- * module's source shares what its elaboration copies. The reversed chain is that module written
- * bottom to top, where no value is settled by the time the one naming it is read unless the check
- * puts them in an order of its own. The flat shape declares as many values naming none of them,
- * which is the same number of declarations with nothing to share — so the distance from it is what
- * substitution costs, and a chain's own per-value figure is what says whether that cost is
- * proportional to what the module declares.
+ * <p>The shapes differ in what a value reaches and in where the thing it reaches is written, which
+ * is what the answer turns on. A chain has each value name the one before it. A chain through
+ * helpers has each value call a helper that names the one before it, so the same reaching is there
+ * and no value writes another's name. Either written bottom to top is the module where nothing a
+ * value reaches has been read yet by the time the value is. The fan-out has one value reach every
+ * other, which is the shape a walk that re-reads a name's edges once per edge is quadratic in and a
+ * chain says nothing about. The flat shape declares as many values reaching none of them: the same
+ * number of declarations with nothing to share, and so the floor the rest are read against.
  *
  * <p>The per-value figure is the one to read. A total that grows is only the module growing; a
  * per-value figure that grows with the module is a term above linear, and it is reported at sizes
@@ -38,15 +38,19 @@ final class Values {
 
     static void measure(Report report) {
         for (int values : SIZES) {
-            Timing chain = timeOf(chain(values, false));
-            Timing reversed = timeOf(chain(values, true));
-            Timing flat = timeOf(flat(values));
-            report.line("VALUES n=%-4d  chain %7.1f ms (%5.3f)   reversed %7.1f ms (%5.3f)   "
-                            + "flat %7.1f ms (%5.3f)   ms/value",
-                    values, chain.medianMillis(), chain.medianMillis() / values,
-                    reversed.medianMillis(), reversed.medianMillis() / values,
-                    flat.medianMillis(), flat.medianMillis() / values);
+            line(report, values, "chain", chain(values, false));
+            line(report, values, "chain bottom-up", chain(values, true));
+            line(report, values, "chain via helpers", throughHelpers(values, false));
+            line(report, values, "same, bottom-up", throughHelpers(values, true));
+            line(report, values, "fan-out", fanOut(values));
+            line(report, values, "flat", flat(values));
         }
+    }
+
+    private static void line(Report report, int values, String shape, String source) {
+        Timing timing = timeOf(source);
+        report.line("VALUES n=%-4d %-18s %7.1f ms (%5.3f ms/value)",
+                values, shape, timing.medianMillis(), timing.medianMillis() / values);
     }
 
     private static Timing timeOf(String source) {
@@ -57,32 +61,64 @@ final class Values {
         });
     }
 
-    /** {@code n} values, each naming the one before it, and a behavior naming the last —
-     * {@code bottomUp} writing the one that names before the one it names. */
+    /** {@code n} values, each naming the one before it — {@code bottomUp} writing the one that
+     * names before the one it names. */
     private static String chain(int n, boolean bottomUp) {
         List<String> declarations = new ArrayList<>();
         declarations.add("let v0 = 1");
         for (int i = 1; i < n; i++) {
             declarations.add("let v" + i + " = v" + (i - 1) + " + 1");
         }
-        if (bottomUp) {
-            Collections.reverse(declarations);
+        return module("chain", declarations, bottomUp, n - 1);
+    }
+
+    /** The same reaching with none of the names: each value calls a helper, and the helper is what
+     * names the value before it. */
+    private static String throughHelpers(int n, boolean bottomUp) {
+        List<String> declarations = new ArrayList<>();
+        declarations.add("let v0 = 1");
+        for (int i = 1; i < n; i++) {
+            declarations.add("let step" + i + " (x: Int) = v" + (i - 1) + " + x");
+            declarations.add("let v" + i + " = step" + i + "(1)");
         }
-        StringBuilder source = new StringBuilder("module chain exposing ( f )\n\n");
-        for (String declaration : declarations) {
+        return module("helpers", declarations, bottomUp, n - 1);
+    }
+
+    /** One value reaching every other, written as a list so that reaching many is not also nesting
+     * deeply. */
+    private static String fanOut(int n) {
+        List<String> declarations = new ArrayList<>();
+        StringBuilder hub = new StringBuilder("let hub = [ ");
+        for (int i = 0; i < n; i++) {
+            declarations.add("let v" + i + " = " + i + " + 1");
+            hub.append(i == 0 ? "" : ", ").append("v").append(i);
+        }
+        declarations.add(hub.append(" ]").toString());
+        return module("fanout", declarations, false, 0);
+    }
+
+    /** {@code n} values reaching none of them. */
+    private static String flat(int n) {
+        List<String> declarations = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            declarations.add("let v" + i + " = " + i + " + 1");
+        }
+        return module("flat", declarations, false, n - 1);
+    }
+
+    /** The module {@code declarations} make, with a behavior naming {@code named} — reversed first
+     * where the point is that nothing a value reaches is written above it. */
+    private static String module(String name, List<String> declarations, boolean bottomUp,
+                                 int named) {
+        List<String> written = new ArrayList<>(declarations);
+        if (bottomUp) {
+            Collections.reverse(written);
+        }
+        StringBuilder source = new StringBuilder("module " + name + " exposing ( f )\n\n");
+        for (String declaration : written) {
             source.append(declaration).append('\n');
         }
         return source.append("\nbehavior f : (x: Int) -> Int\nlet f (x) = x + v")
-                .append(n - 1).append("\n").toString();
-    }
-
-    /** {@code n} values naming none of them, and a behavior naming the last. */
-    private static String flat(int n) {
-        StringBuilder source = new StringBuilder("module flat exposing ( f )\n\n");
-        for (int i = 0; i < n; i++) {
-            source.append("let v").append(i).append(" = ").append(i).append(" + 1\n");
-        }
-        return source.append("\nbehavior f : (x: Int) -> Int\nlet f (x) = x + v")
-                .append(n - 1).append("\n").toString();
+                .append(named).append("\n").toString();
     }
 }

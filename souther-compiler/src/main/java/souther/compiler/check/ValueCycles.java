@@ -156,34 +156,28 @@ public final class ValueCycles {
         Set<String> open = new LinkedHashSet<>();       // on the component stack
         List<String> component = new ArrayList<>();
         Set<String> found = new LinkedHashSet<>();
-        int[] next = {0};
+        int next = 0;
         for (String root : edges.keySet()) {
             if (index.containsKey(root)) {
                 continue;
             }
-            // Each frame is a node and how far its edges have been walked. Pushed with the edge
-            // count at zero and popped once every edge has been taken, which is what a recursion
-            // would have done between two statements.
-            List<Object[]> frames = new ArrayList<>();
-            frames.add(new Object[]{root, 0});
-            index.put(root, next[0]);
-            low.put(root, next[0]++);
+            List<Walking> frames = new ArrayList<>();
+            frames.add(new Walking(root, edges.getOrDefault(root, Set.of()).iterator()));
+            index.put(root, next);
+            low.put(root, next++);
             open.add(root);
             component.add(root);
             while (!frames.isEmpty()) {
-                Object[] frame = frames.get(frames.size() - 1);
-                String at = (String) frame[0];
-                List<String> out = new ArrayList<>(edges.getOrDefault(at, Set.of()));
-                int taken = (Integer) frame[1];
-                if (taken < out.size()) {
-                    frame[1] = taken + 1;
-                    String to = out.get(taken);
+                Walking frame = frames.get(frames.size() - 1);
+                String at = frame.node();
+                if (frame.edges().hasNext()) {
+                    String to = frame.edges().next();
                     if (!index.containsKey(to)) {
-                        index.put(to, next[0]);
-                        low.put(to, next[0]++);
+                        index.put(to, next);
+                        low.put(to, next++);
                         open.add(to);
                         component.add(to);
-                        frames.add(new Object[]{to, 0});
+                        frames.add(new Walking(to, edges.getOrDefault(to, Set.of()).iterator()));
                     } else if (open.contains(to)) {
                         low.put(at, Math.min(low.get(at), index.get(to)));
                     }
@@ -191,7 +185,7 @@ public final class ValueCycles {
                 }
                 frames.remove(frames.size() - 1);
                 if (!frames.isEmpty()) {
-                    String under = (String) frames.get(frames.size() - 1)[0];
+                    String under = frames.get(frames.size() - 1).node();
                     low.put(under, Math.min(low.get(under), low.get(at)));
                 }
                 if (low.get(at).equals(index.get(at))) {
@@ -212,6 +206,16 @@ public final class ValueCycles {
         }
         return found;
     }
+
+    /**
+     * A node the walk is inside, and the edges of it that are left.
+     *
+     * <p>The iterator is the frame's, taken once when the frame is pushed. A frame is resumed once
+     * per edge it has, so a frame that worked out where it had got to would read the node's edges
+     * once per edge — which over a name that reaches many is that name's edges squared, and a chain
+     * says nothing about it because every name there reaches one.
+     */
+    private record Walking(String node, java.util.Iterator<String> edges) {}
 
     /** Records into {@code path} a route from {@code from} back to {@code target}, or answers false. */
     private static boolean pathBackTo(String from, String target, Map<String, Set<String>> edges,
