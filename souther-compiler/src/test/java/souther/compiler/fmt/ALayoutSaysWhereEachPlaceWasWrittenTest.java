@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -20,19 +21,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ALayoutSaysWhereEachPlaceWasWrittenTest {
 
-    private static Layout layoutOf(String source) {
-        return Formatter.document(CstParser.parse(source).root()).resolve().layout(100);
+    private static Formatter.CanonicalForm canonical(String source) {
+        return Formatter.canonicalize(CstParser.parse(source).root());
     }
 
-    /** Every place the document holds is a place the layout wrote somewhere. */
+    private static Layout layoutOf(String source) {
+        return canonical(source).layout();
+    }
+
+    /**
+     * Every place a canonicalization made is a place its layout wrote somewhere — those places, by
+     * identity, and not as many places as it made.
+     *
+     * <p>This used to build the document a second time to walk it, and a second canonicalization
+     * makes its own places: the two collections came out the same size and shared not one member,
+     * so the count held and said nothing about the layout's places.
+     */
     @Test
-    void everyPlaceOfTheDocumentHasASpan() {
+    void everyPlaceOfTheRunHasASpan() {
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
-            Layout layout = layoutOf(source);
+            Formatter.CanonicalForm canonical = canonical(source);
             List<Place> written = new ArrayList<>();
-            placesOf(Formatter.document(CstParser.parse(source).root()), written);
-            assertEquals(written.size(), layout.spans().size(),
-                    "one span per place, in:\n" + source);
+            placesOf(canonical.construction().doc(), written);
+            assertEquals(List.of(), written.stream()
+                            .filter(p -> !canonical.layout().spans().containsKey(p)).toList(),
+                    "places this run's document writes that its layout wrote nowhere, in:\n"
+                            + source);
+            assertEquals(written.size(), canonical.layout().spans().size(),
+                    "and no others, in:\n" + source);
         }
     }
 
@@ -84,5 +100,26 @@ class ALayoutSaysWhereEachPlaceWasWrittenTest {
             case TokenDoc.Concat c -> c.parts().forEach(part -> placesOf(part, out));
             default -> { }
         }
+    }
+
+    /**
+     * What two canonicalizations of one source share. Nothing: each makes its own places, and a
+     * layout asked about another run's place answers that it wrote it nowhere rather than refusing
+     * the question. Written down so that the reason a canonical form is one object is a stated fact
+     * and not a habit.
+     */
+    @Test
+    void andTwoRunsShareNoneOfIt() {
+        String source = "module m\n\nlet g (x: Int): Int = x\n";
+        Formatter.CanonicalForm one = canonical(source);
+        Formatter.CanonicalForm other = canonical(source);
+
+        assertEquals(one.text(), other.text());
+        List<Place> theirs = new ArrayList<>();
+        placesOf(other.construction().doc(), theirs);
+        assertFalse(theirs.isEmpty());
+        assertEquals(List.of(),
+                theirs.stream().filter(p -> one.layout().spans().containsKey(p)).toList(),
+                "a place of one run is not a place the other laid out");
     }
 }

@@ -106,24 +106,10 @@ public final class Formatter {
      * source (e.g. to check for syntax errors) and need not parse it again. Assumes {@code file}
      * came from a clean parse. */
     public static String format(SyntaxNode file) {
-        try {
-            Formatter formatter = new Formatter();
-            // The construction, then the carriers, then the boundaries, then the layout. Each stage
-            // is whole before the next begins: a comment goes to a place of the canonical form and
-            // there are no places until the construction has finished making them.
-            TokenDoc resolved = formatter.resolved(formatter.file(file));
-            List<SyntaxToken> missing = unconsumed(file, formatter.consumedComments);
-            if (!missing.isEmpty()) {
-                throw new IllegalStateException(
-                        missing.size() + " comment(s) in this source reached no construct and would"
-                                + " have been dropped; the first is at offset "
-                                + missing.get(0).start() + ": "
-                                + missing.get(0).text().stripTrailing());
-            }
-            return resolved.resolve().render(WIDTH);
-        } catch (StackOverflowError _) {
-            throw tooDeep();
-        }
+        // The construction, then the carriers, then the boundaries, then the layout. Each stage is
+        // whole before the next begins: a comment goes to a place of the canonical form and there
+        // are no places until the construction has finished making them.
+        return canonicalize(file).text();
     }
 
     /**
@@ -132,7 +118,48 @@ public final class Formatter {
      * them is decided from the document, so a check on that decision reads the document.
      */
     static TokenDoc document(SyntaxNode file) {
-        return build(file).doc();
+        return canonicalize(file).construction().doc();
+    }
+
+    /**
+     * What one canonicalization of {@code file} came to: everything it made, and the text it came
+     * to, from the one run that made them.
+     *
+     * <p>The identities are why this is one object. A {@link Place}, a {@link Doc.GroupRef} and the
+     * rest are made by a run and mean something only to it — {@link Layout} keys its spans and
+     * decisions on them and {@link Correspondence} keys its relation on the same places. Asked for
+     * separately they come from separate runs, and a place of one has no span in the other's layout.
+     * Nothing refuses the mixture: a lookup simply misses, so two collections of the same size can
+     * share no member and a count of them holds.
+     */
+    record CanonicalForm(Construction construction, Layout layout) {
+
+        String text() {
+            return layout.text();
+        }
+
+        /** The places this run made, in the order it made them. */
+        List<Place> places() {
+            return construction.places().made();
+        }
+    }
+
+    /** Canonicalizes {@code file}: one construction, laid out, and everything either of them made. */
+    static CanonicalForm canonicalize(SyntaxNode file) {
+        try {
+            Construction construction = build(file);
+            List<SyntaxToken> missing = unconsumed(file, construction.consumed());
+            if (!missing.isEmpty()) {
+                throw new IllegalStateException(
+                        missing.size() + " comment(s) in this source reached no construct and would"
+                                + " have been dropped; the first is at offset "
+                                + missing.get(0).start() + ": "
+                                + missing.get(0).text().stripTrailing());
+            }
+            return new CanonicalForm(construction, construction.doc().resolve().layout(WIDTH));
+        } catch (StackOverflowError _) {
+            throw tooDeep();
+        }
     }
 
     /**
@@ -145,14 +172,16 @@ public final class Formatter {
      * body, so text is not enough to say which place owns one.
      */
     record Construction(TokenDoc doc, Correspondence places,
-            Map<Place, Map<Carrier, List<SyntaxToken>>> carriers, Map<Place, Integer> order) {}
+            Map<Place, Map<Carrier, List<SyntaxToken>>> carriers, Map<Place, Integer> order,
+            java.util.Set<Integer> consumed) {}
 
     static Construction build(SyntaxNode file) {
         Formatter formatter = new Formatter();
         TokenDoc doc = formatter.file(file);
         Map<Place, Integer> order = Place.orderedIn(doc);
-        return new Construction(formatter.resolved(doc), formatter.places, formatter.assigned,
-                order);
+        TokenDoc resolved = formatter.resolved(doc);
+        return new Construction(resolved, formatter.places, formatter.assigned, order,
+                formatter.consumedComments);
     }
 
     /** {@code doc} with the comments in it. The one place a carrier is answered. */
