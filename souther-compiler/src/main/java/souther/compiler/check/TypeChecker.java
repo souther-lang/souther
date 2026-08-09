@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
@@ -398,8 +399,8 @@ public final class TypeChecker {
         collect(errors, abandoned, () -> {
             for (Ast.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1614, "check.impl.compose")
-                                    .at(fn.pos()).args(fn.name()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(fn.pos()).say(new BehaviorMessage.ACompositionIsAlreadyItsOwnImplementation(fn.name())).build());
                 }
             }
         });
@@ -457,8 +458,8 @@ public final class TypeChecker {
                 // Some/None are the built-in Option cases (ADR-0011); a user data of the same name
                 // would make a `| Some v` pattern ambiguous between Option and the user case, so the
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
-                rejected.add(CompileException.of(Diagnostic.of(DiagnosticCode.E1502, "check.sum.optioncase")
-                                .at(def.written().region()).args(def.name()).build()));
+                rejected.add(CompileException.of(Diagnostic
+                                .at(def.written().region()).say(new BehaviorMessage.ABuiltInOptionCaseCannotBeDeclared(def.name())).build()));
                 continue;
             }
             if (symbols.containsKey(def.name())) {

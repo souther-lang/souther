@@ -234,7 +234,7 @@ class CompileDestructuringTest {
                 behavior countTags : (t: Tags) -> Int
                 let countTags (t: Tags) = length(t.value)
                 """));
-        assertEquals("check.impl.noannotate", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("behavior.an-implementations-parameters-take-their-types-from-it", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test

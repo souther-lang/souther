@@ -434,7 +434,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = call(x)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.behavior.notcallablehere", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("behavior.a-behavior-cannot-be-called-from-here", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test

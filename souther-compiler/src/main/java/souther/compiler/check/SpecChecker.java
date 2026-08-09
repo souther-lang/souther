@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.InjectionMessage;
 import souther.compiler.diag.msg.ModuleMessage;
@@ -218,8 +219,8 @@ public final class SpecChecker {
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     List<Diagnostic> warnings) {
         if (fn.declaredReturn() != null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.noreturn")
-                            .at(fn.pos()).args(fn.name(), spec.name()).build());
+            throw CompileException.of(Diagnostic
+                            .at(fn.pos()).say(new BehaviorMessage.AnImplementationsReturnComesFromTheBehavior(fn.name(), spec.name())).build());
         }
         for (Ast.Var required : spec.dependsOn()) {
             // A `depends on` naming nothing was reported where it is written. What this fn's trailing
@@ -232,24 +233,24 @@ public final class SpecChecker {
         int nBusiness = spec.params().size();
         int nReq = spec.dependsOn().size();
         if (fn.params().size() != nBusiness + nReq) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.arity")
-                            .at(fn.pos()).args(fn.name(), fn.params().size(), spec.name(), nBusiness, nReq)
-                            .build());
+            throw CompileException.of(Diagnostic
+                            .at(fn.pos())
+                            .say(new BehaviorMessage.TheImplementationTakesAnotherNumberOfParameters(fn.name(), String.valueOf(fn.params().size()), spec.name(), String.valueOf(nBusiness), String.valueOf(nReq))).build());
         }
         for (Ast.FnParam p : fn.params()) {
             // a pattern in parameter position names a type, but it is not an annotation: it opens
             // the input the behavior already typed
             if (p.type() != null && !p.typeFromPattern()) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.noannotate")
-                                .at(p.pos()).args(fn.name(), spec.name(), p.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(p.pos()).say(new BehaviorMessage.AnImplementationsParametersTakeTheirTypesFromIt(fn.name(), spec.name(), p.name())).build());
             }
         }
         for (int i = 0; i < nReq; i++) {
             String got = fn.params().get(nBusiness + i).name();
             String want = spec.dependsOn().get(i).bare();
             if (!got.equals(want)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.reqorder")
-                                .at(fn.pos()).args(fn.name(), got, want).build());
+                throw CompileException.of(Diagnostic
+                                .at(fn.pos()).say(new BehaviorMessage.AnInjectedParameterIsOutOfOrder(fn.name(), got, want)).build());
             }
         }
 
@@ -283,9 +284,9 @@ public final class SpecChecker {
                 new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.behavior.return")
-                            .at(body.pos()).args(spec.name(), Type.show(output), Type.show(rt))
-                            .diff(Type.show(rt, output), Type.show(output, rt)).build());
+            throw CompileException.of(Diagnostic
+                            .at(body.pos())
+                            .diff(Type.show(rt, output), Type.show(output, rt)).say(new BehaviorMessage.TheBodyIsNotWhatTheBehaviorReturns(spec.name(), Type.show(output), Type.show(rt))).build());
         }
 
         // One expression (spec 16.4): this single walk sees every construction, including under a
@@ -616,8 +617,8 @@ public final class SpecChecker {
                 String stage = stages.get(i).bare();
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1702, "check.pipe.multiinput")
-                                    .at(pipe.pos()).args(stage, n, pipe.name()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stage, String.valueOf(n), pipe.name())).build());
                 }
             }
         }

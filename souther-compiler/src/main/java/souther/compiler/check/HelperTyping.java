@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.HelperMessage;
+import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -371,8 +372,9 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1);
         String rendered = "invariant -> " + PartialReachability.render(path);
         Ast.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1106, "check.invariant.partial")
-                        .at(at == null ? null : at.name().region()).args(data, reached, rendered).build());
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().region())
+                .say(new InvariantMessage.TheInvariantReachesAPartialHelper(data, reached, rendered))
+                .build());
     }
 
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where

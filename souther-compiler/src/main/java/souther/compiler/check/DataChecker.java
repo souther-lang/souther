@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.CodecMessage;
 import souther.compiler.diag.msg.DataMessage;
@@ -351,16 +352,16 @@ public final class DataChecker {
         // (ADR-0057, the declared-sum counterpart of E1606).
         for (Ast.Name c : sum.cases()) {
             if (symbols.isForeign(c.denotes())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1606, "check.sum.foreigncase")
+                throw CompileException.of(Diagnostic
                                 .at(c.name().region())
-                                .args(c.written(), sum.name(), c.denotes().module())
-                                .hint("check.sum.foreigncase.hint").build());
+                                
+                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), c.denotes().module())).build());
             }
         }
         List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
         if (cycle != null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1021, "check.sum.cycle")
-                            .at(sum.pos()).args(sum.name(), String.join(" | ", cycle)).build());
+            throw CompileException.of(Diagnostic
+                            .at(sum.pos()).say(new BehaviorMessage.ASumContainsItself(sum.name(), String.join(" | ", cycle))).build());
         }
         sum.decoder().ifPresent(disc -> {
             // a derived codec dispatches over the leaves, so a nested sum's cases count too (8.3, 10.3)

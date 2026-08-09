@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Localizable;
@@ -343,9 +344,9 @@ public final class CallElaborator {
         return switch (call.denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
-            case ValueName.Behavior _ -> CompileException.of(Diagnostic.of(DiagnosticCode.E1818, "check.behavior.notcallablehere").at(call.name().region())
-                            .args(call.written()).hint("check.behavior.notcallablehere.hint", call.written())
-                            .build());
+            case ValueName.Behavior _ -> CompileException.of(Diagnostic.at(call.name().region())
+                            .hint(new BehaviorMessage.WhatReachesABehavior(call.written()))
+                            .say(new BehaviorMessage.ABehaviorCannotBeCalledFromHere(call.written())).build());
             // A type applied to an argument is a construction, and every place a construction is
             // allowed rewrites it before the check reads it. Reaching here means it was written
             // somewhere no rewrite covers, so say what it is rather than what it is not.

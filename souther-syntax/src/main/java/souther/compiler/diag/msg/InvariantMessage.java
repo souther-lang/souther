@@ -42,4 +42,9 @@ public sealed interface InvariantMessage extends Message {
     /** The same, where no clause the check refuted was written with a name. */
     @Code(DiagnosticCode.E2010)
     record TheValueIsRejectedOnAReachablePathUnnamed(String data) implements InvariantMessage {}
+
+    /** An invariant reaches a helper that carries no termination guarantee. */
+    @Code(DiagnosticCode.E1106)
+    record TheInvariantReachesAPartialHelper(String data, String partial, String through)
+            implements InvariantMessage {}
 }

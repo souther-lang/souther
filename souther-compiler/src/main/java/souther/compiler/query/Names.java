@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -252,8 +253,8 @@ public final class Names {
             // declare a behavior by it.
             String last = dot < 0 ? "" : written.substring(dot + 1);
             if (last.equals("decoder") || last.equals("encoder")) {
-                return nothing(ref, Report.raised(Diagnostic.of(DiagnosticCode.E1703, "check.pipe.boundary")
-                                .at(ref.pos()).build()));
+                return nothing(ref, Report.raised(Diagnostic
+                                .at(ref.pos()).say(new BehaviorMessage.ABoundaryEdgeIsNotAStage()).build()));
             }
             return behavior(ref, this::unknownBehavior);
         }
