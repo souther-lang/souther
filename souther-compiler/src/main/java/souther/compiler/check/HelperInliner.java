@@ -903,7 +903,7 @@ public final class HelperInliner {
         if (composed.isPastTheBound()) {
             throw CompileException.of(Diagnostic
                     .say(new DeclarationMessage.SubstitutingAValueIsMoreStructureThanIsHeld(
-                            composed.past().name(), composed.costs(), StructuralCost.MAX))
+                            composed.past().name(), StructuralCost.MAX))
                     .at(composed.past().pos())
                     .hint(new DeclarationMessage.WriteItAsABehaviorOfItsOwn())
                     .build());

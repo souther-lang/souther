@@ -153,7 +153,12 @@ public final class StructuralCost {
      * What {@code root} costs once everything it names is substituted into it, and the name the
      * count was inside when it passed {@link #MAX}.
      *
-     * @param costs how much of the bound this takes, never more than one past it
+     * @param costs how much of the bound this takes where it stayed inside it. Where it did not,
+     *              this is what the count had reached when it stopped, which is past the bound and
+     *              is not the whole of what the definition would come to: the walk gives up at the
+     *              first way down that goes past, and an expanded application can go past by its
+     *              argument count at once. What is being asked is which side of the bound this
+     *              falls on, and that is all this says
      * @param past the name whose substitution took it past, or null where it did not go past
      */
     public record Composed(int costs, Ast.Var past) {

@@ -5420,8 +5420,8 @@ a `guard` binds nothing and is one all the same.
 
 [,text]
 ----
-Substituting `{value}` here makes {costs} levels of structure, and a definition holds at most
-{holds}. A value is substituted where it is named, so what it is worth is added to what names it.
+Substituting `{value}` here takes this past {holds} levels of structure, which is what a definition
+holds. A value is substituted where it is named, so what it is worth is added to what names it.
 ----
 
 Reported where a definition says more than the compiler holds (<<source-structural-complexity-is-bounded>>), at whichever construct exceeded it: the block, the definition as written, or the value whose substitution composed it. The three are one limit counted one way, and which of them is reported is where the count first passed it.

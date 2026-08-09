@@ -45,14 +45,15 @@ import java.util.Set;
 public final class AstBuilder {
 
     /**
-     * What each block this pass built costs, against the expression it folded to.
+     * What each thing this pass built costs, against what it built, for the constructs whose source
+     * shape does not survive being built.
      *
-     * <p>A block's cost is a fact about the statements the source wrote, and folding them leaves a
-     * spine of bindings — so it is worked out where the statements are still statements, and kept
-     * here for whatever holds the block to read. Held by identity: two blocks that read alike are
-     * two blocks.
+     * <p>A block's statements become a spine of bindings and a lambda's pattern parameters become
+     * one too, so by the time anything could measure them the source construct is gone and what is
+     * there is the shape this pass chose. Each is worked out where the source is still the source,
+     * and kept here for whatever holds it to read. Held by identity: two that read alike are two.
      */
-    private final java.util.Map<Ast.Expr, Integer> blockCosts = new java.util.IdentityHashMap<>();
+    private final java.util.Map<Ast.Expr, Integer> sourceCosts = new java.util.IdentityHashMap<>();
 
     private final LineIndex lines;
     private String moduleName = "";
@@ -857,13 +858,20 @@ public final class AstBuilder {
                     : Ast.Binder.desugared("$p" + (patternCounter++), pos(p)));
         }
         Ast.Expr body = expr(lastExprChild(n));
+        // What it costs, before its patterns are folded into it: the block it is, the bindings its
+        // parameters are written with, and what it holds. A pattern parameter becomes a spine here
+        // the same way a definition's does, so the same thing has to be said about it — counted
+        // from the pattern rather than from the spine.
+        int costs = 1 + bindingsIntroducedByPatterns(pats) + costOf(body);
         for (int i = pats.size() - 1; i >= 0; i--) {
             if (pats.get(i).kind() != SyntaxKind.PATTERN_NAME) {
                 SourcePos at = pos(pats.get(i));
                 body = bindPattern(pats.get(i), Ast.Var.desugared(params.get(i).name(), at), body, at);
             }
         }
-        return new Ast.Block(List.copyOf(params), body, pos);
+        Ast.Block held = new Ast.Block(List.copyOf(params), body, pos);
+        sourceCosts.put(held, costs);
+        return held;
     }
 
     private Ast.Expr fieldGetter(SyntaxNode n) {
@@ -1116,7 +1124,7 @@ public final class AstBuilder {
         }
         List<int[]> tally = new ArrayList<>();
         Ast.Expr folded = foldStatements(stmts, 0, result, tally);
-        blockCosts.put(folded, costOfBlock(tally));
+        sourceCosts.put(folded, costOfBlock(tally));
         return folded;
     }
 
@@ -1215,7 +1223,7 @@ public final class AstBuilder {
      *  where it was built rather than what folding it left behind. */
     private int costOf(Ast.Expr e) {
         return StructuralCost.of(e, held ->
-                blockCosts.containsKey(held) ? blockCosts.get(held) : StructuralCost.UNKNOWN);
+                sourceCosts.containsKey(held) ? sourceCosts.get(held) : StructuralCost.UNKNOWN);
     }
 
     private Ast.Expr foldStatements(List<SyntaxNode> stmts, int index, SyntaxNode result,
@@ -1296,6 +1304,18 @@ public final class AstBuilder {
      */
     /** How many bindings {@code patterns} introduce between them — what they cost, counted from
      *  what the source wrote rather than from the shape {@link #bindPattern} folds them into. */
+    /** As {@link #bindingsIntroducedBy(List)}, for parameters where a plain name is the parameter
+     *  itself and introduces nothing beyond it. */
+    private int bindingsIntroducedByPatterns(List<SyntaxNode> patterns) {
+        int bindings = 0;
+        for (SyntaxNode pat : patterns) {
+            bindings += pat == null || pat.kind() == SyntaxKind.PATTERN_NAME
+                    ? 0
+                    : bindingsIntroducedBy(pat);
+        }
+        return bindings;
+    }
+
     private int bindingsIntroducedBy(List<SyntaxNode> patterns) {
         int bindings = 0;
         for (SyntaxNode pat : patterns) {
