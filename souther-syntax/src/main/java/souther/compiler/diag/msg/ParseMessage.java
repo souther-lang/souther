@@ -73,8 +73,7 @@ public sealed interface ParseMessage extends Message {
     record AnOptionalIsOnlyWrittenOnAFieldOrInTheCore() implements ParseMessage, Reported {}
 
     /** What to write instead. */
-    @Code(DiagnosticCode.E1402)
-    record LeaveTheTypeOffAndTheOptionalIsInferred() implements ParseMessage, Reported {}
+    record LeaveTheTypeOffAndTheOptionalIsInferred() implements ParseMessage, Supporting {}
 
     @Code(DiagnosticCode.E1308)
     record AQuestionMarkFollowsASumOfCases(String cases) implements ParseMessage, Reported {}

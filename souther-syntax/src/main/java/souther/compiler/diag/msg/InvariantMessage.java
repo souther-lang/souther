@@ -22,7 +22,7 @@ public sealed interface InvariantMessage extends Message {
     record TheGuardsDoNotEstablishTheInvariant(String data) implements InvariantMessage, Reported {}
 
     /** What to write where a relation between inputs is what guarantees the clause. */
-    record ReifyTheRelationOntoAnInput(String data) implements InvariantMessage {}
+    record ReifyTheRelationOntoAnInput(String data) implements InvariantMessage, Supporting {}
 
     /** The value being built is one the invariant rejects, whatever the path. */
     @Code(DiagnosticCode.E2010)
@@ -53,9 +53,9 @@ public sealed interface InvariantMessage extends Message {
     @Code(DiagnosticCode.E1105)
     record TheNamedClauseConstructsAData(String data, String constructs, String clause) implements InvariantMessage, Reported {}
 
-    record TheClauseReachesThatConstruction(String clause) implements InvariantMessage {}
+    record TheClauseReachesThatConstruction(String clause) implements InvariantMessage, Supporting {}
 
-    record ThisClauseReachesThatConstruction() implements InvariantMessage {}
+    record ThisClauseReachesThatConstruction() implements InvariantMessage, Supporting {}
 
     @Code(DiagnosticCode.E1103)
     record TwoClausesShareOneName(String clause, String data) implements InvariantMessage, Reported {}
@@ -66,7 +66,7 @@ public sealed interface InvariantMessage extends Message {
     @Code(DiagnosticCode.E1104)
     record UnderscoreCannotNameAClause(String data) implements InvariantMessage, Reported {}
 
-    record NameTheClauseOrLeaveItUnnamed() implements InvariantMessage {}
+    record NameTheClauseOrLeaveItUnnamed() implements InvariantMessage, Supporting {}
 
     @Code(DiagnosticCode.E1106)
     record AnInvariantAnswersOnEveryPath(String data) implements InvariantMessage, Reported {}

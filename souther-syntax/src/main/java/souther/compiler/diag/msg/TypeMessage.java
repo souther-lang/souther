@@ -23,16 +23,16 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1208)
     record TheBranchesOfThisIfDisagree() implements TypeMessage, Reported {}
 
-    record TheThenBranchProduces(String type) implements TypeMessage {}
+    record TheThenBranchProduces(String type) implements TypeMessage, Supporting {}
 
-    record TheElseBranchProduces(String type) implements TypeMessage {}
+    record TheElseBranchProduces(String type) implements TypeMessage, Supporting {}
 
-    record MakeBothBranchesProduceOneType() implements TypeMessage {}
+    record MakeBothBranchesProduceOneType() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1318)
     record TheElementsDoNotAllHaveOneType() implements TypeMessage, Reported {}
 
-    record OneElementIsOneAndAnotherIsAnother(String one, String other) implements TypeMessage {}
+    record OneElementIsOneAndAnotherIsAnother(String one, String other) implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1314)
     record AFieldsMapCannotBeKeyedByThat(String field, String key) implements TypeMessage, Reported {}
@@ -43,7 +43,7 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1314)
     record AParameterMapCannotBeKeyedByThat(String parameter, String key) implements TypeMessage, Reported {}
 
-    record AMapIsAJsonObjectKeyedByStrings() implements TypeMessage {}
+    record AMapIsAJsonObjectKeyedByStrings() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1315)
     record AMapKeyIsComparedAndAFunctionIsNot(String given) implements TypeMessage, Reported {}
@@ -60,14 +60,14 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1815)
     record OverTheEmptyListTheSeedDecides(String call) implements TypeMessage, Reported {}
 
-    record AnnotateThePositionTheCallFeeds() implements TypeMessage {}
+    record AnnotateThePositionTheCallFeeds() implements TypeMessage, Supporting {}
 
-    record MapToTheNumericFieldFirst(String call) implements TypeMessage {}
+    record MapToTheNumericFieldFirst(String call) implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1317)
     record ItAnswersANumberAndThisPositionNeedsAnother(String call, String needed) implements TypeMessage, Reported {}
 
-    record ANewtypeIsBuiltFromTheResult(String call) implements TypeMessage {}
+    record ANewtypeIsBuiltFromTheResult(String call) implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1206)
     record ThePatternOpensAnotherType(String opens, String value) implements TypeMessage, Reported {}
@@ -75,14 +75,14 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1206)
     record NotANewtypeToOpenInABinding(String name) implements TypeMessage, Reported {}
 
-    record ABindingOpensOnlyWhatEveryValueHas() implements TypeMessage {}
+    record ABindingOpensOnlyWhatEveryValueHas() implements TypeMessage, Supporting {}
 
-    record AModelTypeOwnsTheAbsence() implements TypeMessage {}
+    record AModelTypeOwnsTheAbsence() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1816)
     record TheKeyMustBeAnOrderedValue(String call, String returns) implements TypeMessage, Reported {}
 
-    record MapToAnOrderedFieldFirst() implements TypeMessage {}
+    record MapToAnOrderedFieldFirst() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1325)
     record AParameterTakesATypeTheLanguageDeclares(String parameter, String type) implements TypeMessage, Reported {}
@@ -99,7 +99,7 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1312)
     record AParameterIsAnAnonymousUnion(String parameter, String type) implements TypeMessage, Reported {}
 
-    record DeclareItAsATypeOfTheModel() implements TypeMessage {}
+    record DeclareItAsATypeOfTheModel() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1322)
     record ATemporalTakesAWrittenString(String type) implements TypeMessage, Reported {}
@@ -116,7 +116,7 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1317)
     record ItDoesNotHaveTheTypeItNeedsHere(String what) implements TypeMessage, Reported {}
 
-    record AdjustTheValueOrThePosition() implements TypeMessage {}
+    record AdjustTheValueOrThePosition() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1316)
     record AListNeedsItsElementType() implements TypeMessage, Reported {}
@@ -136,7 +136,7 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1613)
     record OneNameForTwoMembers(String name, String one, String other) implements TypeMessage, Reported {}
 
-    record AMemberIsNamedByItsWrittenName() implements TypeMessage {}
+    record AMemberIsNamedByItsWrittenName() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1317)
     record ItExpectedOneTypeAndGotAnother(String what, String expected, String got) implements TypeMessage, Reported {}

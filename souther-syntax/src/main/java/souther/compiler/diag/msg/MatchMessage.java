@@ -14,10 +14,10 @@ public sealed interface MatchMessage extends Message {
     record NotACaseOf(String caseName, String subject) implements MatchMessage, Reported {}
 
     /** Where the name is a case of another sum, which is the match it belongs to. */
-    record ItIsACaseOfAnotherSum(String caseName, String sum) implements MatchMessage {}
+    record ItIsACaseOfAnotherSum(String caseName, String sum) implements MatchMessage, Supporting {}
 
     /** Where an inner match swallowed the arms written after it. */
-    record AMatchInAnArmTakesTheArmsAfterIt() implements MatchMessage {}
+    record AMatchInAnArmTakesTheArmsAfterIt() implements MatchMessage, Supporting {}
 
     /** Two arms match one case. */
     @Code(DiagnosticCode.E1204)
@@ -44,7 +44,7 @@ public sealed interface MatchMessage extends Message {
     record NotANewtypeToOpen(String name) implements MatchMessage, Reported {}
 
     /** What to write to bind the value itself rather than open it. */
-    record BindTheMatchedValueInstead(String name) implements MatchMessage {}
+    record BindTheMatchedValueInstead(String name) implements MatchMessage, Supporting {}
 
     /** A newtype pattern opens a layer of another type than the one it wraps. */
     @Code(DiagnosticCode.E1206)

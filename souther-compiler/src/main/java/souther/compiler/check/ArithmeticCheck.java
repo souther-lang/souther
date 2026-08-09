@@ -69,7 +69,7 @@ sealed interface ArithmeticCheck {
          * too: what {@code +} takes beside a newtype is not what {@code *} takes, and a fix written
          * for one of them sends the author from this refusal into the next. Where they differ, the
          * fix says both rather than guessing which operator asked. */
-        default souther.compiler.diag.msg.Message hint() {
+        default souther.compiler.diag.msg.Supporting hint() {
             return null;
         }
     }
@@ -89,7 +89,7 @@ sealed interface ArithmeticCheck {
                     Type.show(newtype, wrapped), Type.show(wrapped, newtype));
         }
 
-        @Override public souther.compiler.diag.msg.Message hint() {
+        @Override public souther.compiler.diag.msg.Supporting hint() {
             return new ArithmeticMessage.ReachTheBaseWithValue(
                     Type.show(newtype, wrapped), Type.show(wrapped, newtype));
         }
@@ -102,7 +102,7 @@ sealed interface ArithmeticCheck {
                     Type.show(right, left));
         }
 
-        @Override public souther.compiler.diag.msg.Message hint() {
+        @Override public souther.compiler.diag.msg.Supporting hint() {
             return new ArithmeticMessage.ConvertOneToTheOthersNewtype();
         }
 
@@ -118,7 +118,7 @@ sealed interface ArithmeticCheck {
                     Type.show(right, left));
         }
 
-        @Override public souther.compiler.diag.msg.Message hint() {
+        @Override public souther.compiler.diag.msg.Supporting hint() {
             return new ArithmeticMessage.ComputeOnValueAndBuildTheProduct();
         }
 
@@ -136,7 +136,7 @@ sealed interface ArithmeticCheck {
                     Type.show(right, left));
         }
 
-        @Override public souther.compiler.diag.msg.Message hint() {
+        @Override public souther.compiler.diag.msg.Supporting hint() {
             return new ArithmeticMessage.ComputeOnValueAndBuildTheQuotient();
         }
 
@@ -153,7 +153,7 @@ sealed interface ArithmeticCheck {
                     Type.show(base), Type.show(value, newtype));
         }
 
-        @Override public souther.compiler.diag.msg.Message hint() {
+        @Override public souther.compiler.diag.msg.Supporting hint() {
             return new ArithmeticMessage.WhatEachOperatorTakesBesideANewtype(
                     Type.show(newtype, value), Type.show(base));
         }
@@ -167,7 +167,7 @@ sealed interface ArithmeticCheck {
                     Type.show(newtype, value), Type.show(value, newtype));
         }
 
-        @Override public souther.compiler.diag.msg.Message hint() {
+        @Override public souther.compiler.diag.msg.Supporting hint() {
             return new ArithmeticMessage.BuildItWhereTheValueComesFrom(
                     Type.show(newtype, value));
         }
@@ -181,7 +181,7 @@ sealed interface ArithmeticCheck {
                     Type.show(value, newtype), Type.show(newtype, value));
         }
 
-        @Override public souther.compiler.diag.msg.Message hint() {
+        @Override public souther.compiler.diag.msg.Supporting hint() {
             return new ArithmeticMessage.ComputeOnValueAndBuildTheReciprocal();
         }
 

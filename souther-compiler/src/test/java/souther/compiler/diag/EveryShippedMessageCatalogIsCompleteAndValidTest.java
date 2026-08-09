@@ -509,9 +509,10 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         Deque<Class<?>> pending = new ArrayDeque<>(List.of(Message.class));
         while (!pending.isEmpty()) {
             Class<?> next = pending.poll();
-            if (next == souther.compiler.diag.msg.Reported.class) {
-                // Which of the messages report a rule, not one of the areas they are grouped into.
-                // Its implementors are reached through the area that declares them.
+            if (next == souther.compiler.diag.msg.Reported.class
+                    || next == souther.compiler.diag.msg.Supporting.class) {
+                // Which role a message has, not one of the areas they are grouped into. Their
+                // implementors are reached through the area that declares them.
                 continue;
             }
             Class<?>[] permitted = next.getPermittedSubclasses();
@@ -539,8 +540,15 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * mistake.
      *
      * <p>Which messages must name one is {@link souther.compiler.diag.msg.Reported}: those are what
-     * a diagnostic can be about, and a hint or a secondary label is not. The code on a hint would be
-     * read by nothing and counted by the rule below as a rule something reports.
+     * a diagnostic can be about. A hint or a secondary label is
+     * {@link souther.compiler.diag.msg.Supporting}, and names none — a code there is read by
+     * nothing, and counted by the rule below as a rule something reports.
+     *
+     * <p>Every message is one of the two and never both, which is what makes being a
+     * {@code Reported} the same thing as being usable as one: the two are separate types and the
+     * builder takes each where it belongs, so a message written for a hint cannot reach {@code say}
+     * and one written as a subject cannot reach {@code hint}. Held here as well because a leaf could
+     * implement neither and fall through both.
      */
     @Test
     void everyMessageIsARecordThatNamesItsRule() {
@@ -552,13 +560,19 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
                 continue;
             }
             boolean reports = souther.compiler.diag.msg.Reported.class.isAssignableFrom(leaf);
+            boolean supports = souther.compiler.diag.msg.Supporting.class.isAssignableFrom(leaf);
+            if (reports == supports) {
+                wrong.add(leaf.getName() + (reports
+                        ? " is both what a diagnostic is about and what is said beside one"
+                        : " is neither what a diagnostic is about nor what is said beside one"));
+            }
             boolean named = leaf.getAnnotation(souther.compiler.diag.msg.Code.class) != null;
             if (reports && !named) {
                 wrong.add(leaf.getName() + " reports a rule and names no code");
             }
             // A hint's code is read by nothing — a diagnostic's comes from its subject — so one
             // written here is a number that looks reported and is not.
-            if (!reports && named) {
+            if (supports && named) {
                 wrong.add(leaf.getName() + " is a hint or a label and names a code");
             }
         }
@@ -610,8 +624,10 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * <p>And read off the {@link souther.compiler.diag.msg.Reported} ones, which is what makes
      * "built" mean "built as a diagnostic's subject". Every message renders, so a scan of the source
      * cannot tell the subject from the hint written under it — three quarters of the subjects reach
-     * {@code say} through a helper and would read as unbuilt. The type says it instead: a hint
-     * carries no code, so no hint can answer for one.
+     * {@code say} through a helper and would read as unbuilt, and a scan that classified them by
+     * hand put thirteen hints on the wrong side. The types say it instead, and they are disjoint: a
+     * {@code Reported} is what {@code say} takes and nothing else takes it, so a message that is one
+     * is built as a subject or is not built at all.
      */
     @Test
     void everyCodeIsReportedByAMessage() throws IOException {

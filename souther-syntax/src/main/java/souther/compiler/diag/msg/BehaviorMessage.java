@@ -14,7 +14,7 @@ public sealed interface BehaviorMessage extends Message {
     @Code(DiagnosticCode.E1818)
     record ABehaviorCannotBeCalledFromHere(String behavior) implements BehaviorMessage, Reported {}
 
-    record WhatReachesABehavior(String behavior) implements BehaviorMessage {}
+    record WhatReachesABehavior(String behavior) implements BehaviorMessage, Supporting {}
 
     @Code(DiagnosticCode.E1317)
     record TheBodyIsNotWhatTheBehaviorReturns(String behavior, String returns, String body) implements BehaviorMessage, Reported {}
@@ -49,7 +49,7 @@ public sealed interface BehaviorMessage extends Message {
     @Code(DiagnosticCode.E2105)
     record AUnionOutputsInterfaceCollidesWithAData(String behavior, String jvmClass) implements BehaviorMessage, Reported {}
 
-    record AUnionOutputReachesJavaThroughThatName(String jvmClass) implements BehaviorMessage {}
+    record AUnionOutputReachesJavaThroughThatName(String jvmClass) implements BehaviorMessage, Supporting {}
 
     @Code(DiagnosticCode.E1021)
     record ASumContainsItself(String sum, String through) implements BehaviorMessage, Reported {}
@@ -57,7 +57,7 @@ public sealed interface BehaviorMessage extends Message {
     @Code(DiagnosticCode.E1606)
     record ACaseIsDeclaredInAnotherModule(String caseName, String sum, String module) implements BehaviorMessage, Reported {}
 
-    record ASumsCasesAreDeclaredWithIt(String caseName) implements BehaviorMessage {}
+    record ASumsCasesAreDeclaredWithIt(String caseName) implements BehaviorMessage, Supporting {}
 
     @Code(DiagnosticCode.E1502)
     record ABuiltInOptionCaseCannotBeDeclared(String name) implements BehaviorMessage, Reported {}

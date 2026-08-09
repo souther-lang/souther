@@ -10,21 +10,21 @@ public sealed interface AttemptMessage extends Message {
     record ThisIsNotAConstruction() implements AttemptMessage, Reported {}
 
     /** What to write instead. */
-    record WriteTheConstructionWhoseInvariantDecides() implements AttemptMessage {}
+    record WriteTheConstructionWhoseInvariantDecides() implements AttemptMessage, Supporting {}
 
     /** The type declares no invariant, so the attempt always succeeds. */
     @Code(DiagnosticCode.E2013)
     record TheTypeDeclaresNoInvariant(String data) implements AttemptMessage, Reported {}
 
     /** What to write instead. */
-    record ConstructItDirectlyOrGiveItAnInvariant(String data) implements AttemptMessage {}
+    record ConstructItDirectlyOrGiveItAnInvariant(String data) implements AttemptMessage, Supporting {}
 
     /** The arms answer clauses, and nothing here is attempted for them to answer for. */
     @Code(DiagnosticCode.E2018)
     record NothingHereIsAttempted() implements AttemptMessage, Reported {}
 
     /** What to write instead. */
-    record AttemptTheConstructionOrGiveTheElseOneValue() implements AttemptMessage {}
+    record AttemptTheConstructionOrGiveTheElseOneValue() implements AttemptMessage, Supporting {}
 
     /** One clause is answered by two arms. */
     @Code(DiagnosticCode.E2019)
@@ -35,26 +35,26 @@ public sealed interface AttemptMessage extends Message {
     record NoClauseOfThatName(String clause, String data) implements AttemptMessage, Reported {}
 
     /** Which clauses can be answered by name. */
-    record TheClausesThatCanBeAnswered(String clauses) implements AttemptMessage {}
+    record TheClausesThatCanBeAnswered(String clauses) implements AttemptMessage, Supporting {}
 
     /** Clauses that can fail and have no arm. */
     @Code(DiagnosticCode.E2015)
     record TheseClausesHaveNoArm(String clauses, String data) implements AttemptMessage, Reported {}
 
     /** What to write instead. */
-    record AnswerEachOfThemOrGiveTheElseOneValue() implements AttemptMessage {}
+    record AnswerEachOfThemOrGiveTheElseOneValue() implements AttemptMessage, Supporting {}
 
     /** Clauses declared without a name, and nothing answering them. */
     @Code(DiagnosticCode.E2016)
     record UnnamedClausesAreLeftUnanswered(String data) implements AttemptMessage, Reported {}
 
     /** What to write instead. */
-    record AddACatchAllArmOrNameThem() implements AttemptMessage {}
+    record AddACatchAllArmOrNameThem() implements AttemptMessage, Supporting {}
 
     /** A catch-all arm where every clause is named and answered. */
     @Code(DiagnosticCode.E2017)
     record TheCatchAllArmAnswersNothing(String data) implements AttemptMessage, Reported {}
 
     /** What to do about it. */
-    record DropTheCatchAllArm(String data) implements AttemptMessage {}
+    record DropTheCatchAllArm(String data) implements AttemptMessage, Supporting {}
 }

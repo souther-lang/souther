@@ -82,10 +82,13 @@ Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, hel
 are removed. `getMessage()` renders the same record in English, so a message exists once.
 
 A hint and a secondary label are messages too — they render, and they carry values of their own —
-but they are not what a diagnostic is about. Only the subject reports a rule, so only the subject
-carries a code: those messages are `Reported`, `say` takes one, and `hint` and `secondary` take any
-message. Without that split the code on a hint is a number nothing reads, and a rule whose subjects
-had all moved to another number would go on looking reported by the repair written under it.
+but they are not what a diagnostic is about. That is a second role and it is a second type: a
+`Reported` is the subject and names a rule, a `Supporting` is what is said beside one and names
+none. `say` takes the first, `hint` and `secondary` take the second, and every message is one or the
+other and never both. Being a `Reported` and being usable as one are then the same thing, which is
+the property rule 7 rests on: the code on a hint would be a number nothing reads, and counted, a
+rule whose subjects had all moved to another number would go on looking reported by the repair
+written under it.
 
 The build holds every message to seven rules, over every shipped locale:
 
@@ -106,13 +109,12 @@ record they used is left behind. Read off the records some site *builds*, it say
 to: nothing sends a reader to that chapter any more. A declared message nothing builds is also a
 sentence shipped in every catalog that no compile can produce, which is rule 6 on its own.
 
-What makes "built" mean "built as the subject" is the type and not the scan. Every message renders,
-so reading the source for what reaches `say` finds a quarter of the subjects — the rest arrive
-through a helper that takes the message and positions it. A hint carries no code, so no hint can
-answer for one, and the scan does not have to tell them apart. What is left is narrow and named
-rather than checked: a message declared `Reported` and then written only as a hint would answer for
-its code without reporting it. The name is the claim, and a mislabel is one the type invites nobody
-to make.
+What makes "built" mean "built as the subject" is the roles being types, not a scan of the source.
+Every message renders, so reading the source for what reaches `say` finds a quarter of the subjects
+— the rest arrive through a helper that takes the message and positions it — and classifying the
+439 by hand put thirteen hints on the wrong side. javac does it exactly, and it is what the split
+was checked with: declare each message either way, and every mistake is a call that does not
+compile.
 
 Rule 1 is why the messages are records at all rather than a convention: a leaf of the hierarchy that
 is not one carries no components, so every rule under it is silent about it. Rule 4 reads the entry
@@ -216,8 +218,8 @@ than separately.
 A message whose wording turns on a value becomes two records and two catalog entries. The catalog
 grows; the sentences become readable in the source.
 
-Rule 6 is held from the codes' side, and it is what says a rule stopped being reported: a code
-whose site moved to another number leaves nothing that sends a reader to its chapter, and the
+Rule 7 is held from the codes' side, and it is what says a rule stopped being reported: a code
+whose sites moved to another number leaves nothing that sends a reader to its chapter, and the
 number alone does not say so.
 
 Rule 5 found catalog keys no record names. Each was either a message that had stopped being raised

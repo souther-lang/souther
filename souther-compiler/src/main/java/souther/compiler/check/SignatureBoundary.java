@@ -250,7 +250,7 @@ final class SignatureBoundary {
         }
 
         CompileException hinted(souther.compiler.diag.msg.Reported said,
-                                souther.compiler.diag.msg.Message hint) {
+                                souther.compiler.diag.msg.Supporting hint) {
             Diagnostic.Builder builder = Diagnostic.say(said).hint(hint);
             return CompileException.of(
                     (region == null ? builder.at(pos) : builder.at(region)).build());

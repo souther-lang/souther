@@ -16,6 +16,5 @@ public sealed interface InjectionMessage extends Message {
             implements InjectionMessage, Reported {}
 
     /** Why an injected behavior is held to it whatever `exposing` says. */
-    @Code(DiagnosticCode.E1611)
-    record TheBaseClassIsPublicWhateverExposingSays(String kept) implements InjectionMessage, Reported {}
+    record TheBaseClassIsPublicWhateverExposingSays(String kept) implements InjectionMessage, Supporting {}
 }

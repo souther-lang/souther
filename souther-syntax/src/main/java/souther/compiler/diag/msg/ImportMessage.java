@@ -15,7 +15,7 @@ public sealed interface ImportMessage extends Message {
     record ImportedNameCollidesWithADeclaration(String name) implements ImportMessage, Reported {}
 
     /** What to do about a name that would stand for two things. */
-    record RenameOrQualifyTheCollidingName() implements ImportMessage {}
+    record RenameOrQualifyTheCollidingName() implements ImportMessage, Supporting {}
 
     /** Two modules publish the name, so importing both leaves it saying neither. */
     @Code(DiagnosticCode.E1508)

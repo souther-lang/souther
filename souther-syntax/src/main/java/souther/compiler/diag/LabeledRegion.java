@@ -1,6 +1,6 @@
 package souther.compiler.diag;
 
-import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.Supporting;
 
 /**
  * A secondary source region with a note. Used when one error points at more than one place — the
@@ -14,7 +14,7 @@ import souther.compiler.diag.msg.Message;
  * line that happens to sit at that number in the first. Read it through
  * {@link #sourceIdOr(String)}: a resolver is asked about a source that is named, never about null.
  */
-public record LabeledRegion(Region region, String sourceId, Message said) {
+public record LabeledRegion(Region region, String sourceId, Supporting said) {
 
     public LabeledRegion {
         java.util.Objects.requireNonNull(said, "a secondary region says why it is pointed at");

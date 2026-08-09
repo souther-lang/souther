@@ -1,6 +1,7 @@
 package souther.compiler.frontend;
 
 import souther.compiler.diag.msg.Reported;
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.LineIndex;
@@ -1516,7 +1517,7 @@ public final class AstBuilder {
     }
 
     /** As {@link #error}, with a hint under it naming the way out. */
-    private CompileException errorWithHint(SourcePos pos, Reported said, Message hint) {
+    private CompileException errorWithHint(SourcePos pos, Reported said, Supporting hint) {
         return CompileException.of(Diagnostic.say(said).at(pos).hint(hint).build());
     }
 

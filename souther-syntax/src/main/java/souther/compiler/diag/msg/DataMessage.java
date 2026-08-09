@@ -47,20 +47,20 @@ public sealed interface DataMessage extends Message {
     record NotAFieldOf(String field, String data) implements DataMessage, Reported {}
 
     /** What to write where a construction leaves a field unwritten and nothing was spread. */
-    record GiveTheFieldAValue(String field) implements DataMessage {}
+    record GiveTheFieldAValue(String field) implements DataMessage, Supporting {}
 
     /** What to write where a spread does not provide the missing field. */
-    record SupplyTheFieldExplicitly(String field) implements DataMessage {}
+    record SupplyTheFieldExplicitly(String field) implements DataMessage, Supporting {}
 
     /** The field is outside the part every case of the spread sum shares. */
-    record TheFieldIsNotInWhatTheSumShares(String field, String sum) implements DataMessage {}
+    record TheFieldIsNotInWhatTheSumShares(String field, String sum) implements DataMessage, Supporting {}
 
     /** The field is outside the shared part of every one of the sums spread. */
     record TheFieldIsInTheSharedPartOfNoneOfThese(String field, String sums)
-            implements DataMessage {}
+            implements DataMessage, Supporting {}
 
     /** A union written where it stands declares nothing about what its cases share. */
-    record NameTheUnionWithADeclaration(String union) implements DataMessage {}
+    record NameTheUnionWithADeclaration(String union) implements DataMessage, Supporting {}
 
     /** A data reaches itself through a field that is always there, so none of it can be built. */
     @Code(DiagnosticCode.E1013)
@@ -69,7 +69,7 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1010)
     record ACaseDeclaresTheDiscriminatorField(String caseName, String field, String sum) implements DataMessage, Reported {}
 
-    record TheTagAndTheFieldWantOneKey(String field) implements DataMessage {}
+    record TheTagAndTheFieldWantOneKey(String field) implements DataMessage, Supporting {}
 
     @Code(DiagnosticCode.E1010)
     record AMemberDeclaresTheDiscriminatorField(String member, String field, String behavior) implements DataMessage, Reported {}
@@ -89,7 +89,7 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1008)
     record ADataWithAnEmptyBody(String data) implements DataMessage, Reported {}
 
-    record WriteItAsAUnitDataOrGiveItFields(String data) implements DataMessage {}
+    record WriteItAsAUnitDataOrGiveItFields(String data) implements DataMessage, Supporting {}
 
     @Code(DiagnosticCode.E1502)
     record ADataTakesTheStandardLibraryQualifier(String data) implements DataMessage, Reported {}
@@ -124,5 +124,5 @@ public sealed interface DataMessage extends Message {
     @Code(DiagnosticCode.E1009)
     record ANewtypeMayNotWrapAnOptional(String newtype, String wraps) implements DataMessage, Reported {}
 
-    record WrapTheValueAndWriteTheQuestionMarkOnTheField(String newtype) implements DataMessage {}
+    record WrapTheValueAndWriteTheQuestionMarkOnTheField(String newtype) implements DataMessage, Supporting {}
 }

@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.Supporting;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
@@ -185,7 +186,7 @@ public final class Diagnostic {
         }
 
         /** A hint written as a message of its own. */
-        public Builder hint(Message hint) {
+        public Builder hint(Supporting hint) {
             this.notes.add(new Note(hint));
             return this;
         }
@@ -206,13 +207,13 @@ public final class Diagnostic {
         }
 
         /** A second place to point at, saying what it says as the values it is about. */
-        public Builder secondary(Region region, Message label) {
+        public Builder secondary(Region region, Supporting label) {
             this.secondary.add(new LabeledRegion(region, null, label));
             return this;
         }
 
         /** A second place to point at, in {@code sourceId}, saying what it says as a message. */
-        public Builder secondaryIn(String sourceId, Region region, Message label) {
+        public Builder secondaryIn(String sourceId, Region region, Supporting label) {
             this.secondary.add(new LabeledRegion(region, sourceId, label));
             return this;
         }

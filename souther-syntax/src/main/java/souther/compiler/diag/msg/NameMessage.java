@@ -23,7 +23,7 @@ public sealed interface NameMessage extends Message {
     @Code(DiagnosticCode.E1815)
     record TheElementTypeCannotBeInferredHere() implements NameMessage, Reported {}
 
-    record TheAccumulatorsTypeStaysUnknown() implements NameMessage {}
+    record TheAccumulatorsTypeStaysUnknown() implements NameMessage, Supporting {}
 
     @Code(DiagnosticCode.E1317)
     record TheBindingDeclaresAnotherType(String binding, String declares, String value) implements NameMessage, Reported {}
@@ -40,7 +40,7 @@ public sealed interface NameMessage extends Message {
     @Code(DiagnosticCode.E1025)
     record WriteAStandardLibraryNameQualified(String name, String qualified) implements NameMessage, Reported {}
 
-    record WriteItOnItsOwn(String name) implements NameMessage {}
+    record WriteItOnItsOwn(String name) implements NameMessage, Supporting {}
 
     @Code(DiagnosticCode.E1023)
     record NoBehaviorOfThatNameInThisPipeline(String name) implements NameMessage, Reported {}
@@ -54,7 +54,7 @@ public sealed interface NameMessage extends Message {
     @Code(DiagnosticCode.E1307)
     record NothingSaysWhatThisPositionHolds() implements NameMessage, Reported {}
 
-    record WriteItWhereTheTypeIsStated() implements NameMessage {}
+    record WriteItWhereTheTypeIsStated() implements NameMessage, Supporting {}
 
     @Code(DiagnosticCode.E1022)
     record AValueReachesItself(String name, String through) implements NameMessage, Reported {}

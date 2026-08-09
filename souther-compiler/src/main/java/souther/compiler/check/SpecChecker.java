@@ -540,7 +540,7 @@ public final class SpecChecker {
             if (sig == null || (!injected && !exposed.contains(b.name()))) {
                 continue;
             }
-            java.util.function.Function<String, souther.compiler.diag.msg.Message> hint =
+            java.util.function.Function<String, souther.compiler.diag.msg.Supporting> hint =
                     injected
                             ? hidden -> new InjectionMessage
                                     .TheBaseClassIsPublicWhateverExposingSays(hidden)
@@ -568,7 +568,7 @@ public final class SpecChecker {
                                      java.util.function.Function<String,
                                              souther.compiler.diag.msg.Reported> say,
                                      java.util.function.Function<String,
-                                             souther.compiler.diag.msg.Message> hint,
+                                             souther.compiler.diag.msg.Supporting> hint,
                                      SourcePos pos, Symbols symbols,
                                      boolean exposeAll, Set<String> exposed) {
         if (written == null) {

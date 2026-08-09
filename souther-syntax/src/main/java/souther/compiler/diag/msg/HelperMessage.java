@@ -17,7 +17,7 @@ public sealed interface HelperMessage extends Message {
             implements HelperMessage, Reported {}
 
     /** Where the use that fails to determine it is pointed at. */
-    record ThisUseNamesNoType() implements HelperMessage {}
+    record ThisUseNamesNoType() implements HelperMessage, Supporting {}
 
     /** The parameter is only ever read through a field, which names no type. */
     @Code(DiagnosticCode.E1811)
@@ -25,7 +25,7 @@ public sealed interface HelperMessage extends Message {
             implements HelperMessage, Reported {}
 
     /** Where the field read that fails to determine it is pointed at. */
-    record AFieldIsReadOffItAndThatNamesNoType() implements HelperMessage {}
+    record AFieldIsReadOffItAndThatNamesNoType() implements HelperMessage, Supporting {}
 
     /** A parameter used as a function must be written with its type. */
     @Code(DiagnosticCode.E1811)
@@ -66,7 +66,7 @@ public sealed interface HelperMessage extends Message {
             implements HelperMessage, Reported {}
 
     /** What that call reads as, written out. */
-    record WriteTheCallThisWay(String call, String shape) implements HelperMessage {}
+    record WriteTheCallThisWay(String call, String shape) implements HelperMessage, Supporting {}
 
     /** A value is written on the argument that takes the function. */
     @Code(DiagnosticCode.E1804)
@@ -126,5 +126,5 @@ public sealed interface HelperMessage extends Message {
     record AFunctionTypeIsWrittenOutsideAHelperParameter(String binding) implements HelperMessage, Reported {}
 
     /** What to do about it. */
-    record RemoveTheAnnotation() implements HelperMessage {}
+    record RemoveTheAnnotation() implements HelperMessage, Supporting {}
 }

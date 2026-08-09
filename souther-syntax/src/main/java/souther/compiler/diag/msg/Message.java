@@ -12,8 +12,13 @@ package souther.compiler.diag.msg;
  * <p>Which catalog entry a message renders through is read off the message's own type
  * ({@link MessageKeys}), so it is not a string a site chooses, two messages cannot name one entry
  * and a message cannot name none. Which rule it reports is read the same way ({@link MessageCodes}),
- * of the messages that report one: those are {@link Reported}, and a hint or a secondary label is
- * not.
+ * of the messages that report one.
+ *
+ * <p>Every message is one of two things and never both. A {@link Reported} is what a diagnostic is
+ * about: it names a rule, and it is what {@code say} takes. A {@link Supporting} is what is said
+ * alongside — a hint, a secondary label — and it names no rule, because a diagnostic's code comes
+ * from its subject and from nothing else. The two are disjoint so that being one is the same thing
+ * as being usable as one.
  *
  * <p>Both are functions of the type and not methods here. A record component generates an accessor,
  * so a method on this interface is one a message could answer for itself: a component named
@@ -28,5 +33,5 @@ package souther.compiler.diag.msg;
 public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage,
         CodecMessage, DataMessage, DeclarationMessage, ExampleMessage, HelperMessage, ImportMessage,
         InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage, NameMessage, ParseMessage,
-        Reported, TypeMessage {
+        Reported, Supporting, TypeMessage {
 }
