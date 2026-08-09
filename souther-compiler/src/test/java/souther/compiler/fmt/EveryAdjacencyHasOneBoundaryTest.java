@@ -26,7 +26,7 @@ class EveryAdjacencyHasOneBoundaryTest {
         List<String> unbounded = new ArrayList<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             unbounded.addAll(Gaps.adjacenciesWithNoBoundary(
-                    Formatter.document(CstParser.parse(source).root())));
+                    Formatter.canonicalize(CstParser.parse(source).root()).construction().doc()));
         }
         assertEquals(List.of(), unbounded.stream().distinct().toList(),
                 "pairs written next to each other with nothing between them to decide");

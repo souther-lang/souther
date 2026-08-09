@@ -268,7 +268,7 @@ class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
         Set<String> outside = new TreeSet<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             for (Gaps.Boundary b : Gaps.boundaries(
-                    Formatter.document(CstParser.parse(source).root()))) {
+                    Formatter.canonicalize(CstParser.parse(source).root()).construction().doc())) {
                 if (b.joining() == null || b.policy() == TokenDoc.Break.ALWAYS) {
                     continue;   // not one the rule was asked about
                 }

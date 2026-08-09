@@ -159,7 +159,7 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
      */
     @Test
     void andAPlaceMayStandForNothingTheSourceWrote() {
-        Formatter.Construction built = Formatter.build(CstParser.parse("""
+        Formatter.Construction built = Formatter.canonicalize(CstParser.parse("""
                 module m
                 data R =
                     { x: Int
@@ -170,7 +170,7 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
 
                 fake f
                     | _ -> R { x = 0 }
-                """).root());
+                """).root()).construction();
 
         List<Place> empty = new ArrayList<>();
         for (Place p : placesIn(built.doc())) {
@@ -205,7 +205,7 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
         List<String> unwritten = new ArrayList<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             SyntaxNode file = CstParser.parse(source).root();
-            Formatter.Construction built = Formatter.build(file);
+            Formatter.Construction built = Formatter.canonicalize(file).construction();
             for (SyntaxNode n : allOf(file)) {
                 if (n.kind() == SyntaxKind.SOURCE_FILE) {
                     continue;
@@ -234,7 +234,7 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
     void andEveryPlaceTheConstructionMakesIsWrittenInTheDocument() {
         List<String> unmarked = new ArrayList<>();
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
-            Formatter.Construction built = Formatter.build(CstParser.parse(source).root());
+            Formatter.Construction built = Formatter.canonicalize(CstParser.parse(source).root()).construction();
             for (Place p : built.places().made()) {
                 if (built.order().get(p) == null) {
                     unmarked.add(p.construct() + " under "
@@ -292,7 +292,7 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
 
     private Formatter.Construction build(String src) {
         root = CstParser.parse(src).root();
-        return Formatter.build(root);
+        return Formatter.canonicalize(root).construction();
     }
 
     private static SyntaxNode childOf(SyntaxNode n, SyntaxKind kind) {
