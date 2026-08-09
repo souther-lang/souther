@@ -5,7 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.cst.CstParser;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -129,5 +132,22 @@ class EveryPlaceIsSomewhereInTheOutputTest {
                 "and so are the ends themselves");
         assertFalse(held.contains(new Extent(30, 30)), "a position past the end is not");
         assertFalse(held.contains(new Extent(9, 9)), "nor one before the start");
+    }
+
+    /**
+     * And a run makes each of its places once. Asking a canonicalization for the file's place used
+     * to make one — the call that reads it also records it — so the file was in the run's places
+     * twice. Nothing above sees that: both copies are the same object, so both have an extent and
+     * both are inside whatever holds them. What one canonicalization made is a set of things, and
+     * a list of them with a member twice is not that.
+     */
+    @Test
+    void andEachPlaceOnce() {
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+            List<Place> made = canonical(source).places();
+            Set<Place> once = Collections.newSetFromMap(new IdentityHashMap<>());
+            once.addAll(made);
+            assertEquals(made.size(), once.size(), "a place made twice, in:\n" + source);
+        }
     }
 }

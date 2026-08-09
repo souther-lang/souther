@@ -150,7 +150,7 @@ public final class Formatter {
             Layout laid = construction.doc().resolve().layout(WIDTH);
             // The file's place is the output, which is the run's answer and not one a construct
             // emits: nothing writes the file, and every place it made is somewhere inside it.
-            return new CanonicalForm(construction, laid.and(construction.places().fileOf(file),
+            return new CanonicalForm(construction, laid.and(construction.places().file(),
                     new Extent(0, laid.text().length())));
         } catch (StackOverflowError _) {
             throw tooDeep();
