@@ -16,6 +16,11 @@ import java.util.Map;
  * topics as {@code set/topic<TAB>title}; a name prints that section or topic; {@code --search
  * <term>} spans both. The tab-separated listing is one line per entry so a tool — a coding agent
  * above all — can pick a name without scraping prose.
+ *
+ * <p>A search asks three things in turn and stops at the first that answers. Whether the term is a
+ * name, which is settled rather than scored, and answers with that one document. Whether the
+ * documents say it as it stands, which is a phrase search. Whether they say its words, which is
+ * ranked by how many of them each document holds.
  */
 public final class DocCommand {
 
@@ -67,17 +72,37 @@ public final class DocCommand {
                 }
             }
             String term = args[1];
-            List<String> lines = new ArrayList<>(hits(spec, shipped, term));
-            if (lines.isEmpty() && term.contains(" ")) {
-                // A phrase is matched whole, so a reader who typed a question rather than a term
-                // gets nothing. Rather than answer with silence, the words are tried separately.
-                err.println("no section says `" + term + "` — searching for its words instead");
-                for (String word : term.split("\\s+")) {
-                    for (String line : hits(spec, shipped, word)) {
-                        if (!lines.contains(line)) {
-                            lines.add(line);
-                        }
-                    }
+            // What a reader arriving from a diagnostic holds is a name, and a name resolves. Asked
+            // first and answered on its own, because the section a name names is not a matter of
+            // how much prose says its words: a heading's anchor is written where no section's body
+            // reaches, so ranking it would answer with the sections that cite it and never with it.
+            SpecDocument.Section named = spec.named(term);
+            if (named != null) {
+                resolved(term, named.anchor(), err);
+                print(named, out);
+                return 0;
+            }
+            LibraryDocs.Topic topic = shipped.named(term);
+            String shippedText = topic == null ? null : shipped.read(topic.name());
+            if (shippedText != null) {
+                resolved(term, topic.name(), err);
+                out.print(shippedText);
+                return 0;
+            }
+            List<String> lines = hits(spec, shipped, List.of(term), Match.ANYWHERE);
+            List<String> asked = DocName.words(term);
+            if (lines.isEmpty() && asked.size() > 1) {
+                // Nobody's name and nobody's phrase, so what is left to answer from is the words.
+                // Every section is scored against the whole query at once: taking the words one at
+                // a time and laying the answers end to end would fill the page from the first of
+                // them, and a reader who wrote eight words would be answered for one.
+                List<String> byWord = hits(spec, shipped, asked, Match.WORD);
+                if (!byWord.isEmpty()) {
+                    // Said only where it happened. A term whose words are nowhere either is answered
+                    // that nothing says it, and being told twice, in two ways, is being told less.
+                    err.println("no section says `" + term
+                            + "` — ranking the sections by how many of its words they say");
+                    lines = byWord;
                 }
             }
             if (lines.isEmpty()) {
@@ -122,10 +147,38 @@ public final class DocCommand {
             // not told so cannot tell an answer to what they asked from the nearest thing to it.
             err.println("`" + anchor + "` is written in `" + section.anchor() + "`, which is what follows");
         }
+        print(section, out);
+        return 0;
+    }
+
+    /**
+     * A section, headed as the document heads it.
+     *
+     * <p>The one place a section is written out, so that a name resolved by a search and the same
+     * name read outright are answered with the same text rather than with two renderings of it.
+     */
+    private static void print(SpecDocument.Section section, PrintStream out) {
         out.println("=".repeat(section.level()) + " " + section.title() + " [#" + section.anchor() + "]");
         out.println();
         out.println(section.body());
-        return 0;
+    }
+
+    /**
+     * Says that {@code asked} was taken as a name, and which document it named.
+     *
+     * <p>A search that answers with one document rather than a list has done something the reader
+     * did not ask for in so many words, and a reader who is not told cannot tell it from a search
+     * that found one hit. Where the name is written inside a document rather than being that
+     * document's own, that is said too: {@code an-optional-does-not-stand-in-a-boundary} is a rule
+     * inside a section, and the section is what there is to answer with.
+     */
+    private static void resolved(String asked, String name, PrintStream err) {
+        if (DocName.asWords(asked).equals(DocName.asWords(name))) {
+            err.println("`" + asked + "` is a name, so it is resolved rather than searched for");
+            return;
+        }
+        err.println("`" + asked + "` is a name written in `" + name
+                + "` — resolved rather than searched for, and that is what follows");
     }
 
     /** What separates one part of a documentation name from the next. */
@@ -184,25 +237,28 @@ public final class DocCommand {
      * after the other would put the best answer out of reach whenever the other side has enough
      * weak matches to fill the page, and the shipped topics — being few — are what would vanish.
      */
-    private record Found(String name, String title, String snippet, boolean titled, int occurrences) {
+    private record Found(String name, String title, String snippet, boolean titled, int matched,
+            int occurrences) {
 
         String rendered() {
             return name + "\t" + title + (snippet.isBlank() ? "" : "\n    " + snippet);
         }
     }
 
-    private static List<String> hits(SpecDocument spec, LibraryDocs shipped, String term) {
+    private static List<String> hits(SpecDocument spec, LibraryDocs shipped, List<String> terms,
+            Match how) {
         List<Found> found = new ArrayList<>();
-        for (SpecDocument.Hit hit : spec.rank(term)) {
+        for (SpecDocument.Hit hit : spec.rank(terms, how)) {
             found.add(new Found(hit.section().anchor(), hit.section().title(), hit.snippet(),
-                    hit.titled(), hit.occurrences()));
+                    hit.titled(), hit.matched(), hit.occurrences()));
         }
-        for (LibraryDocs.Hit hit : shipped.rank(term)) {
+        for (LibraryDocs.Hit hit : shipped.rank(terms, how)) {
             found.add(new Found(hit.topic().name(), hit.topic().title(), hit.snippet(),
-                    hit.titled(), hit.occurrences()));
+                    hit.titled(), hit.matched(), hit.occurrences()));
         }
         return found.stream()
-                .sorted(java.util.Comparator.comparing(Found::titled).reversed()
+                .sorted(java.util.Comparator.comparingInt(Found::matched).reversed()
+                        .thenComparing(java.util.Comparator.comparing(Found::titled).reversed())
                         .thenComparing(java.util.Comparator.comparingInt(Found::occurrences).reversed()))
                 .map(Found::rendered)
                 .toList();

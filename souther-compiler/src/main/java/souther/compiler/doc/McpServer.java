@@ -86,7 +86,13 @@ public final class McpServer {
     private static final List<Tool> TOOLS = List.of(
             new Tool("doc_search",
                     "Search the Souther language specification and every bundled library doc for a term."
-                            + " Answers the 20 best hits unless `limit` says otherwise.",
+                            + " A term that is a name answers with that one document: the anchor a"
+                            + " diagnostic cites resolves whether it is written with its hyphens"
+                            + " (`an-optional-does-not-stand-in-a-boundary`) or as its words (`an optional"
+                            + " does not stand in a boundary`), and so does a diagnostic code. Otherwise"
+                            + " the documents saying the term are listed, and failing that the ones saying"
+                            + " its words, most of them first. Answers the 20 best hits unless `limit`"
+                            + " says otherwise.",
                     List.of(new Param("term", Kind.STRING, true, "the word or phrase to look for"),
                             new Param("limit", Kind.COUNT, false,
                                     "how many hits to answer with; 0 for all of them (default 20)"))),

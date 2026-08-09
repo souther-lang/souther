@@ -75,6 +75,8 @@ public final class LibraryDocs {
     /** Keyed by {@link DocName#canonical}, so a topic is found in whatever case it is asked for.
      *  The topic keeps its own spelling: the name is also the path its text is read from. */
     private final Map<String, Topic> byName;
+    /** The same topics keyed by {@link DocName#asWords}, which is how a search resolves a name. */
+    private final Map<String, Topic> byWords;
     /**
      * What a search ranks: every file and every part of one, each over its own text.
      *
@@ -92,6 +94,12 @@ public final class LibraryDocs {
         this.byName = byName;
         this.ranked = ranked;
         this.caller = caller;
+        Map<String, Topic> byWords = new LinkedHashMap<>();
+        // A jar's own doing, unlike a name that is this compiler's to keep apart: two topics whose
+        // names are the same words are still two names to read by, so the one a search resolves to
+        // is settled here — the first the registry gave — rather than by which was read last.
+        byName.values().forEach(topic -> byWords.putIfAbsent(DocName.asWords(topic.name()), topic));
+        this.byWords = byWords;
     }
 
     /** The doc sets reachable through {@code loader} — for the CLI, everything bundled with it. */
@@ -270,55 +278,67 @@ public final class LibraryDocs {
         return text(topic);
     }
 
+    /**
+     * The topic {@code query} is the name of, written as its words or as its doc set spells it, or
+     * null when it names nothing. The same question {@link #read} answers, asked the way a reader
+     * who has the name says it aloud.
+     */
+    public Topic named(String query) {
+        return DocName.isName(query) ? byWords.get(DocName.asWords(query)) : null;
+    }
+
     /** Every topic whose title or text contains {@code term}, case-insensitively. */
     public List<Topic> search(String term) {
         return rank(term).stream().map(Hit::topic).toList();
     }
 
-    /** A topic the term was found in, scored the same way a specification section is. */
-    public record Hit(Topic topic, boolean titled, int occurrences, String snippet) {}
+    /** A topic the query was found in, scored the same way a specification section is. */
+    public record Hit(Topic topic, boolean titled, int matched, int occurrences, String snippet) {}
 
     /**
-     * The topics that say {@code term}, each with what a caller needs to rank it against a
-     * specification section: whether the title names it, how often it is said, and the line it was
-     * found on.
+     * The topics that say {@code term} as it stands, each with what a caller needs to rank it
+     * against a specification section.
      */
     public List<Hit> rank(String term) {
         if (term == null || term.isBlank()) {
             return List.of();
         }
-        String needle = term.toLowerCase();
+        return rank(List.of(term), Match.ANYWHERE);
+    }
+
+    /**
+     * The topics that say any of {@code terms}: how much of the query each holds, whether its title
+     * or its name is what was asked for, how often it is said, and the line one was found on.
+     *
+     * <p>Scored the way a specification section is, by the same {@link Match}, because the two are
+     * merged into one answer and sorted once. A shipped topic ranked under its own meaning of the
+     * numbers beside it would be placed against sections it was never compared with.
+     */
+    List<Hit> rank(List<String> asked, Match how) {
+        List<String> terms = asked.stream().map(DocName::canonical).toList();
         List<Hit> hits = new ArrayList<>();
         for (Topic topic : ranked) {
-            String body = own(topic);
-            boolean titled = topic.title().toLowerCase().contains(needle)
-                    || topic.name().toLowerCase().contains(needle);
-            int occurrences = count(body.toLowerCase(), needle);
-            if (titled || occurrences > 0) {
-                hits.add(new Hit(topic, titled, occurrences, snippet(topic, term)));
+            Match.Held held = how.held((topic.title() + " " + topic.name()).toLowerCase(),
+                    own(topic).toLowerCase(), terms);
+            if (held.matched() > 0) {
+                hits.add(new Hit(topic, held.named(), held.matched(), held.occurrences(),
+                        snippet(topic, terms, how)));
             }
         }
         return hits;
     }
 
-    private static int count(String haystack, String needle) {
-        if (needle.isEmpty()) {
-            return 0;
-        }
-        int n = 0;
-        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length())) {
-            n++;
-        }
-        return n;
-    }
-
     /** The line of {@code topic} that says {@code term}, cut to a readable width. */
     public String snippet(Topic topic, String term) {
-        String needle = term.toLowerCase();
+        return snippet(topic, List.of(DocName.canonical(term)), Match.ANYWHERE);
+    }
+
+    /** The line of {@code topic} that says one of {@code terms}, cut to a readable width. */
+    private String snippet(Topic topic, List<String> terms, Match how) {
         String line = own(topic).lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
-                .filter(l -> l.toLowerCase().contains(needle))
+                .filter(l -> terms.stream().anyMatch(term -> how.says(l.toLowerCase(), term)))
                 .findFirst()
                 .orElse("");
         return line.length() <= 120 ? line : line.substring(0, 119) + "…";

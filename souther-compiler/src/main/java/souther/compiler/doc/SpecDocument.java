@@ -58,29 +58,59 @@ public final class SpecDocument {
     /** Keyed by {@link DocName#canonical}: every name the document writes, and the section it
      *  resolves to. Several names may resolve to one section. */
     private final Map<String, Section> byAnchor;
+    /** The same names keyed by {@link DocName#asWords}, which is how a search resolves one. */
+    private final Map<String, Section> byWords;
     private final List<Section> inOrder;
     private final List<String> ownTexts;
     private final List<String> names;
 
     private SpecDocument(List<Section> sections, List<String> ownTexts,
-            Map<String, Section> byAnchor, List<String> names) {
+            Map<String, Section> byAnchor, Map<String, Section> byWords, List<String> names) {
         this.inOrder = List.copyOf(sections);
         this.ownTexts = List.copyOf(ownTexts);
         this.byAnchor = Map.copyOf(byAnchor);
+        this.byWords = Map.copyOf(byWords);
         this.names = List.copyOf(names);
     }
 
-    /** Registers {@code anchor} as a name for {@code section}, refusing a name already taken. Two
-     *  names that fold to one key would otherwise answer by whichever was read second. */
-    private static void register(Map<String, Section> byAnchor, Map<String, String> writtenAs,
-            String anchor, Section section) {
-        String key = DocName.canonical(anchor);
-        String taken = writtenAs.put(key, anchor);
-        if (taken != null) {
-            throw new IllegalStateException("two names to ask for fold together: `"
-                    + taken + "` and `" + anchor + "`");
+    /**
+     * The names read so far, under each fold a lookup uses, with the spelling each was read as.
+     *
+     * <p>Both folds are held together because a name is registered under both or under neither: one
+     * of them holding a name the other does not is a name one tool answers for and the other cannot.
+     */
+    private static final class Names {
+
+        private final Map<String, Section> byAnchor = new LinkedHashMap<>();
+        private final Map<String, Section> byWords = new LinkedHashMap<>();
+        private final Map<String, String> writtenAs = new LinkedHashMap<>();
+        private final Map<String, String> askedAs = new LinkedHashMap<>();
+
+        /**
+         * Registers {@code anchor} as a name for {@code section}, refusing a name already taken.
+         *
+         * <p>Two names that fold to one key would otherwise answer by whichever was read second,
+         * and both folds are checked because both are lookups. A pair that only the wider fold
+         * brings together — {@code also-named} and {@code also_named} — reads as two names in the
+         * document and would be one question to a reader who typed either, answered from whichever
+         * the document happened to write last.
+         */
+        void register(String anchor, Section section) {
+            String key = DocName.canonical(anchor);
+            String taken = writtenAs.put(key, anchor);
+            if (taken != null) {
+                throw new IllegalStateException("two names to ask for fold together: `"
+                        + taken + "` and `" + anchor + "`");
+            }
+            String words = DocName.asWords(anchor);
+            String said = askedAs.put(words, anchor);
+            if (said != null) {
+                throw new IllegalStateException("two names are the same words: `"
+                        + said + "` and `" + anchor + "`");
+            }
+            byAnchor.put(key, section);
+            byWords.put(words, section);
         }
-        byAnchor.put(key, section);
     }
 
     /** The specification this compiler was built from, bundled in its jar. */
@@ -176,11 +206,10 @@ public final class SpecDocument {
             sections.add(new Section(here.anchors().getFirst(), here.title(), here.level(), body));
             ownTexts.add(String.join("\n", List.of(lines).subList(here.bodyFrom(), ownEnd)).strip());
         }
-        Map<String, Section> byAnchor = new LinkedHashMap<>();
-        Map<String, String> writtenAs = new LinkedHashMap<>();
+        Names named = new Names();
         for (int h = 0; h < headings.size(); h++) {
             for (String anchor : headings.get(h).anchors()) {
-                register(byAnchor, writtenAs, anchor, sections.get(h));
+                named.register(anchor, sections.get(h));
             }
         }
         // An anchor written anywhere else names a place inside a section rather than a section, and
@@ -200,15 +229,16 @@ public final class SpecDocument {
             }
             Matcher anchor = ANCHOR.matcher(lines[i]);
             if (anchor.matches()) {
-                register(byAnchor, writtenAs, anchor.group(1), standingIn);
+                named.register(anchor.group(1), standingIn);
                 continue;
             }
             Matcher inline = INLINE_ANCHOR.matcher(lines[i]);
             while (inline.find()) {
-                register(byAnchor, writtenAs, inline.group(1), standingIn);
+                named.register(inline.group(1), standingIn);
             }
         }
-        return new SpecDocument(sections, ownTexts, byAnchor, List.copyOf(writtenAs.values()));
+        return new SpecDocument(sections, ownTexts, named.byAnchor, named.byWords,
+                List.copyOf(named.writtenAs.values()));
     }
 
     /**
@@ -241,6 +271,20 @@ public final class SpecDocument {
     }
 
     /**
+     * The section {@code query} is the name of, written as its words or as the document spells it,
+     * or null when it names nothing.
+     *
+     * <p>This is the same question {@link #section} answers and not a well-scored guess at it. A
+     * name resolves or it does not, and what a name resolves to is not for prose to decide: a
+     * heading's anchor is written on a line of its own that belongs to no section's body, so a
+     * search that went looking for it in the text would find it only where another section cites it
+     * and would answer with every section but the one it names.
+     */
+    public Section named(String query) {
+        return DocName.isName(query) ? byWords.get(DocName.asWords(query)) : null;
+    }
+
+    /**
      * Every name that resolves, as the document spells it, in the order the document writes them.
      *
      * <p>The same names {@link #section} answers for, so a caller suggesting what a reader might
@@ -260,20 +304,21 @@ public final class SpecDocument {
     }
 
     /**
-     * A section the term was found in: whether its title names it, how often it says it, and the
-     * line it was found on. The line is what makes a list of hits an answer rather than a filtered
-     * table of contents — without it a reader has to open each section to tell a hit from a
-     * coincidence.
+     * A section the query was found in: how many of the terms asked for it holds, whether its title
+     * or its anchor is one of them, how often it says them, and the line one was found on. The line
+     * is what makes a list of hits an answer rather than a filtered table of contents — without it a
+     * reader has to open each section to tell a hit from a coincidence.
      */
-    public record Hit(Section section, boolean titled, int occurrences, String snippet) {}
+    public record Hit(Section section, boolean titled, int matched, int occurrences, String snippet) {}
 
     /** How wide a snippet may run before it stops being readable in a list. */
     private static final int SNIPPET_WIDTH = 120;
 
     /**
-     * The sections that say {@code term}, best answer first: a section titled with the term, then
-     * the sections that dwell on it most. A word common enough to appear across the specification
-     * is otherwise no answer at all — over half the document comes back and nothing is chosen.
+     * The sections that say {@code term} as it stands, best answer first: a section titled with the
+     * term, then the sections that dwell on it most. A word common enough to appear across the
+     * specification is otherwise no answer at all — over half the document comes back and nothing
+     * is chosen.
      */
     public List<Hit> rank(String term) {
         // A term of no characters sits at every position and matches everything, which is not an
@@ -281,33 +326,54 @@ public final class SpecDocument {
         if (term == null || term.isBlank()) {
             return List.of();
         }
-        String needle = term.toLowerCase();
+        return rank(List.of(term), Match.ANYWHERE);
+    }
+
+    /**
+     * The sections that say any of {@code terms}, the ones that say most of them first.
+     *
+     * <p>How much of the query a section holds is what is asked before how often it says any of it,
+     * because a query of several words is one question. Ranking each word on its own and laying the
+     * answers end to end spends the whole answer on whichever word was typed first, and a section
+     * saying four of them sits behind every section saying the opening one.
+     *
+     * <p>Where a section holds as much of the query as another, the one whose title or anchor is
+     * what was asked for comes first, and then the one that dwells on it. A query of one term is
+     * every section holding all of it, so those two settle it, which is what a phrase search is.
+     */
+    List<Hit> rank(List<String> asked, Match how) {
+        // Folded once for the whole search rather than once per section, and here rather than at
+        // each caller, so that a term arriving in the case a reader copied it in is one term.
+        List<String> terms = asked.stream().map(DocName::canonical).toList();
         List<Hit> hits = new ArrayList<>();
         for (int i = 0; i < inOrder.size(); i++) {
             Section s = inOrder.get(i);
-            boolean titled = s.title().toLowerCase().contains(needle);
-            String own = ownTexts.get(i);
-            int occurrences = count(own.toLowerCase(), needle);
-            if (titled || occurrences > 0) {
-                hits.add(new Hit(s, titled, occurrences, snippet(own, needle)));
+            // The anchor is asked of the same text the title is: an anchor is what a reader has in
+            // hand, and a section whose prose never writes its own anchor is most of them.
+            Match.Held held = how.held((s.title() + " " + s.anchor()).toLowerCase(),
+                    ownTexts.get(i).toLowerCase(), terms);
+            if (held.matched() > 0) {
+                hits.add(new Hit(s, held.named(), held.matched(), held.occurrences(),
+                        snippet(ownTexts.get(i), terms, how)));
             }
         }
         return hits.stream()
-                .sorted(java.util.Comparator.comparing(Hit::titled).reversed()
+                .sorted(java.util.Comparator.comparingInt(Hit::matched).reversed()
+                        .thenComparing(java.util.Comparator.comparing(Hit::titled).reversed())
                         .thenComparing(java.util.Comparator.comparingInt(Hit::occurrences).reversed()))
                 .toList();
     }
 
     /**
-     * The line {@code needle} was found on, trimmed of the AsciiDoc that carries no meaning aloud
-     * and cut to a readable width around the term. A section matched only by its title falls back
-     * to its opening line, which is what it is about.
+     * The line one of {@code terms} was found on, trimmed of the AsciiDoc that carries no meaning
+     * aloud and cut to a readable width around it. A section matched only by its title or its anchor
+     * falls back to its opening line, which is what it is about.
      */
-    private static String snippet(String body, String needle) {
+    private static String snippet(String body, List<String> terms, Match how) {
         String line = body.lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("|") && !l.startsWith("["))
-                .filter(l -> l.toLowerCase().contains(needle))
+                .filter(l -> terms.stream().anyMatch(term -> how.says(l.toLowerCase(), term)))
                 .findFirst()
                 .orElseGet(() -> body.lines().map(String::strip)
                         .filter(l -> !l.isEmpty() && !l.startsWith("[") && !l.startsWith("|"))
@@ -316,20 +382,10 @@ public final class SpecDocument {
         if (plain.length() <= SNIPPET_WIDTH) {
             return plain;
         }
-        int at = plain.toLowerCase().indexOf(needle);
+        int at = terms.stream().mapToInt(term -> plain.toLowerCase().indexOf(term))
+                .filter(found -> found >= 0).min().orElse(-1);
         int from = at < 0 ? 0 : Math.max(0, at - SNIPPET_WIDTH / 3);
         int to = Math.min(plain.length(), from + SNIPPET_WIDTH);
         return (from > 0 ? "…" : "") + plain.substring(from, to).strip() + (to < plain.length() ? "…" : "");
-    }
-
-    private static int count(String haystack, String needle) {
-        if (needle.isEmpty()) {
-            return 0;
-        }
-        int n = 0;
-        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length())) {
-            n++;
-        }
-        return n;
     }
 }
