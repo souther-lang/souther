@@ -15,8 +15,6 @@ import java.util.List;
 sealed interface Doc {
 
     Doc NIL = new Nil();
-    Doc LINE = new Line(" ");        // a space when flat, a newline when broken
-    Doc SOFTLINE = new Line("");     // nothing when flat, a newline when broken
 
     /** Writes nothing, and the group holding it is never laid out flat. A comment cannot share the
      * line after it, so a construct holding one breaks even where its own content would have fitted
@@ -30,7 +28,13 @@ sealed interface Doc {
      * in particular, and told apart only by their kind two hardlines are one answer. */
     final class Ref {
     }
-    record Line(String flat) implements Doc {}
+    record Line(LineRef ref, String flat) implements Doc {}
+
+    /** Which place the layout may break this is. Two written the same way are two of them, and the
+     * conditional-layout rule answers about the group that settles one rather than about a kind of
+     * boundary. */
+    final class LineRef {
+    }
     record Hard(Ref ref) implements Doc {}
     record Concat(List<Doc> parts) implements Doc {}
     record Nest(NestRef ref, int indent, Doc doc) implements Doc {}
@@ -67,6 +71,16 @@ sealed interface Doc {
 
     static Doc text(String s) {
         return new Text(s);
+    }
+
+    /** A space when the line it is on is whole, and a newline where it is not. */
+    static Doc line() {
+        return new Line(new LineRef(), " ");
+    }
+
+    /** Nothing when the line it is on is whole, and a newline where it is not. */
+    static Doc softline() {
+        return new Line(new LineRef(), "");
     }
 
     /** Always a newline, and the group holding it is never laid out flat. */
@@ -137,6 +151,7 @@ sealed interface Doc {
     default Layout layout(int width) {
         List<GroupDecision> decisions = new ArrayList<>();
         List<Newline> breaks = new ArrayList<>();
+        List<Opportunity> opportunities = new ArrayList<>();
         java.util.Map<Place, Extent> extents = new java.util.LinkedHashMap<>();
         // A place that writes a region and also carries a comment has both an `At` and a
         // point; the region is where it is, so the points are kept apart and read only
@@ -162,19 +177,20 @@ sealed interface Doc {
                 case Concat c -> {
                     List<Doc> parts = c.parts();
                     for (int i = parts.size() - 1; i >= 0; i--) {
-                        todo.push(new Item(it.indent, it.mode, parts.get(i), null, it.under));
+                        todo.push(it.within(parts.get(i)));
                     }
                 }
                 case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc(), null,
-                        new Nesting(n.ref(), it.under)));
+                        new Nesting(n.ref(), it.under), it.within()));
                 case PointOf p -> points.putIfAbsent(p.place(),
                         new Extent(sb.length(), sb.length()));
                 case At a -> {
                     // The close is pushed first so that it is popped after everything written at
                     // the place, which is what makes the span the interval the place occupies.
                     opened.put(a.place(), sb.length());
-                    todo.push(new Item(it.indent, it.mode, Doc.NIL, a.place(), it.under));
-                    todo.push(new Item(it.indent, it.mode, a.doc(), null, it.under));
+                    todo.push(new Item(it.indent, it.mode, Doc.NIL, a.place(), it.under,
+                            it.within()));
+                    todo.push(it.within(a.doc()));
                 }
                 case Group g -> {
                     Outcome outcome = flatnessOf(width - col,
@@ -182,9 +198,17 @@ sealed interface Doc {
                     decisions.add(new GroupDecision(g.ref(), col, outcome));
                     todo.push(new Item(it.indent,
                             outcome instanceof Outcome.Flat ? Mode.FLAT : Mode.BREAK, g.doc(),
-                            null, it.under));
+                            null, it.under, g.ref()));
                 }
                 case Line l -> {
+                    // The group that settles it is the innermost one holding it, which is the one
+                    // the walk was inside when it reached here. One outside every group is not an
+                    // opportunity: the outermost context breaks, so it always breaks and no
+                    // decision settles it. The formatter writes none, which is its own check.
+                    if (it.within() != null) {
+                        opportunities.add(new Opportunity(l.ref(), it.within(),
+                                it.mode != Mode.FLAT));
+                    }
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
                         col += l.flat().length();
@@ -205,7 +229,7 @@ sealed interface Doc {
             }
         }
         points.forEach(extents::putIfAbsent);
-        return new Layout(sb.toString(), decisions, extents, breaks);
+        return new Layout(sb.toString(), decisions, extents, breaks, opportunities);
     }
 
     /** Writes a break and says what it wrote. */
@@ -294,14 +318,22 @@ sealed interface Doc {
     /** {@code closes} is the place this item ends, and is set only on the marker pushed to run
      * after everything written at that place. {@code under} is the nestings it is written inside,
      * innermost first. */
-    record Item(int indent, Mode mode, Doc doc, Place closes, Nesting under) {
+    record Item(int indent, Mode mode, Doc doc, Place closes, Nesting under, GroupRef within) {
 
         Item(int indent, Mode mode, Doc doc) {
-            this(indent, mode, doc, null, null);
+            this(indent, mode, doc, null, null, null);
         }
 
         Item(int indent, Mode mode, Doc doc, Place closes) {
-            this(indent, mode, doc, closes, null);
+            this(indent, mode, doc, closes, null, null);
+        }
+
+        Item(int indent, Mode mode, Doc doc, Place closes, Nesting under) {
+            this(indent, mode, doc, closes, under, null);
+        }
+
+        Item within(Doc doc) {
+            return new Item(indent, mode, doc, null, under, within);
         }
     }
 

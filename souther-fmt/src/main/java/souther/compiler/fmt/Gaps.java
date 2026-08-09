@@ -278,7 +278,7 @@ final class Gaps {
                 String flat = answers.get(next[0]++);
                 yield switch (g.policy()) {
                     case ALWAYS -> Doc.hardline();
-                    case MAY -> flat.isEmpty() ? Doc.SOFTLINE : Doc.LINE;
+                    case MAY -> flat.isEmpty() ? Doc.softline() : Doc.line();
                     case NEVER -> flat.isEmpty() ? Doc.NIL : Doc.text(flat);
                 };
             }

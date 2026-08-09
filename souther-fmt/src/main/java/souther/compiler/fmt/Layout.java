@@ -16,18 +16,20 @@ import java.util.List;
  * What is kept is what the layout realized, which is what the canonicalization rules are about.
  */
 record Layout(String text, List<GroupDecision> decisions,
-        java.util.Map<Place, Extent> extents, List<Newline> breaks) {
+        java.util.Map<Place, Extent> extents, List<Newline> breaks,
+        List<Opportunity> opportunities) {
 
     Layout {
         decisions = List.copyOf(decisions);
         extents = java.util.Map.copyOf(extents);
         breaks = List.copyOf(breaks);
+        opportunities = List.copyOf(opportunities);
     }
 
     /** This layout with one more place located. */
     Layout and(Place place, Extent extent) {
         java.util.Map<Place, Extent> out = new java.util.LinkedHashMap<>(extents);
         out.put(place, extent);
-        return new Layout(text, decisions, out, breaks);
+        return new Layout(text, decisions, out, breaks, opportunities);
     }
 }
