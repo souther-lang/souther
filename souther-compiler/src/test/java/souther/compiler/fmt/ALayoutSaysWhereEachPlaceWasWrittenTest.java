@@ -30,8 +30,11 @@ class ALayoutSaysWhereEachPlaceWasWrittenTest {
     }
 
     /**
-     * Every place a canonicalization made is a place its layout wrote somewhere — those places, by
-     * identity, and not as many places as it made.
+     * Every place this run's document writes is a place its layout wrote somewhere — those places,
+     * by identity, and not as many of them as the document has.
+     *
+     * <p>The places the document writes, and not every place the run made: some of those are
+     * written nowhere, which {@link #butNotEveryPlaceTheRunMakes} says and #555 settles.
      *
      * <p>This used to build the document a second time to walk it, and a second canonicalization
      * makes its own places: the two collections came out the same size and shared not one member,
@@ -103,13 +106,13 @@ class ALayoutSaysWhereEachPlaceWasWrittenTest {
     }
 
     /**
-     * What two canonicalizations of one source share. Nothing they made: each run makes its own
-     * places and its own groups, and a layout asked about another run's identity answers that it
+     * What two canonicalizations of one source share of the places and the groups they make.
+     * Neither: each run makes its own, and a layout asked about the other run's answers that it
      * wrote it nowhere rather than refusing the question. Written down so that the reason a
      * canonical form is one object is a stated fact and not a habit.
      */
     @Test
-    void andTwoRunsShareNothingTheyMade() {
+    void andTwoRunsShareNoPlacesOrGroups() {
         String source = "module m\n\nlet g (x: Int): Int = x\n";
         Formatter.CanonicalForm one = canonical(source);
         Formatter.CanonicalForm other = canonical(source);
@@ -131,6 +134,32 @@ class ALayoutSaysWhereEachPlaceWasWrittenTest {
         assertEquals(theirGroups.size(), ours.size());
         assertEquals(List.of(), theirGroups.stream().filter(ours::contains).toList(),
                 "and a group of one run is not a group the other decided about");
+    }
+
+    /**
+     * And the places a run makes that its document writes nowhere. A place is made for the line a
+     * construct opens with — a {@code data} declaration's {@code =}, a block's brace, a match's
+     * {@code with} — and it carries the comment written at the end of that line while holding none
+     * of the text; a construct that writes through its members, like a product body, makes a place
+     * that is the parent of theirs and wraps nothing itself; and the file's own place wraps nothing
+     * at all.
+     *
+     * <p>So the spans answer where an annotation was written, not where a place is. Stated here
+     * rather than left to be found, because a witness naming one of these as a comment's owner
+     * cannot say where in the output it is. What a place's location is when it writes no text of
+     * its own is #555.
+     */
+    @Test
+    void butNotEveryPlaceTheRunMakes() {
+        Formatter.CanonicalForm canonical = canonical(SOURCE_WITH_A_HEADER_COMMENT);
+        List<String> unlocated = canonical.places().stream()
+                .filter(p -> !canonical.layout().spans().containsKey(p))
+                .map(p -> p.construct() + (p.parent() == null ? " (the file)" : ""))
+                .toList();
+
+        assertEquals(List.of("SOURCE_FILE (the file)", "ASSIGN", "PRODUCT_BODY"), unlocated,
+                "the file, the anchor that carries the header line's comment, and the parent of the"
+                        + " fields \u2014 none of them locatable in the output");
     }
 
     private static final String SOURCE_WITH_A_HEADER_COMMENT =

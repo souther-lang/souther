@@ -166,7 +166,7 @@ public final class Formatter {
             Map<Place, Map<Carrier, List<SyntaxToken>>> carriers, Map<Place, Integer> order,
             java.util.Set<Integer> consumed) {}
 
-    static Construction build(SyntaxNode file) {
+    private static Construction build(SyntaxNode file) {
         Formatter formatter = new Formatter();
         TokenDoc doc = formatter.file(file);
         Map<Place, Integer> order = Place.orderedIn(doc);

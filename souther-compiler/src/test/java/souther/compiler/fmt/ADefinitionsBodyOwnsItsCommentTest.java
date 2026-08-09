@@ -166,7 +166,7 @@ class ADefinitionsBodyOwnsItsCommentTest {
                     // about the body
                     x
                 """).root();
-        Formatter.Construction built = Formatter.build(root);
+        Formatter.Construction built = Formatter.canonicalize(root).construction();
 
         SyntaxNode lambda = only(root, SyntaxKind.LAMBDA_EXPR);
         SyntaxNode body = childOf(lambda, SyntaxKind.VAR_EXPR);
