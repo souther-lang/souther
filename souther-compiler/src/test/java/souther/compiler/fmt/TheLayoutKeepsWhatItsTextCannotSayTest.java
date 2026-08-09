@@ -6,6 +6,7 @@ import souther.compiler.cst.CstParser;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -98,23 +99,41 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
                 "the outer group and the one inside it, and the inner one once");
     }
 
-    /** And over a real source: the document's groups and the layout's decisions are the same
-     * number, so none is dropped and none is taken twice. */
+    /** A decision names the group that was laid out. Counting them agrees with a layout that
+     * answered about a group it made up, which is why this reads the identities. */
     @Test
-    void andOverASourceTheCountsAgree() {
+    void andADecisionNamesTheGroupThatWasLaidOut() {
+        Doc inner = Doc.group(Doc.concat(Doc.text("cd"), Doc.LINE, Doc.text("ef")));
+        Doc outer = Doc.group(Doc.concat(Doc.text("ab"), Doc.LINE, inner));
+
+        List<Doc.GroupRef> laidOut = outer.layout(100).decisions().stream()
+                .map(GroupDecision::group).toList();
+
+        assertEquals(List.of(((Doc.Group) outer).ref(), ((Doc.Group) inner).ref()), laidOut,
+                "the outer group and then the one inside it, each by its own identity");
+    }
+
+    /** And over a real source: the groups the document holds are the groups the layout decided
+     * about, one for one. */
+    @Test
+    void andOverASourceTheyAreTheSameGroups() {
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             Doc doc = Formatter.document(CstParser.parse(source).root()).resolve();
-            List<Doc> groups = new ArrayList<>();
-            groupsOf(doc, groups);
-            assertEquals(groups.size(), doc.layout(100).decisions().size(),
+            List<Doc.GroupRef> written = new ArrayList<>();
+            groupsOf(doc, written);
+            List<Doc.GroupRef> decided = doc.layout(100).decisions().stream()
+                    .map(GroupDecision::group).toList();
+            assertEquals(written.size(), decided.size(),
                     "one decision per group, in:\n" + source);
+            assertEquals(Set.copyOf(written), Set.copyOf(decided),
+                    "and about those groups rather than about others, in:\n" + source);
         }
     }
 
-    private static void groupsOf(Doc doc, List<Doc> out) {
+    private static void groupsOf(Doc doc, List<Doc.GroupRef> out) {
         switch (doc) {
             case Doc.Group g -> {
-                out.add(g);
+                out.add(g.ref());
                 groupsOf(g.doc(), out);
             }
             case Doc.Nest n -> groupsOf(n.doc(), out);
