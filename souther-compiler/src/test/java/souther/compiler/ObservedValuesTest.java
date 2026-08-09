@@ -80,7 +80,8 @@ class ObservedValuesTest {
                 observe(long_, new Limits(16, 10_000, 64, 10)));
     }
 
-    /** A prefix would answer a length question with the wrong number, so the collection goes whole. */
+    /** Whole, because a prefix read back is a collection nobody wrote and nothing downstream could
+     * tell it from one somebody did. */
     @Test
     void aCollectionPastTheLimitIsDroppedWhole() {
         List<Long> many = new ArrayList<>();

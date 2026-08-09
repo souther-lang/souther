@@ -74,8 +74,10 @@ final class ObservedValues {
                 : new ObservedValue.Truncated();
     }
 
-    /** A collection past the element limit is dropped whole rather than kept as a prefix: its size is
-     * what a rule over it reads, and a prefix would answer a length question with the wrong number. */
+    /** A collection past the element limit is dropped whole rather than kept as a prefix. A prefix
+     * read back is a collection nobody wrote, and it arrives looking like one that was: a measure
+     * would classify it, and be answering about a value that was never there. Saying the
+     * observation was stopped is the one thing that stays true. */
     private ObservedValue sequence(Iterable<?> it, int depth) {
         List<ObservedValue> out = new ArrayList<>();
         for (Object e : it) {
