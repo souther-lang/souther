@@ -71,32 +71,32 @@ class ObservedValuesTest {
         assertInstanceOf(ObservedValue.Unknown.class, observe(null));
     }
 
+    /** The content goes with it, which is the whole reason the walk is bounded. */
     @Test
-    void textPastTheLimitKeepsItsLengthAndNotItsContent() {
+    void textPastTheLimitDoesNotKeepItsContent() {
         String long_ = "x".repeat(50);
-        ObservedValue.Truncated t = assertInstanceOf(ObservedValue.Truncated.class,
+
+        assertInstanceOf(ObservedValue.Truncated.class,
                 observe(long_, new Limits(16, 10_000, 64, 10)));
-        assertEquals(50, t.observedSize());
     }
 
-    /** A prefix would answer a length question with the wrong number, so the collection goes whole. */
+    /** Whole, because a prefix read back is a collection nobody wrote and nothing downstream could
+     * tell it from one somebody did. */
     @Test
-    void aCollectionPastTheLimitIsDroppedWholeAndKeepsItsSize() {
+    void aCollectionPastTheLimitIsDroppedWhole() {
         List<Long> many = new ArrayList<>();
         for (long i = 0; i < 20; i++) {
             many.add(i);
         }
-        ObservedValue.Truncated t = assertInstanceOf(ObservedValue.Truncated.class,
+        assertInstanceOf(ObservedValue.Truncated.class,
                 observe(many, new Limits(16, 10_000, 4, 1024)));
-        assertEquals(20, t.observedSize());
-        assertEquals("elements", t.digest());
 
         Map<Object, Object> big = new LinkedHashMap<>();
         for (long i = 0; i < 20; i++) {
             big.put("k" + i, i);
         }
-        assertEquals(20, assertInstanceOf(ObservedValue.Truncated.class,
-                observe(big, new Limits(16, 10_000, 4, 1024))).observedSize());
+        assertInstanceOf(ObservedValue.Truncated.class,
+                observe(big, new Limits(16, 10_000, 4, 1024)));
     }
 
     @Test
@@ -116,9 +116,7 @@ class ObservedValuesTest {
         ObservedValue.Sequence observed = assertInstanceOf(ObservedValue.Sequence.class,
                 observe(List.of(1L, 2L, 3L, 4L), new Limits(16, 3, 64, 1024)));
         assertEquals(new ObservedValue.Integer(1L), observed.elements().get(0));
-        ObservedValue.Truncated stopped = assertInstanceOf(ObservedValue.Truncated.class,
-                observed.elements().get(2));
-        assertEquals("node-limit", stopped.digest());
+        assertInstanceOf(ObservedValue.Truncated.class, observed.elements().get(2));
     }
 
     /** Being a record is not being immutable: what an answer reported must not change under it. */

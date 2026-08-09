@@ -85,11 +85,21 @@ public sealed interface ObservedValue {
      * rather than reporting a gap it did not see. */
     record Unknown(String reason) implements ObservedValue {}
 
-    /** An observation {@link Limits} stopped. Not the same as a large value: the node budget is one
-     * for the whole walk, so a small value observed after a large sibling arrives here too. What is
-     * kept is the size and a digest, which is enough to tell two of these apart without holding
-     * either. */
-    record Truncated(int observedSize, String digest) implements ObservedValue {}
+    /**
+     * An observation {@link Limits} stopped. Not the same as a large value: the node budget is one
+     * for the whole walk, so a small value observed after a large sibling arrives here too.
+     *
+     * <p>Nothing about it but that it happened. It carried the size and a fingerprint, for a rule
+     * over the value's size to read and for telling two of these apart — and a position is divided
+     * by the cases of its type or by where a rule cuts its range, never by how large a value is, so
+     * a size was written only where nothing classifies and was {@code -1} wherever anything did.
+     * Nothing compares two observations either.
+     *
+     * <p>Which leaves the case, and the case is read: a row this stands in is one no class holds,
+     * and the report says an observation was stopped by a limit. Two of these being equal is Java
+     * saying they carry the same nothing, and is not two observations being the same value.
+     */
+    record Truncated() implements ObservedValue {}
 
     /** An empty map with a stable iteration order, for building a {@link Constructed}. */
     static Map<String, ObservedValue> fields() {

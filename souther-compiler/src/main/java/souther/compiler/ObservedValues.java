@@ -20,11 +20,11 @@ import java.util.Map;
  * one {@link NeutralForm#of} makes in the other direction: that one produces the form a decoder reads,
  * this one produces the form a measure reads.
  *
- * <p>The walk never fails. A value it cannot read becomes {@link ObservedValue.Unknown} and an
- * observation {@link Limits} stopped becomes {@link ObservedValue.Truncated}, both carrying why,
- * because a measure that cannot classify a row has to say so rather than count the row as covering
- * nothing. The second is not the same as a large value: the node budget is one for the whole walk,
- * so a small value observed after a large sibling is truncated as well.
+ * <p>The walk never fails. A value it cannot read becomes {@link ObservedValue.Unknown}, which says
+ * why, and an observation {@link Limits} stopped becomes {@link ObservedValue.Truncated}, which says
+ * only that — a measure that cannot classify a row has to say so rather than count the row as
+ * covering nothing. The second is not the same as a large value: the node budget is one for the
+ * whole walk, so a small value observed after a large sibling is truncated as well.
  */
 final class ObservedValues {
 
@@ -48,10 +48,10 @@ final class ObservedValues {
 
     private ObservedValue walk(Object live, int depth) {
         if (budget-- <= 0) {
-            return new ObservedValue.Truncated(-1, "node-limit");
+            return new ObservedValue.Truncated();
         }
         if (depth > limits.maxDepth()) {
-            return new ObservedValue.Truncated(-1, "depth-limit:" + NeutralForm.simpleName(live));
+            return new ObservedValue.Truncated();
         }
         return switch (live) {
             case null -> new ObservedValue.Unknown("a null reached the observer");
@@ -71,17 +71,19 @@ final class ObservedValues {
     private ObservedValue text(String s) {
         return s.length() <= limits.maxText()
                 ? new ObservedValue.Text(s)
-                : new ObservedValue.Truncated(s.length(),
-                        java.lang.Integer.toHexString(s.hashCode()));
+                : new ObservedValue.Truncated();
     }
 
-    /** A collection past the element limit is dropped whole rather than kept as a prefix: its size is
-     * what a rule over it reads, and a prefix would answer a length question with the wrong number. */
+    /** A collection past the element limit is dropped whole rather than kept as a prefix. A prefix
+     * is not the value that was written, and returned as a {@link ObservedValue.Sequence} it would
+     * be the same thing as a complete observation of a shorter collection — nothing about the two
+     * would differ. {@link ObservedValue.Truncated} keeps the one fact that stays true: the
+     * observation stopped. */
     private ObservedValue sequence(Iterable<?> it, int depth) {
         List<ObservedValue> out = new ArrayList<>();
         for (Object e : it) {
             if (out.size() >= limits.maxElements()) {
-                return new ObservedValue.Truncated(size(it), "elements");
+                return new ObservedValue.Truncated();
             }
             out.add(walk(e, depth + 1));
         }
@@ -90,7 +92,7 @@ final class ObservedValues {
 
     private ObservedValue mapping(Map<?, ?> m, int depth) {
         if (m.size() > limits.maxElements()) {
-            return new ObservedValue.Truncated(m.size(), "entries");
+            return new ObservedValue.Truncated();
         }
         List<ObservedValue.Entry> out = new ArrayList<>(m.size());
         for (Map.Entry<?, ?> e : m.entrySet()) {
@@ -154,14 +156,4 @@ final class ObservedValues {
         }
     }
 
-    private static int size(Iterable<?> it) {
-        if (it instanceof java.util.Collection<?> c) {
-            return c.size();
-        }
-        int n = 0;
-        for (Object _ : it) {
-            n++;
-        }
-        return n;
-    }
 }
