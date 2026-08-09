@@ -106,8 +106,9 @@ class AnAnonymousUnionIsWrittenWhereAWholeTypeIsReadTest {
      * The positions that refuse one, and what each refuses it for.
      *
      * <p>The three that are a syntax error are not a rule about unions: the grammar reads no whole
-     * type there, which is the same reason {@code List<T?>} is not written either. One position
-     * refuses a union it could have read, and that one is the boundary.
+     * type there, which is the mechanism that keeps {@code List<T?>} from being written either —
+     * though that one breaks its own rule and carries its own code. One position refuses a union it
+     * could have read, and that one is the boundary.
      */
     @Test
     void thePositionsThatRefuseOneSayWhichRefusalItIs() {
@@ -117,9 +118,9 @@ class AnAnonymousUnionIsWrittenWhereAWholeTypeIsReadTest {
         positions.put("tuple member", "let f (t: (A | B, Int)) : Int = 1");
 
         Map<String, String> expected = new LinkedHashMap<>(positions);
-        expected.replaceAll((_, _) -> "E2301");
+        expected.replaceAll((_, _) -> "E2307");
         assertEquals(expected, verdicts(positions),
-                "no whole type is read there, so the grammar refuses the form");
+                "no whole type is read there, so the grammar refuses the form — and says which form");
         assertEquals("E1312", verdictOfWholeModule("""
                 module p exposing (A, B, Out, run)
 
