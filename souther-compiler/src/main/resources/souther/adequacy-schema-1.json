@@ -230,7 +230,7 @@
         },
         "notDerivable": {
           "type": "array",
-          "description": "Positions the current reading drew no line through. Not a gap: no row is owed here and none is missing. Not a statement that the model has no boundary there either — a bound one type away from the position a behavior takes lands in this list, and the reading that produced it cannot tell that from a position nothing bounds. Read `boundariesMeasure` for whether the measure was made.",
+          "description": "Positions the current reading drew no line through. Not a finding: the reading established no boundary obligation here, so nothing is reported against the rows. Not a statement that nothing is owed either, and not one that the model has no boundary here — a bound one type away from the position a behavior takes lands in this list, and the reading that produced it cannot tell that from a position nothing bounds. Read `boundariesMeasure` for whether the measure was made.",
           "items": { "type": "string" }
         },
         "omitted": {
