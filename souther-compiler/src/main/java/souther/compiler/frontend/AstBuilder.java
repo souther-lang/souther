@@ -9,6 +9,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -781,16 +782,19 @@ public final class AstBuilder {
             return null;
         }
         if (binder == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2018, "check.attempt.armswithoutattempt").at(pos(node.get()))
-                            .hint("check.attempt.armswithoutattempt.hint").build());
+            throw CompileException.of(Diagnostic.at(pos(node.get()))
+                    .say(new AttemptMessage.NothingHereIsAttempted())
+                    .hint(new AttemptMessage.AttemptTheConstructionOrGiveTheElseOneValue())
+                    .build());
         }
         List<Ast.ElseArm> arms = new ArrayList<>();
         Set<String> answered = new HashSet<>();
         for (SyntaxNode arm : childNodes(node.get(), SyntaxKind.ELSE_ARM)) {
             SyntaxToken label = identTokens(arm).get(0);
             if (!answered.add(ident(label))) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2019, "check.attempt.armtwice").at(posOf(label))
-                                .args(ident(label)).build());
+                throw CompileException.of(Diagnostic.at(posOf(label))
+                        .say(new AttemptMessage.TheClauseIsAnsweredTwice(ident(label)))
+                        .build());
             }
             Ast.Expr body = expr(onlyExpr(arm));
             arms.add(ident(label).equals("_")

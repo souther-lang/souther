@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -286,20 +287,21 @@ public final class Elaborator {
             case Ast.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
                 if (!(built instanceof Core.NewData construct)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2012, "check.attempt.notconstruction")
-                                    .at(region(ic.construct()))
-                                    .hint("check.attempt.notconstruction.hint")
-                                    .build());
+                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                            .say(new AttemptMessage.ThisIsNotAConstruction())
+                            .hint(new AttemptMessage.WriteTheConstructionWhoseInvariantDecides())
+                            .build());
                 }
                 // What decides the branch is the invariant, so a type with none has no failing side
                 // and the else value could never be reached. Reported rather than compiled into a
                 // branch that is not one — the same call a unit data's forbidden invariant makes.
                 if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2013, "check.attempt.noinvariant")
-                                    .at(region(ic.construct()))
-                                    .args(construct.typeName().name())
-                                    .hint("check.attempt.noinvariant.hint")
-                                    .build());
+                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                            .say(new AttemptMessage.TheTypeDeclaresNoInvariant(
+                                    construct.typeName().name()))
+                            .hint(new AttemptMessage.ConstructItDirectlyOrGiveItAnInvariant(
+                                    construct.typeName().name()))
+                            .build());
                 }
                 checkArmsAnswerClauses(ic, construct.typeName(), ctx.symbols());
                 // The binder names the built value, so the success branch reads it at the data's own
@@ -1377,36 +1379,33 @@ public final class Elaborator {
             String name = arm.clause().get();
             answered.add(name);
             if (!named.contains(name)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2014, "check.attempt.unknownclause")
-                                .at(arm.pos(), name.length())
-                                .args(name, typeName.name())
-                                .hint("check.attempt.unknownclause.hint",
-                                        named.isEmpty() ? "-" : String.join(", ", named))
-                                .build());
+                throw CompileException.of(Diagnostic.at(arm.pos(), name.length())
+                        .say(new AttemptMessage.NoClauseOfThatName(name, typeName.name()))
+                        .hint(new AttemptMessage.TheClausesThatCanBeAnswered(
+                                named.isEmpty() ? "-" : String.join(", ", named)))
+                        .build());
             }
         }
         List<String> missing = new ArrayList<>(named);
         missing.removeAll(answered);
         if (!missing.isEmpty()) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2015, "check.attempt.clauseunanswered")
-                            .at(ic.pos(), 2)
-                            .args(String.join(", ", missing), typeName.name())
-                            .hint("check.attempt.clauseunanswered.hint")
-                            .build());
+            throw CompileException.of(Diagnostic.at(ic.pos(), 2)
+                    .say(new AttemptMessage.TheseClausesHaveNoArm(String.join(", ", missing),
+                            typeName.name()))
+                    .hint(new AttemptMessage.AnswerEachOfThemOrGiveTheElseOneValue())
+                    .build());
         }
         if (unnamed && !wildcard) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2016, "check.attempt.unnamedunanswered")
-                            .at(ic.pos(), 2)
-                            .args(typeName.name())
-                            .hint("check.attempt.unnamedunanswered.hint")
-                            .build());
+            throw CompileException.of(Diagnostic.at(ic.pos(), 2)
+                    .say(new AttemptMessage.UnnamedClausesAreLeftUnanswered(typeName.name()))
+                    .hint(new AttemptMessage.AddACatchAllArmOrNameThem())
+                    .build());
         }
         if (!unnamed && wildcard) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2017, "check.attempt.nothingunnamed")
-                            .at(ic.pos(), 2)
-                            .args(typeName.name())
-                            .hint("check.attempt.nothingunnamed.hint")
-                            .build());
+            throw CompileException.of(Diagnostic.at(ic.pos(), 2)
+                    .say(new AttemptMessage.TheCatchAllArmAnswersNothing(typeName.name()))
+                    .hint(new AttemptMessage.DropTheCatchAllArm(typeName.name()))
+                    .build());
         }
     }
 
