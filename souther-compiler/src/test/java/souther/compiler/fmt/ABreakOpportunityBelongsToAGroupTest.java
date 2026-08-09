@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -92,5 +93,21 @@ class ABreakOpportunityBelongsToAGroupTest {
             case Doc.Concat c -> c.parts().stream().mapToLong(ABreakOpportunityBelongsToAGroupTest::linesIn).sum();
             default -> 0;
         };
+    }
+
+    /**
+     * Two places written the same way are two opportunities. Read by their shape they would be one,
+     * and a witness naming one of them would be naming both.
+     */
+    @Test
+    void andTwoWrittenTheSameWayAreTwo() {
+        Doc doc = Doc.group(Doc.concat(
+                Doc.text("ab"), Doc.line(), Doc.text("cd"), Doc.line(), Doc.text("ef")));
+
+        List<Opportunity> found = doc.layout(100).opportunities();
+
+        assertEquals(2, found.size());
+        assertNotSame(found.get(0).line(), found.get(1).line(),
+                "each is its own, and neither stands for the other");
     }
 }
