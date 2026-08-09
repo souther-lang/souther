@@ -3,6 +3,8 @@ package souther.compiler;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.JsonRenderer;
@@ -33,8 +35,8 @@ import java.util.Map;
 
 /**
  * CLI entry point with two subcommands: {@code souther compile <file.sou>... -d <outdir>} writes
- * {@code .class} files, and {@code souther run <file.sou> [--behavior <name>] [--input <json>]}
- * drives one behavior and prints its output (see {@link Runner}).
+ * {@code .class} files, and {@code souther run <file.sou> [-cp <path>] [--behavior <name>] [--input
+ * <json>]} drives one behavior and prints its output (see {@link Runner}).
  *
  * <p>Both accept {@code --format human|json}, {@code --lang <tag>}, and {@code --color auto|always|never}
  * to control how a compile error is rendered (an Elm-style snippet or a JSON object, in the chosen
@@ -46,7 +48,7 @@ public final class Main {
             usage: souther <command> [args]
             commands:
               compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
-              run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
+              run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]  run a behavior, print its output
               fmt <file.sou>... [-w|--write] [--check]             format source (stdout, or -w in place)
               examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
               doc [<anchor> | <error-code> | <set>/<topic> | --search <term>]  read the language specification
@@ -67,7 +69,7 @@ public final class Main {
             options (compile):
               --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
               --warnings report|error   refuse a compile that warns (default report)
-            options (compile/examples/japi):
+            options (compile/run/examples/japi):
               -cp, --class-path <path>  where to find modules another project compiled
 
             options (compile/run/examples):
@@ -83,17 +85,16 @@ public final class Main {
      * <p>Written here rather than read back out of {@link #USAGE}. The usage text is what an author
      * is shown, and reading it for what an option means is the dependency the wrong way round — it
      * says an option under the heading of the commands it is documented with, which is not the same
-     * set as the commands that accept it. {@code --behavior} is documented under {@code examples}
-     * and taken by {@code run} as well; {@code -cp} is documented under {@code compile/examples} and
-     * taken by {@code japi} too. This table is the one the commands answer from, and a test holds it
-     * against both the usage text and what each parser has a case for.
+     * set as the commands that accept it — {@code --behavior} is documented under {@code examples}
+     * and taken by {@code run} as well. This table is the one the commands answer from, and a test
+     * holds it against both the usage text and what each parser has a case for.
      */
     private static final Map<String, String> OPTION_OWNERS = Map.ofEntries(
             Map.entry("--format", "compile/run/examples"),
             Map.entry("--lang", "compile/run/examples"),
             Map.entry("--color", "compile/run/examples"),
-            Map.entry("-cp", "compile/examples/japi"),
-            Map.entry("--class-path", "compile/examples/japi"),
+            Map.entry("-cp", "compile/run/examples/japi"),
+            Map.entry("--class-path", "compile/run/examples/japi"),
             Map.entry("-d", "compile"),
             Map.entry("--adequacy", "compile"),
             Map.entry("--warnings", "compile"),
@@ -576,8 +577,9 @@ public final class Main {
         return failed || unformatted ? 1 : 0;
     }
 
-    /** {@code souther run <file.sou> [--behavior <name>] [--input <json>]}: compiles the file in
-     * memory and drives one behavior, printing its output as JSON (see {@link Runner}). */
+    /** {@code souther run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]}: compiles the
+     * file in memory against the modules on the path and drives one behavior, printing its output as
+     * JSON (see {@link Runner}). */
     private static int runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
@@ -603,7 +605,43 @@ public final class Main {
             return e.exitCode;
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
+            sayHowRunReachesAModule(e, render);
             return 1;
+        }
+    }
+
+    /**
+     * Says how {@code run} is given a module to resolve against, where that is what the reader is
+     * missing.
+     *
+     * <p>Beside the diagnostic and not inside it. E1504 states what the compile observed — that the
+     * module is in neither the sources nor the path — and that is true of every compile, however it
+     * was started. Which option widens the path is a fact about this command line, so a diagnostic
+     * carrying it would be the compiler holding the command line's knowledge, and would be carried by
+     * every other caller of the same compile.
+     *
+     * <p>Once per run rather than per diagnostic. An error carrying several is what a pass reporting
+     * each of its independent failures produces, and however many of them went unresolved there is
+     * one thing to do about it. And it says what the option is for rather than that it would fix this
+     * import — a misspelled module name is the same E1504, and a line promising that a class path
+     * resolves it would send that author to build something they do not need.
+     *
+     * <p>Not under {@code --format json}, for the reason {@link #refused} is not: a reader taking one
+     * object per line cannot tell a sentence among them from output it should have understood. A
+     * remediation JSON carries is a field of the diagnostic schema, which is a thing to design rather
+     * than a line to print.
+     */
+    private static void sayHowRunReachesAModule(CompileException e, RenderOptions render) {
+        if (render.json()) {
+            return;
+        }
+        for (Diagnostic d : e.diagnostics()) {
+            if (DiagnosticCode.E1504.name().equals(d.code())) {
+                Locale locale = render.locale();
+                System.err.println(Messages.get("diag.hint.label", locale) + " "
+                        + Messages.get("cli.run.classpath", locale));
+                return;
+            }
         }
     }
 
@@ -708,11 +746,18 @@ public final class Main {
         }
     }
 
-    /** The first non-option argument of {@code run} — the source file, for the error snippet. */
+    /**
+     * The first non-option argument of {@code run} — the source file, for the error snippet.
+     *
+     * <p>Every option that takes a value is skipped with it, including the short one: {@code -cp} is
+     * a path and not a file to quote, and reading it as one made the snippet name a file the author
+     * never wrote.
+     */
     private static Path firstSource(String[] args) {
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
-            if (a.equals("--behavior") || a.equals("--input")) {
+            if (a.equals("--behavior") || a.equals("--input")
+                    || a.equals("-cp") || a.equals("--class-path")) {
                 i++;
             } else if (!a.startsWith("--")) {
                 return Path.of(a);

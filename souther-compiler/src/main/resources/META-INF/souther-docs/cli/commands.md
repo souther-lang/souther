@@ -26,12 +26,13 @@ The default is `report`, which prints them and writes the classes.
 ## run
 
 ```
-souther run <file.sou> [--behavior <name>] [--input <json>]
+souther run <file.sou> [-cp|--class-path <path>] [--behavior <name>] [--input <json>]
 ```
 
-Applies one behavior of one self-contained file to JSON input and prints the JSON result. The
-`--input` encoding depends on the behavior's arity and is easy to get wrong — see
-{{doc:cli/run}}.
+Applies one behavior of one file to JSON input and prints the JSON result. A file that imports
+another user module runs against `-cp`, the same class path `compile` takes — compile that module
+first and name where its classes went. The `--input` encoding depends on the behavior's arity and is
+easy to get wrong — see {{doc:cli/run}}.
 
 <!-- souther-section: fmt -->
 ## fmt

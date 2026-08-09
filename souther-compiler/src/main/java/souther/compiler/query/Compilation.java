@@ -69,11 +69,24 @@ public final class Compilation {
         return String.valueOf(i);
     }
 
-    /** A compile of one self-contained source. A source with no {@code module} header takes
+    /** A compile of one source. A source with no {@code module} header takes
      * {@code defaultModuleName}, which a set of linked sources cannot allow: a module reached by an
      * import has to be named. */
     public static Compilation ofSource(String source, String defaultModuleName) {
-        Compilation c = ofSources(List.of(source), ModulePath.EMPTY);
+        return ofSource(source, defaultModuleName, ModulePath.EMPTY);
+    }
+
+    /**
+     * As {@link #ofSource(String, String)}, resolving an import that names no module here against
+     * {@code path} — the compiled modules of the projects this one depends on.
+     *
+     * <p>One source is how many a caller has, not how many modules it may reach. {@code run} is
+     * handed a single file and used to be given the empty path with it, which made every import of
+     * another user module an unknown one; what a caller can name and what the compile can resolve
+     * are separate, and this is the second of them.
+     */
+    public static Compilation ofSource(String source, String defaultModuleName, ModulePath path) {
+        Compilation c = ofSources(List.of(source), path);
         c.db.set(new Front.DefaultName(), defaultModuleName);
         // There is only one source, so an error carries no origin: the caller knows which file it
         // handed over, and a rendered id would be a file number nobody asked for.
@@ -150,6 +163,21 @@ public final class Compilation {
     public Map<String, byte[]> classes() {
         Map<String, byte[]> all = db.ask(new Output.All()).value();
         return all == null ? Map.of() : all;
+    }
+
+    /**
+     * A loader over what this compilation produced and the modules it was compiled against — the one
+     * a caller runs the generated code with.
+     *
+     * <p>{@link #classes()} alone is not enough to run any of it. A module resolved on the path is
+     * read for its declarations and is deliberately not re-emitted here, so a behavior of this
+     * compilation that builds one of its values has no class for it in this map; the path's classes
+     * have to be under the map rather than beside it. Which order that is, and why a loader that
+     * delegates first would answer with a stale build instead, is settled once for every caller —
+     * the same composition the compile-time evaluation runs against.
+     */
+    public ClassLoader loader() {
+        return Output.loader(db, classes());
     }
 
     /** A module as everything below the check reads it — derived, desugared, and carrying the

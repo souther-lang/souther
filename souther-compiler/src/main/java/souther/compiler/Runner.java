@@ -11,6 +11,7 @@ import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.Located;
@@ -49,14 +50,17 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Drives a compiled behavior from the command line: {@code souther run <file.sou> [--behavior
- * <name>] [--input <json>]}. The runner is itself the Java boundary (spec section 13) — it decodes
- * the JSON input into the behavior's parameter types through their derived decoders, applies the
- * behavior, and encodes the returned domain value back to JSON through its derived encoder. Souther
- * keeps no I/O of its own; a header-less {@code .sou} is named after the file (see {@link Parser}).
+ * Drives a compiled behavior from the command line: {@code souther run <file.sou> [-cp <path>]
+ * [--behavior <name>] [--input <json>]}. The runner is itself the Java boundary (spec section 13) —
+ * it decodes the JSON input into the behavior's parameter types through their derived decoders,
+ * applies the behavior, and encodes the returned domain value back to JSON through its derived
+ * encoder. Souther keeps no I/O of its own; a header-less {@code .sou} is named after the file (see
+ * {@link Parser}).
  *
- * <p>The runner drives a single self-contained {@code .sou} file: stdlib imports resolve, but it
- * cannot link against other user modules. A behavior is runnable when it has a {@code let} and no
+ * <p>The runner drives one {@code .sou} file. Stdlib imports resolve, and an import of another user
+ * module resolves against {@code -cp} — the same class path {@code compile} takes, read for the
+ * imported module's declarations and holding the classes the behavior then runs against. A behavior
+ * is runnable when it has a {@code let} and no
  * {@code depends on}, or when it is a {@code >->} pipeline whose stages are all themselves runnable
  * (each has a {@code let} and no {@code depends on}) — such a pipeline compiles to a no-arg {@code
  * $Impl} that chains the stages, so it runs like any other behavior. An injected behavior (no
@@ -143,10 +147,15 @@ public final class Runner {
         Path file = null;
         String behaviorName = null;
         String inputJson = null;
+        List<Path> classPath = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--behavior" -> behaviorName = value(args, ++i, "--behavior");
                 case "--input" -> inputJson = value(args, ++i, "--input");
+                case "-cp", "--class-path" -> {
+                    String option = args[i];
+                    classPath.addAll(entriesOf(value(args, ++i, option)));
+                }
                 default -> {
                     if (args[i].startsWith("--")) {
                         throw usage("run.usage.unknownoption", "unknown option `" + args[i] + "`", args[i]);
@@ -161,7 +170,22 @@ public final class Runner {
         if (file == null) {
             throw usage("run.usage.nofile", "no source file given");
         }
-        return run(file, behaviorName, inputJson, warningsOut);
+        return run(file, behaviorName, inputJson, warningsOut, pathOf(classPath));
+    }
+
+    /** A class path as its entries, in the order they are searched. */
+    static List<Path> entriesOf(String written) {
+        List<Path> entries = new ArrayList<>();
+        for (String entry : written.split(java.io.File.pathSeparator)) {
+            if (!entry.isBlank()) {
+                entries.add(Path.of(entry));
+            }
+        }
+        return entries;
+    }
+
+    private static ModulePath pathOf(List<Path> entries) {
+        return entries.isEmpty() ? ModulePath.EMPTY : ModulePath.ofClassPath(entries);
     }
 
     private static String value(String[] args, int i, String option) {
@@ -173,34 +197,43 @@ public final class Runner {
 
     private static RunException usage(String key, String problem, Object... args) {
         return new RunException(key, problem
-                + "\nusage: souther run <file.sou> [--behavior <name>] [--input <json>]", 2, null, args);
+                + "\nusage: souther run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]",
+                2, null, args);
     }
 
     /** Compiles {@code file}, drives {@code behaviorName} with {@code inputJson}, and returns the
      * encoded output as JSON text. {@code behaviorName} may be null when the module holds exactly
      * one runnable behavior; {@code inputJson} may be null for a zero-argument behavior. */
     public static String run(Path file, String behaviorName, String inputJson) {
-        return run(file, behaviorName, inputJson, new ArrayList<>());
+        return run(file, behaviorName, inputJson, new ArrayList<>(), ModulePath.EMPTY);
     }
 
-    /** As {@link #run(Path, String, String)}, collecting the compile's warnings into
-     *  {@code warningsOut}. */
-    static String run(Path file, String behaviorName, String inputJson, List<Located> warningsOut) {
+    /**
+     * As {@link #run(Path, String, String)}, resolving an import naming no module in {@code file}
+     * against {@code path} and running against its classes, and collecting the compile's warnings
+     * into {@code warningsOut}.
+     */
+    static String run(Path file, String behaviorName, String inputJson, List<Located> warningsOut,
+                      ModulePath path) {
         String source = read(file);
         String moduleName = moduleName(file);
 
         // One compilation answers all of it. Re-reading the source here to find the behavior and
         // its signature would resolve every name a second time, against a tree this compile has
         // already produced.
-        Compilation compilation = Compiler.compiled(source, moduleName, warningsOut);
-        Map<String, byte[]> classes = compilation.classes();
+        Compilation compilation = Compiler.compiled(source, moduleName, warningsOut, path);
+        // The module this file declares, and not one it reached: what the path holds is read for its
+        // declarations and is no part of what this compilation declares.
         Ast.Module module = compilation.module(compilation.modules().get(0));
         Map<String, Sig> sigs = compilation.signatures(module.name());
 
         Ast.BehaviorDef spec = resolveBehavior(module, behaviorName);
         Sig sig = sigs.get(spec.name());
 
-        MemoryClassLoader loader = new MemoryClassLoader(classes, Runner.class.getClassLoader());
+        // The compilation's own — its classes over the ones the path already built. Composing a
+        // loader here instead would be a second statement of that order, which is the one thing
+        // about loading this compiler settles in a single place.
+        ClassLoader loader = compilation.loader();
         Object[] args = decodeInputs(loader, spec.name(), sig.ins(), inputJson);
 
         Object result = invoke(loader, module.name(), spec.name(), args);
@@ -386,7 +419,7 @@ public final class Runner {
      * Arity cannot tell them apart; only decoding against the parameter type can. So the split and the
      * decode are one step, taken with the types in hand.
      */
-    private static Object[] decodeInputs(MemoryClassLoader loader, String name,
+    private static Object[] decodeInputs(ClassLoader loader, String name,
                                          List<BoundaryInput> ins, String inputJson) {
         int arity = ins.size();
         if (arity == 0) {
@@ -424,7 +457,7 @@ public final class Runner {
      * the value while succeeding as the array's sole element is. When the element fails too, the input
      * is wrong for some other reason and the decoder's own report is what says so.
      */
-    private static Object decodeSoleInput(MemoryClassLoader loader, BoundaryInput shape,
+    private static Object decodeSoleInput(ClassLoader loader, BoundaryInput shape,
                                           JsonNode tree) {
         try {
             return decode(loader, shape, tree, 0);
@@ -438,7 +471,7 @@ public final class Runner {
     }
 
     /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
-    private static boolean decodes(MemoryClassLoader loader, BoundaryInput shape, JsonNode raw) {
+    private static boolean decodes(ClassLoader loader, BoundaryInput shape, JsonNode raw) {
         try {
             decode(loader, shape, raw, 0);
             return true;
@@ -449,7 +482,7 @@ public final class Runner {
 
     // --- decode / encode ----------------------------------------------------------------------
 
-    private static Object decode(MemoryClassLoader loader, BoundaryInput shape, JsonNode raw,
+    private static Object decode(ClassLoader loader, BoundaryInput shape, JsonNode raw,
                                  int index) {
         Decoder<JsonNode, ?> decoder = decoderFor(loader, shape, index);
         Result<?> result;
@@ -490,7 +523,7 @@ public final class Runner {
      * a sum's discriminator are all read exactly as they are at the boundary. What is composed here
      * is only what has no class of its own: the primitives and the collections.
      */
-    private static Decoder<JsonNode, ?> decoderFor(MemoryClassLoader loader, BoundaryInput shape,
+    private static Decoder<JsonNode, ?> decoderFor(ClassLoader loader, BoundaryInput shape,
                                                    int index) {
         return switch (shape) {
             case BoundaryInput.Scalar s -> leafDecoder(s.scalar());
@@ -516,7 +549,7 @@ public final class Runner {
      * the map-key rule answers with travels in the shape. A named key runs its own decoder, and a
      * representation is the string leaf, parsed for a temporal.
      */
-    private static Decoder<Object, ?> keyDecoder(MemoryClassLoader loader, BoundaryMapKey key) {
+    private static Decoder<Object, ?> keyDecoder(ClassLoader loader, BoundaryMapKey key) {
         return switch (key.representation()) {
             case MapKeyRepresentation.StringNewtype n -> codecOf(loader, n.name(), "decoder");
             case MapKeyRepresentation.UnitEnum e -> codecOf(loader, e.name(), "decoder");
@@ -583,7 +616,7 @@ public final class Runner {
      * a reflective failure would mean the class this run emitted is not the class it emitted, which
      * is not something a reader of the boundary can say anything useful about.
      */
-    private static <I> Decoder<I, ?> codecOf(MemoryClassLoader loader, TypeName type, String factory) {
+    private static <I> Decoder<I, ?> codecOf(ClassLoader loader, TypeName type, String factory) {
         try {
             @SuppressWarnings("unchecked")
             Decoder<I, ?> decoder = (Decoder<I, ?>)
@@ -616,7 +649,7 @@ public final class Runner {
      * was handed, so this is reached from input the boundary accepted. A {@code StackOverflowError}
      * is not a {@code RunException}, so left alone it reaches the caller as a stack trace.
      */
-    private static Object encodeOutput(MemoryClassLoader loader, String pkg, String behavior,
+    private static Object encodeOutput(ClassLoader loader, String pkg, String behavior,
                                        BoundaryOutput out, Object result) {
         try {
             return encode(loader, pkg, behavior, out, result);
@@ -632,7 +665,7 @@ public final class Runner {
      * discriminator on its own encoder — only the sum's writes one — so taking the encoder off the
      * runtime value would answer a form the same sum's decoder then refuses.
      */
-    private static Object encode(MemoryClassLoader loader, String pkg, String behavior,
+    private static Object encode(ClassLoader loader, String pkg, String behavior,
                                  BoundaryOutput out, Object result) {
         return switch (out) {
             case BoundaryOutput.Scalar s -> encodeLeaf(s.scalar(), result);
@@ -666,7 +699,7 @@ public final class Runner {
      * it — the string leaf, the ISO form of a temporal, the newtype's bare value, the enumeration's
      * case name — and which kind it is travelled here rather than being asked again.
      */
-    private static String encodeKey(MemoryClassLoader loader, BoundaryMapKey key, Object value) {
+    private static String encodeKey(ClassLoader loader, BoundaryMapKey key, Object value) {
         return (String) switch (key.representation()) {
             case MapKeyRepresentation.Text _ -> encodeLeaf(LeafScalar.STRING, value);
             case MapKeyRepresentation.Date _ -> encodeLeaf(LeafScalar.DATE, value);
@@ -681,7 +714,7 @@ public final class Runner {
     /** {@code result} through the derived {@code encoder()} of the named generated class. Every type
      *  a witness names has one, and so does the class a behavior's anonymous answer is generated as,
      *  so this reads what was emitted rather than asking whether it was. */
-    private static Object encodeThrough(MemoryClassLoader loader, String className,
+    private static Object encodeThrough(ClassLoader loader, String className,
                                         Object result) {
         try {
             @SuppressWarnings("unchecked")   // the generated class's encoder() erases at the reflection boundary
@@ -693,7 +726,7 @@ public final class Runner {
         }
     }
 
-    private static List<Object> encodeElements(MemoryClassLoader loader, String pkg, String behavior,
+    private static List<Object> encodeElements(ClassLoader loader, String pkg, String behavior,
                                                BoundaryOutput element, java.util.Collection<?> values) {
         List<Object> encoded = new java.util.ArrayList<>(values.size());
         for (Object v : values) {
@@ -726,7 +759,7 @@ public final class Runner {
      * than anything the module did. Reported as one, the second reads as the behavior having run and
      * failed, and sends the author looking through a body that was never entered.
      */
-    private static Object invoke(MemoryClassLoader loader, String pkg, String behavior, Object[] args) {
+    private static Object invoke(ClassLoader loader, String pkg, String behavior, Object[] args) {
         // The public name is an interface; its no-arg constructor and erased apply live on the $Impl.
         String className = pkg + "." + behaviorClass(behavior) + "$Impl";
         try {
