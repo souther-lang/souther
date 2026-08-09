@@ -32,7 +32,7 @@ class CompileInvariantViolationReasonTest {
                 behavior mk : () -> Range constructs Range
                 let mk = Range { lo = 5, hi = 1 }
                 """;
-        assertEquals("check.invariant.violation.alone", reasonOf(m),
+        assertEquals("invariant.the-value-is-one-the-invariant-rejects-unnamed", reasonOf(m),
                 "nothing is guarded here — the values written decide it");
     }
 
@@ -45,7 +45,7 @@ class CompileInvariantViolationReasonTest {
                 behavior calc : (m: Money) -> Money constructs Money
                 let calc (m) = Money(0m) - Money(1m)
                 """;
-        assertEquals("check.invariant.violation.alone", reasonOf(m),
+        assertEquals("invariant.the-value-is-one-the-invariant-rejects-unnamed", reasonOf(m),
                 "0 - 1 is negative wherever it stands");
     }
 
@@ -61,7 +61,7 @@ class CompileInvariantViolationReasonTest {
                 behavior conv : (p: Pos) -> Neg constructs Neg
                 let conv (p) = Neg(p.value)
                 """;
-        assertEquals("check.invariant.violation.alone", reasonOf(m),
+        assertEquals("invariant.the-value-is-one-the-invariant-rejects-unnamed", reasonOf(m),
                 "an input's type carries its invariant everywhere the input does");
     }
 
@@ -77,7 +77,7 @@ class CompileInvariantViolationReasonTest {
                     Amount(bad)
                 }
                 """;
-        assertEquals("check.invariant.violation.alone", reasonOf(m),
+        assertEquals("invariant.the-value-is-one-the-invariant-rejects-unnamed", reasonOf(m),
                 "a name is an alias for what it was given, and no guard was written");
     }
 
@@ -92,7 +92,7 @@ class CompileInvariantViolationReasonTest {
                     if n < 0 then Amount(n)
                     else Amount(0)
                 """;
-        assertEquals("check.invariant.violation.assumed", reasonOf(m),
+        assertEquals("invariant.the-value-is-rejected-on-a-reachable-path-unnamed", reasonOf(m),
                 "without `n < 0` nothing here refutes the invariant");
     }
 
@@ -108,7 +108,7 @@ class CompileInvariantViolationReasonTest {
                     if p.a < p.b then Money(0m) - Money(1m)
                     else p.a
                 """;
-        assertEquals("check.invariant.violation.alone", reasonOf(m),
+        assertEquals("invariant.the-value-is-one-the-invariant-rejects-unnamed", reasonOf(m),
                 "the guard settles something, and the violation does not need it");
     }
 
@@ -124,7 +124,7 @@ class CompileInvariantViolationReasonTest {
                 behavior mk : (n: Int) -> Amount constructs Amount
                 let mk (n) = Amount(if n < 0 then n else 0 - 1)
                 """;
-        assertEquals("check.invariant.violation.assumed", reasonOf(m),
+        assertEquals("invariant.the-value-is-rejected-on-a-reachable-path-unnamed", reasonOf(m),
                 "one reading needed the path, so the two together are said to");
     }
 
@@ -143,14 +143,14 @@ class CompileInvariantViolationReasonTest {
     @Test
     void aClauseRefutedOnTheValuesAloneDecidesTheReasonForTheWholeInvariant() {
         // `x >= 0` fails only under the guard; `y >= 0` fails on `y = -1` wherever it is written
-        assertEquals("check.invariant.violation.alone",
+        assertEquals("invariant.the-value-is-one-the-invariant-rejects-unnamed",
                 reasonOf(TWO_CLAUSES.formatted("    invariant x >= 0\n    invariant y >= 0")),
                 "the invariant is already false without the guard, by its second clause");
     }
 
     @Test
     void whichClauseIsWrittenFirstIsNotTheReason() {
-        assertEquals("check.invariant.violation.alone",
+        assertEquals("invariant.the-value-is-one-the-invariant-rejects-unnamed",
                 reasonOf(TWO_CLAUSES.formatted("    invariant y >= 0\n    invariant x >= 0")),
                 "the same two clauses in the other order are the same invariant");
     }

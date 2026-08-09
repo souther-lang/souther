@@ -1028,14 +1028,44 @@ public final class TypeOps {
             TypeName named, Ast.Data data, Symbols symbols,
             Function<TypeName, List<Ast.InvariantClause>> form) {
         List<Ast.InvariantClause> invs = new ArrayList<>();
+        for (Declared one : declaredInvariants(named, data, symbols, form)) {
+            invs.add(one.clause());
+        }
+        return invs;
+    }
+
+    /**
+     * A clause and the declaration that wrote it.
+     *
+     * <p>A clause reaching a type through a spread is that type's to hold and the other type's to
+     * have written, and a reader told which clause failed on a data that declares none of its own is
+     * told about a declaration they would not find. {@code declaredOn} is null where the walk was
+     * not given a name to start from.
+     */
+    public record Declared(TypeName declaredOn, Ast.InvariantClause clause) {}
+
+    /**
+     * The same clauses {@link #effectiveInvariants} answers, each with the declaration it was written
+     * on.
+     *
+     * <p>Flattening them loses which spread brought which, and what is reported of an unproven clause
+     * is the name the author wrote — so what is asked for here is the pair, and the flat list is
+     * taken from it rather than walked again.
+     */
+    public static List<Declared> declaredInvariants(
+            TypeName named, Ast.Data data, Symbols symbols,
+            Function<TypeName, List<Ast.InvariantClause>> form) {
+        List<Declared> invs = new ArrayList<>();
         for (Ast.Name inc : data.includes()) {
             Ast.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(effectiveInvariants(inc.denotes(), id, symbols, form));
+                invs.addAll(declaredInvariants(inc.denotes(), id, symbols, form));
             }
         }
         List<Ast.InvariantClause> own = named == null ? null : form.apply(named);
-        invs.addAll(own != null ? own : data.invariants());
+        for (Ast.InvariantClause clause : own != null ? own : data.invariants()) {
+            invs.add(new Declared(named, clause));
+        }
         return invs;
     }
 
