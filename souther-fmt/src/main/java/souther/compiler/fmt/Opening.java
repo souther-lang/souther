@@ -15,13 +15,21 @@ sealed interface Opening {
 
     Opening NONE = new None();
 
+    /** The one line nothing opens: the first of the file. */
+    Opening FILE_BEGINS = new FileBegins();
+
     /** The boundary that opens this place's line, and what the construct writes after it before
      *  the place itself — a leading comma, or nothing. */
     record Breaks(TokenDoc.Break policy, TokenDoc opener) implements Opening {}
 
-    /** The line begins where whatever holds this place opened one — a {@code {}, the start of a
-     *  file — so the boundary is already behind it and only the opener is left to write. */
-    record ByOpener(TokenDoc opener) implements Opening {}
+    /**
+     * The line is open and no boundary opened it, which is true in one place: the start of a file.
+     *
+     * <p>Anywhere else a place with a line of its own says what opens that line, so that whether
+     * the place has one and what wrote it are one value. A place that claimed a line while
+     * something else wrote the boundary would be the two-table arrangement again, one table deep.
+     */
+    record FileBegins() implements Opening {}
 
     /** The place does not open a line: what holds it goes on writing the line it is on. */
     record None() implements Opening {}
@@ -34,7 +42,7 @@ sealed interface Opening {
     default TokenDoc boundary() {
         return switch (this) {
             case Breaks b -> new TokenDoc.Gap(b.policy());
-            case ByOpener _, None _ -> TokenDoc.NIL;
+            case FileBegins _, None _ -> TokenDoc.NIL;
         };
     }
 
@@ -48,8 +56,7 @@ sealed interface Opening {
     default TokenDoc opener() {
         return switch (this) {
             case Breaks b -> b.opener();
-            case ByOpener o -> o.opener();
-            case None _ -> TokenDoc.NIL;
+            case FileBegins _, None _ -> TokenDoc.NIL;
         };
     }
 
@@ -63,7 +70,7 @@ sealed interface Opening {
     default boolean opensALine() {
         return switch (this) {
             case Breaks b -> b.policy() != TokenDoc.Break.NEVER;
-            case ByOpener _ -> true;
+            case FileBegins _ -> true;
             case None _ -> false;
         };
     }

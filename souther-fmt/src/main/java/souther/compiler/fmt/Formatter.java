@@ -144,12 +144,14 @@ public final class Formatter {
      * body, so text is not enough to say which place owns one.
      */
     record Construction(TokenDoc doc, Correspondence places,
-            Map<Place, Map<Carrier, List<SyntaxToken>>> carriers) {}
+            Map<Place, Map<Carrier, List<SyntaxToken>>> carriers, Map<Place, Integer> order) {}
 
     static Construction build(SyntaxNode file) {
         Formatter formatter = new Formatter();
         TokenDoc doc = formatter.file(file);
-        return new Construction(formatter.resolved(doc), formatter.places, formatter.assigned);
+        Map<Place, Integer> order = Place.orderedIn(doc);
+        return new Construction(formatter.resolved(doc), formatter.places, formatter.assigned,
+                order);
     }
 
     /** {@code doc} with the comments in it. The one place a carrier is answered. */
@@ -186,12 +188,14 @@ public final class Formatter {
         // a line the canonical form opens a construct with goes to that line and not to wherever the
         // construct ends.
         for (var e : comments.aboveToken().entrySet()) {
-            file(out, declared, tokenPlaces(e.getKey(), Carrier.ABOVE, declared), Carrier.ABOVE,
-                    e.getValue());
+            file(out, declared,
+                    namePlaces(e.getKey(), e.getValue(), Carrier.ABOVE, declared),
+                    Carrier.ABOVE, e.getValue().comments());
         }
         for (var e : comments.afterToken().entrySet()) {
-            file(out, declared, tokenPlaces(e.getKey(), Carrier.TRAILING, declared),
-                    Carrier.TRAILING, e.getValue());
+            file(out, declared,
+                    namePlaces(e.getKey(), e.getValue(), Carrier.TRAILING, declared),
+                    Carrier.TRAILING, e.getValue().comments());
         }
         for (var e : comments.above().entrySet()) {
             file(out, declared, entryPlaces(e.getKey(), Carrier.ABOVE), Carrier.ABOVE, e.getValue());
@@ -212,56 +216,51 @@ public final class Formatter {
     }
 
     /**
-     * The places a comment held against a token reaches.
+     * The places a comment held against a name reaches.
      *
-     * <p>A token is a place of the canonical form wherever the canonical form writes it as one: the
-     * name a sum's case is written from, the {@code =} a declaration's first line ends with. That is
-     * asked of the correspondence by the run the token is part of, since a name written as several
-     * identifiers is one thing and a comment anywhere in it is about all of it.
-     *
-     * <p>Where the canonical form writes no place for it, the token is in the middle of a construct
-     * — a {@code module}, an {@code exposing}, a bracket — and what a comment there ends is the line
-     * that construct is on. So the question is asked again of the construct, which is a source
-     * element and reaches the places the ordinary way.
+     * <p>A name is a place of the canonical form wherever the canonical form writes it as one: the
+     * name a sum's case is written from, the {@code =} a declaration's first line ends with. Where
+     * it writes no place for it, the name is in the middle of a construct — a {@code module}, an
+     * {@code exposing}, a bracket — and the construction said which construct that is, so this asks
+     * that construct and not the source tree.
      */
-    private List<Place> tokenPlaces(SyntaxToken t, Carrier which,
+    private List<Place> namePlaces(Written name, Attachments.OnAName held, Carrier which,
             Map<Place, java.util.EnumSet<Carrier>> declared) {
-        List<Place> written = places.placesOf(new Written.Run(nameStart(t), nameEnd(t)));
+        List<Place> written = places.placesOf(name);
         if (!written.isEmpty()) {
             return written;
         }
         return which == Carrier.ABOVE
-                ? entryPlaces(beginningAt(t), Carrier.ABOVE)
-                : endsTheLine(endingAt(t), t.end(), declared);
+                ? entryPlaces(held.inside(), Carrier.ABOVE)
+                : endsTheLine(held.inside(), name.end(), declared);
     }
 
     /**
-     * The places a source construct was written at, or where the canonical form writes nothing for
-     * it, the nearest places that stand at the end of it — or the start, for a comment written
-     * above.
+     * The places a source construct was written at.
      *
-     * <p>A run the source wrote nested is written flat, so {@code 1 |> b} of {@code 1 |> b |> c} is
-     * not a construct the canonical form has: what it has at the end of it is the {@code b} stage,
-     * and that is what a comment written after {@code 1 |> b} is at the end of the line of.
+     * <p>Every construct has an answer and the construction gave it. One the canonical form writes
+     * a place for is written at that place; one it writes inside another construct's line is
+     * written at that construct's place; and a run the canonical form flattens — {@code 1 |> b} of
+     * {@code 1 |> b |> c} — opens at the head place and ends at the stage place its own right
+     * operand is written at, which is what a comment written after it is at the end of the line of.
      *
-     * <p>This is the whole of the walk over the source tree. Past here the walk is over the places,
-     * and the two are kept apart so that the second cannot start answering with the first.
+     * <p>Nothing here walks the source tree. Which canonical place a construct the canonical form
+     * has no construct for contributed to is a fact the construction knew and recorded; worked out
+     * afterwards from the shape of the source it is a guess, and it was one — the first or last
+     * child of whatever held it, which is neither of the two ends of a flattened run.
      */
     private List<Place> entryPlaces(SyntaxNode node, Carrier which) {
-        for (SyntaxNode c = node; c != null; c = c.parent()) {
-            List<Place> found = places.placesOf(new Written.Construct(c));
-            if (!found.isEmpty()) {
-                return found;
-            }
-            SyntaxNode edge = which == Carrier.ABOVE ? firstChildOf(c) : lastChildOf(c);
-            if (edge != null) {
-                List<Place> atTheEdge = places.placesOf(new Written.Construct(edge));
-                if (!atTheEdge.isEmpty()) {
-                    return atTheEdge;
-                }
-            }
+        List<Place> written = places.placesOf(new Written.Construct(node));
+        if (!written.isEmpty()) {
+            return written;
         }
-        return List.of();
+        Correspondence.Span span = places.spanOf(node);
+        if (span == null) {
+            throw new IllegalStateException("the construction recorded no place for " + node.kind()
+                    + " at " + node.start() + ".." + node.end()
+                    + "; every construct it writes is written somewhere");
+        }
+        return List.of(which == Carrier.ABOVE ? span.from() : span.to());
     }
 
     /**
@@ -270,60 +269,60 @@ public final class Formatter {
      *
      * <p>Where the place that would take it goes on past {@code wrote}, the comment was written in
      * the middle of that place and not at the end of its line: what it ends is the line that place
-     * is on, so the question is asked again of what the place ends inside. A comment after the
-     * condition of an {@code if} is written at the end of the declaration that holds the {@code if},
-     * and this is why.
+     * is on, so the question is asked again of the place that one is written under. A comment after
+     * the condition of an {@code if} is written at the end of the declaration that holds the
+     * {@code if}, and this is why.
      *
      * <p>Where the comment was written is carried separately from the construct it was written in,
-     * because the two are not the same offset for a comment written in the middle of one: an anchor
-     * that ends past the comment would say the first place asked already ends the line, and the
-     * comment would stay inside a construct whose line runs on after it.
+     * because for a comment in the middle of one the two are not the same offset: an anchor that
+     * ends past the comment would say the first place asked already ends the line.
+     *
+     * <p>The widening is over the places. It used to read the place's source elements, find what
+     * the source has ending there and ask the source tree again, which is the round trip between
+     * the two structures that having places is meant to end.
      */
     private List<Place> endsTheLine(SyntaxNode anchor, int wrote,
             Map<Place, java.util.EnumSet<Carrier>> declared) {
-        SyntaxNode at = anchor;
+        List<Place> entries = entryPlaces(anchor, Carrier.TRAILING);
+        Place carrier = null;
+        for (Place entry : entries) {
+            Place found = nearestCarrier(entry, Carrier.TRAILING, declared);
+            if (found != null && (carrier == null || isAncestorOf(carrier, found))) {
+                carrier = found;
+            }
+        }
         int pos = wrote;
-        for (int widened = 0; widened < 16; widened++) {
-            List<Place> entries = entryPlaces(at, Carrier.TRAILING);
-            Place carrier = null;
-            for (Place entry : entries) {
-                Place found = nearestCarrier(entry, Carrier.TRAILING, declared);
-                if (found != null && (carrier == null || isAncestorOf(carrier, found))) {
-                    carrier = found;
+        while (carrier != null) {
+            int ends = endsAt(carrier);
+            if (ends <= pos) {
+                break;                        // its line ends where the comment was written
+            }
+            // The comment is inside this place, so what it ends is the line this place is on, and
+            // that line runs to the end of the outermost place ending where this one does.
+            Place outer = carrier;
+            for (Place p = carrier.parent(); p != null && endsAt(p) == ends; p = p.parent()) {
+                Place found = nearestCarrier(p, Carrier.TRAILING, declared);
+                if (found != null && endsAt(found) == ends) {
+                    outer = found;
                 }
             }
-            if (carrier == null) {
-                return entries;
+            pos = ends;
+            if (outer == carrier) {
+                break;                        // nothing wider ends here to hand it to
             }
-            SyntaxNode ends = endOfPlace(carrier);
-            if (ends == null || ends.end() <= pos) {
-                return entries;
-            }
-            at = ends;
-            pos = ends.end();
+            carrier = outer;
         }
-        return entryPlaces(at, Carrier.TRAILING);
+        return carrier == null ? entries : List.of(carrier);
     }
 
-    /** The source construct a place ends at, or null where the canonical form writes it from
-     *  nothing the source has. */
-    private SyntaxNode endOfPlace(Place place) {
-        SyntaxNode last = null;
+    /** Where what {@code place} is written from ends, or the start of the file where the canonical
+     *  form writes it from nothing the source has. */
+    private int endsAt(Place place) {
+        int end = 0;
         for (Written w : places.sourcesOf(place)) {
-            if (w instanceof Written.Construct c && (last == null || c.node().end() > last.end())) {
-                last = c.node();
-            }
+            end = Math.max(end, w.end());
         }
-        return last == null ? null : endingAt(lastCodeTokenOf(last));
-    }
-
-    /** {@code n}'s last child node, whether or not the layout gives it a line. */
-    private static SyntaxNode lastChildOf(SyntaxNode n) {
-        SyntaxNode last = null;
-        for (SyntaxNode c : n.childNodes()) {
-            last = c;
-        }
-        return last;
+        return end;
     }
 
     private void file(Map<Place, Map<Carrier, List<SyntaxToken>>> out,
@@ -402,16 +401,6 @@ public final class Formatter {
             }
         }
         return null;
-    }
-
-    /**
-     * The places {@code file} is written at, and what the source had at each. For a check that has
-     * to see the structure the canonical form has rather than the one the source had — the two are
-     * not the same tree, and where they differ is where asking the source a second time answers
-     * about a construct the canonical form does not write.
-     */
-    static Correspondence placesOf(SyntaxNode file) {
-        return build(file).places();
     }
 
     /**
@@ -621,8 +610,7 @@ public final class Formatter {
             // the item's; the first item's line is opened by the start of the file. The blank line
             // between two of them separates them and belongs to neither, so it stays here.
             Place at = places.under(ofTheFile, item.kind(),
-                    prev == null ? new Opening.ByOpener(TokenDoc.NIL)
-                            : Opening.breaks(TokenDoc.Break.ALWAYS),
+                    prev == null ? Opening.FILE_BEGINS : Opening.breaks(TokenDoc.Break.ALWAYS),
                     Written.of(item));
             if (prev != null && blankBetween(prev, item.kind())) {
                 parts.add(HARD_GAP);
@@ -654,13 +642,14 @@ public final class Formatter {
     }
 
     private TokenDoc item(SyntaxNode n, Place at) {
+        places.within(n, at);
         return switch (n.kind()) {
             case MODULE_HEADER -> moduleHeader(n, at);
             case IMPORT_DECL -> importDecl(n, at);
             case DATA_DEF -> dataDef(n, at);
             case BEHAVIOR_DEF -> behaviorDef(n, at);
             case FN_DEF -> fnDef(n, at);
-            case EXAMPLES_FILE_HEADER -> examplesFileHeader(n);
+            case EXAMPLES_FILE_HEADER -> examplesFileHeader(n, at);
             case EXAMPLE_DEF -> exampleDef(n, at);
             case FAKE_DEF -> fakeDef(n, at);
             default -> throw new IllegalStateException("no case writes " + n.kind());
@@ -669,9 +658,9 @@ public final class Formatter {
 
     // --- example ---
 
-    private TokenDoc examplesFileHeader(SyntaxNode n) {
+    private TokenDoc examplesFileHeader(SyntaxNode n, Place at) {
         return TokenDoc.node(n.kind(), concat(ident("examples"), GAP, ident("for"), GAP,
-                qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow())));
+                qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), at)));
     }
 
     private TokenDoc exampleDef(SyntaxNode n, Place at) {
@@ -788,7 +777,7 @@ public final class Formatter {
 
     private TokenDoc moduleHeader(SyntaxNode n, Place at) {
         TokenDoc d = concat(TokenDoc.token(SyntaxKind.MODULE_KW, "module"), GAP,
-                qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow()));
+                qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), at));
         return TokenDoc.node(n.kind(), n.child(SyntaxKind.EXPOSING_CLAUSE)
                 .map(c -> concat(d, GAP, exposing(c, at)))
                 .orElse(d));
@@ -799,7 +788,7 @@ public final class Formatter {
         List<Member> entries = new ArrayList<>();
         for (SyntaxNode e : childNodes(clause, SyntaxKind.EXPOSED_ENTRY)) {
             Place entry = memberPlace(run, e);
-            TokenDoc name = qualifiedName(e.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
+            TokenDoc name = qualifiedName(e.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), entry);
             entries.add(member(entry, e, TokenDoc.node(e.kind(), e.child(SyntaxKind.RET_TYPE)
                     .map(rt -> concat(name, GAP, COLON, GAP, retType(rt, entry)))
                     .orElse(name))));
@@ -811,7 +800,7 @@ public final class Formatter {
 
     private TokenDoc importDecl(SyntaxNode n, Place at) {
         TokenDoc d = concat(TokenDoc.token(SyntaxKind.IMPORT_KW, "import"), GAP,
-                qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow()));
+                qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow(), at));
         Optional<SyntaxNode> alias = n.child(SyntaxKind.IMPORT_ALIAS);
         if (alias.isPresent()) {
             d = concat(d, GAP, TokenDoc.node(alias.get().kind(),
@@ -862,8 +851,7 @@ public final class Formatter {
             }
             return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.DATA_KW, "data"), GAP, ident(name), GAP, ASSIGN,
                     headerLine(at, n.token(SyntaxKind.ASSIGN)),
-                    nest(INDENT, concat(concat(HARD_GAP, productBody(product.get(), at)),
-                            concat(invariants)))));
+                    nest(INDENT, concat(productBody(product.get(), at), concat(invariants)))));
         }
         var sum = n.child(SyntaxKind.SUM_BODY);
         if (sum.isPresent()) {
@@ -875,10 +863,11 @@ public final class Formatter {
             // a line, and the line it moves to is the union's own. Which shape the union is written
             // in is not where the comment goes — it is what the source has above that case, which
             // the token stream has already said.
-            boolean movesDown = !comments.aboveToken()
-                    .getOrDefault(firstCaseOf(sum.get()), List.of()).isEmpty();
+            SyntaxToken firstCase = firstCaseOf(sum.get());
+            boolean movesDown = firstCase != null && comments.aboveToken()
+                    .containsKey(new Written.Run(nameStart(firstCase), nameEnd(firstCase)));
             Place chainAt = places.under(at, sum.get().kind(),
-                    movesDown ? new Opening.ByOpener(TokenDoc.NIL) : Opening.NONE,
+                    movesDown ? Opening.breaks(TokenDoc.Break.ALWAYS) : Opening.NONE,
                     Written.of(sum.get()));
             TokenDoc head = null;
             List<TokenDoc> cases = new ArrayList<>();
@@ -901,7 +890,7 @@ public final class Formatter {
                 return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.DATA_KW, "data"), GAP, ident(name), GAP, ASSIGN, GAP, chain));
             }
             return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.DATA_KW, "data"), GAP, ident(name), GAP, ASSIGN,
-                    nest(INDENT, concat(HARD_GAP, chain))));
+                    nest(INDENT, chain)));
         }
         var newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
@@ -942,7 +931,7 @@ public final class Formatter {
             // block's indent rather than after the comma the rest of the block is written with.
             boolean first = lines.isEmpty();
             Place place = places.under(run, m.kind(),
-                    first ? new Opening.ByOpener(LBRACE)
+                    first ? new Opening.Breaks(TokenDoc.Break.ALWAYS, LBRACE)
                             : new Opening.Breaks(TokenDoc.Break.ALWAYS, COMMA),
                     Written.of(m));
             TokenDoc written = m.kind() == SyntaxKind.FIELD
@@ -956,7 +945,7 @@ public final class Formatter {
             // No member wrote the opening brace, so the block writes it on a line of its own. This
             // is the body that holds only comments: `dataDef` writes a body holding nothing at all
             // as `{}` and never reaches here.
-            lines.add(LBRACE);
+            lines.add(concat(HARD_GAP, LBRACE));
         }
         lines.add(TokenDoc.carries(run, Carrier.AT_END));
         lines.add(concat(HARD_GAP, RBRACE));
@@ -1041,7 +1030,7 @@ public final class Formatter {
             // stage is not what ends the line and carries nothing there: what ends it is the
             // declaration, whose own place is outside the group this run is laid out in.
             boolean last = i == stages.size() - 1;
-            parts.add(TokenDoc.at(ofTheStage, concat(stage(st),
+            parts.add(TokenDoc.at(ofTheStage, concat(stage(st, ofTheStage),
                     last ? declaredOut : TokenDoc.endsTheLineOf(ofTheStage))));
         }
         return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name), GAP, ASSIGN,
@@ -1062,8 +1051,8 @@ public final class Formatter {
     }
 
     /** One stage of a pipeline, which is a name and is written as one. */
-    private TokenDoc stage(SyntaxNode n) {
-        return qualifiedName(n);
+    private TokenDoc stage(SyntaxNode n, Place at) {
+        return qualifiedName(n, at);
     }
 
     /** The names a {@code constructs} / {@code depends on} clause lists. {@code skipIdents} drops
@@ -1279,6 +1268,7 @@ public final class Formatter {
     }
 
     private TokenDoc retType(SyntaxNode n, Place at) {
+        places.within(n, at);
         List<TokenDoc> cases = new ArrayList<>();
         List<TokenDoc> rest = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
@@ -1303,6 +1293,7 @@ public final class Formatter {
     }
 
     private TokenDoc typeRef(SyntaxNode n, Place at) {
+        places.within(n, at);
         if (n.kind() == SyntaxKind.TUPLE_TYPE) {
             Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
             List<Member> elems = new ArrayList<>();
@@ -1319,7 +1310,7 @@ public final class Formatter {
         if (typevar.isPresent()) {
             return token(typevar.get());
         }
-        TokenDoc name = qualifiedName(n);   // a type may be named through its module or an import alias
+        TokenDoc name = qualifiedName(n, at);   // a type may be named through its module or an import alias
         var args = n.child(SyntaxKind.TYPE_ARGS);
         if (args.isEmpty()) {
             return name;
@@ -1342,6 +1333,7 @@ public final class Formatter {
 
     /** One term of a written type. A function type reads as itself wherever a type goes. */
     private TokenDoc typeTerm(SyntaxNode n, Place at) {
+        places.within(n, at);
         return n.kind() == SyntaxKind.FN_TYPE ? fnType(n, at) : typeRef(n, at);
     }
 
@@ -1350,6 +1342,7 @@ public final class Formatter {
     /** {@code n} written at {@code at}, which is the place the canonical form has it at. What it
      *  writes under itself is written at places under that one. */
     private TokenDoc expr(SyntaxNode n, Place at) {
+        places.within(n, at);
         return switch (n.kind()) {
             case LITERAL_EXPR -> token(firstMeaningfulToken(n));
             case VAR_EXPR -> ident(firstIdent(n));
@@ -1445,16 +1438,23 @@ public final class Formatter {
         List<SyntaxNode> ops = exprChildren(n);
         SyntaxNode left = ops.get(0);
         TokenDoc head;
+        Place opensAt;
         if (left.kind() == SyntaxKind.BINARY_EXPR && ladderLevel(operatorKind(left)) == level) {
             head = collectChain(left, at, level, segs, false);
+            opensAt = places.spanOf(left).from();
         } else {
             Place ofTheLeft = headPlace(at, left);
+            opensAt = ofTheLeft;
             head = TokenDoc.at(ofTheLeft, concat(expr(left, ofTheLeft), TokenDoc.endsTheLineOf(ofTheLeft)));
         }
         SyntaxNode right = ops.get(1);
         Place ofTheRight = segmentPlace(at, token(operatorToken(n)), right);
         segs.add(last ? lastOfARun(ofTheRight, expr(right, ofTheRight))
                 : segment(ofTheRight, right, expr(right, ofTheRight)));
+        // What the parser read as one operand of the level above is written here as a run of
+        // sibling places. It opens where the run's head is written and ends at the segment its own
+        // right operand is written at, and the construction is the only thing that knows both.
+        places.spanning(n, opensAt, ofTheRight);
         return head;
     }
 
@@ -1491,15 +1491,19 @@ public final class Formatter {
         SyntaxNode left = ops.get(0);
         SyntaxNode right = ops.get(1);
         TokenDoc head;
+        Place opensAt;
         if (left.kind() == SyntaxKind.PIPE_EXPR) {
             head = collectPipe(left, at, stages, false);
+            opensAt = places.spanOf(left).from();
         } else {
             Place ofTheLeft = headPlace(at, left);
+            opensAt = ofTheLeft;
             head = TokenDoc.at(ofTheLeft, concat(expr(left, ofTheLeft), TokenDoc.endsTheLineOf(ofTheLeft)));
         }
         Place ofTheStage = segmentPlace(at, TokenDoc.token(SyntaxKind.VPIPE, "|>"), right);
         stages.add(last ? lastOfARun(ofTheStage, expr(right, ofTheStage))
                 : segment(ofTheStage, right, expr(right, ofTheStage)));
+        places.spanning(n, opensAt, ofTheStage);
         return head;
     }
 
@@ -1754,6 +1758,7 @@ public final class Formatter {
     /** A binding pattern, written back as it was: a name, a tuple, a newtype opened by its
      * constructor, or a record's fields. */
     private TokenDoc pattern(SyntaxNode n, Place at) {
+        places.within(n, at);
         switch (n.kind()) {
             case PATTERN_NAME -> {
                 return ident(firstIdent(n));
@@ -1773,7 +1778,7 @@ public final class Formatter {
             case PATTERN_CTOR -> {
                 SyntaxNode inner = patternChild(n);
                 Place ofTheInner = places.under(at, inner.kind(), Opening.NONE, Written.of(inner));
-                return TokenDoc.node(n.kind(), concat(qualifiedName(n), GAP, LPAREN, GAP,
+                return TokenDoc.node(n.kind(), concat(qualifiedName(n, at), GAP, LPAREN, GAP,
                         TokenDoc.at(ofTheInner, pattern(inner, ofTheInner)), GAP, RPAREN));
             }
             case PATTERN_RECORD -> {
@@ -1862,16 +1867,33 @@ public final class Formatter {
             Map<SyntaxNode, List<SyntaxToken>> after,
             /** Inside the node, under its last member and before it closes. */
             Map<SyntaxNode, List<SyntaxToken>> atEnd,
-            /** Against a token rather than a node — a name the grammar wrote as identifiers, and a
-             * token in the middle of a construct, which is a line of the canonical form without
-             * being a construct of the source. */
-            Map<SyntaxToken, List<SyntaxToken>> aboveToken,
-            Map<SyntaxToken, List<SyntaxToken>> afterToken) {
+            /** Against a name rather than a node — the identifiers a sum's case or a clause's
+             * member is written as, and a token in the middle of a construct, which is a line of
+             * the canonical form without being a construct of the source. */
+            Map<Written, OnAName> aboveToken,
+            Map<Written, OnAName> afterToken) {
+
+        /**
+         * The comments held against one name, and the construct that name is written in.
+         *
+         * <p>Both are read here, where the comment's own position is read. Leaving the second to be
+         * worked out later would have the walk over the places begin by walking the source tree,
+         * which is what recording the places is here to stop.
+         */
+        record OnAName(SyntaxNode inside, List<SyntaxToken> comments) {}
 
         static Attachments empty() {
             return new Attachments(new IdentityHashMap<>(), new IdentityHashMap<>(),
-                    new IdentityHashMap<>(), new IdentityHashMap<>(), new IdentityHashMap<>());
+                    new IdentityHashMap<>(), new java.util.HashMap<>(), new java.util.HashMap<>());
         }
+    }
+
+    /** Files {@code comment} against the name {@code t} is part of, written inside {@code inside}. */
+    private static void onAName(Map<Written, Attachments.OnAName> to, SyntaxToken t,
+            SyntaxNode inside, SyntaxToken comment) {
+        to.computeIfAbsent(new Written.Run(nameStart(t), nameEnd(t)),
+                        _ -> new Attachments.OnAName(inside, new ArrayList<>()))
+                .comments().add(comment);
     }
 
     /**
@@ -2010,7 +2032,7 @@ public final class Formatter {
                 return;
             }
             if (first instanceof SyntaxToken token) {
-                add(out.aboveToken(), token, comment);
+                onAName(out.aboveToken(), token, beginningAt(token), comment);
                 return;
             }
         }
@@ -2024,7 +2046,7 @@ public final class Formatter {
             if (opensTheClause) {
                 add(out.above(), next.parent(), comment);
             } else {
-                add(out.aboveToken(), next, comment);
+                onAName(out.aboveToken(), next, beginningAt(next), comment);
             }
             return;
         }
@@ -2051,11 +2073,11 @@ public final class Formatter {
         // follow: a comment inside `other.mod.Thing` and one after it are about the same member, and
         // the last member of a run ends where the run does, which is the run's line and not its own.
         if (isBareMember(code) && nameEnd(code) != code.parent().end()) {
-            add(out.afterToken(), code, comment);
+            onAName(out.afterToken(), code, endingAt(code), comment);
             return;
         }
         if (isChainHead(code)) {
-            add(out.afterToken(), code, comment);
+            onAName(out.afterToken(), code, endingAt(code), comment);
             return;
         }
         // The outermost construct ending where the comment is. Outermost because
@@ -2068,18 +2090,10 @@ public final class Formatter {
             // Nothing ends here, so the comment was written in the middle of a construct — after a
             // `data D =`, a `match … with`, a `{`. What it ends is the line that token is on, so it
             // is held against the token rather than against the construct the token is inside.
-            add(out.afterToken(), code, comment);
+            onAName(out.afterToken(), code, ends, comment);
             return;
         }
         add(out.after(), ends, comment);
-    }
-
-    /** {@code n}'s first child node, whether or not the layout gives it a line. */
-    private static SyntaxNode firstChildOf(SyntaxNode n) {
-        for (SyntaxNode c : n.childNodes()) {
-            return c;
-        }
-        return null;
     }
 
     private static SyntaxToken lastCodeTokenOf(SyntaxNode n) {
@@ -2337,7 +2351,8 @@ public final class Formatter {
 
     // --- CST navigation ---
 
-    private TokenDoc qualifiedName(SyntaxNode n) {
+    private TokenDoc qualifiedName(SyntaxNode n, Place at) {
+        places.within(n, at);
         return TokenDoc.node(n.kind(), dottedName(idents(n)));
     }
 

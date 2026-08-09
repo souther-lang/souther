@@ -23,10 +23,10 @@ import java.util.Map;
  */
 final class Correspondence {
 
-    private final Place file = new Place(null, 0, SyntaxKind.SOURCE_FILE, Opening.NONE);
-    private final Map<Place, Integer> counts = new IdentityHashMap<>();
+    private final Place file = new Place(null, SyntaxKind.SOURCE_FILE, Opening.FILE_BEGINS);
     private final Map<Place, List<Written>> wrote = new IdentityHashMap<>();
     private final Map<Written, List<Place>> at = new HashMap<>();
+    private final Map<SyntaxNode, Span> spans = new IdentityHashMap<>();
 
     /** Says what the source has at the file's own place. It is made before anything is written, so
      *  it is the one place that is told rather than asked. */
@@ -44,8 +44,7 @@ final class Correspondence {
      * once they all exist, which is the whole of the difference this makes.
      */
     Place under(Place parent, SyntaxKind construct, Opening opening, Written... from) {
-        int ordinal = counts.merge(parent, 1, Integer::sum) - 1;
-        Place place = new Place(parent, ordinal, construct, opening);
+        Place place = new Place(parent, construct, opening);
         if (from.length > 0) {
             wrote.put(place, List.of(from));
             for (Written w : from) {
@@ -53,6 +52,29 @@ final class Correspondence {
             }
         }
         return place;
+    }
+
+    /** Where a construct the canonical form writes no place of its own for begins and ends: the
+     *  first place its text is written at and the last. The two are the same place for a construct
+     *  written inside one. */
+    record Span(Place from, Place to) {}
+
+    /** Records that {@code node}'s text is written at {@code at} and nowhere else — a type inside a
+     *  field's line, a name inside an import's. */
+    void within(SyntaxNode node, Place at) {
+        spans.putIfAbsent(node, new Span(at, at));
+    }
+
+    /** Records that {@code node} is written as a run of places, opening at {@code from} and ending
+     *  at {@code to}. This is what a flattened chain leaves: the source's nesting is written as
+     *  siblings, so the construct the parser read is spread over several of them. */
+    void spanning(SyntaxNode node, Place from, Place to) {
+        spans.put(node, new Span(from, to));
+    }
+
+    /** Where {@code node} is written, or null where the construction recorded nothing for it. */
+    Span spanOf(SyntaxNode node) {
+        return spans.get(node);
     }
 
     /** What the source had at {@code place}. Empty where the canonical form writes something the

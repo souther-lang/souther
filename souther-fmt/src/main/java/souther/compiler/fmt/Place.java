@@ -2,6 +2,11 @@ package souther.compiler.fmt;
 
 import souther.compiler.cst.SyntaxKind;
 
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * One place of the canonical form: somewhere the formatter writes something, told apart from every
  * other place by being it.
@@ -18,19 +23,17 @@ import souther.compiler.cst.SyntaxKind;
  * {@link Correspondence}'s to say and not a field here: a place with one source element and a place
  * with none are both ordinary, and a field would make the first of those the only kind.
  *
- * <p>Which of its parent's places this is, is the label on the edge from the parent — the parent
- * and the ordinal together. Nothing else has to name it.
+ * <p>Which of its parent's places this is, is the label on the edge from the parent, and it is read
+ * from the document by {@link #orderedIn}. Nothing else has to name it.
  */
 final class Place {
 
     private final Place parent;
-    private final int ordinal;
     private final SyntaxKind construct;
     private final Opening opening;
 
-    Place(Place parent, int ordinal, SyntaxKind construct, Opening opening) {
+    Place(Place parent, SyntaxKind construct, Opening opening) {
         this.parent = parent;
-        this.ordinal = ordinal;
         this.construct = construct;
         this.opening = opening;
     }
@@ -38,11 +41,6 @@ final class Place {
     /** The place this one is written inside, or null for the file. */
     Place parent() {
         return parent;
-    }
-
-    /** Which of its parent's places this is, counted in the order they are written. */
-    int ordinal() {
-        return ordinal;
     }
 
     /** What the canonical form writes here, named as it writes it rather than as the source had
@@ -55,9 +53,56 @@ final class Place {
         return opening;
     }
 
+    /**
+     * Which of its parent's places each place of {@code doc} is, counted in the order the document
+     * writes them.
+     *
+     * <p>Read from the document and not from the order the formatter made them. A declaration
+     * builds its clauses before its body and writes the body first; an {@code example} builds its
+     * rows before the line it opens with and writes that line first. Counting as they are made
+     * records the order the formatter's methods happened to run in and calls it a fact about the
+     * canonical form, which is the kind of thing a place exists to stop being asked of a trace.
+     *
+     * <p>Asked of the document before the carriers are answered, since a slot names the place it
+     * belongs to and an answered one does not.
+     */
+    static Map<Place, Integer> orderedIn(TokenDoc doc) {
+        List<Place> written = new ArrayList<>();
+        Map<Place, Boolean> seen = new IdentityHashMap<>();
+        collect(doc, written, seen);
+        Map<Place, Integer> counts = new IdentityHashMap<>();
+        Map<Place, Integer> out = new IdentityHashMap<>();
+        for (Place p : written) {
+            out.put(p, counts.merge(p.parent(), 1, Integer::sum) - 1);
+        }
+        return out;
+    }
+
+    private static void collect(TokenDoc doc, List<Place> written, Map<Place, Boolean> seen) {
+        switch (doc) {
+            case TokenDoc.At a -> {
+                first(a.place(), written, seen);
+                collect(a.doc(), written, seen);
+            }
+            case TokenDoc.Carries c -> first(c.place(), written, seen);
+            case TokenDoc.Vacant v -> first(v.place(), written, seen);
+            case TokenDoc.Node n -> collect(n.doc(), written, seen);
+            case TokenDoc.Nest n -> collect(n.doc(), written, seen);
+            case TokenDoc.Group g -> collect(g.doc(), written, seen);
+            case TokenDoc.Concat c -> c.parts().forEach(part -> collect(part, written, seen));
+            case TokenDoc.Nil _, TokenDoc.Token _, TokenDoc.Comment _, TokenDoc.Trailing _,
+                    TokenDoc.Gap _, TokenDoc.MustBreak _ -> { }
+        }
+    }
+
+    private static void first(Place place, List<Place> written, Map<Place, Boolean> seen) {
+        if (place != null && seen.put(place, true) == null) {
+            written.add(place);
+        }
+    }
+
     @Override
     public String toString() {
-        return (parent == null ? "file" : parent.construct() + "[" + ordinal + "]")
-                + " " + construct;
+        return (parent == null ? "file" : "under " + parent.construct()) + " " + construct;
     }
 }
