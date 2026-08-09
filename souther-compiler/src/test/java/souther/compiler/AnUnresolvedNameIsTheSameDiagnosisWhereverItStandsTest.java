@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -115,10 +116,83 @@ class AnUnresolvedNameIsTheSameDiagnosisWhereverItStandsTest {
                 "the near spelling is offered: " + e.getMessage());
     }
 
+    /**
+     * A name another module of this compilation exposes is still not in scope, and the report says
+     * where it is.
+     *
+     * <p>The commonest way to reach an unresolved name is to leave one off an import list, and the
+     * spelling suggestion cannot help there: it offers names within reach, and this one is not. What
+     * the compiler knows is that a module of this compilation has it, which is a fact and not an
+     * instruction — reaching it qualified needs no import at all.
+     */
+    @Test
+    void aNameAnotherModuleExposesIsSaidToBeThere() {
+        String up = """
+                module up exposing (Amount)
+
+                data Amount = Int
+                """;
+        String down = """
+                module down exposing (Out, f)
+
+                data Out = { v: Int }
+
+                behavior f : (n: Int) -> Out
+                    constructs Out
+
+                let f (n) = Out { v = Amount(n).value }
+                """;
+        String reported = messageOf(up, down);
+
+        assertTrue(reported.contains("E1023"), reported);
+        assertTrue(reported.contains("`up` exposes `Amount`"), reported);
+    }
+
+    /**
+     * Two modules exposing the spelling is no answer, so none is given.
+     *
+     * <p>A hint naming one of them is a guess, and the reader is already being told the name is not
+     * in scope. The diagnosis does not change.
+     */
+    @Test
+    void aSpellingTwoModulesExposeIsLeftWithoutAModuleToName() {
+        String up = """
+                module up exposing (Amount)
+
+                data Amount = Int
+                """;
+        String other = """
+                module other exposing (Amount)
+
+                data Amount = Int
+                """;
+        String down = """
+                module down exposing (Out, f)
+
+                data Out = { v: Int }
+
+                behavior f : (n: Int) -> Out
+                    constructs Out
+
+                let f (n) = Out { v = Amount(n).value }
+                """;
+        String reported = messageOf(up, other, down);
+
+        assertTrue(reported.contains("E1023"), reported);
+        assertFalse(reported.contains("exposes `Amount`"), reported);
+    }
+
     private static Map<String, String> verdicts(Map<String, String> bodies) {
         Map<String, String> out = new LinkedHashMap<>();
         bodies.forEach((where, body) -> out.put(where, verdict(body)));
         return out;
+    }
+
+    /** What a multi-module compilation was refused with, rendered the way an author reads it. */
+    private static String messageOf(String... sources) {
+        CompileException e = org.junit.jupiter.api.Assertions.assertThrows(CompileException.class,
+                () -> Compiler.compileModules(java.util.List.of(sources)));
+        return e.diagnostic().code() + " " + e.getMessage();
     }
 
     /** The code a multi-module compilation is refused with. */

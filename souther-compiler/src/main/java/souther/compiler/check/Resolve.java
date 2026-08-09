@@ -958,9 +958,19 @@ public final class Resolve {
             return bareLibraryName;
         }
         List<String> candidates = reachable(bound);
-        return CompileException.of(Diagnostic
-                        .at(written.region())
-                        .suggestion(Suggest.candidate(name, candidates)).say(new NameMessage.NoValueOfThatNameInScope(written.quoted())).build());
+        Diagnostic.Builder report = Diagnostic
+                .at(written.region())
+                .suggestion(Suggest.candidate(name, candidates));
+        // A name another module of this compilation exposes is the one kind of unresolved name that
+        // has somewhere to go, and it is what a name left off an import list looks like from here.
+        // Said as what is known — that module has it — rather than as an instruction, since reaching
+        // it qualified needs no import at all.
+        String elsewhere = written.canonical().indexOf('.') < 0
+                ? symbols.moduleExposing(name) : null;
+        if (elsewhere != null) {
+            report = report.hint(new NameMessage.ItIsExposedByAnotherModule(elsewhere, name));
+        }
+        return CompileException.of(report.say(new NameMessage.NoValueOfThatNameInScope(written.quoted())).build());
     }
 
 
