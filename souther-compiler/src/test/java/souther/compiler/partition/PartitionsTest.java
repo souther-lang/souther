@@ -244,18 +244,21 @@ class PartitionsTest {
     void classifiersRecogniseTheValuesRowsCarry() {
         Partitions.Partitioning partitioning = partitioningOf(KINDS, "submit");
         Axis kind = axis(partitioning, "request.kind");
-        TypeName domestic = kind.classes().get(0).classifier().matches(
-                new ObservedValue.Unit(new TypeName("example.trip", "Domestic")))
-                ? new TypeName("example.trip", "Domestic") : null;
-        assertNotNull(domestic, "a unit case is recognised by the type it names");
+        assertEquals(Membership.MATCH, kind.classes().get(0).classifier().membershipOf(
+                        new ObservedValue.Unit(new TypeName("example.trip", "Domestic"))),
+                "a unit case is recognised by the type it names");
 
         Axis urgent = axis(partitioning, "request.urgent");
-        assertTrue(urgent.classOf("true").classifier().matches(new ObservedValue.Bool(true)));
-        assertFalse(urgent.classOf("true").classifier().matches(new ObservedValue.Bool(false)));
+        assertEquals(Membership.MATCH,
+                urgent.classOf("true").classifier().membershipOf(new ObservedValue.Bool(true)));
+        assertEquals(Membership.NO_MATCH,
+                urgent.classOf("true").classifier().membershipOf(new ObservedValue.Bool(false)));
 
         Axis memo = axis(partitioning, "request.memo");
-        assertTrue(memo.classOf("None").classifier().matches(new ObservedValue.Absent()));
-        assertFalse(memo.classOf("None").classifier().matches(new ObservedValue.Text("x")));
+        assertEquals(Membership.MATCH,
+                memo.classOf("None").classifier().membershipOf(new ObservedValue.Absent()));
+        assertEquals(Membership.NO_MATCH,
+                memo.classOf("None").classifier().membershipOf(new ObservedValue.Text("x")));
     }
 
     /**
