@@ -237,7 +237,8 @@ public final class Adequacy {
                                 spec.name(), body, plan, parameters, symbols);
                 // What the positions can hold, read before any threshold is applied: a guard's own line
                 // is not what says whether that line is reachable.
-                Map<String, souther.compiler.numeric.NumericDomain.Bounds> admissible =
+                Map<souther.compiler.partition.NumericTerm,
+                        souther.compiler.numeric.NumericDomain.Bounds> admissible =
                         souther.compiler.partition.Partitions.of(spec, sig, symbols,
                                 excluded == null ? Exclusions.NONE
                                         : excluded.getOrDefault(spec.name(), Exclusions.NONE))
@@ -498,8 +499,8 @@ public final class Adequacy {
                     continue;
                 }
                 out.addAll(Coverages.assess(axis, parameters, observed, symbols, armsAsked,
-                        partitioning.edgeIsKnownWritable(axis.term().toString()), probe,
-                        partitioning.domains().get(axis.term().toString())));
+                        partitioning.edgeIsKnownWritable(axis.term()), probe,
+                        partitioning.domains().get(axis.term())));
             }
             return List.copyOf(out);
         }

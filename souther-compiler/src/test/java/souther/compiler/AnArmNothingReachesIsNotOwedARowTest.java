@@ -249,8 +249,9 @@ class AnArmNothingReachesIsNotOwedARowTest {
         GuardEdge edge = GuardEdge.above(new CoverageSites.GuardRef("classify", 0, 1, null),
                 0, new NumericTerm.ValueOf(TermPath.of("pair")), BigDecimal.valueOf(50), true);
         return GuardReachability.of(List.of(edge),
-                Map.of("pair", new NumericDomain.Bounds(Endpoint.inclusive(BigDecimal.ZERO),
-                        Endpoint.inclusive(BigDecimal.TEN))));
+                Map.of(new NumericTerm.ValueOf(TermPath.of("pair")),
+                        new NumericDomain.Bounds(Endpoint.inclusive(BigDecimal.ZERO),
+                                Endpoint.inclusive(BigDecimal.TEN))));
     }
 
     @Test

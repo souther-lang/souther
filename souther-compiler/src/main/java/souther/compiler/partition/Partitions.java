@@ -6,6 +6,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.InvariantBound;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.numeric.Endpoint;
@@ -63,8 +64,8 @@ public final class Partitions {
      *                nothing can classify into the denominator
      */
     public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
-                               Map<String, NumericDomain.Bounds> domains,
-                               java.util.Set<String> uncertain) {
+                               Map<NumericTerm, NumericDomain.Bounds> domains,
+                               java.util.Set<NumericTerm> uncertain) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
@@ -78,7 +79,7 @@ public final class Partitions {
          * edge here is then where the rules this could read stop, and a rule it could not read can
          * refuse that value as easily as the one beyond it — so the edge is not known to be writable
          * and asking for a row at it is asking for work nobody may be able to do. */
-        public boolean edgeIsKnownWritable(String term) {
+        public boolean edgeIsKnownWritable(NumericTerm term) {
             return !uncertain.contains(term);
         }
 
@@ -93,8 +94,8 @@ public final class Partitions {
     public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
-        Map<String, NumericDomain.Bounds> domains = new LinkedHashMap<>();
-        java.util.Set<String> uncertain = new java.util.LinkedHashSet<>();
+        Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
+        java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             // One reading per parameter, not one per record met on the way down. A clause on the
             // outer record relates positions at any depth it can name, and rebuilding the reading at
@@ -211,18 +212,19 @@ public final class Partitions {
     }
 
     private static NumericDomain.Bounds domainOf(Partitioning base, NumericTerm term) {
-        NumericDomain.Bounds read = base.domains().get(term.toString());
+        NumericDomain.Bounds read = base.domains().get(term);
         return read != null ? read : term.ownBounds();
     }
 
     /** The domains, with an entry for a term an axis only took on here. What a term guarantees about
      * its own values is what bounds it where no rule was written about it. */
-    private static Map<String, NumericDomain.Bounds> domainsOf(Partitioning base, List<Axis> axes) {
-        Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>(base.domains());
+    private static Map<NumericTerm, NumericDomain.Bounds> domainsOf(Partitioning base,
+                                                                    List<Axis> axes) {
+        Map<NumericTerm, NumericDomain.Bounds> out = new LinkedHashMap<>(base.domains());
         for (Axis axis : axes) {
             NumericDomain.Bounds own = axis.term().ownBounds();
             if (own != null) {
-                out.putIfAbsent(axis.term().toString(), own);
+                out.putIfAbsent(axis.term(), own);
             }
         }
         return out;
@@ -321,8 +323,8 @@ public final class Partitions {
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
                              List<Axis> out, Placed placed,
-                             Map<String, NumericDomain.Bounds> domains,
-                             java.util.Set<String> uncertain) {
+                             Map<NumericTerm, NumericDomain.Bounds> domains,
+                             java.util.Set<NumericTerm> uncertain) {
         List<PartitionClass> classes = classesOf(type, symbols);
         // Which number this position is measured at, and what its rules leave that number. Asked
         // together because they are one reading: whether a rule bounds the length of a string is how
@@ -344,7 +346,7 @@ public final class Partitions {
         NumericDomain.Bounds admissible = nothingExists ? null
                 : admissibleBounds(own, projected, term);
         if (admissible != null && !admissible.isEmpty()) {
-            domains.put(term.toString(), admissible);
+            domains.put(term, admissible);
         }
         Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
@@ -353,7 +355,7 @@ public final class Partitions {
         // sits in, so it is answered once for the parameter. A rule this could not read is a way that
         // value can be refused, wherever in it the rule is written.
         if (!cuts.isEmpty() && placed != null && !placed.domains().allRulesRead()) {
-            uncertain.add(term.toString());
+            uncertain.add(term);
         }
         if (!classes.isEmpty() || !cuts.isEmpty()) {
             out.add(new Axis(id, term, type, classes, cuts));
@@ -385,7 +387,7 @@ public final class Partitions {
         if (carried != null) {
             return new Measured(new NumericTerm.ValueOf(path), boundsOf(type, symbols, carried, null));
         }
-        ValueName.Stdlib of = sizeCallFor(type, symbols);
+        ValueName.Stdlib of = NumericMeasures.takenOf(type, symbols);
         if (of != null) {
             Bounds sized = boundsOf(type, symbols, Type.INT, of);
             if (sized != null && !sized.isEmpty()) {
@@ -393,26 +395,6 @@ public final class Partitions {
             }
         }
         return new Measured(new NumericTerm.ValueOf(path), null);
-    }
-
-    /** The operation that counts what a position holds, or null where nothing counts it. Which of
-     * them it is follows from what the value is, so a term and the observation it is read off cannot
-     * disagree about which count was meant. */
-    static ValueName.Stdlib sizeCallFor(Type type, Symbols symbols) {
-        Type carried = TypeOps.base(type, symbols);
-        if (carried == Type.STRING) {
-            return ValueName.Stdlib.operation("String", "length");
-        }
-        if (carried instanceof Type.ListOf) {
-            return ValueName.Stdlib.operation("List", "length");
-        }
-        if (carried instanceof Type.SetOf) {
-            return ValueName.Stdlib.operation("Set", "size");
-        }
-        if (carried instanceof Type.MapOf) {
-            return ValueName.Stdlib.operation("Map", "size");
-        }
-        return null;
     }
 
     /** The value a position is inside: what it is called, and what its rules leave each position of

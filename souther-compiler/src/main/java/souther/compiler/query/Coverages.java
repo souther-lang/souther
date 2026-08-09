@@ -15,6 +15,7 @@ import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.GuardThresholds;
+import souther.compiler.partition.NumericTerm;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
@@ -489,15 +490,16 @@ final class Coverages {
                                    ObservedValue boundary, OriginRef.GuardOrigin origin) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            java.math.BigDecimal at = numberFor(axis, parameters, row);
-            if (at == null) {
-                unreadable = true;
-                continue;
-            }
-            if (sameNumber(at, boundary)
-                    && (row.hits().contains(origin.guard().siteIndexThen())
-                            || row.hits().contains(origin.guard().siteIndexElse()))) {
-                return Met.YES;
+            switch (readingFor(axis, parameters, row)) {
+                case NumericTerm.Reading.Missing _ -> unreadable = true;
+                case NumericTerm.Reading.NotNumber _ -> { }
+                case NumericTerm.Reading.Number number -> {
+                    if (sameNumber(number.value(), boundary)
+                            && (row.hits().contains(origin.guard().siteIndexThen())
+                                    || row.hits().contains(origin.guard().siteIndexElse()))) {
+                        return Met.YES;
+                    }
+                }
             }
         }
         return unreadable ? Met.UNREADABLE : Met.NO;
@@ -507,32 +509,38 @@ final class Coverages {
                                  ObservedValue boundary) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            java.math.BigDecimal at = numberFor(axis, parameters, row);
-            if (at != null) {
-                if (sameNumber(at, boundary)) {
-                    return Met.YES;
+            switch (readingFor(axis, parameters, row)) {
+                case NumericTerm.Reading.Missing _ -> unreadable = true;
+                case NumericTerm.Reading.NotNumber _ -> { }
+                case NumericTerm.Reading.Number number -> {
+                    if (sameNumber(number.value(), boundary)) {
+                        return Met.YES;
+                    }
                 }
-            } else {
-                unreadable = true;
             }
         }
         return unreadable ? Met.UNREADABLE : Met.NO;
     }
 
     /**
-     * The number this row put on the line's own term, or null where it did not put a readable one
-     * there.
+     * What this row put on the line's own term, kept as the three answers it is.
      *
      * <p>Asked of the term and not of the shape of what sits at the position. A boundary is on a
      * number, and which number a value carries is the term's to say: the content of a location where
      * the line is on that, and how long the string is where it is on that. Read as "is this
      * observation a number", a string was unreadable at every position and every length boundary was
-     * undecided for every row. The truncation can be one layer in — a newtype is observed as a
-     * construction holding its value — which is why the term is asked rather than the outer shape.
+     * undecided for every row.
+     *
+     * <p>The three are kept apart here rather than folded into a number-or-null. An observation the
+     * run could not read leaves this line undecided, because the row that was cut short may be the
+     * row at the value. A value that was read and is not a number of this term does not: it is a row
+     * that is not at this boundary, and calling it undecided would report a term that does not fit
+     * its position as a row nobody could read — which is the answer {@code Intervals} already gives
+     * a class asked the same question, and it has to be the same answer.
      */
-    private static java.math.BigDecimal numberFor(Axis axis, List<String> parameters,
+    private static NumericTerm.Reading readingFor(Axis axis, List<String> parameters,
                                                   RowOutcome row) {
-        return axis.term().numberAt(RowClasses.valueAt(row, parameters, axis.path()));
+        return axis.term().read(RowClasses.valueAt(row, parameters, axis.path()));
     }
 
     /** A newtype and the number it wraps are the same value at this position, which is how the row

@@ -83,11 +83,6 @@ public sealed interface NumericTerm {
         };
     }
 
-    /** The number at an observation, for a caller with nothing to say about why there is none. */
-    default BigDecimal numberAt(ObservedValue at) {
-        return read(at) instanceof Reading.Number number ? number.value() : null;
-    }
-
     /**
      * Whether this term's values are decimals, which is a question about the term and only sometimes
      * about the position: a size is a whole number whatever it is a size of.

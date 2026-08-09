@@ -170,6 +170,40 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
                 partition.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList());
     }
 
+    private static final String IMPORTED = """
+            module example.imported
+
+            import String ( length )
+
+            data Label = String
+                invariant nonEmpty = length(value) > 0
+
+            data T = { label: Label }
+
+            behavior look : (t: T) -> Int
+            let look (t) = {
+                guard length(t.label.value) > 3 else 0
+                1
+            }
+            """;
+
+    /**
+     * The same rule written without its qualifier.
+     *
+     * <p>An import lets a library operation be written bare (spec §imports), so a reader comparing
+     * the text {@code "String.length"} would answer "no rule here" to a clause that plainly draws a
+     * line — and would look, from the report, exactly like a reader that had read it and found
+     * nothing. Both ends ask the name the call resolved to instead, and this is what says so.
+     */
+    @Test
+    void aMeasureWrittenWithoutItsQualifierIsTheSameTerm() {
+        assertEquals(List.of(
+                        "String.length(t.label) = 1",
+                        "String.length(t.label) = 3",
+                        "String.length(t.label) = 4"),
+                labels(partitions(IMPORTED).get("look")));
+    }
+
     private static final String UNBOUNDED = """
             module example.unbounded
 

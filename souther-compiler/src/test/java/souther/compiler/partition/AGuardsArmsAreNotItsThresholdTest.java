@@ -218,7 +218,8 @@ class AGuardsArmsAreNotItsThresholdTest {
     @Test
     void reachabilityNamesTheArmsItProvesAndNoOthers() {
         List<GuardEdge> edges = List.of(above(50, true), below(50, false));
-        GuardReachability reach = GuardReachability.of(edges, Map.of("n", holds(0L, 10L)));
+        GuardReachability reach = GuardReachability.of(edges,
+                Map.of(new NumericTerm.ValueOf(TermPath.of("n")), holds(0L, 10L)));
 
         assertTrue(reach.provenUnreachable(0), "the arm above 50 is unreachable");
         assertFalse(reach.provenUnreachable(1), "the arm below it is the whole of the range");
