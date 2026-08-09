@@ -93,4 +93,22 @@ sealed interface Witness {
      */
     record Conditional(Group unit, boolean canonicalIsWhole, boolean sourceIsWhole)
             implements Witness {}
+
+    /**
+     * A forced-layout rule's unit: one boundary the canonical form breaks whatever the width, and
+     * the obligation it breaks it for.
+     *
+     * <p>These are the rules whose unit and whose boundary are the same thing. One adjacency of two
+     * members is one pair, one bracket is one bracket, one comment is one comment and one file is
+     * one file — unlike a group, which holds many boundaries and was decided once, or a pair of
+     * nesting levels, which many lines are written under.
+     *
+     * <p>{@code adjacency} is which pair of the canonical form's tokens it stands between, and
+     * {@code -1} the end of the file, where there is no token after it.
+     */
+    record ForcedBoundary(int adjacency, Obligation obligation) {}
+
+    /** A forced-layout rule at one boundary: the canonical form breaks it and the source did
+     *  not. */
+    record Forced(ForcedBoundary unit) implements Witness {}
 }

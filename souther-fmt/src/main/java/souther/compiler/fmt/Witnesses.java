@@ -209,6 +209,64 @@ final class Witnesses {
     }
 
     /**
+     * What the forced-layout rules have against {@code source}: the boundaries the canonical form
+     * breaks whatever the width and the source wrote on a line.
+     *
+     * <p>One witness per boundary, which for these rules is one per unit. The separation rule is
+     * not among them — its unit is a pair of items and its answer a count of blank lines, and
+     * {@link #separation} says it.
+     *
+     * <p>Nothing is reported the other way round. A break the source wrote where the canonical form
+     * writes none is not a forced rule being disobeyed: the rule says a line ends there, not that
+     * no other line may. What answers for such a break is the group whose opportunity it sits at.
+     */
+    static List<Witness> forced(String source, Formatter.CanonicalForm canonical) {
+        Layout layout = canonical.layout();
+        List<SyntaxToken> had = code(CstParser.parse(source).root());
+        List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
+        if (had.size() != writes.size()) {
+            throw new IllegalStateException(
+                    "the source has " + had.size() + " tokens and its canonical form "
+                            + writes.size() + "; the two cannot be held side by side");
+        }
+        List<Witness> out = new ArrayList<>();
+        for (Newline n : layout.breaks()) {
+            if (!(n.cause() instanceof Newline.Cause.Forced f)
+                    || f.obligation() == Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS) {
+                continue;
+            }
+            if (writes.isEmpty() || n.offset() >= writes.get(writes.size() - 1).end()) {
+                // past the last token: the break that ends the file, and what the source has for it
+                // is whether it ends with a newline and with one
+                if (!source.endsWith("\n") || source.endsWith("\n\n")) {
+                    out.add(new Witness.Forced(new Witness.ForcedBoundary(-1, f.obligation())));
+                }
+                continue;
+            }
+            int i = adjacencyAt(writes, n.offset());
+            if (i < 0) {
+                continue;   // before the first token: nothing of the source stands on both sides
+            }
+            String has = source.substring(had.get(i).end(), had.get(i + 1).start());
+            if (has.indexOf('\n') < 0) {
+                out.add(new Witness.Forced(new Witness.ForcedBoundary(i, f.obligation())));
+            }
+        }
+        return out;
+    }
+
+    /** Which adjacency of {@code tokens} the offset {@code at} stands in, or -1 where it stands
+     *  before the first of them. */
+    private static int adjacencyAt(List<SyntaxToken> tokens, int at) {
+        for (int i = 0; i + 1 < tokens.size(); i++) {
+            if (tokens.get(i).end() <= at && at <= tokens.get(i + 1).start()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Whether the source broke at the adjacency the canonical form has an opportunity at.
      *
      * <p>The opportunity stands between two of the canonical form's tokens, and the source's
