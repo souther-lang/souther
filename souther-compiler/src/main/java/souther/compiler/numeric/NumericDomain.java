@@ -19,10 +19,11 @@ import java.util.Set;
  * newtype's invariant, and {@link #entails} / {@link #refutes} answer whether a construction's
  * invariant is discharged or is definitely violated on the current path — which is the
  * invariant-discharge check, the caller this was written for. What it derives is bounded to
- * interval + difference-bound; a form of neither shape is kept as it was written, so a guard
- * restating an invariant still discharges it even where nothing can be derived from the two
- * together (spec §invariant-discharge). Instances are immutable — each operation returns a fresh
- * domain, threaded functionally like {@code TotalityChecker}'s scope map.
+ * interval + difference-bound; a form of neither shape is kept as it was written and nothing is
+ * derived from it on its own, but it stands as a premise wherever the derived part proves the
+ * difference between it and what is being asked (spec §invariant-discharge). Instances are
+ * immutable — each operation returns a fresh domain, threaded functionally like
+ * {@code TotalityChecker}'s scope map.
  */
 public final class NumericDomain {
 
@@ -110,7 +111,9 @@ public final class NumericDomain {
         DROPPED_DISEQUALITY,
 
         /** A form that is neither an interval nor a difference, kept as written. It proves things
-         * ({@link #entails} reads it) and no bound is derived through it. */
+         * ({@link #entails} reads it, as a premise as well as a match) and no bound is derived
+         * through it — {@link #boundsOf} does not read it, so a projection is short of what the
+         * rules said. */
         KEPT_UNPROJECTABLE
     }
 
@@ -313,8 +316,39 @@ public final class NumericDomain {
         return proveLe(negOf(rel) ? f : f.negate(), !strictOf(rel));
     }
 
-    /** Whether {@code g <= 0} (or {@code g < 0} when strict) follows from the domain. */
+    /**
+     * Whether {@code g <= 0} (or {@code g < 0} when strict) follows from the domain.
+     *
+     * <p>Two ways to reach it, and the second reads the first. A form kept as written is a premise
+     * and not only something a goal is matched against: {@code f <= 0} together with
+     * {@code g - f <= 0} gives {@code g <= 0}, so a relation of neither shape carries onward wherever
+     * the derived fragment proves the difference between it and the goal. That is what relates a
+     * guard over a computed value to what the type of the value it was compared against guarantees —
+     * the two land in different shapes, and neither is the other's to derive.
+     *
+     * <p>One premise, once. The residual is proven against the derived fragment alone
+     * ({@link #proveBaseLe}), so two kept relations are never added together. Closing the kept
+     * relations over each other is arbitrary linear reasoning and a different fragment to state; this
+     * one is what the domain already decides in, reached through one relation it does not.
+     */
     private boolean proveLe(LinearForm g, boolean strict) {
+        if (proveBaseLe(g, strict)) {
+            return true;
+        }
+        for (Asserted a : kept) {
+            // The goal is strict where either the premise or the residual is, so what the residual is
+            // asked for is what the premise did not already give.
+            if (proveBaseLe(g.minus(a.f()), strict && !a.strict())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The same over what this derives in: an interval bound on the whole form, or a bound on a
+     * difference of two atoms read through the closure. The kept relations are not read here — this
+     * is what a residual is proven against, and reading them would let one stand on another. */
+    private boolean proveBaseLe(LinearForm g, boolean strict) {
         Endpoint hiG = upperBound(g);
         if (hiG != null) {
             int s = hiG.value().signum();
@@ -333,18 +367,6 @@ public final class NumericDomain {
                 if (s < 0 || (s == 0 && (!strict || !diffBound.inclusive()))) {
                     return true;
                 }
-            }
-        }
-        // A form kept as written proves `g <= 0` when g is that form plus a constant no greater than
-        // zero: asserting `f <= 0` gives `f + c <= 0` for every `c <= 0`.
-        for (Asserted a : kept) {
-            LinearForm slack = g.minus(a.f());
-            if (!slack.coefs().isEmpty()) {
-                continue;
-            }
-            int s = slack.constant().signum();
-            if (s < 0 || (s == 0 && (!strict || a.strict()))) {
-                return true;
             }
         }
         return false;
