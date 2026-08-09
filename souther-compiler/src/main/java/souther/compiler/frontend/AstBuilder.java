@@ -1170,21 +1170,37 @@ public final class AstBuilder {
         return Math.max(most, stepsBefore + stepsHeldBy(result));
     }
 
-    /** What a block written here would take, or one where nothing is written here or what is is
-     *  not a block. */
+    /**
+     * What the deepest block written anywhere in {@code held} would take, or one where there is no
+     * block in it.
+     *
+     * <p>Down through whatever is written around a block and not only where one is written
+     * directly. A block handed to a call or put in a tuple is a block the fold still descends, and
+     * a preflight that only looked at what a statement's value is would be walked past by writing
+     * {@code f({ … })}. What is written around it is not counted — a construct is a level and the
+     * source's nesting is bounded as it is read — so what this comes to is the steps the fold will
+     * take and nothing else.
+     */
     private int stepsHeldBy(SyntaxNode held) {
-        if (held == null || held.kind() != SyntaxKind.BLOCK_EXPR) {
+        if (held == null) {
             return 1;
         }
-        List<SyntaxNode> stmts = new ArrayList<>();
-        SyntaxNode result = null;
-        for (SyntaxNode c : held.childNodes()) {
-            switch (c.kind()) {
-                case LET_STMT, LET_DESTRUCTURE, GUARD_STMT -> stmts.add(c);
-                default -> result = c;
+        if (held.kind() == SyntaxKind.BLOCK_EXPR) {
+            List<SyntaxNode> stmts = new ArrayList<>();
+            SyntaxNode result = null;
+            for (SyntaxNode c : held.childNodes()) {
+                switch (c.kind()) {
+                    case LET_STMT, LET_DESTRUCTURE, GUARD_STMT -> stmts.add(c);
+                    default -> result = c;
+                }
             }
+            return stepsTakenBy(stmts, result);
         }
-        return stepsTakenBy(stmts, result);
+        int most = 1;
+        for (SyntaxNode child : held.childNodes()) {
+            most = Math.max(most, stepsHeldBy(child));
+        }
+        return most;
     }
 
     /** How many steps one statement takes: a `let` written with a pattern is what the pattern
@@ -1210,7 +1226,9 @@ public final class AstBuilder {
         if (index == 0) {
             int steps = stepsTakenBy(stmts, result);
             if (steps > StructuralCost.MAX) {
-                throw errorWithHint(pos(stmts.get(stmts.size() - 1)),
+                // A block holding nothing but another block has no statement to be reported at, and
+                // what it comes to is what that one comes to; the result is where it is written.
+                throw errorWithHint(pos(stmts.isEmpty() ? result : stmts.get(stmts.size() - 1)),
                         new DeclarationMessage.ABlockTakesMoreStructuralStepsThanADefinitionHolds(
                                 steps, StructuralCost.MAX),
                         new DeclarationMessage.WriteItAsABehaviorOfItsOwn());

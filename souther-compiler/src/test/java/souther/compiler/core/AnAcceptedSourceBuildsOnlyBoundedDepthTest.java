@@ -235,6 +235,61 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
         }
     }
 
+    /**
+     * The same, with something ordinary written around each block.
+     *
+     * <p>A block handed to a call or put in a tuple is a block the fold still descends. Counted
+     * only where a block is a statement's value, this walks past — and what is written around it
+     * costs the source nesting the parser bounds, so a shape like this is what a bound on blocks
+     * alone would let build itself before saying anything.
+     */
+    @Test
+    void aBlockWrappedInSomethingOrdinaryIsCountedToo() {
+        for (int nesting : new int[]{5, 10, 15}) {
+            CompileException said = assertThrows(CompileException.class,
+                    () -> Compiler.compiled(wrappedBlocksInsideBlocks(nesting, 319), "m"),
+                    nesting + " wrapped blocks of 319 steps is past the bound");
+
+            assertEquals("E2107", said.code(), said.getMessage());
+            assertTrue(said.getMessage().contains("structural steps"),
+                    "the blocks are counted together: " + said.getMessage());
+        }
+    }
+
+    /** A block holding nothing but another block: there is no statement of its own to report at. */
+    @Test
+    void aBlockOfNothingButAnotherBlockIsReportedAtWhatItHolds() {
+        StringBuilder sb = new StringBuilder("module m exposing (f)\n\n"
+                + "behavior f : (b: Bool) -> Int\nlet f (b) = {\n    {\n");
+        for (int i = 0; i <= StructuralCost.MAX; i++) {
+            sb.append("        guard b else 0\n");
+        }
+        String source = sb.append("        1\n    }\n}\n").toString();
+
+        CompileException said = assertThrows(CompileException.class,
+                () -> Compiler.compiled(source, "m"));
+
+        assertEquals("E2107", said.code(), said.getMessage());
+    }
+
+    private static String wrappedBlocksInsideBlocks(int nesting, int stepsEach) {
+        return "module m exposing (f)\n\nbehavior f : (x: Int) -> Int\nlet f (x) = "
+                + oneWrapped(nesting, stepsEach, new int[]{0}) + "\n";
+    }
+
+    private static String oneWrapped(int nesting, int stepsEach, int[] named) {
+        if (nesting == 0) {
+            return "x";
+        }
+        StringBuilder sb = new StringBuilder("{\n");
+        for (int i = 0; i < stepsEach; i++) {
+            sb.append("    let a").append(named[0]++).append(" = x\n");
+        }
+        sb.append("    let held").append(nesting).append(" = (")
+          .append(oneWrapped(nesting - 1, stepsEach, named)).append(") + 1\n");
+        return sb.append("    held").append(nesting).append("\n}").toString();
+    }
+
     /** {@code nesting} blocks of {@code stepsEach} statements, each written in the value of a
      *  statement of the one outside it. */
     private static String blocksInsideBlocks(int nesting, int stepsEach) {
