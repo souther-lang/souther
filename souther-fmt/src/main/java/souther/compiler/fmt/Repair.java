@@ -5,7 +5,10 @@ import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The source with what the canonical form has at the units a witness names.
@@ -41,6 +44,7 @@ final class Repair {
             switch (w) {
                 case Witness.BetweenTwoTokens b -> edits.add(spacing(source, b));
                 case Witness.Separation s -> edits.add(separation(source, canonical, s));
+                case Witness.Indentation i -> edits.addAll(indentation(source, canonical, i));
                 default -> throw new IllegalArgumentException(
                         "no expectation is composed for " + w.getClass().getSimpleName()
                                 + " yet, and a repair that skipped it would answer with a text that"
@@ -50,7 +54,13 @@ final class Repair {
         edits.sort(Comparator.comparingInt(Edit::from));
         StringBuilder out = new StringBuilder();
         int at = 0;
+        Edit last = null;
         for (Edit e : edits) {
+            if (e.equals(last)) {
+                continue;   // two levels, nested one inside the other, moving the same line the
+                            // same way: one expectation about it and not two
+            }
+            last = e;
             if (e.from() < at) {
                 throw new IllegalStateException(
                         "two expectations over one stretch of the source, at " + e.from()
@@ -61,6 +71,38 @@ final class Repair {
             at = e.to();
         }
         return out.append(source.substring(at)).toString();
+    }
+
+    /**
+     * The columns the canonical form writes the lines of a level at.
+     *
+     * <p>One edit per line and one decision behind them, which is the shape the model asks for: the
+     * expectation is composed over the levels and projected onto the text once. The column written
+     * is the one the break was written at rather than the source's plus a step, so a level whose
+     * outer level is also being moved does not have to be repaired in any order.
+     *
+     * <p>Every line written under the level and not only the ones written at it. A level that moves
+     * takes what is nested inside it along, and those deeper levels have nothing against them —
+     * their step is right and it is the column underneath that changed.
+     */
+    private static List<Edit> indentation(String source, Formatter.CanonicalForm canonical,
+            Witness.Indentation witness) {
+        Map<Newline, Integer> lines = Witnesses.sourceLines(source, canonical);
+        List<Edit> out = new ArrayList<>();
+        Set<Integer> at = new LinkedHashSet<>();
+        for (Map.Entry<Newline, Integer> e : lines.entrySet()) {
+            List<Doc.NestRef> under = e.getKey().under();
+            if (!under.contains(witness.unit().inner()) || !at.add(e.getValue())) {
+                continue;
+            }
+            int lineStart = e.getValue();
+            int indent = lineStart;
+            while (indent < source.length() && source.charAt(indent) == ' ') {
+                indent++;
+            }
+            out.add(new Edit(lineStart, indent, " ".repeat(e.getKey().indent())));
+        }
+        return out;
     }
 
     /** What the canonical form writes between the two tokens of a boundary. */

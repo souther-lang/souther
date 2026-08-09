@@ -81,24 +81,69 @@ class ARepairComposesTheExpectationsAndWritesOnceTest {
                 """, repaired);
     }
 
+    /**
+     * A level that moves takes what is nested inside it along. Those deeper levels have nothing
+     * against them — their step is right and it is the column underneath that changed — so a repair
+     * that moved only the lines written at the level named would leave them behind.
+     *
+     * <p>The source here is the canonical form with both levels shifted out by two, which is one
+     * witness: the outer step is wrong and the inner step is not.
+     */
+    @Test
+    void aLevelThatMovesTakesWhatIsNestedInsideItAlong() {
+        String canonical = Formatter.format("""
+                module fmtprobe exposing ( V, f )
+
+                data V = Alpha | Beta
+
+                let f (v: V, x: Int): Int =
+                    {
+                        let a =
+                            match v with
+                            | Alpha -> x
+                            | Beta -> 0
+                        a
+                    }
+                """);
+        String source = reindent(reindent(canonical, 4, 6), 8, 10);
+        Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(source).root());
+        List<Witness> found = Witnesses.indentation(source, form);
+
+        assertEquals(1, found.size(), "one step was got wrong: " + found);
+        assertEquals(canonical, Repair.repair(source, form, found),
+                "and repairing that one step writes the canonical form, deeper lines and all");
+    }
+
+    /** The same text with every line indented by {@code from} written at {@code to} instead. */
+    private static String reindent(String text, int from, int to) {
+        List<String> out = new ArrayList<>();
+        for (String line : text.split("\n", -1)) {
+            int indent = line.length() - line.stripLeading().length();
+            out.add(!line.isBlank() && indent == from ? " ".repeat(to) + line.substring(from)
+                    : line);
+        }
+        return String.join("\n", out);
+    }
+
     /** A family whose expectation is not composed yet is refused rather than left out. A repair
      * that skipped one would answer with a text that is not the canonical form and say nothing. */
     @Test
     void aFamilyWithNoExpectationYetIsRefused() {
         String source = """
-                module fmtprobe exposing ( f )
+                module fmtprobe exposing ( P, f )
 
-                let f (x: Int): Int =
-                    {
-                      let a = x
-                      a
-                    }
+                data P = { alpha: Int, beta: Int }
+
+                let f (x: Int): P =
+                    P { alpha = x
+                      , beta = x
+                      }
                 """;
         Formatter.CanonicalForm canonical = Formatter.canonicalize(CstParser.parse(source).root());
-        List<Witness> indentation = Witnesses.indentation(source, canonical);
+        List<Witness> conditional = Witnesses.conditional(source, canonical);
 
-        assertTrue(!indentation.isEmpty(), "the fixture deviates, or this checks nothing");
+        assertTrue(!conditional.isEmpty(), "the fixture deviates, or this checks nothing");
         assertThrows(IllegalArgumentException.class,
-                () -> Repair.repair(source, canonical, indentation));
+                () -> Repair.repair(source, canonical, conditional));
     }
 }

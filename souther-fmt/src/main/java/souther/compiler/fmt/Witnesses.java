@@ -86,6 +86,32 @@ final class Witnesses {
     }
 
     /**
+     * Where the source begins the line each break of the canonical form opens, for the breaks whose
+     * line the source opened too.
+     *
+     * <p>The offset that line starts at, so that what stands in front of the first thing on it is
+     * the indent a repair writes over. A break the source has no line for is not here: the source
+     * broke somewhere else, and moving an indent would be answering a question about a line nobody
+     * wrote.
+     */
+    static Map<Newline, Integer> sourceLines(String source, Formatter.CanonicalForm canonical) {
+        Layout layout = canonical.layout();
+        Map<Integer, Place> opened = placesByStart(layout);
+        Map<Newline, Integer> out = new LinkedHashMap<>();
+        for (Newline n : layout.breaks()) {
+            Place place = opened.get(n.offset() + 1 + n.indent());
+            Integer column = sourceColumn(source, canonical, place, lineAfter(layout.text(), n));
+            if (column == null) {
+                continue;
+            }
+            List<Written> from = canonical.construction().places().sourcesOf(place);
+            int start = from.get(0).start();
+            out.put(n, source.lastIndexOf('\n', Math.max(0, start - 1)) + 1);
+        }
+        return out;
+    }
+
+    /**
      * What the spacing rule has against {@code source}.
      *
      * <p>One boundary of the canonical form at a time, and only the ones it writes on a line. Where
