@@ -31,6 +31,11 @@ final class Correspondence {
 
     /** Says what the source has at the file's own place. It is made before anything is written, so
      *  it is the one place that is told rather than asked. */
+    /** The file's place, which the construction declared. Asking for it does not make one. */
+    Place file() {
+        return file;
+    }
+
     Place fileOf(SyntaxNode source) {
         made.add(file);
         wrote.put(file, List.of(new Written.Construct(source)));
@@ -57,8 +62,9 @@ final class Correspondence {
         return place;
     }
 
-    /** Every place the construction made, the file's first. Each of them is written somewhere in
-     *  the document, which is what lets which of its parent's places it is be read off. */
+    /** Every place the construction made, the file's first, each once. Not all of them are written
+     *  in the document — the file's is not, and neither is one naming the line a construct opens
+     *  with — so where each of them is is {@link Layout}'s to say and not this order's. */
     List<Place> made() {
         return List.copyOf(made);
     }

@@ -361,7 +361,7 @@ class ThePlacesTheCanonicalFormWritesAreItsOwnTest {
             case TokenDoc.Group g -> collect(g.doc(), out);
             case TokenDoc.Concat c -> c.parts().forEach(part -> collect(part, out));
             case TokenDoc.Nil _, TokenDoc.Token _, TokenDoc.Comment _, TokenDoc.Trailing _,
-                    TokenDoc.Gap _, TokenDoc.MustBreak _ -> { }
+                    TokenDoc.Gap _, TokenDoc.MustBreak _, TokenDoc.PointOf _ -> { }
             case TokenDoc.Carries c -> throw new IllegalStateException(
                     "a carrier survived the resolution: " + c);
             case TokenDoc.Vacant v -> throw new IllegalStateException(

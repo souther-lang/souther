@@ -8,8 +8,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * One place of the canonical form: somewhere the formatter writes something, told apart from every
- * other place by being it.
+ * One place of the canonical form: somewhere it has, told apart from every other place by being
+ * it. Not always somewhere it writes — a place naming the line a construct opens with carries
+ * the comment written at the end of that line and emits nothing, and the file's own place emits
+ * nothing either. Where each of them is is {@link Layout}'s to say.
  *
  * <p>Two siblings written as the same kind of construct are two places. An {@code if} written
  * {@code if flag then p else q} has three children that are all a {@code VAR_EXPR}, and its
@@ -85,6 +87,7 @@ final class Place {
                 collect(a.doc(), written, seen);
             }
             case TokenDoc.Carries c -> first(c.place(), written, seen);
+            case TokenDoc.PointOf p -> first(p.place(), written, seen);
             case TokenDoc.Vacant v -> first(v.place(), written, seen);
             case TokenDoc.Node n -> collect(n.doc(), written, seen);
             case TokenDoc.Nest n -> collect(n.doc(), written, seen);

@@ -39,6 +39,7 @@ final class Carriers {
     static void slots(TokenDoc doc, Slot into) {
         switch (doc) {
             case TokenDoc.Carries c -> into.found(c.place(), c.which());
+            case TokenDoc.PointOf _ -> { }
             case TokenDoc.Vacant v -> into.found(v.place(), Carrier.AT_END);
             case TokenDoc.At a -> slots(a.doc(), into);
             case TokenDoc.Node n -> slots(n.doc(), into);
@@ -57,7 +58,11 @@ final class Carriers {
 
     private static TokenDoc rewrite(TokenDoc doc, Held held) {
         return switch (doc) {
-            case TokenDoc.Carries c -> written(c, held);
+            // The place is where the carrier stood, before whatever it carries: a comment
+            // written there is at the place and not the other way round.
+            case TokenDoc.Carries c -> TokenDoc.concat(TokenDoc.pointOf(c.place()),
+                    written(c, held));
+            case TokenDoc.PointOf p -> p;
             case TokenDoc.Vacant v -> filled(v, held);
             case TokenDoc.At a -> new TokenDoc.At(a.place(), rewrite(a.doc(), held));
             case TokenDoc.Node n -> new TokenDoc.Node(n.kind(), rewrite(n.doc(), held));
