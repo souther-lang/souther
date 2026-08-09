@@ -393,22 +393,24 @@ public final class Partitions {
     static List<PartitionClass> classesOf(Type type, Symbols symbols) {
         if (type == Type.BOOL) {
             return List.of(
-                    PartitionClass.of("true", "true", v -> isBool(v, true),
+                    PartitionClass.of("true", "true", Classifier.byShape(v -> isBool(v, true)),
                             RepresentativeSource.of(FixtureTemplate.bool(true))),
-                    PartitionClass.of("false", "false", v -> isBool(v, false),
+                    PartitionClass.of("false", "false", Classifier.byShape(v -> isBool(v, false)),
                             RepresentativeSource.of(FixtureTemplate.bool(false))));
         }
         if (type instanceof Type.OptionOf option) {
             List<FixtureTemplate> some = representativesOf(option.element(), symbols);
             return List.of(
-                    PartitionClass.of("None", "None", v -> v instanceof ObservedValue.Absent,
+                    PartitionClass.of("None", "None",
+                            Classifier.byShape(v -> v instanceof ObservedValue.Absent),
                             RepresentativeSource.of(FixtureTemplate.none())),
                     some.isEmpty()
                             ? PartitionClass.ungeneratable("Some", "Some",
-                                    v -> !(v instanceof ObservedValue.Absent),
+                                    Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
                                     "no value of " + option.element() + " can be written")
                             : PartitionClass.of("Some", "Some",
-                                    v -> !(v instanceof ObservedValue.Absent), () -> some));
+                                    Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
+                                    () -> some));
         }
         if (TypeOps.isSumType(type, symbols)) {
             List<PartitionClass> cases = new ArrayList<>();
@@ -425,11 +427,11 @@ public final class Partitions {
     }
 
     private static PartitionClass caseClass(TypeName leaf, Symbols symbols) {
-        Classifier is = v -> switch (v) {
+        Classifier is = Classifier.byShape(v -> switch (v) {
             case ObservedValue.Unit u -> leaf.equals(u.type());
             case ObservedValue.Constructed c -> leaf.equals(c.type());
-            case null, default -> false;
-        };
+            default -> false;
+        });
         if (!(symbols.get(leaf) instanceof Ast.Data data)) {
             return PartitionClass.of(leaf.name(), leaf.name(), is,
                     RepresentativeSource.of(FixtureTemplate.unitCase(leaf)));   // naming it builds it

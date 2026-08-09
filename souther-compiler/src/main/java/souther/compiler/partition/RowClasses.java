@@ -46,6 +46,16 @@ public final class RowClasses {
         return walk(row.inputs().get(at), path.fields());
     }
 
+    /**
+     * Which class the row's value at {@code axis} fell in, or why none of them could say.
+     *
+     * <p>The classes answer for themselves, including about a value none of them could read. This
+     * used to test the value's shape here first, which is the same question asked in a second place
+     * and answered from a different node: a classifier may read through the value — a number at a
+     * position is the number inside the newtype named there — so a limit reached one level in left
+     * a construction this saw nothing wrong with, and the reason came out as the one the last line
+     * had to guess.
+     */
     private static Classification classify(RowOutcome row, List<String> parameters, Axis axis) {
         int at = parameters.indexOf(axis.path().head());
         if (at < 0 || at >= row.inputs().size()) {
@@ -53,27 +63,44 @@ public final class RowClasses {
                     axis.id().behavior(), axis.id().path());
         }
         ObservedValue value = walk(row.inputs().get(at), axis.path().fields());
-        if (value == null) {
-            return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                    axis.id().behavior(), axis.id().path());
-        }
-        if (value instanceof ObservedValue.Unknown) {
-            return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                    axis.id().behavior(), axis.id().path());
-        }
-        if (value instanceof ObservedValue.Truncated) {
-            return Classification.unreadable(Incompleteness.Code.VALUE_TRUNCATED,
-                    axis.id().behavior(), axis.id().path());
-        }
+        // Kept rather than returned on, and not acted on either. A class may read less of a value
+        // than the one after it, so one saying it could not read says nothing about the rest —
+        // including that the rest cannot hold it. An incompleteness is what is left once no class
+        // has claimed the value, so nothing about it is decided until every class has answered.
+        Incompleteness.Code incomplete = null;
+        boolean disagreed = false;
         for (PartitionClass each : axis.classes()) {
-            if (each.classifier().matches(value)) {
-                return Classification.in(each.id());
+            switch (each.classifier().membershipOf(value)) {
+                case Membership.Match _ -> {
+                    return Classification.in(each.id());
+                }
+                case Membership.Incomplete why -> {
+                    if (incomplete == null) {
+                        incomplete = why.code();
+                    } else if (incomplete != why.code()) {
+                        disagreed = true;
+                    }
+                }
+                case Membership.NoMatch _ -> { }
             }
         }
-        // The classes are exhaustive over the position, so a value in none of them is one this could
-        // not read rather than one outside the partition.
-        return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                axis.id().behavior(), axis.id().path());
+        // Two readings of one value that disagree about whether it is there. Held to rather than
+        // picked between: today every class of a numeric position reads through the same reader,
+        // so nothing produces one.
+        if (disagreed) {
+            throw new IllegalStateException("classes of " + axis.id()
+                    + " disagree about why the value could not be read");
+        }
+        if (incomplete != null) {
+            return Classification.unreadable(incomplete,
+                    axis.id().behavior(), axis.id().path());
+        }
+        // Every class read the value and none holds it, which `Axis` says cannot happen: its classes
+        // are exhaustive over the position's values. So this is that contract broken rather than
+        // anything about the row, and saying the value could not be read would be reporting a
+        // measurement failure for a defect in the partition.
+        throw new IllegalStateException("no class of " + axis.id() + " holds a value it read: "
+                + value);
     }
 
     /** The value at the end of a field chain, or null where the chain does not lead anywhere. A

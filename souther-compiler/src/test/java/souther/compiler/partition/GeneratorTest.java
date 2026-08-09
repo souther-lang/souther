@@ -152,7 +152,7 @@ class GeneratorTest {
         for (long each : candidates) {
             values.add(FixtureTemplate.integer(each));
         }
-        return PartitionClass.of(id, id, _ -> false, () -> values);
+        return PartitionClass.of(id, id, _ -> Membership.NO_MATCH, () -> values);
     }
 
     /**
@@ -208,7 +208,7 @@ class GeneratorTest {
     void aClassWithNoValueIsNamedRatherThanDropped() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Generator.Subject subject = twoNumbers(symbols,
-                List.of(PartitionClass.ungeneratable("opaque", "opaque", _ -> false, "no value")),
+                List.of(PartitionClass.ungeneratable("opaque", "opaque", _ -> Membership.NO_MATCH, "no value")),
                 List.of(number("high", 10)));
 
         Generator.GenerationResult filled =
@@ -230,7 +230,7 @@ class GeneratorTest {
     void whatHadNoValueIsNamedRatherThanTheCombinationsThatWantedIt() {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Generator.Subject subject = twoNumbers(symbols,
-                List.of(PartitionClass.ungeneratable("opaque", "opaque", _ -> false, "no value"),
+                List.of(PartitionClass.ungeneratable("opaque", "opaque", _ -> Membership.NO_MATCH, "no value"),
                         number("low", 1)),
                 List.of(number("high", 10), number("higher", 20)));
 

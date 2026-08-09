@@ -122,9 +122,10 @@ final class Intervals {
         for (Interval range : intervals) {
             String id = path + "/" + range.label();
             BigDecimal inside = representative(range, decimal);
-            Classifier is = v -> {
-                BigDecimal number = numberOf(v);
-                return number != null && range.holds(number);
+            Classifier is = v -> switch (read(v)) {
+                case Read.Number number -> Membership.of(range.holds(number.value()));
+                case Read.Missing missing -> new Membership.Incomplete(missing.code());
+                case Read.NotNumber _ -> Membership.NO_MATCH;
             };
             classes.add(inside == null
                     ? PartitionClass.ungeneratable(id, range.label(), is,
@@ -144,13 +145,45 @@ final class Intervals {
                 decimal ? Granularity.DENSE : Granularity.DISCRETE);
     }
 
-    static BigDecimal numberOf(ObservedValue v) {
+    /** The number a value holds, or why it holds none — and those are two different reasons. */
+    private sealed interface Read {
+
+        record Number(BigDecimal value) implements Read {}
+
+        /** There was no value to read, and this is what stopped there being one. */
+        record Missing(souther.compiler.observe.Incompleteness.Code code) implements Read {}
+
+        /** The value was read and is not a number. Which is an answer about the value and not about
+         * the observation: a {@code Text} at a numeric position is a class this does not hold, and
+         * calling it unreadable would report a partition that does not fit its position as a row
+         * nobody could read. */
+        record NotNumber() implements Read {}
+    }
+
+    /**
+     * The number at a value, keeping why there is none where there is none.
+     *
+     * <p>A newtype is not a step in a path, so the value at a position may be the construction and
+     * the number one inside it. Which is why this walk exists, and why the reason it stops has to
+     * come back with it: read as a bare {@code null}, an observation a limit stopped is the same
+     * answer as a value that is not a number.
+     */
+    private static Read read(ObservedValue v) {
+        Membership.Incomplete unread = Membership.unread(v);
+        if (unread != null) {
+            return new Read.Missing(unread.code());
+        }
         return switch (v) {
-            case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value();
-            case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
-            case null, default -> null;
+            case ObservedValue.Integer i -> new Read.Number(BigDecimal.valueOf(i.value()));
+            case ObservedValue.Decimal d -> new Read.Number(d.value());
+            case ObservedValue.Constructed c when c.field("value") != null -> read(c.field("value"));
+            default -> new Read.NotNumber();
         };
+    }
+
+    /** The number at a value, for a caller that has nothing to say about why there is none. */
+    static BigDecimal numberOf(ObservedValue v) {
+        return read(v) instanceof Read.Number number ? number.value() : null;
     }
 
     private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,
