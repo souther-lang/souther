@@ -132,4 +132,16 @@ public sealed interface ParseMessage extends Message {
     /** `Some(v)` opens a wrapped newtype, and binding the whole value is written without parens. */
     @Code(DiagnosticCode.E2303)
     record SomeParensOpenAWrappedNewtype(String newtype) implements ParseMessage, Reported {}
+
+    /** A `|` on a data field, which takes the one type the field has. */
+    @Code(DiagnosticCode.E2307)
+    record AFieldTypeIsNotAnAnonymousUnion(String field) implements ParseMessage, Reported {}
+
+    /** A `|` inside another type — a type argument, a tuple's member. */
+    @Code(DiagnosticCode.E2307)
+    record AnAnonymousUnionIsNotWrittenInsideAnotherType() implements ParseMessage, Reported {}
+
+    /** A `?` inside another type — a type argument, a tuple's member. */
+    @Code(DiagnosticCode.E2308)
+    record AnOptionalIsNotWrittenInsideAnotherType() implements ParseMessage, Reported {}
 }

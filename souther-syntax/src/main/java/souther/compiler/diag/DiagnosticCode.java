@@ -190,7 +190,9 @@ public enum DiagnosticCode {
     E2303("pattern-syntax", "parse.title"),
     E2304("examples-syntax", "parse.title"),
     E2305("literal-syntax", "parse.title"),
-    E2306("the-source-is-made-of-tokens", "parse.title");
+    E2306("the-source-is-made-of-tokens", "parse.title"),
+    E2307("a-narrow-type-position-takes-one-type", "parse.title"),
+    E2308("an-optional-is-not-written-inside-another-type", "parse.title");
 
     private final String ruleAnchor;
     private final String titleKey;
