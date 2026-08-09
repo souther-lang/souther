@@ -79,11 +79,10 @@ public final class Compiler {
      * Drives one compilation with the recovery every entry point here answers by.
      *
      * <p>Around the three places a compilation is driven, rather than around the entry points that
-     * reach them. There are eleven of those and they had it twice: the two that answer with classes
-     * caught the overflow, and the ones that answer with a {@link Compilation} — which is what the
-     * command line and the editor ask for — did not, so the same source was a diagnostic through one
-     * door and a stack trace through another. What decides the answer is the compiler, not which
-     * signature a caller reached for.
+     * reach them. It was written on the entry points that answer with classes, and the ones that
+     * answer with a {@link Compilation} — which is what the command line and the editor ask for —
+     * had nothing, so the same source was a diagnostic through one door and a stack trace through
+     * another. What decides the answer is the compiler, not which signature a caller reached for.
      *
      * <p>Around what an entry point does with the compilation as well as around the driving of it.
      * Taking the classes off a driven compilation reads a key the driver already asked, so it walks
@@ -91,7 +90,7 @@ public final class Compiler {
      * that holds only while they stay in it is not a boundary. Nesting is why it can be said twice:
      * the inner one answers first, and the outer one covers what is left.
      */
-    private static <T> T driven(java.util.function.Supplier<T> compilation) {
+    static <T> T driven(java.util.function.Supplier<T> compilation) {
         try {
             return compilation.get();
         } catch (StackOverflowError _) {
@@ -103,8 +102,8 @@ public final class Compiler {
      * A source whose expressions nest deeper than the compiler can walk. Every phase descends an
      * expression by recursion — parsing, inlining, checking, emitting — so past some depth the stack
      * runs out. That is not a {@code CompileException}, so left alone it passes through the recovery
-     * boundary and reaches the author as a stack trace, and takes the language server's dispatch
-     * loop with it. It is reported like any other thing the compiler cannot accept.
+     * boundary and reaches the author as a stack trace. It is reported like any other thing the
+     * compiler cannot accept.
      *
      * <p>The depth is not a written limit, so no position is claimed: the failure belongs to the
      * source as a whole, and the author's move is the same wherever it landed — name the parts.

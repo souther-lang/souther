@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -90,6 +91,27 @@ class CompileDeepExpressionTest {
                 () -> Compiler.analyzedModules(sources, ModulePath.EMPTY, new ArrayList<Located>(),
                         Adequacy.Asked.NOTHING));
         return doors;
+    }
+
+    /**
+     * The boundary itself, asked with the one thing it is for.
+     *
+     * <p>Apart from the case below, which reaches it by compiling a source deep enough to exhaust a
+     * walk. That is the reachability, and it is a different question: it holds while nothing before
+     * the walks refuses such a source, and issue #524 is about giving the producers of that depth a
+     * bound of their own, after which no source reaches here at all. On the day that lands, the case
+     * below stops exercising this and starts passing on the new diagnostic — and if this one were
+     * not written, removing the recovery entirely would leave both of them green.
+     */
+    @Test
+    void theBoundaryTurnsAnExhaustedStackIntoADiagnostic() {
+        CompileException thrown = assertThrows(CompileException.class,
+                () -> Compiler.driven(() -> {
+                    throw new StackOverflowError();
+                }));
+
+        assertTrue(thrown.getMessage().contains("deep"),
+                "expected a depth diagnostic, got: " + thrown.getMessage());
     }
 
     /**
