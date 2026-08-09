@@ -75,7 +75,8 @@ public final class LibraryDocs {
     /** Keyed by {@link DocName#canonical}, so a topic is found in whatever case it is asked for.
      *  The topic keeps its own spelling: the name is also the path its text is read from. */
     private final Map<String, Topic> byName;
-    /** The same topics keyed by {@link DocName#asWords}, which is how a search resolves a name. */
+    /** The same topics keyed by {@link DocName#asWords}, which is how a search resolves a name.
+     *  The same topics: a name that reaches one of these reaches the other. */
     private final Map<String, Topic> byWords;
     /**
      * What a search ranks: every file and every part of one, each over its own text.
@@ -88,18 +89,13 @@ public final class LibraryDocs {
     /** Who the text is spelled for, wherever it sends its reader somewhere. */
     private final Caller caller;
 
-    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, List<Topic> ranked,
-            Caller caller) {
+    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, Map<String, Topic> byWords,
+            List<Topic> ranked, Caller caller) {
         this.loader = loader;
         this.byName = byName;
+        this.byWords = byWords;
         this.ranked = ranked;
         this.caller = caller;
-        Map<String, Topic> byWords = new LinkedHashMap<>();
-        // A jar's own doing, unlike a name that is this compiler's to keep apart: two topics whose
-        // names are the same words are still two names to read by, so the one a search resolves to
-        // is settled here — the first the registry gave — rather than by which was read last.
-        byName.values().forEach(topic -> byWords.putIfAbsent(DocName.asWords(topic.name()), topic));
-        this.byWords = byWords;
     }
 
     /** The doc sets reachable through {@code loader} — for the CLI, everything bundled with it. */
@@ -109,7 +105,7 @@ public final class LibraryDocs {
 
     /** The same sets, read as {@code caller} is to be answered. */
     static LibraryDocs on(ClassLoader loader, Caller caller) {
-        Map<String, Topic> byName = new LinkedHashMap<>();
+        Names named = new Names();
         List<Topic> ranked = new ArrayList<>();
         try {
             Enumeration<URL> registries = loader.getResources(ROOT + "sets");
@@ -131,13 +127,13 @@ public final class LibraryDocs {
                         // divide it between them: nothing is counted twice and nothing is left out.
                         Topic whole = new Topic(topic, titleOf(text, file), 0, resource, 0,
                                 text.length(), without(0, text.length(), parts));
-                        register(byName, whole);
+                        named.register(whole);
                         ranked.add(whole);
                         for (Named part : parts) {
                             Topic held = new Topic(part.name(), part.title(), part.level(), resource,
                                     part.from(), part.to(),
                                     without(part.from(), part.to(), inside(part, parts)));
-                            register(byName, held);
+                            named.register(held);
                             ranked.add(held);
                         }
                     }
@@ -146,14 +142,37 @@ public final class LibraryDocs {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new LibraryDocs(loader, byName, List.copyOf(ranked), caller);
+        return new LibraryDocs(loader, named.byName, named.byWords, List.copyOf(ranked), caller);
     }
 
-    private static void register(Map<String, Topic> byName, Topic topic) {
-        Topic taken = byName.put(DocName.canonical(topic.name()), topic);
-        if (taken != null) {
-            throw new IllegalStateException("two shipped topics are asked for by the same name: `"
-                    + taken.name() + "` and `" + topic.name() + "`");
+    /**
+     * The topics read so far, under each fold a lookup uses.
+     *
+     * <p>A topic is registered under both or under neither. A doc set naming two topics that come
+     * together under either fold has published one name for two documents, and which of them a
+     * reader is answered with would be settled by the order its registry happened to list them —
+     * the read path taking the last and a search taking the first. That the names are a jar's to
+     * choose is why it is refused where the jar is read rather than settled quietly here.
+     */
+    private static final class Names {
+
+        private final Map<String, Topic> byName = new LinkedHashMap<>();
+        private final Map<String, Topic> byWords = new LinkedHashMap<>();
+        private final Map<String, String> askedAs = new LinkedHashMap<>();
+
+        void register(Topic topic) {
+            Topic taken = byName.put(DocName.canonical(topic.name()), topic);
+            if (taken != null) {
+                throw new IllegalStateException("two shipped topics are asked for by the same name: `"
+                        + taken.name() + "` and `" + topic.name() + "`");
+            }
+            String words = DocName.asWords(topic.name());
+            String said = askedAs.put(words, topic.name());
+            if (said != null) {
+                throw new IllegalStateException("two shipped topics are the same words: `"
+                        + said + "` and `" + topic.name() + "`");
+            }
+            byWords.put(words, topic);
         }
     }
 

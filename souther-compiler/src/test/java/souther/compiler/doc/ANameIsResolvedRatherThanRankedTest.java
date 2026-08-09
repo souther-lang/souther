@@ -4,11 +4,18 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -135,6 +142,53 @@ class ANameIsResolvedRatherThanRankedTest {
 
         assertTrue(searched.out().contains("[#behavior]"),
                 "`jvm-behavior` is titled `behavior`, and a title is not an identity: " + searched.out());
+    }
+
+    @Test
+    void aDocSetNamingTwoTopicsTheSameWordsIsRefusedWhereItIsRead() {
+        // `somelib/guide-notes` and `somelib/guide/notes` are two names to read by and one name to
+        // resolve, so one of the two documents is unreachable by name however this settled it.
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> shipping("guide.md", """
+                        # A guide
+
+                        <!-- souther-section: notes -->
+                        ## Notes
+
+                        What is worth noting.
+                        """, "guide-notes.md", """
+                        # Notes on the guide
+
+                        Something else entirely.
+                        """));
+
+        assertTrue(refused.getMessage().contains("the same words"),
+                "and says which two names came together: " + refused.getMessage());
+        assertTrue(refused.getMessage().contains("guide-notes")
+                        && refused.getMessage().contains("guide/notes"),
+                refused.getMessage());
+    }
+
+    /** A jar shipping one doc set of the given {@code file, text} pairs. */
+    private LibraryDocs shipping(String... files) {
+        try {
+            Path jar = Files.createTempDirectory("docset").resolve("somelib-1.0.jar");
+            try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
+                out.putNextEntry(new JarEntry("META-INF/souther-docs/sets"));
+                out.write("somelib\n".getBytes(StandardCharsets.UTF_8));
+                out.putNextEntry(new JarEntry("META-INF/souther-docs/somelib/index"));
+                for (int i = 0; i < files.length; i += 2) {
+                    out.write((files[i] + "\n").getBytes(StandardCharsets.UTF_8));
+                }
+                for (int i = 0; i < files.length; i += 2) {
+                    out.putNextEntry(new JarEntry("META-INF/souther-docs/somelib/" + files[i]));
+                    out.write(files[i + 1].getBytes(StandardCharsets.UTF_8));
+                }
+            }
+            return LibraryDocs.on(new URLClassLoader(new URL[]{jar.toUri().toURL()}, null), Caller.CLI);
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test
