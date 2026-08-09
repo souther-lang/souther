@@ -63,6 +63,17 @@ public final class HelperInliner {
      * a fact about the module rather than about any one body.
      */
     private Map<String, Integer> callableBehaviors = Map.of();
+    /**
+     * The values whose own answer this expansion was given, so that a reference to one need not
+     * copy its body. Empty for every expansion that has no such answer — the tree the backend emits
+     * from is one, and it copies every value as it always did.
+     *
+     * <p>Two answers rather than one, and they are read in {@link #settled}: the type a reference
+     * stands under, and the constant a reference is written out as. A value has the first and may
+     * have the second.
+     */
+    private Preserved settledValues = Preserved.NONE;
+    private java.util.function.Function<ValueName, Object> settledConstants = _ -> null;
     /** What each declaration this table reaches calls, and which of them recurse. A function of the
      * table, so a narrowed table does not narrow it: what recurses was settled over the table as it
      * was built. */
@@ -244,6 +255,24 @@ public final class HelperInliner {
      */
     public HelperInliner namingBehaviors(Map<String, Integer> arities) {
         this.callableBehaviors = Map.copyOf(arities);
+        return this;
+    }
+
+    /**
+     * The same, told what the values named in {@code settled} were settled as, so that a reference
+     * to one of them is not copied.
+     *
+     * <p>For the checks that read a definition on its own. A definition is checked against what the
+     * definitions it names were settled as, which is what a check of each of them already worked
+     * out; copying the body instead re-derives that answer once per name that reaches it, so a
+     * chain of values costs the chain again per link. What the backend emits is the other question
+     * and unchanged: a value is substituted where it is named (ADR-0072), and the tree it is
+     * substituted into is not built here.
+     */
+    public HelperInliner readingSettledValues(Preserved settled,
+                                             java.util.function.Function<ValueName, Object> constants) {
+        this.settledValues = settled;
+        this.settledConstants = constants;
         return this;
     }
 
@@ -1301,7 +1330,46 @@ public final class HelperInliner {
         if (value == null || value.body() == null || graph.recurses(v.reaches())) {
             return v;
         }
-        return substituted(v.reaches(), value.writtenBody());
+        Ast.Expr settled = settled(v);
+        return settled != null ? settled : substituted(v.reaches(), value.writtenBody());
+    }
+
+    /**
+     * What {@code v} stands for where this expansion was told the value's own answer, or null where
+     * it was not and the body has to be copied.
+     *
+     * <p>Two answers, because two things read a substituted value. What it types as is read by the
+     * check, and a reference standing under the settled type says it. What it is a constant of is
+     * read by everything that asks whether an expression is known at compile time — a
+     * {@code String.matches} pattern, the argument a construction proves its invariant against —
+     * and those fold a tree rather than resolve a name ({@link ConstEval}), so a constant is written
+     * out as the literal it folded to and they go on reading a literal. Where the value is neither
+     * — a construction, a collection, anything a fold does not reach — the reference stands and the
+     * check reads its type.
+     *
+     * <p>The literal is written at the reference. A value is substituted at each of its references
+     * (ADR-0072), so what stands there is this reference's, and a report about it belongs where the
+     * name was written rather than in the body it came from.
+     */
+    private Ast.Expr settled(Ast.Var v) {
+        Type type = settledValues.valueKept(v.denotes());
+        if (type == null) {
+            return null;
+        }
+        Object constant = settledConstants.apply(v.denotes());
+        return constant == null ? v : literal(constant, v.pos());
+    }
+
+    /** {@code constant} as the expression a fold would read it back out of, or null for a value no
+     * literal spells. */
+    private static Ast.Expr literal(Object constant, SourcePos pos) {
+        return switch (constant) {
+            case Long i -> new Ast.IntLit(i, pos);
+            case java.math.BigDecimal d -> new Ast.DecimalLit(d, pos);
+            case String s -> new Ast.StringLit(s, pos);
+            case Boolean b -> new Ast.BoolLit(b, pos);
+            default -> null;
+        };
     }
 
     /**

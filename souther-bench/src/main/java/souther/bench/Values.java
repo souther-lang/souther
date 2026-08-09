@@ -3,6 +3,8 @@ package souther.bench;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -12,11 +14,13 @@ import java.util.List;
  * two have different answers: a value is substituted where it is named, so what a module declares
  * can cost more than the sum of its declarations while what a workspace holds does not.
  *
- * <p>Two shapes, held the same apart from what a value names. Each value of the chain names the one
- * before it, so the last of them stands for the whole chain and the module's source shares what its
- * elaboration copies. The flat shape declares as many values naming none of them, which is the same
- * number of declarations with nothing to share — so the distance between the two lines is what
- * substitution costs, and the chain's own per-value figure is what says whether that cost is
+ * <p>Three shapes, held the same apart from what a value names and where it is written. Each value
+ * of the chain names the one before it, so the last of them stands for the whole chain and the
+ * module's source shares what its elaboration copies. The reversed chain is that module written
+ * bottom to top, where no value is settled by the time the one naming it is read unless the check
+ * puts them in an order of its own. The flat shape declares as many values naming none of them,
+ * which is the same number of declarations with nothing to share — so the distance from it is what
+ * substitution costs, and a chain's own per-value figure is what says whether that cost is
  * proportional to what the module declares.
  *
  * <p>The per-value figure is the one to read. A total that grows is only the module growing; a
@@ -34,11 +38,13 @@ final class Values {
 
     static void measure(Report report) {
         for (int values : SIZES) {
-            Timing chain = timeOf(chain(values));
+            Timing chain = timeOf(chain(values, false));
+            Timing reversed = timeOf(chain(values, true));
             Timing flat = timeOf(flat(values));
-            report.line("VALUES n=%-4d  chain %7.1f ms (%5.3f ms/value)   "
-                            + "flat %7.1f ms (%5.3f ms/value)",
+            report.line("VALUES n=%-4d  chain %7.1f ms (%5.3f)   reversed %7.1f ms (%5.3f)   "
+                            + "flat %7.1f ms (%5.3f)   ms/value",
                     values, chain.medianMillis(), chain.medianMillis() / values,
+                    reversed.medianMillis(), reversed.medianMillis() / values,
                     flat.medianMillis(), flat.medianMillis() / values);
         }
     }
@@ -51,11 +57,20 @@ final class Values {
         });
     }
 
-    /** {@code n} values, each naming the one before it, and a behavior naming the last. */
-    private static String chain(int n) {
-        StringBuilder source = new StringBuilder("module chain exposing ( f )\n\nlet v0 = 1\n");
+    /** {@code n} values, each naming the one before it, and a behavior naming the last —
+     * {@code bottomUp} writing the one that names before the one it names. */
+    private static String chain(int n, boolean bottomUp) {
+        List<String> declarations = new ArrayList<>();
+        declarations.add("let v0 = 1");
         for (int i = 1; i < n; i++) {
-            source.append("let v").append(i).append(" = v").append(i - 1).append(" + 1\n");
+            declarations.add("let v" + i + " = v" + (i - 1) + " + 1");
+        }
+        if (bottomUp) {
+            Collections.reverse(declarations);
+        }
+        StringBuilder source = new StringBuilder("module chain exposing ( f )\n\n");
+        for (String declaration : declarations) {
+            source.append(declaration).append('\n');
         }
         return source.append("\nbehavior f : (x: Int) -> Int\nlet f (x) = x + v")
                 .append(n - 1).append("\n").toString();
