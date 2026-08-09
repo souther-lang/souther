@@ -62,6 +62,38 @@ sealed interface TokenDoc {
     /** The construct joining what is under it, named as the canonical form writes it. */
     record Node(SyntaxKind kind, TokenDoc doc) implements TokenDoc {}
 
+    /**
+     * Where in the canonical form this document is written, and what opens the line it is on.
+     *
+     * <p>A {@link Node} names what joins two tokens and is asked of the spacing rule; this names a
+     * position and is asked of nothing. It is what comment ownership addresses when it says which
+     * construct can carry a comment — a question a {@code Node} cannot answer, since two siblings
+     * written as the same kind of construct are one {@code Node} kind and two places.
+     */
+    record At(Place place, TokenDoc doc) implements TokenDoc {}
+
+    /**
+     * Where the comments a place carries in one direction are written.
+     *
+     * <p>A construct leaves the slot and says nothing about what goes in it. What does is decided
+     * once every place exists — which is after the construction and before the layout, because a
+     * comment cannot share the line after it and so decides whether the group holding it can be laid
+     * out flat. A construct that settled it here would be answering from the source tree, which is
+     * the structure the canonical form is not.
+     */
+    record Carries(Place place, Carrier which) implements TokenDoc {}
+
+    /**
+     * Brackets with no member written between them.
+     *
+     * <p>What goes there is one line or none, and which of the two depends on whether the place was
+     * handed any comments — a construct with nothing in it is written {@code ()}, and one holding
+     * only a comment keeps the line the comment is on. The construction does not know which, so it
+     * hands over the brackets and lets the same pass that answers the carriers say.
+     */
+    record Vacant(Place place, SyntaxKind construct, TokenDoc open, TokenDoc close, int indent)
+            implements TokenDoc {}
+
     record Gap(Break policy) implements TokenDoc {}
 
     record Concat(List<TokenDoc> parts) implements TokenDoc {}
@@ -78,6 +110,31 @@ sealed interface TokenDoc {
 
     static TokenDoc node(SyntaxKind kind, TokenDoc doc) {
         return new Node(kind, doc);
+    }
+
+    /**
+     * {@code doc} at {@code place}, behind whatever opens the line that place is written on, with
+     * {@code leading} at the head of that line.
+     *
+     * <p>The boundary and the place are written together because they are one decision: what stands
+     * in front of a place and whether the place has a line of its own to be written above are the
+     * same fact, and a construct able to write one without the other is one where the two can
+     * disagree.
+     */
+    static TokenDoc at(Place place, TokenDoc doc) {
+        Opening opening = place.opening();
+        return concat(opening.boundary(), new Carries(place, Carrier.ABOVE), opening.opener(),
+                new At(place, doc));
+    }
+
+    /** What the place carries at the end of the line it ends. Written where the construct holding
+     *  it has finished writing that line, which is not always straight after the place. */
+    static TokenDoc endsTheLineOf(Place place) {
+        return new Carries(place, Carrier.TRAILING);
+    }
+
+    static TokenDoc carries(Place place, Carrier which) {
+        return new Carries(place, which);
     }
 
     static TokenDoc comment(String text) {
