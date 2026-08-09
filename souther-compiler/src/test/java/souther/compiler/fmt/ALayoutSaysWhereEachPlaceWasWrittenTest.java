@@ -38,7 +38,7 @@ class ALayoutSaysWhereEachPlaceWasWrittenTest {
      * so the count held and said nothing about the layout's places.
      */
     @Test
-    void everyPlaceOfTheRunHasASpan() {
+    void everyPlaceTheDocumentWritesHasASpan() {
         for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
             Formatter.CanonicalForm canonical = canonical(source);
             List<Place> written = new ArrayList<>();
@@ -122,4 +122,32 @@ class ALayoutSaysWhereEachPlaceWasWrittenTest {
                 theirs.stream().filter(p -> one.layout().spans().containsKey(p)).toList(),
                 "a place of one run is not a place the other laid out");
     }
+
+    /**
+     * And the places a run makes that its document writes nowhere. A place is made for the line a
+     * construct opens with — a {@code data} declaration's {@code =}, a block's brace, a match's
+     * {@code with} — and it carries the comment written at the end of that line while holding none
+     * of the text; a construct that writes through its members, like a product body, makes a place
+     * that is the parent of theirs and wraps nothing itself; and the file's own place wraps nothing
+     * at all.
+     *
+     * <p>So {@code spans()} answers where an {@code At} was written, not where a place is. Stated
+     * here rather than left to be found, because a witness naming one of these as a comment's owner
+     * cannot say where in the output it is.
+     */
+    @Test
+    void butNotEveryPlaceTheRunMakes() {
+        Formatter.CanonicalForm canonical = canonical(SOURCE_WITH_A_HEADER_COMMENT);
+        List<String> unlocated = canonical.places().stream()
+                .filter(p -> !canonical.layout().spans().containsKey(p))
+                .map(p -> p.construct() + (p.parent() == null ? " (the file)" : ""))
+                .toList();
+
+        assertEquals(List.of("SOURCE_FILE (the file)", "ASSIGN", "PRODUCT_BODY"), unlocated,
+                "the file, the anchor that carries the header line's comment, and the parent of the"
+                        + " fields \u2014 none of them locatable in the output");
+    }
+
+    private static final String SOURCE_WITH_A_HEADER_COMMENT =
+            "module m\ndata D =   // about the block\n    { a: Int\n    , b: Int\n    }\n";
 }
