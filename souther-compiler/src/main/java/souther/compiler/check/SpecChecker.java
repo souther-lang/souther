@@ -122,7 +122,7 @@ public final class SpecChecker {
      * because the fix differs: a behavior that depends on nothing is called instead, a {@code >->}
      * composition cannot be rested on because its requirements are not written, and a name that is no
      * behavior has to be declared or imported. The body check would see only a call it cannot type
-     * and report all three as an arbitrary JVM call (E1401, issue #96).
+     * and report all three as a name that resolves to nothing (E1023).
      */
     static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs,
                                                  Map<String, ReqSig> calleeSigs) {

@@ -207,7 +207,7 @@ public final class TypeChecker {
         // `injectedRecursiveHelpers`, to be emitted here rather than declared here.
         // A helper is checked standing on its own as well as expanded into what calls it, and both
         // readings answer the same about a behavior's name: it becomes the function value it names,
-        // which a helper may then not apply (E1401). Told nothing, the standalone reading would
+        // which a helper may then not apply (E1818). Told nothing, the standalone reading would
         // refuse the name for being a name rather than for being a behavior a helper cannot reach.
         HelperInliner inliner = HelperInliner.forModule(module, publishedToHere)
                 .namingBehaviors(InjectionSigs.arities(calleeSigs));
@@ -361,7 +361,7 @@ public final class TypeChecker {
             throw new Unanswerable(module.pos());
         }
         // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
-        // untypeable, and the body check would report it as a call to an unknown name (E1401).
+        // untypeable, and the body check would report it as a call to an unknown name (E1023).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
         // Fail-fast too: a behavior reaching itself has no first element to build, and the code that
         // works out requirement sets and emits classes would walk the loop.

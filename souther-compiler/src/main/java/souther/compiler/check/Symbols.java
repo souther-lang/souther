@@ -157,9 +157,6 @@ public final class Symbols {
         return contains(candidate) && exposes(target, candidate.name()) ? candidate : null;
     }
 
-    /** The module a qualifier names — a module of this compilation, or an import alias — or null
-     * when it names none. Used to tell "unknown module" apart from "unknown type in a known
-     * module". */
     /**
      * The module of this compilation that exposes {@code name}, or null where that is not exactly
      * one module.
@@ -186,6 +183,9 @@ public final class Symbols {
         return found;
     }
 
+    /** The module a qualifier names — a module of this compilation, or an import alias — or null
+     * when it names none. Used to tell "unknown module" apart from "unknown type in a known
+     * module". */
     public String moduleOfQualifier(String qualifier) {
         String alias = aliases.get(qualifier);
         if (alias != null) {

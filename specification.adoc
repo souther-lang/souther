@@ -4120,7 +4120,7 @@ Reported at the `+match+` (<<branches-agree-on-a-type>>). It answers with one va
 [#e1302-removed]
 === (retired)
 
-E1302 is retired. `+.sou+` has no `+throw+` and no `+catch+` to reject: the rule that a failure is answered as a case of the output rather than raised is carried by the grammar, and a Java method named in an expression is E1401 (<<out-of-scope>>).
+E1302 is retired. `+.sou+` has no `+throw+` and no `+catch+` to reject: the rule that a failure is answered as a case of the output rather than raised is carried by the grammar, and a Java method named in an expression names nothing the language knows, so it is reported as a name that is not in scope (<<out-of-scope>>, <<e1023>>).
 
 [#e1303]
 === Writing an option case
@@ -4343,7 +4343,7 @@ Reported at the parameter, or at the behavior for its output (<<a-boundary-carri
 [#e1401-removed]
 === (retired)
 
-E1401 is retired. It was raised where a name applied to arguments resolved to nothing, which is what E1023 says (<<e1023>>) — nothing established that such a name was on the JVM, and the sample above was itself reported as an unknown name. That arbitrary Java calls are out of scope is a design decision and stays one (<<no-arbitrary-jvm-calls>>); it was never a thing a compile could find.
+E1401 is retired. It was raised where a name applied to arguments resolved to nothing, which is what E1023 says (<<e1023>>), and nothing established that such a name was on the JVM. `+java.time.LocalDate.now+`, which this section used as its example, is read from a root `+java+` that names no qualifier and resolves to nothing, so it was reported as an unknown name and not as this. That arbitrary Java calls are out of scope is a design decision and stays one (<<no-arbitrary-jvm-calls>>); it was never a thing a compile could find.
 
 [#e1402]
 === A core form is written outside the core

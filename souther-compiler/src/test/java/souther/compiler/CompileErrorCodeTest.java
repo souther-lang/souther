@@ -7,8 +7,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Diagnostic codes for two rejected constructs: {@code null} (E1301) and a call to something
- *  that is not a behavior or builtin (E1401). See spec 22.8, 22.10. */
+/** Diagnostic codes for two rejected constructs: {@code null} (E1301) and a call to a name nothing
+ *  declares (E1023). */
 class CompileErrorCodeTest {
 
     @Test

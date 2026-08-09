@@ -54,7 +54,7 @@ Making the rule uniform surfaced a defect it had been hiding. The shadowing guar
 
 Two more of the rule's own sentences were not what the code did. An arm determines its sibling only where it answers a value, and `unreachable` answers none — its `Never` fits every expectation because it states nothing, so taking it for an answer settled `let choose (b: Bool, v) = if b then v else unreachable "..."` as `Never` and let every call through. Which types say nothing about a value is one question now, asked in one place beside the empty collection's bottom. And a closure was read with no expectation and against no bindings, so `List.find((v) -> v, xs)` left the element open although the step's declared result says `v` answers a `Bool`. A call is solved in the stages `CallElaborator.applySignature` uses — result, then the arguments that are not closures, then the closures — which is also what lets a fold's seed say what its step accumulates.
 
-The report order is settled with it. A helper does not reach a behavior at all (E1401), and asking for the parameter's type first sent the author to write an annotation that changed nothing; the call is reported instead.
+The report order is settled with it. A helper does not reach a behavior at all (E1818), and asking for the parameter's type first sent the author to write an annotation that changed nothing; the call is reported instead.
 
 Measured again after the change: 2194 compiler tests and every module of souther-lang/examples pass, and no existing annotation had to move. What an author gains is that the same shapes their code already takes — a closure over a collection, an argument whose type a sibling argument fixes, an arm beside an arm — no longer ask for a type the body already knows (#302).
 
