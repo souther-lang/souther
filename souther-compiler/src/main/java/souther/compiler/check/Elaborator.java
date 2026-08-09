@@ -926,14 +926,14 @@ public final class Elaborator {
         return name.startsWith("$") ? name.substring(1) : name;
     }
 
-    /** {@code let f: T = <function>} — a binding whose value is a function takes no annotation, because
-     * a function type may be written only in a helper's parameter (spec 13.1) and no ordinary type
-     * describes a function. Raised from the surface check below and from the value path, so the two
-     * shapes a function binding takes (a bare lambda, one an {@code if} chooses) read the same. */
+    /** {@code let f: T = <function>} where {@code T} is not a function type. No ordinary type describes
+     * a function, so the annotation settles nothing. Raised from the surface check below and from the
+     * value path, so the two shapes a function binding takes (a bare lambda, one an {@code if} chooses)
+     * read the same. */
     static CompileException functionAnnotation(Ast.LetIn li) {
         return CompileException.of(Diagnostic.at(li.pos())
-                .say(new HelperMessage.AFunctionTypeIsWrittenOutsideAHelperParameter(li.name()))
-                .hint(new HelperMessage.RemoveTheAnnotation())
+                .say(new HelperMessage.AnAnnotationOnAFunctionBindingIsNotAFunctionType(li.name()))
+                .hint(new HelperMessage.WriteAFunctionTypeOrLeaveTheAnnotationOff())
                 .build());
     }
 

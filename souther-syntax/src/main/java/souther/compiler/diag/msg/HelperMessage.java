@@ -121,10 +121,11 @@ public sealed interface HelperMessage extends Message {
     record TheBranchesAnswerDifferentFunctionTypes(String one, String other)
             implements HelperMessage, Reported {}
 
-    /** A function type is written somewhere other than a helper's parameter. */
+    /** A binding holding a function carries an annotation that is not a function type. */
     @Code(DiagnosticCode.E1810)
-    record AFunctionTypeIsWrittenOutsideAHelperParameter(String binding) implements HelperMessage, Reported {}
+    record AnAnnotationOnAFunctionBindingIsNotAFunctionType(String binding)
+            implements HelperMessage, Reported {}
 
     /** What to do about it. */
-    record RemoveTheAnnotation() implements HelperMessage, Supporting {}
+    record WriteAFunctionTypeOrLeaveTheAnnotationOff() implements HelperMessage, Supporting {}
 }

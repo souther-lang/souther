@@ -375,7 +375,7 @@ data Line =
     }
 ----
 
-This is what a module does when two it depends on declare the same type name — `+Amount+` in each of two bounded contexts, which is normal and not the integrator's to rename. A qualified reference MAY be written wherever a type is named: a type position (a field, a behavior's input or output, a helper's parameter), a `+match+` arm's case name, a layer a constructor pattern opens (<<binding-patterns>>, <<match>>), and a `+constructs+` entry. A sum's case list is the exception: its cases are declared with it (<<sum-data>>), so there is no other module to name.
+This is what a module does when two it depends on declare the same type name — `+Amount+` in each of two bounded contexts, which is normal and not the integrator's to rename. A qualified reference MAY be written wherever a type is written or named (<<a-type-is-written-in-a-type-position>>, <<binding-patterns>>, <<match>>). A sum's case list is the exception: its cases are declared with it (<<sum-data>>), so there is no other module to name.
 
 Which spelling names a type is not something a check has an opinion about. A bare `+Amount+` an `+import+` brings in and a qualified `+example.pricing.Amount+` are one type, so a clause and a body that spell it differently agree, and a pattern opens the type it names however the field that holds it was written.
 
@@ -469,7 +469,8 @@ What a text MUST be for the compiler to read it is stated with each construct, a
 * `+|>+` is the value pipe, binding most loosely and left-associatively. `+a |> f |> g+` reads as `+g(f(a))+`. The left side enters the last argument of the right-hand call and is expanded to a call at parse time (<<pipe>>). This is distinct from the `+>->+` that composes behaviors; it threads the value of an expression.
 * `+?+` is a type postfix (`+EmployeeId?+`) and desugars to `+Option<EmployeeId>+` (<<optional>>).
 * `+.+` is field reference; `+...+` is spread (<<record-literal>>).
-* The type position admits: a named type, a stdlib generic type (such as `+List<T>+`), an anonymous output sum (`+A | B+`), a postfix `+?+`, and a function type `+(A) -> B+`. A function type's parameters and result are themselves whole types, so `+->+` is right-associative — `+(A) -> (B) -> C+` returns a function and `+((A) -> B) -> C+` takes one — and `+(A) -> B | C+` still reads as `+(A) -> (B | C)+` by the `+|+` rule above. `+(A, B) -> C+` takes two parameters and `+((A, B)) -> C+` takes one tuple, as a lambda's parameter list does. A parenthesised single type is grouping.
+* [[a-type-is-written-in-a-type-position]]A type is written in a *type position*, and these are the positions: a data field and a newtype's base; a behavior's parameter and its output, and the output declared for a `+>->+` composition, written either on the composition or in `+exposing+` (<<declared-composition-output>>); a helper's parameter and its declared return; a local binding's annotation; and, inside another type, a type argument, a tuple's member, and a function type's parameter and its result. A lambda's parameter is a pattern and takes no type (<<blocks>>). A type is also *named* in three places that are not type positions — a `+match+` arm's case, a `+constructs+` entry, and a constructor pattern — and each of those takes the name of a declared type rather than a type form.
+* What a type position reads is not the same in every position. Where a *whole* type is read — a behavior's parameter and its output, a composition's declared output, a helper's parameter and its declared return, a local binding's annotation, and a function type's parameter and its result — the forms are a named type, a stdlib generic type (such as `+List<T>+`), a tuple type, a function type `+(A) -> B+`, an anonymous output sum (`+A | B+`), and a postfix `+?+`. A data field reads all of those but the anonymous sum, so a `+|+` written on a field is a syntax error rather than a choice (<<e2301>>). A type argument and a tuple's member read neither the anonymous sum nor the postfix `+?+`, so `+List<A | B>+` and `+List<T?>+` are not written at all. A newtype's base is narrower again, below. A function type's parameters and result are themselves whole types, so `+->+` is right-associative — `+(A) -> (B) -> C+` returns a function and `+((A) -> B) -> C+` takes one — and `+(A) -> B | C+` still reads as `+(A) -> (B | C)+` by the `+|+` rule above. `+(A, B) -> C+` takes two parameters and `+((A, B)) -> C+` takes one tuple, as a lambda's parameter list does. A parenthesised single type is grouping.
 * Writing a type in a position is not being admitted by it. What a position requires of a type is asked of the type: a data field, a newtype base and a behavior's input and output require an *external representation*, so none of them takes a type that carries a function at any depth (`+List<(Int) -> Bool>+` included); `+==+` / `+/=+`, a `+Set+`'s element and a `+Map+`'s key require *equality*; `+sort+` and a `+sortBy+` key require an *ordering* (<<equality>>).
 * A newtype's base (`+data X = Y+`) is a type position narrowed to what `+X+` can take as its own external representation: no tuple, no function type, and no `+?+` (<<newtype>>). A sum's cases are names of declared data, so a case is never generic: `+data X = List<A> | B+` is not a sum (<<sum-data>>).
 
@@ -495,7 +496,7 @@ An external representation may contain null, but internal data forbids null. nul
 == Built-in types
 
 
-[[a-value-has-the-type-its-position-requires]]A value MUST have the type its position requires — a field, a parameter, a declared return, an annotated binding, a type argument. This is the rule most others here are a special case of, and it is what a diagnostic falls back to where no narrower one applies.
+[[a-value-has-the-type-its-position-requires]]A value MUST have the type its position requires (<<a-type-is-written-in-a-type-position>>). This is the rule most others here are a special case of, and it is what a diagnostic falls back to where no narrower one applies.
 
 [[a-lists-elements-have-one-type]]A list literal's elements MUST all have one type. A list is `+List<T>+` for a single `+T+`; a sequence of several types is a list of a sum they are cases of.
 
@@ -660,7 +661,7 @@ A decode-side violation does not abort; Raoh's `+Result+` failure carries it (<<
 
 ==== How Option appears
 
-`+Option<T>+` is the name of the type a `+?+` field has, and it MAY be written wherever a model *reads* an optional: a data field (where `+T?+` means the same thing), a behavior's input, a helper's parameter or declared return, a function type's result, and a local binding's annotation. A recursive helper and a function-typed parameter MUST declare their types (<<fn-declaration>>), so for those the name is the only way to say it at all.
+`+Option<T>+` is the name of the type a `+?+` field has. It is written in a type position like any other name (<<a-type-is-written-in-a-type-position>>), and two kinds of position refuse it: the boundary, which is a behavior's parameter and its output (<<an-optional-does-not-stand-in-a-boundary>>), and a newtype's base, which wraps a value that is always there (<<newtype>>). On a data field `+T?+` means the same thing and is the shorter spelling. A recursive helper and a function-typed parameter MUST declare their types (<<fn-declaration>>), so for those the name is the only way to say it at all.
 
 The mark `+?+` outside a field is written only in the shipped core, as a type variable is (<<stdlib>>): `+?+` marks where an optional is *made*, and the name says what the type is.
 
@@ -676,7 +677,7 @@ let firstOver (n: Int, m: OrgMember) : Option<OrgMember> =
         | None -> m.manager             // the absence it read, passed on
 ----
 
-It MUST NOT be written in a behavior's output, whichever way it is written. To state "might not be found" as a business result, that is a domain sum (<<unmarked-sum>>); an optional output is reported as itself rather than as a composition that does not fit (<<e1701>>).
+Where the boundary refuses it, what replaces it is a name the model owns. To state "might not be found" as a business result, that is a domain sum (<<unmarked-sum>>); an optional output is reported as itself rather than as a composition that does not fit (<<e1701>>).
 
 [,text]
 ----
@@ -1970,7 +1971,7 @@ Behaviors do not recurse. A behavior MUST NOT reach itself, through calls, throu
 
 `+(a, b, ...)+` is a tuple bundling two or more values into one. It is an expression-level value, used only in the middle of a computation — a helper `+let+` returning multiple values and destructuring them — and MUST NOT be written in a data field or a behavior input/output. Like a function (<<blocks>>), it does not cross the boundary, so no codec is derived. Domain vocabulary stays as named data.
 
-A tuple *type* `+(A, B, ...)+` may be written in a helper or standard-library signature — a parameter, a return type, or a type argument such as `+List<(String, 'a)>+` — since a signature is not a codec boundary. It is still rejected in the two boundary positions above: a data field and a behavior's input/output, where a codec would have to be derived. A one-element `+(T)+` is not a tuple type.
+A tuple *type* `+(A, B, ...)+` is written in a type position like any other type (<<a-type-is-written-in-a-type-position>>), and what refuses it is the positions requiring an external representation — a data field, a newtype's base, and a behavior's input and output — where a codec would have to be derived (<<what-crosses-the-boundary-has-an-external-representation>>). A signature is not a codec boundary, so a helper's or the standard library's takes one, `+List<(String, 'a)>+` included. A one-element `+(T)+` is not a tuple type.
 
 A tuple is compared by its elements (<<equality>>), so two built separately from the same values are one value. It is therefore a `+Set+`'s element and a `+Map+`'s key like any other, which is how a rule over a composite key is written: `+allDistinctBy(t -> (t.from, t.event), transitions)+` says one row per `+(from, event)+`. A tuple has no *ordering*, so it is not a `+sort+`'s element or a `+sortBy+`'s key (<<stdlib-list>>) — order by one key and then the other instead.
 
@@ -2009,7 +2010,7 @@ A block is written where a function is taken, and that position is part of what 
 
 [[a-function-bindings-type-is-known]]That type MUST be readable where the binding is written — from its annotation, or from an application in the same scope. Nothing outside the scope is consulted for it.
 
-[[a-function-type-is-written-only-on-a-helper-parameter]]A function type is written in one place: a helper's parameter. Everywhere else what a function is is read off what it is applied to.
+[[an-annotation-on-a-function-binding-is-a-function-type]]An annotation on a binding that holds a function MUST be a function type. An ordinary type does not describe a function, so it settles nothing and disagrees with the value in the same breath. Leaving the annotation off is the other way to write the binding, and then the applications settle it.
 
 A `+let+` is the implementation of a behavior. A behavior is the specification (<<behavior>>), and a `+let+` is what satisfies it.
 
@@ -2108,7 +2109,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 
 A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
 * A helper `+let+` may construct data, but its construction set is inferred transitively and MUST be included in the calling behavior's `+constructs+` (<<constructs>>, <<blocks>>) — except for what another module's published body carried in, which that module already stated (<<exposed-values>>). A helper cannot be placed in a `+>->+` stage, because it does not appear in the spec DSL. It may be written in `+exposing+`: what a module offers is not only its list of behaviors.
-* A function type (`+(A) -> B+`) is an ordinary type and may be written wherever a type is (<<delimiters>>). What refuses one is the position's requirement, not the grammar: a data field and a behavior's input and output require an external representation, and a function has none — including a function carried inside a `+List+` or a `+Map+` there. A behavior output is a sum of business results, and a function is not a business result.
+* A function type (`+(A) -> B+`) is an ordinary type and is written in a type position like any other (<<a-type-is-written-in-a-type-position>>). What refuses one is the position's requirement, not the grammar: a data field, a newtype's base and a behavior's input and output require an external representation, and a function has none — including a function carried inside a `+List+` or a `+Map+` there (<<what-crosses-the-boundary-has-an-external-representation>>). A behavior output is a sum of business results, and a function is not a business result.
 * A `+let+` may return a function (`+let adder (n: Int) = (x) -> x + n+`). An escaping function — a return value or a runtime choice — becomes a closure capturing free variables (<<blocks>>). If only passed or applied on the spot, it is expandable and no closure is needed. A helper's name written where a value goes is the function it names. A binding MAY state its type (`+let p: (Int) -> Bool = ...+`), and that is what settles the parameters of the lambda it binds. Where no type is written they are inferred from how it is applied (a local rule, distinct from global type inference, which the declarative design does not do — a behavior takes its type from the specification and a helper states its own, <<fn-declaration>>).
 
 [#injected-behavior]
@@ -4254,7 +4255,7 @@ Reported at the type (<<a-generic-type-is-given-its-arguments>>). The bare quali
 Field `estimatedCost` expects Amount, but got Int.
 ----
 
-Reported at the value (<<a-value-has-the-type-its-position-requires>>). The rule most of the others in this range are a special case of, and what a diagnostic says where no narrower one applies: a field, a parameter, a declared return, an annotated binding, a type argument.
+Reported at the value (<<a-value-has-the-type-its-position-requires>>). The rule most of the others in this range are a special case of, and what a diagnostic says where no narrower one applies; the positions it covers are the type positions (<<a-type-is-written-in-a-type-position>>).
 
 [#e1318]
 === A list's elements do not all have one type
@@ -4756,14 +4757,14 @@ cannot be returned or stored in a field.
 Reported where a block leaves the scope it was written in (<<a-block-is-not-a-value>>). A function has no external representation (<<external-representation>>), so a field holding one could not be decoded or encoded and an output holding one could not cross out.
 
 [#e1810]
-=== A function type is written outside a helper parameter
+=== An annotation on a function binding is not a function type
 
 [,text]
 ----
-The binding `step` is a function, and a function type may be written only in a helper parameter.
+The binding `step` holds a function, and its annotation is not a function type.
 ----
 
-Reported at the annotation (<<a-function-type-is-written-only-on-a-helper-parameter>>).
+Reported at the annotation (<<an-annotation-on-a-function-binding-is-a-function-type>>). A function type in that annotation is admitted, as it is in every type position a representation is not required at (<<a-type-is-written-in-a-type-position>>); what this reports is an annotation that describes something else.
 
 [#e1811]
 === A helper parameter has no type

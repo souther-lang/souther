@@ -819,7 +819,6 @@ public final class CstParser {
         bump();   // let
         expect(SyntaxKind.IDENT, Reading.AN_EXPRESSION);
         if (eat(SyntaxKind.COLON)) {
-            // an ordinary type: a function type may be written only in a helper parameter (spec 13.1)
             retType();
         }
         expect(SyntaxKind.ASSIGN, Reading.AN_EXPRESSION);
