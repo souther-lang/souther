@@ -75,9 +75,10 @@ final class ObservedValues {
     }
 
     /** A collection past the element limit is dropped whole rather than kept as a prefix. A prefix
-     * read back is a collection nobody wrote, and it arrives looking like one that was: a measure
-     * would classify it, and be answering about a value that was never there. Saying the
-     * observation was stopped is the one thing that stays true. */
+     * is not the value that was written, and returned as a {@link ObservedValue.Sequence} it would
+     * be the same thing as a complete observation of a shorter collection — nothing about the two
+     * would differ. {@link ObservedValue.Truncated} keeps the one fact that stays true: the
+     * observation stopped. */
     private ObservedValue sequence(Iterable<?> it, int depth) {
         List<ObservedValue> out = new ArrayList<>();
         for (Object e : it) {
