@@ -31,7 +31,15 @@ public sealed interface Doc {
     record Hard() implements Doc {}
     record Concat(List<Doc> parts) implements Doc {}
     record Nest(int indent, Doc doc) implements Doc {}
-    record Group(Doc doc) implements Doc {}
+    record Group(GroupRef ref, Doc doc) implements Doc {}
+
+    /**
+     * Which group a group is. Two groups written the same way are still two of them, and a layout
+     * that kept its decisions by their shape would keep one — so this is an identity and carries
+     * nothing else.
+     */
+    final class GroupRef {
+    }
 
     /**
      * A comment written at the end of a line of code. It is not content the width has to make room
@@ -64,7 +72,7 @@ public sealed interface Doc {
     }
 
     static Doc group(Doc doc) {
-        return new Group(doc);
+        return new Group(new GroupRef(), doc);
     }
 
     /** Joins {@code parts} with {@code sep} between each. */
@@ -79,9 +87,22 @@ public sealed interface Doc {
         return new Concat(out);
     }
 
-    /** Renders this document to a string at the given target {@code width} (columns), using
-     * {@code indentUnit} spaces per nesting level increment already folded into nest amounts. */
+    /** The text this document lays out to at the given target {@code width} (columns), which is
+     * {@link #layout}'s projection. */
     default String render(int width) {
+        return layout(width).text();
+    }
+
+    /**
+     * This document laid out at the given target {@code width} (columns): the text, and what the
+     * layout decided on the way to it.
+     *
+     * <p>A decision is taken once, where the outer walk reaches the group. {@link #fits} walks ahead
+     * over groups it is only measuring and takes none, so what comes back is what was laid out
+     * rather than what was considered.
+     */
+    default Layout layout(int width) {
+        List<GroupDecision> decisions = new ArrayList<>();
         StringBuilder sb = new StringBuilder();
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(new Item(0, Mode.BREAK, this));   // the outermost context breaks
@@ -102,9 +123,14 @@ public sealed interface Doc {
                 }
                 case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc()));
                 case Group g -> {
-                    Mode mode = fits(width - col, new Item(it.indent, Mode.FLAT, g.doc()), todo)
-                            ? Mode.FLAT : Mode.BREAK;
-                    todo.push(new Item(it.indent, mode, g.doc()));
+                    Fit fit = fits(width - col, new Item(it.indent, Mode.FLAT, g.doc()), todo);
+                    decisions.add(new GroupDecision(g.ref(), col, switch (fit) {
+                        case FITS -> new Outcome.Flat();
+                        case TOO_WIDE -> new Outcome.BrokenByWidth();
+                        case REFUSED -> new Outcome.BrokenByForcedLayout();
+                    }));
+                    todo.push(new Item(it.indent,
+                            fit == Fit.FITS ? Mode.FLAT : Mode.BREAK, g.doc()));
                 }
                 case Line l -> {
                     if (it.mode == Mode.FLAT) {
@@ -126,14 +152,18 @@ public sealed interface Doc {
                 case MustBreak _ -> { }
             }
         }
-        return sb.toString();
+        return new Layout(sb.toString(), decisions);
     }
+
+    /** What a flat layout of a group came to. Refused and too wide are not one answer: the first is
+     * a fact about the group's content and the second about the width it was measured against. */
+    enum Fit { FITS, TOO_WIDE, REFUSED }
 
     /** Whether the documents starting with {@code first} then the queued rest fit in {@code remaining}
      * columns before the next forced break — the standard flat-fits check. */
-    private static boolean fits(int remaining, Item first, Deque<Item> rest) {
+    private static Fit fits(int remaining, Item first, Deque<Item> rest) {
         if (remaining < 0) {
-            return false;
+            return Fit.TOO_WIDE;
         }
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(first);
@@ -145,14 +175,14 @@ public sealed interface Doc {
             } else if (restIt.hasNext()) {
                 it = restIt.next();
             } else {
-                return true;
+                return Fit.FITS;
             }
             switch (it.doc) {
                 case Nil _ -> { }
                 case Text t -> {
                     remaining -= t.s().length();
                     if (remaining < 0) {
-                        return false;
+                        return Fit.TOO_WIDE;
                     }
                 }
                 case Concat c -> {
@@ -167,25 +197,25 @@ public sealed interface Doc {
                     if (it.mode == Mode.FLAT) {
                         remaining -= l.flat().length();
                         if (remaining < 0) {
-                            return false;
+                            return Fit.TOO_WIDE;
                         }
                     } else {
-                        return true;   // a break within reach means it fits
+                        return Fit.FITS;   // a break within reach means it fits
                     }
                 }
                 case Hard _ -> {
                     // a hardline cannot be laid out flat: inside the group under test (FLAT) it forces
                     // a break; in an already-broken outer context it just ends the measured line.
-                    return it.mode != Mode.FLAT;
+                    return it.mode == Mode.FLAT ? Fit.REFUSED : Fit.FITS;
                 }
                 case Trailing _ -> {
                     // the same, and for the same reason: whatever follows starts a new line, so it
                     // is measured against that line rather than this one, and the comment's own
                     // width is measured against nothing.
-                    return it.mode != Mode.FLAT;
+                    return it.mode == Mode.FLAT ? Fit.REFUSED : Fit.FITS;
                 }
                 case MustBreak _ -> {
-                    return it.mode != Mode.FLAT;
+                    return it.mode == Mode.FLAT ? Fit.REFUSED : Fit.FITS;
                 }
             }
         }
