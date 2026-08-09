@@ -117,7 +117,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
 
     private static Classification at(Read read, RowOutcome row, String path) {
         Map<AxisId, Classification> classes = RowClasses.of(row, read.parameters(), read.axes());
-        return classes.entrySet().stream().filter(e -> e.getKey().path().equals(path))
+        return classes.entrySet().stream().filter(e -> e.getKey().term().equals(path))
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path));
     }

@@ -45,6 +45,18 @@ public sealed interface NumericTerm {
      * <p>Keyed by the operation the call resolved to rather than by how it was written, so a term
      * here and an atom in the discharge procedure are the same term when they are the same operation
      * over the same location.
+     *
+     * <p><b>The operation and the location agree, by construction.</b> Both places that make one of
+     * these guarantee it: an invariant's term is the operation that counts the position's own type
+     * ({@code NumericMeasures.takenOf}), and a guard's is a call the type checker has already held
+     * to its argument. So {@link #read} counts what the observation is without asking which
+     * operation was named.
+     *
+     * <p>Not a check that was skipped for being cheap. A {@code List} and a {@code Set} are one
+     * observation — which of the two it was is the declared type's to say, not the value's — so
+     * comparing the operation against the shape would tell a string from a collection and leave the
+     * one pair a reader might actually confuse undistinguished. A check that looks total and is
+     * blind in the middle is worse than a stated premise, so the premise is stated.
      */
     record SizeOf(ValueName.Stdlib measure, TermPath path) implements NumericTerm {
 
@@ -151,10 +163,10 @@ public sealed interface NumericTerm {
     /**
      * How much an observation holds.
      *
-     * <p>Which of the four operations the term names does not come into it: each counts what its own
-     * kind of value holds, and the observation says which kind it is. A string counts in code points,
-     * as {@code Strings.length} does — counting UTF-16 units here would put a boundary one place away
-     * from the rule that drew it for every string outside the basic plane.
+     * <p>Read off the observation under the premise {@link SizeOf} states: the operation and what it
+     * is applied to agree, so counting what is there counts what was asked for. A string counts in
+     * code points, as {@code Strings.length} does — counting UTF-16 units here would put a boundary
+     * one place away from the rule that drew it for every string outside the basic plane.
      */
     private static Reading size(ObservedValue at) {
         return switch (at) {

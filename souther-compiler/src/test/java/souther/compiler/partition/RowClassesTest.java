@@ -87,10 +87,10 @@ class RowClassesTest {
     }
 
     private static Classification at(Map<AxisId, Classification> classes, String path) {
-        return classes.entrySet().stream().filter(e -> e.getKey().path().equals(path))
+        return classes.entrySet().stream().filter(e -> e.getKey().term().equals(path))
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path + "; had "
-                        + classes.keySet().stream().map(AxisId::path).toList()));
+                        + classes.keySet().stream().map(AxisId::term).toList()));
     }
 
     @Test
@@ -137,7 +137,7 @@ class RowClassesTest {
         Map<AxisId, Classification> classes =
                 RowClasses.of(read.rows().get(0), read.parameters(), read.axes());
 
-        assertTrue(classes.keySet().stream().noneMatch(a -> a.path().equals("request.memo")),
+        assertTrue(classes.keySet().stream().noneMatch(a -> a.term().equals("request.memo")),
                 "a plain String is not divided, so there is no class to be in");
     }
 

@@ -6,8 +6,12 @@ package souther.compiler.partition;
  *
  * <p>A value rather than the axis itself, so that an obligation or a coverage row can say which axis
  * it is about without holding the classes and their classifiers.
+ *
+ * <p>The term as it prints, which is not always a location: {@code String.length(t.name)} is one of
+ * these. Written out here because this crosses into a report, where an axis is a name and nothing
+ * more — the structure it was made from is {@link NumericTerm} and stays inside the partition.
  */
-public record AxisId(String behavior, String path) {
+public record AxisId(String behavior, String term) {
 
     public static AxisId of(String behavior, NumericTerm term) {
         return new AxisId(behavior, term.toString());
@@ -15,6 +19,6 @@ public record AxisId(String behavior, String path) {
 
     @Override
     public String toString() {
-        return behavior + "/" + path;
+        return behavior + "/" + term;
     }
 }
