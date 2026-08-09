@@ -1134,7 +1134,10 @@ public final class AstBuilder {
         int stepsBefore = 0;
         int most = 0;
         for (int[] at : tally) {
-            most = Math.max(most, stepsBefore + at[1]);
+            // A statement's own step is one of the levels its value is written under: the value is
+            // what the step introduces, so it stands inside it. The result takes no step and stands
+            // after them all, which is the entry with none.
+            most = Math.max(most, stepsBefore + (at[0] > 0 ? 1 : 0) + at[1]);
             stepsBefore += at[0];
         }
         return most;

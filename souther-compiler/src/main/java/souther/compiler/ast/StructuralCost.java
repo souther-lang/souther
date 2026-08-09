@@ -30,13 +30,12 @@ import java.util.List;
  * one, like any other construct. What is counted is what the compiler will build, and a call it
  * will not splice builds nothing per argument.
  *
- * <p>A block is counted in the steps its statements take, and a step is not always a binding: a
- * {@code guard} introduces no name and is one, because what follows it is written inside the case
- * it settles; an ordinary {@code let} is one; a {@code let} written with a pattern is as many as
- * the pattern binds. The rule for a construct counts a level each, and what a statement holds is
- * counted from where that statement stands rather than from the block's end — so a long block of
- * small statements and a short one holding something large can cost the same, which is the point:
- * what is counted is the longest way down, not two quantities added.
+ * <p>A block has an algebra of its own, and it is not written here: it is the steps its statements
+ * take and what each of them holds from where it stands, which is a fact about statements, and by
+ * the time this class sees one they are a spine of bindings. Whoever folded them works it out and
+ * says so through {@link Known}. What is left for this to do with a block is what the rule for a
+ * construct does with anything, which is a level at a time — and folding writes a level per step,
+ * so the two agree, which is held by a test rather than by luck.
  *
  * <p>Neither number is read off the tree: both are counted from what the author wrote, and the tree
  * is only where they are read from.
@@ -75,6 +74,11 @@ public final class StructuralCost {
     /**
      * What {@code e} costs as written, with nothing substituted into it — so no application is an
      * expanded one, and none of them costs more than a construct.
+     *
+     * <p>What a block costs is read off the shape it was folded into. That shape is a level per
+     * step by construction and a test holds it to that, so the number is the block's — but the
+     * number is arrived at from the tree, and a caller that has the block's own answer should hand
+     * it over rather than let this work one out. {@link #of(Ast.Expr, Known)} is how.
      */
     public static int of(Ast.Expr e) {
         return of(e, _ -> UNKNOWN);

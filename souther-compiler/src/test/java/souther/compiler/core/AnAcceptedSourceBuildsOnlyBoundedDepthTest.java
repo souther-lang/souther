@@ -112,12 +112,15 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
 
     /** A block of guards: a step that binds nothing, and the only statement kind that does not. */
     private static String guards(int statements) {
+        // The condition is a name, so what each guard holds is one level and the steps are what the
+        // block costs. A written-out condition would be counted too, from where its guard stands,
+        // which is the algebra working rather than the fixture being awkward.
         StringBuilder sb = new StringBuilder("module m exposing (f)\n\n"
-                + "behavior f : (x: Int) -> Int\nlet f (x) = {\n");
+                + "behavior f : (b: Bool) -> Int\nlet f (b) = {\n");
         for (int i = 0; i < statements; i++) {
-            sb.append("    guard x > ").append(i).append(" else 0\n");
+            sb.append("    guard b else 0\n");
         }
-        return sb.append("    x\n}\n").toString();
+        return sb.append("    1\n}\n").toString();
     }
 
     /** Guards, destructurings and a deep value in one block: every statement kind at once. */
@@ -174,6 +177,47 @@ class AnAcceptedSourceBuildsOnlyBoundedDepthTest {
                 steps.getMessage());
         assertFalse(steps.getMessage().contains("binds " + (StructuralCost.MAX + 1)),
                 "a block of guards binds no names, and this counts steps: " + steps.getMessage());
+    }
+
+    /**
+     * A block named as a value and substituted somewhere else is counted the same on both sides of
+     * the substitution.
+     *
+     * <p>Two things count a block: the pass that builds it, from the statements the source wrote,
+     * and the pass that substitutes it, from what building it left behind. They have to agree, or a
+     * definition is inside the bound where it is written and past it where it is named — and the
+     * side that spoke would be whichever pass looked, which is what this bound is not to depend on.
+     *
+     * <p>The block here holds what it holds at its first statement, which is where the two ways of
+     * counting part most: from the source that is no steps and then the payload, and from the tree
+     * it is the binding and then the payload.
+     */
+    @Test
+    void aBlockCostsTheSameWhereItIsWrittenAndWhereItIsSubstituted() {
+        assertDoesNotThrow(() -> Compiler.compiled(aValueHoldingABlock(317), "m"),
+                "a value whose block is inside the bound is substitutable");
+
+        CompileException past = assertThrows(CompileException.class,
+                () -> Compiler.compiled(aValueHoldingABlock(318), "m"));
+
+        assertEquals("E2107", past.code(), past.getMessage());
+        assertTrue(past.getMessage().contains("Substituting"), past.getMessage());
+    }
+
+    /**
+     * A value whose body is a block, holding a chain of {@code names} values at its first
+     * statement, named by a behavior so that substituting it is what the second count is of.
+     *
+     * <p>The chain is what makes the block expensive. Written nesting cannot: the parser bounds it
+     * at a depth far under this one, so a block that holds a lot holds it through names.
+     */
+    private static String aValueHoldingABlock(int names) {
+        StringBuilder sb = new StringBuilder("module m exposing (f)\n\nlet v0 = 1\n");
+        for (int i = 1; i <= names; i++) {
+            sb.append("let v").append(i).append(" = v").append(i - 1).append(" + 1\n");
+        }
+        sb.append("\nlet held = {\n    let a = v").append(names).append("\n    a\n}\n\n");
+        return sb.append("behavior f : (x: Int) -> Int\nlet f (x) = x + held\n").toString();
     }
 
     @Test
