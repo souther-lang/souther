@@ -63,30 +63,36 @@ public final class RowClasses {
                     axis.id().behavior(), axis.id().path());
         }
         ObservedValue value = walk(row.inputs().get(at), axis.path().fields());
-        Membership.Incomplete incomplete = null;
+        // Kept rather than returned on, and not acted on either. A class may read less of a value
+        // than the one after it, so one saying it could not read says nothing about the rest —
+        // including that the rest cannot hold it. An incompleteness is what is left once no class
+        // has claimed the value, so nothing about it is decided until every class has answered.
+        Incompleteness.Code incomplete = null;
+        boolean disagreed = false;
         for (PartitionClass each : axis.classes()) {
             switch (each.classifier().membershipOf(value)) {
                 case Membership.Match _ -> {
                     return Classification.in(each.id());
                 }
-                // Kept rather than returned on: a class may read less of a value than the one after
-                // it, so one saying it could not read says nothing about the rest. Two of them
-                // disagreeing about why is two readings of one value, which is not an answer to
-                // pick between.
                 case Membership.Incomplete why -> {
                     if (incomplete == null) {
-                        incomplete = why;
-                    } else if (incomplete.code() != why.code()) {
-                        throw new IllegalStateException("two classes of " + axis.id()
-                                + " disagree about why the value could not be read: "
-                                + incomplete.code() + " and " + why.code());
+                        incomplete = why.code();
+                    } else if (incomplete != why.code()) {
+                        disagreed = true;
                     }
                 }
                 case Membership.NoMatch _ -> { }
             }
         }
+        // Two readings of one value that disagree about whether it is there. Held to rather than
+        // picked between: today every class of a numeric position reads through the same reader,
+        // so nothing produces one.
+        if (disagreed) {
+            throw new IllegalStateException("classes of " + axis.id()
+                    + " disagree about why the value could not be read");
+        }
         if (incomplete != null) {
-            return Classification.unreadable(incomplete.code(),
+            return Classification.unreadable(incomplete,
                     axis.id().behavior(), axis.id().path());
         }
         // Every class read the value and none holds it, which `Axis` says cannot happen: its classes

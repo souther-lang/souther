@@ -163,6 +163,35 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                         "request.cost")));
     }
 
+    /** A class told apart by shape says it too, which is where that test moved to. */
+    @Test
+    void aShapeClassSaysWhenTheObservationWasStopped() {
+        Read read = read();
+
+        assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
+                why(at(read, giving(read, "kind", new ObservedValue.Truncated()), "request.kind")));
+        assertEquals(Incompleteness.Code.VALUE_UNREADABLE,
+                why(at(read, giving(read, "kind", new ObservedValue.Unknown("gone")),
+                        "request.kind")));
+    }
+
+    /**
+     * A value that was read and is not a number is a class this position does not hold.
+     *
+     * <p>Not an incompleteness. `VALUE_UNREADABLE` is a value that could not be read back into an
+     * observed form at all, and a `Text` was read — it is the partition that does not fit it. So the
+     * classes all decline, and declining together is the contract below, not a row nobody could
+     * read.
+     */
+    @Test
+    void aReadableValueThatIsNotANumberIsNotAnIncompleteness() {
+        Read read = read();
+        RowOutcome row = giving(read, "plain", new ObservedValue.Text("x"));
+
+        assertThrows(IllegalStateException.class,
+                () -> RowClasses.of(row, read.parameters(), read.axes()));
+    }
+
     /** And a value every class could read still lands where it did. */
     @Test
     void aReadableValueIsStillPlacedInTheClassThatHoldsIt() {
@@ -188,6 +217,26 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                     RepresentativeSource.none()));
         }
         return List.of(new Axis(real.id(), real.path(), real.type(), classes, real.cuts()));
+    }
+
+    /**
+     * A class that holds the value wins over classes that could not read it, wherever it sits.
+     *
+     * <p>One class saying it could not read says nothing about the rest — that is why the answers
+     * are collected rather than returned on — and it says nothing about whether one of them holds
+     * the value either. An incompleteness is what is left once nothing has claimed it, so it cannot
+     * be acted on before every class has answered.
+     */
+    @Test
+    void aClassThatHoldsTheValueWinsOverOnesThatCouldNotReadIt() {
+        Read read = read();
+        List<Axis> axes = answering(read, "request.plain",
+                _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_TRUNCATED),
+                _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE),
+                _ -> Membership.MATCH);
+
+        assertEquals(new Classification.Classified("c2"),
+                RowClasses.of(read.row(), read.parameters(), axes).values().iterator().next());
     }
 
     /**

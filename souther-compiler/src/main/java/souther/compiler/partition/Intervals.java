@@ -125,6 +125,7 @@ final class Intervals {
             Classifier is = v -> switch (read(v)) {
                 case Read.Number number -> Membership.of(range.holds(number.value()));
                 case Read.Missing missing -> new Membership.Incomplete(missing.code());
+                case Read.NotNumber _ -> Membership.NO_MATCH;
             };
             classes.add(inside == null
                     ? PartitionClass.ungeneratable(id, range.label(), is,
@@ -144,12 +145,19 @@ final class Intervals {
                 decimal ? Granularity.DENSE : Granularity.DISCRETE);
     }
 
-    /** The number a value holds, or why it holds none. */
+    /** The number a value holds, or why it holds none — and those are two different reasons. */
     private sealed interface Read {
 
         record Number(BigDecimal value) implements Read {}
 
+        /** There was no value to read, and this is what stopped there being one. */
         record Missing(souther.compiler.observe.Incompleteness.Code code) implements Read {}
+
+        /** The value was read and is not a number. Which is an answer about the value and not about
+         * the observation: a {@code Text} at a numeric position is a class this does not hold, and
+         * calling it unreadable would report a partition that does not fit its position as a row
+         * nobody could read. */
+        record NotNumber() implements Read {}
     }
 
     /**
@@ -169,7 +177,7 @@ final class Intervals {
             case ObservedValue.Integer i -> new Read.Number(BigDecimal.valueOf(i.value()));
             case ObservedValue.Decimal d -> new Read.Number(d.value());
             case ObservedValue.Constructed c when c.field("value") != null -> read(c.field("value"));
-            default -> new Read.Missing(souther.compiler.observe.Incompleteness.Code.VALUE_UNREADABLE);
+            default -> new Read.NotNumber();
         };
     }
 
