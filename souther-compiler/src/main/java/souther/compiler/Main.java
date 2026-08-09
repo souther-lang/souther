@@ -33,8 +33,8 @@ import java.util.Map;
 
 /**
  * CLI entry point with two subcommands: {@code souther compile <file.sou>... -d <outdir>} writes
- * {@code .class} files, and {@code souther run <file.sou> [--behavior <name>] [--input <json>]}
- * drives one behavior and prints its output (see {@link Runner}).
+ * {@code .class} files, and {@code souther run <file.sou> [-cp <path>] [--behavior <name>] [--input
+ * <json>]} drives one behavior and prints its output (see {@link Runner}).
  *
  * <p>Both accept {@code --format human|json}, {@code --lang <tag>}, and {@code --color auto|always|never}
  * to control how a compile error is rendered (an Elm-style snippet or a JSON object, in the chosen
@@ -46,7 +46,7 @@ public final class Main {
             usage: souther <command> [args]
             commands:
               compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
-              run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
+              run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]  run a behavior, print its output
               fmt <file.sou>... [-w|--write] [--check]             format source (stdout, or -w in place)
               examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
               doc [<anchor> | <error-code> | <set>/<topic> | --search <term>]  read the language specification
@@ -67,7 +67,7 @@ public final class Main {
             options (compile):
               --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
               --warnings report|error   refuse a compile that warns (default report)
-            options (compile/examples/japi):
+            options (compile/run/examples/japi):
               -cp, --class-path <path>  where to find modules another project compiled
 
             options (compile/run/examples):
@@ -83,17 +83,16 @@ public final class Main {
      * <p>Written here rather than read back out of {@link #USAGE}. The usage text is what an author
      * is shown, and reading it for what an option means is the dependency the wrong way round — it
      * says an option under the heading of the commands it is documented with, which is not the same
-     * set as the commands that accept it. {@code --behavior} is documented under {@code examples}
-     * and taken by {@code run} as well; {@code -cp} is documented under {@code compile/examples} and
-     * taken by {@code japi} too. This table is the one the commands answer from, and a test holds it
-     * against both the usage text and what each parser has a case for.
+     * set as the commands that accept it — {@code --behavior} is documented under {@code examples}
+     * and taken by {@code run} as well. This table is the one the commands answer from, and a test
+     * holds it against both the usage text and what each parser has a case for.
      */
     private static final Map<String, String> OPTION_OWNERS = Map.ofEntries(
             Map.entry("--format", "compile/run/examples"),
             Map.entry("--lang", "compile/run/examples"),
             Map.entry("--color", "compile/run/examples"),
-            Map.entry("-cp", "compile/examples/japi"),
-            Map.entry("--class-path", "compile/examples/japi"),
+            Map.entry("-cp", "compile/run/examples/japi"),
+            Map.entry("--class-path", "compile/run/examples/japi"),
             Map.entry("-d", "compile"),
             Map.entry("--adequacy", "compile"),
             Map.entry("--warnings", "compile"),
@@ -576,8 +575,9 @@ public final class Main {
         return failed || unformatted ? 1 : 0;
     }
 
-    /** {@code souther run <file.sou> [--behavior <name>] [--input <json>]}: compiles the file in
-     * memory and drives one behavior, printing its output as JSON (see {@link Runner}). */
+    /** {@code souther run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]}: compiles the
+     * file in memory against the modules on the path and drives one behavior, printing its output as
+     * JSON (see {@link Runner}). */
     private static int runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
@@ -708,11 +708,18 @@ public final class Main {
         }
     }
 
-    /** The first non-option argument of {@code run} — the source file, for the error snippet. */
+    /**
+     * The first non-option argument of {@code run} — the source file, for the error snippet.
+     *
+     * <p>Every option that takes a value is skipped with it, including the short one: {@code -cp} is
+     * a path and not a file to quote, and reading it as one made the snippet name a file the author
+     * never wrote.
+     */
     private static Path firstSource(String[] args) {
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
-            if (a.equals("--behavior") || a.equals("--input")) {
+            if (a.equals("--behavior") || a.equals("--input")
+                    || a.equals("-cp") || a.equals("--class-path")) {
                 i++;
             } else if (!a.startsWith("--")) {
                 return Path.of(a);

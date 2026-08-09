@@ -1,15 +1,25 @@
 # Running a behavior: `souther run`
 
 ```
-souther run <file.sou> [--behavior <name>] [--input <json>]
+souther run <file.sou> [-cp|--class-path <path>] [--behavior <name>] [--input <json>]
 ```
 
-`souther run` compiles one self-contained `.sou` in memory and applies a single behavior to input
-you give as JSON. It is itself the Java boundary: the input is decoded through the behavior's
-derived decoders, the behavior runs, and the returned value is encoded back to JSON and printed.
+`souther run` compiles one `.sou` in memory and applies a single behavior to input you give as JSON.
+It is itself the Java boundary: the input is decoded through the behavior's derived decoders, the
+behavior runs, and the returned value is encoded back to JSON and printed.
 
-It drives one file. Standard library imports resolve, but a file that imports another user module
-cannot be run this way — compile both and call the generated classes instead.
+It drives one file. Standard library imports resolve, and an import of another user module resolves
+against `-cp` — the same class path `compile` and `examples` take. Compile that module first and
+name where its classes went:
+
+```sh
+souther compile catalog.sou -d out
+souther run enrollment.sou -cp out --behavior register --input '"c-1"'
+```
+
+The path is read for the imported module's declarations and holds the classes the behavior runs
+against, so a value of that module's is built from the module you compiled and not from a second
+copy of it. Without `-cp` there is nowhere for the import to resolve and the module is unknown.
 
 ## Which behavior runs
 

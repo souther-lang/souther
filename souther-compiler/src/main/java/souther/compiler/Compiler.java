@@ -176,19 +176,29 @@ public final class Compiler {
         return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, deadline, null);
     }
 
+    /**
+     * The compilation of one source, resolving an import that names no module in it against
+     * {@code path} — what {@code run} asks for, holding one file and a class path.
+     */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, ModulePath path) {
+        return driven(() -> compilingSource(source, defaultModuleName, warningsOut,
+                Adequacy.Asked.NOTHING, null, null, null, path));
+    }
+
     private static Compilation compiled(String source, String defaultModuleName,
                                         List<Located> warningsOut, Adequacy.Asked measure,
                                         java.time.Duration exampleBudget, Deadline deadline,
                                         EvaluationPolicy policy) {
         return driven(() -> compilingSource(source, defaultModuleName, warningsOut, measure,
-                exampleBudget, deadline, policy));
+                exampleBudget, deadline, policy, ModulePath.EMPTY));
     }
 
     private static Compilation compilingSource(String source, String defaultModuleName,
                                                List<Located> warningsOut, Adequacy.Asked measure,
                                                java.time.Duration exampleBudget, Deadline deadline,
-                                               EvaluationPolicy policy) {
-        Compilation compilation = Compilation.ofSource(source, defaultModuleName);
+                                               EvaluationPolicy policy, ModulePath path) {
+        Compilation compilation = Compilation.ofSource(source, defaultModuleName, path);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
         }
