@@ -19,38 +19,47 @@ public final class BinaryElaborator {
 
     private BinaryElaborator() {}
 
-    /** Whether either side of {@code bin} has a type the compiler could not work out. */
-    private static boolean erroneousOperand(Ast.Binary bin, Scope env,
-                                            CheckContext ctx) {
-        return erroneous(bin.left(), env, ctx) || erroneous(bin.right(), env, ctx);
-    }
-
-    private static boolean erroneous(Ast.Expr operand, Scope env, CheckContext ctx) {
-        try {
-            return Elaborator.elaborate(operand, env, ctx).type() instanceof Type.Erroneous;
-        } catch (CompileException _) {
-            return false;   // it has its own error; the operator's check will raise it as before
+    /**
+     * Reads one operand, and gives up on the definition where its type is one the compiler could not
+     * work out.
+     *
+     * <p>An operator wants a particular shape of type — Int or Decimal to add, two lists or two
+     * strings to append — and an operand the compiler could not work out has no shape. Absorbing is
+     * for a comparison, which can answer "no disagreement"; there is no answer to give here, so the
+     * definition is abandoned and the name that denoted nothing stands as what was wrong. Left alone,
+     * the operand's type reaches the message as `?`, which names nothing the author could go looking
+     * for.
+     *
+     * <p>{@code &&} and {@code ||} are the operators that ask something of an operand on its own,
+     * and that is asked here, before the operand beside it is read: an operand is finished where it
+     * stands. The rest ask about the pair and cannot answer until both have been read.
+     *
+     * <p>What this answers with is what the operator's rule then reads. Asking the question of a
+     * reading of its own cost the expression twice its own subtree, and an operand of an operand
+     * twice again, so a chain of operators nested one inside the last cost two to the power of its
+     * length: twenty-six links took ten seconds and a hundred did not finish.
+     */
+    private static Core operand(Ast.Expr e, Ast.Binary bin, Scope env, CheckContext ctx) {
+        Core read = Elaborator.elaborate(e, env, ctx);
+        if (read.type() instanceof Type.Erroneous) {
+            throw new Unanswerable(bin.pos());
         }
+        if (bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR) {
+            Elaborator.requireType(e, read.type(), Type.BOOL, ctx.symbols(),
+                    "operand of logical operator");
+        }
+        return read;
     }
 
     static Core elaborateBinary(Ast.Binary bin, Scope env, CheckContext ctx) {
-        // An operator wants a particular shape of type — Int or Decimal to add, two lists or two
-        // strings to append — and an operand the compiler could not work out has no shape. Absorbing
-        // is for a comparison, which can answer "no disagreement"; there is no answer to give here, so
-        // the definition is abandoned and the name that denoted nothing stands as what was wrong.
-        // Left alone, the operand's type reaches the message as `?`, which names nothing the author
-        // could go looking for.
-        if (erroneousOperand(bin, env, ctx)) {
-            throw new Unanswerable(bin.pos());
-        }
+        // Left to right, and the first operand that failed is the one reported: an operand that says
+        // what is wrong with it has said it, and what stands beside it is not read at all where this
+        // one left nothing to check against.
+        Core left = operand(bin.left(), bin, env, ctx);
+        Core right = operand(bin.right(), bin, env, ctx);
         return switch (bin.op()) {
-            case AND, OR -> {
-                Core left = Elaborator.requireTyped(bin.left(), Type.BOOL, env, ctx,
-                        "operand of logical operator");
-                Core right = Elaborator.requireTyped(bin.right(), Type.BOOL, env, ctx,
-                        "operand of logical operator");
-                yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
-            }
+            // both operands were asked for a Bool where they were read
+            case AND, OR -> new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             case LT, LE, GT, GE -> {
                 // The ordered primitives: Int numerically, String lexicographically, Decimal by
                 // value, Date/DateTime in time. Unlike Elm (which orders only Int/Float/Char/String
@@ -58,8 +67,6 @@ public final class BinaryElaborator {
                 // LocalDateTime are Comparable, so it orders them too. A single-value newtype over an
                 // ordered type is ordered by that value; the operands stay the same newtype (nominal),
                 // except that a bare literal takes the other side's newtype from context.
-                Core left = Elaborator.elaborate(bin.left(), env, ctx);
-                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
                 if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
@@ -76,8 +83,6 @@ public final class BinaryElaborator {
                 // `+ - * /` work on two Int or two Decimal operands (spec 18.1). Int aborts on
                 // overflow and `/` aborts on a zero divisor; Decimal `/` rounds by the default
                 // scale/mode. Case handling for a zero divisor is the `divide`/`remainder` functions.
-                Core left = Elaborator.elaborate(bin.left(), env, ctx);
-                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
                 // The rules live in ArithmeticCheck, which answers with the type the operator gives
@@ -100,8 +105,6 @@ public final class BinaryElaborator {
             case CONCAT -> {
                 // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to
                 // a list (spec 18.1). Strings are checked first, before the empty-list absorption below.
-                Core left = Elaborator.elaborate(bin.left(), env, ctx);
-                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lraw = left.type();
                 Type rraw = right.type();
                 if (lraw == Type.STRING && rraw == Type.STRING) {
@@ -129,8 +132,6 @@ public final class BinaryElaborator {
                         Type.list(BottomInfer.unifyElem(lo.element(), ro.element(), bin.pos())), bin.pos());
             }
             case EQ, NE -> {
-                Core left = Elaborator.elaborate(bin.left(), env, ctx);
-                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
                 // two values of the same data compare by their fields (spec 16.2); across different
