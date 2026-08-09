@@ -103,12 +103,27 @@ public final class RowClasses {
                 + value);
     }
 
-    /** The value at the end of a field chain, or null where the chain does not lead anywhere. A
+    /**
+     * The value at the end of a field chain, or null where the chain does not lead anywhere. A
      * newtype is never a step — the path never names its {@code value} — so what is walked here is
-     * only a record's fields. */
+     * only a record's fields.
+     *
+     * <p>An observation that stopped is handed on rather than walked into. It is not a record and
+     * there is nothing under it, but it is also not a chain that leads nowhere: it is the reason
+     * this position has no value, and it says that itself. Read as somewhere the walk could not go,
+     * a limit that ran out one field short of a position came back as a value nobody could read —
+     * the same observation the walk returns as it stands when the path happens to end on it.
+     *
+     * <p>Which leaves null for the walk's own answer, and only that: a record that does not hold the
+     * field named next, or a value that was read and is not a record at all. The path and the shape
+     * disagree, and no observation says why because nothing went wrong with one.
+     */
     private static ObservedValue walk(ObservedValue from, List<String> fields) {
         ObservedValue at = from;
         for (String field : fields) {
+            if (at.unread() != null) {
+                return at;
+            }
             if (!(at instanceof ObservedValue.Constructed constructed)) {
                 return null;
             }

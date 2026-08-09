@@ -39,15 +39,13 @@ public sealed interface Membership {
      *
      * <p>Null where there is a value to look at, so a classifier can go on to its own question. Here
      * rather than at each classifier because it is one fact about the observation and not a
-     * judgement any class makes: a limit stopped it, or the walk could not read it back, and both
-     * are true before any class is consulted.
+     * judgement any class makes — and by the same reading it is not this layer's to state either, so
+     * which cases are a reason instead of a value is {@link ObservedValue#unread()}'s to say. What
+     * is left here is the absence a walk answers with, which is not an observation at all.
      */
     static Incomplete unread(ObservedValue value) {
-        return switch (value) {
-            case null -> new Incomplete(Incompleteness.Code.VALUE_UNREADABLE);
-            case ObservedValue.Truncated _ -> new Incomplete(Incompleteness.Code.VALUE_TRUNCATED);
-            case ObservedValue.Unknown _ -> new Incomplete(Incompleteness.Code.VALUE_UNREADABLE);
-            default -> null;
-        };
+        Incompleteness.Code why = value == null
+                ? Incompleteness.Code.VALUE_UNREADABLE : value.unread();
+        return why == null ? null : new Incomplete(why);
     }
 }

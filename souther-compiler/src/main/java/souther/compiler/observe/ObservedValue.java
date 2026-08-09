@@ -101,6 +101,31 @@ public sealed interface ObservedValue {
      */
     record Truncated() implements ObservedValue {}
 
+    /**
+     * Why nothing can be read here, or null where there is a value to read.
+     *
+     * <p>Two of these cases stand where a value would have been rather than being one, and what they
+     * say is a fact about the observation: a limit stopped it, or it could not be read back. Neither
+     * is a judgement anything downstream makes, and the case that is left over is the whole of what
+     * a reader further on is entitled to interpret.
+     *
+     * <p>So the cases are named once, here, where they are declared. A reader that meets one is at
+     * the end of what it can do with the value and says this; a walk that meets one on the way to
+     * somewhere else hands it on unchanged, because where along a path an observation stopped is not
+     * something it stopped differently for.
+     *
+     * <p>Nothing readable answers here. A value the limits shortened is not kept — a text past its
+     * length and a collection past its count are replaced whole — so no case is a value and a reason
+     * at once, and this can stay the narrow question it is.
+     */
+    default Incompleteness.Code unread() {
+        return switch (this) {
+            case Truncated _ -> Incompleteness.Code.VALUE_TRUNCATED;
+            case Unknown _ -> Incompleteness.Code.VALUE_UNREADABLE;
+            default -> null;
+        };
+    }
+
     /** An empty map with a stable iteration order, for building a {@link Constructed}. */
     static Map<String, ObservedValue> fields() {
         return new LinkedHashMap<>();
