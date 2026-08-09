@@ -2780,6 +2780,8 @@ A binding may carry its type, `+let x: T = v+`. The type is optional — a bindi
 if condition then expression1 else expression2
 ----
 
+Both branches are written. An `+if+` MUST have its `+else+`, so no `+if+` is left one-armed and an `+else+` closes the nearest `+then+` that is still open: `+if a then if b then c else d else e+` gives `+d+` to the inner `+if+` and `+e+` to the outer one. A branch taken only when the condition fails is written `+guard ... else+`, whose other arm is the rest of the body (<<guard>>).
+
 `+if+` is an expression. If both branch types agree, its type is that type; if they are different data, it is a sum of both (`+if c then Submitted{...} else AwaitingPreApproval{...}+` is `+Submitted | AwaitingPreApproval+`). A mismatch between primitives is a compile error.
 
 The condition is a `+Bool+`, with one exception: a construction followed by `+as <name>+`, whose invariant decides the branch and whose value the name carries into the success branch (<<attempted-construction>>).
