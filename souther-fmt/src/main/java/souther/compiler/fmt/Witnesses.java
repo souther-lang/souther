@@ -328,9 +328,10 @@ final class Witnesses {
         String[] lines = source.substring(from, to).split("\n", -1);
         int blank = 0;
         for (int i = 1; i + 1 < lines.length; i++) {
-            if (lines[i].isBlank()) {
-                blank++;
+            if (!lines[i].isBlank()) {
+                break;   // what opens the second item's block: its own line, or a comment it carries
             }
+            blank++;
         }
         return blank;
     }
@@ -361,7 +362,7 @@ final class Witnesses {
     }
 
     /** The file's tokens, comments and whitespace left out. */
-    private static List<SyntaxToken> code(SyntaxNode node) {
+    static List<SyntaxToken> code(SyntaxNode node) {
         List<SyntaxToken> out = new ArrayList<>();
         collect(node, out);
         return out;
