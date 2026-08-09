@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A place is somewhere the canonical form writes something, and the layout is where it wrote it. The
@@ -32,6 +33,28 @@ class ALayoutSaysWhereEachPlaceWasWrittenTest {
             placesOf(Formatter.document(CstParser.parse(source).root()), written);
             assertEquals(written.size(), layout.spans().size(),
                     "one span per place, in:\n" + source);
+        }
+    }
+
+    /**
+     * A place is written inside the place that holds it. {@code Place.parent} says "the place this
+     * one is written inside", and a function type used to name the bracketed run alone while its
+     * result was written after it — a parent that did not hold its child.
+     */
+    @Test
+    void andAPlaceIsWrittenInsideTheOneThatHoldsIt() {
+        for (String source : WhatGoesBetweenTwoTokensOnALineTest.corpus()) {
+            Layout layout = layoutOf(source);
+            for (Place place : layout.spans().keySet()) {
+                Span span = layout.spans().get(place);
+                Span above = place.parent() == null ? null : layout.spans().get(place.parent());
+                if (above == null) {
+                    continue;
+                }
+                assertTrue(above.start() <= span.start() && span.end() <= above.end(),
+                        place.construct() + " at " + span + " is not inside its parent "
+                                + place.parent().construct() + " at " + above + ", in:\n" + source);
+            }
         }
     }
 
