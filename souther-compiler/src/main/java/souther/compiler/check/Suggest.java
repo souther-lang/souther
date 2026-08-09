@@ -29,7 +29,10 @@ public final class Suggest {
      * {@code limit} of them.
      *
      * <p>A candidate must also be further than its own length is short — a two-letter name would
-     * otherwise be within two edits of everything and suggest whatever came first.
+     * otherwise be within two edits of everything and suggest something it has nothing to do with.
+     *
+     * <p>Ties are broken by the name. A candidate list carries no order the author chose, so an
+     * answer that depended on the one it happens to arrive in would be no answer at all.
      */
     public static List<String> nearest(String name, Collection<String> candidates, int bound, int limit) {
         record Near(String candidate, int distance) {}
@@ -56,25 +59,20 @@ public final class Suggest {
         return best == null ? "" : " (did you mean `" + best + "`?)";
     }
 
-    /** The closest in-scope candidate to {@code name} within the closeness bound, or {@code null}.
-     * The structured form of {@link #hint}, for a diagnostic's {@code suggestion} field. */
+    /**
+     * The closest in-scope candidate to {@code name} within the closeness bound, or {@code null}.
+     * The structured form of {@link #hint}, for a diagnostic's {@code suggestion} field.
+     *
+     * <p>Answered through {@link #nearest} so that two candidates at the same distance are decided
+     * by the same total order both ways of asking use. The collections a caller offers are sets and
+     * key views built by {@code Map.copyOf}, whose iteration order the JVM salts per run: a
+     * selection that kept whichever of two equally close names it met first named a different one
+     * on a different run of the same compile. Which of them the author meant is not something an
+     * encounter order knows, so the tie is settled by the name.
+     */
     public static String candidate(String name, Collection<String> candidates) {
-        String best = null;
-        int bestDistance = Integer.MAX_VALUE;
-        for (String candidate : candidates) {
-            if (candidate.equals(name)) {
-                continue;
-            }
-            int d = distance(name, candidate);
-            if (d < bestDistance) {
-                bestDistance = d;
-                best = candidate;
-            }
-        }
-        if (best != null && bestDistance <= NEAR_ENOUGH && bestDistance < name.length()) {
-            return best;
-        }
-        return null;
+        List<String> near = nearest(name, candidates, NEAR_ENOUGH, 1);
+        return near.isEmpty() ? null : near.getFirst();
     }
 
     /** Levenshtein edit distance (insert/delete/substitute), on Unicode code points. */
