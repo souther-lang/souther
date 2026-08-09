@@ -260,7 +260,7 @@ final class Gaps {
             case TokenDoc.Comment c -> Doc.text(c.text());
             case TokenDoc.Trailing t -> Doc.trailing(t.text());
             case TokenDoc.Node n -> lower(n.doc(), answers, next);
-            case TokenDoc.At a -> lower(a.doc(), answers, next);
+            case TokenDoc.At a -> Doc.at(a.place(), lower(a.doc(), answers, next));
             case TokenDoc.Carries _, TokenDoc.Vacant _ -> throw new IllegalStateException(
                     "a carrier reached the layout unresolved");
             case TokenDoc.Nest n -> Doc.nest(n.indent(), lower(n.doc(), answers, next));

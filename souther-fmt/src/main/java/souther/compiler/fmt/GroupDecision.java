@@ -7,5 +7,5 @@ package souther.compiler.fmt;
  * way are two decisions, and the conditional-layout rule answers about a group rather than about a
  * kind of group.
  */
-public record GroupDecision(Doc.GroupRef group, int startColumn, Outcome outcome) {
+record GroupDecision(Doc.GroupRef group, int startColumn, Outcome outcome) {
 }

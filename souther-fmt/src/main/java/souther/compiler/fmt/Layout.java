@@ -15,9 +15,10 @@ import java.util.List;
  * that a nesting was entered; those are the mechanism and they change when the code is rearranged.
  * What is kept is what the layout realized, which is what the canonicalization rules are about.
  */
-public record Layout(String text, List<GroupDecision> decisions) {
+record Layout(String text, List<GroupDecision> decisions, java.util.Map<Place, Span> spans) {
 
-    public Layout {
+    Layout {
         decisions = List.copyOf(decisions);
+        spans = java.util.Map.copyOf(spans);
     }
 }

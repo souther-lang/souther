@@ -13,7 +13,7 @@ package souther.compiler.fmt;
  * refused rather than not fitted; naming the obligation behind a forced break is the forced-layout
  * rule's, and it can be given without changing this.
  */
-public sealed interface Outcome {
+sealed interface Outcome {
 
     /** Written on one line: the line it takes is within the width and nothing in it refuses to. */
     record Flat() implements Outcome {}

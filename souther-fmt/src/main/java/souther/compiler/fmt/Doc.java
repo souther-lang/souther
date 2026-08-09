@@ -12,7 +12,7 @@ import java.util.List;
  * indent) otherwise. This is what lets the formatter keep a short record or pipeline on one line and
  * break a long one, from a single description of its shape.
  */
-public sealed interface Doc {
+sealed interface Doc {
 
     Doc NIL = new Nil();
     Doc LINE = new Line(" ");        // a space when flat, a newline when broken
@@ -32,6 +32,10 @@ public sealed interface Doc {
     record Concat(List<Doc> parts) implements Doc {}
     record Nest(int indent, Doc doc) implements Doc {}
     record Group(GroupRef ref, Doc doc) implements Doc {}
+
+    /** What is written at one place of the canonical form. The document says which place; the
+     * layout says where it ended up. */
+    record At(Place place, Doc doc) implements Doc {}
 
     /**
      * Which group a group is. Two groups written the same way are still two of them, and a layout
@@ -71,6 +75,10 @@ public sealed interface Doc {
         return new Nest(indent, doc);
     }
 
+    static Doc at(Place place, Doc doc) {
+        return new At(place, doc);
+    }
+
     static Doc group(Doc doc) {
         return new Group(new GroupRef(), doc);
     }
@@ -103,12 +111,18 @@ public sealed interface Doc {
      */
     default Layout layout(int width) {
         List<GroupDecision> decisions = new ArrayList<>();
+        java.util.Map<Place, Span> spans = new java.util.LinkedHashMap<>();
+        java.util.Map<Place, Integer> opened = new java.util.IdentityHashMap<>();
         StringBuilder sb = new StringBuilder();
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(new Item(0, Mode.BREAK, this));   // the outermost context breaks
         int col = 0;
         while (!todo.isEmpty()) {
             Item it = todo.pop();
+            if (it.closes != null) {
+                spans.put(it.closes, new Span(opened.get(it.closes), sb.length()));
+                continue;
+            }
             switch (it.doc) {
                 case Nil _ -> { }
                 case Text t -> {
@@ -122,6 +136,13 @@ public sealed interface Doc {
                     }
                 }
                 case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc()));
+                case At a -> {
+                    // The close is pushed first so that it is popped after everything written at
+                    // the place, which is what makes the span the interval the place occupies.
+                    opened.put(a.place(), sb.length());
+                    todo.push(new Item(it.indent, it.mode, Doc.NIL, a.place()));
+                    todo.push(new Item(it.indent, it.mode, a.doc()));
+                }
                 case Group g -> {
                     Fit fit = fits(width - col, new Item(it.indent, Mode.FLAT, g.doc()), todo);
                     decisions.add(new GroupDecision(g.ref(), col, switch (fit) {
@@ -152,7 +173,7 @@ public sealed interface Doc {
                 case MustBreak _ -> { }
             }
         }
-        return new Layout(sb.toString(), decisions);
+        return new Layout(sb.toString(), decisions, spans);
     }
 
     /** What a flat layout of a group came to. Refused and too wide are not one answer: the first is
@@ -193,6 +214,7 @@ public sealed interface Doc {
                 }
                 case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc()));
                 case Group g -> todo.push(new Item(it.indent, it.mode, g.doc()));
+                case At a -> todo.push(new Item(it.indent, it.mode, a.doc()));
                 case Line l -> {
                     if (it.mode == Mode.FLAT) {
                         remaining -= l.flat().length();
@@ -223,5 +245,12 @@ public sealed interface Doc {
 
     enum Mode { FLAT, BREAK }
 
-    record Item(int indent, Mode mode, Doc doc) {}
+    /** {@code closes} is the place this item ends, and is set only on the marker pushed to run
+     * after everything written at that place. */
+    record Item(int indent, Mode mode, Doc doc, Place closes) {
+
+        Item(int indent, Mode mode, Doc doc) {
+            this(indent, mode, doc, null);
+        }
+    }
 }

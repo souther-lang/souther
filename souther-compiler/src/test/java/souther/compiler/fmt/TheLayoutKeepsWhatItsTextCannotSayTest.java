@@ -137,6 +137,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
                 groupsOf(g.doc(), out);
             }
             case Doc.Nest n -> groupsOf(n.doc(), out);
+            case Doc.At a -> groupsOf(a.doc(), out);
             case Doc.Concat c -> c.parts().forEach(part -> groupsOf(part, out));
             default -> { }
         }
