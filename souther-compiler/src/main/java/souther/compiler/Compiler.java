@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
@@ -89,7 +90,7 @@ public final class Compiler {
      * source as a whole, and the author's move is the same wherever it landed — name the parts.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E2104, "check.expr.toodeep").build());
+        return CompileException.of(Diagnostic.say(new NameMessage.TheExpressionNestsTooDeeply()).build());
     }
 
     /**

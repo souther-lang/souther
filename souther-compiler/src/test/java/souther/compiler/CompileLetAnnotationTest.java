@@ -103,7 +103,7 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.type.mismatch.title", d.titleKey());
-        assertEquals("check.let.annotation", d.messageKey());
+        assertEquals("name.the-binding-declares-another-type", d.messageKey());
         assertEquals("String", d.diff().actualType());
         assertEquals("Int", d.diff().expectedType());
     }

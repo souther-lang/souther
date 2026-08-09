@@ -53,7 +53,7 @@ class CascadeStopsAtTheCauseTest {
         assertEquals(1, found.size(),
                 "the name that denotes nothing, and nothing about adding or appending it: " + found);
         assertFalse(found.stream().anyMatch(d -> d.args() != null
-                        && List.of(d.args()).contains("?")),
+                        && List.copyOf(d.values().values()).contains("?")),
                 "the error type's own rendering never reaches a message: " + found);
     }
 

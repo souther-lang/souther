@@ -116,6 +116,6 @@ class CompileDecimalDivideTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { n = HALF_UP(i.n) }
                 """));
-        assertEquals("check.construct.position", e.diagnostic().messageKey());
+        assertEquals("data.a-construction-cannot-be-written-here", e.diagnostic().messageKey());
     }
 }

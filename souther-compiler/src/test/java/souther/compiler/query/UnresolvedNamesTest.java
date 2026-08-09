@@ -40,9 +40,9 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(), "both, not the first: " + found);
         assertTrue(found.stream().anyMatch(d -> d.args() != null
-                && List.of(d.args()).contains("Nowhere")));
+                && List.copyOf(d.values().values()).contains("Nowhere")));
         assertTrue(found.stream().anyMatch(d -> d.args() != null
-                && List.of(d.args()).contains("Elsewhere")));
+                && List.copyOf(d.values().values()).contains("Elsewhere")));
     }
 
     @Test
@@ -94,7 +94,7 @@ class UnresolvedNamesTest {
 
         assertEquals(1, found.size(),
                 "the name that denotes nothing, and nothing about constructing it: " + found);
-        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())),
                 "the construction names nothing, and that is said: " + found);
         assertEquals(Map.of(), c.classes(),
                 "a construction of a type nobody could name is not emitted");
@@ -119,7 +119,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown name, and g's own mistake — nothing about what f does: " + found);
-        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())),
                 "the name that denotes nothing: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and a type mismatch in the definition that has one: " + found);
@@ -145,7 +145,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown behavior, and g's own mistake: " + found);
-        assertTrue(found.stream().anyMatch(d -> "check.unknown.behavior.msg".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> "name.no-behavior-of-that-name-in-this-pipeline".equals(d.messageKey())),
                 "the stage that names no behavior: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);
@@ -166,7 +166,7 @@ class UnresolvedNamesTest {
                 """);
 
         assertEquals(2, found.size(), "both, not the first: " + found);
-        assertTrue(found.stream().allMatch(d -> "check.unknown.name.msg".equals(d.messageKey())),
+        assertTrue(found.stream().allMatch(d -> "name.no-value-of-that-name-in-scope".equals(d.messageKey())),
                 found.toString());
     }
 
@@ -186,7 +186,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown name, and g's own mistake — nothing about what f does: " + found);
-        assertTrue(found.stream().anyMatch(d -> "check.unknown.name.msg".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> "name.no-value-of-that-name-in-scope".equals(d.messageKey())),
                 "the name that denotes nothing: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);
@@ -270,7 +270,7 @@ class UnresolvedNamesTest {
 
         assertEquals(2, found.size(),
                 "the unknown name, and g's own mistake: " + found);
-        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())),
                 "the name that denotes nothing: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);

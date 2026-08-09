@@ -9,6 +9,9 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.InvariantMessage;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -266,9 +269,9 @@ public final class AstBuilder {
             // built as `T {}` where a unit is built by name, so the two spellings mean the same
             // thing and reject each other's construction. One way to write it (spec §unit-data).
             if (includes.isEmpty() && fields.isEmpty()) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1008, "check.data.emptybody")
-                                .at(bodyRegion(product.get())).args(name)
-                                .hint("check.data.emptybody.hint", name).build());
+                throw CompileException.of(Diagnostic
+                                .at(bodyRegion(product.get()))
+                                .hint(new DataMessage.WriteItAsAUnitDataOrGiveItFields(name)).say(new DataMessage.ADataWithAnEmptyBody(name)).build());
             }
             return new Ast.Data(declared, false, includes, fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
@@ -297,8 +300,8 @@ public final class AstBuilder {
         // clause that has nothing to constrain is refused — reaching `Ast.UnitData`, which has no
         // slot for one, would silently drop it and with it any error inside it.
         for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1102, "check.invariant.onunit")
-                            .at(pos(clause)).args(name).build());
+            throw CompileException.of(Diagnostic
+                            .at(pos(clause)).say(new InvariantMessage.AUnitDataHasNothingToObserve(name)).build());
         }
         return new Ast.UnitData(declared, pos);
     }
@@ -322,13 +325,13 @@ public final class AstBuilder {
                 // `_` could not be answered by name at all: the arm reading it would be that wildcard.
                 // Refused here rather than left to be discovered at the attempt.
                 if (ident(label).equals("_")) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1104, "check.invariant.underscore")
-                                    .at(posOf(label)).args(typeName)
-                                    .hint("check.invariant.underscore.hint").build());
+                    throw CompileException.of(Diagnostic
+                                    .at(posOf(label))
+                                    .hint(new InvariantMessage.NameTheClauseOrLeaveItUnnamed()).say(new InvariantMessage.UnderscoreCannotNameAClause(typeName)).build());
                 }
                 if (!named.add(ident(label))) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1103, "check.invariant.duplicate")
-                                    .at(posOf(label)).args(ident(label), typeName).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(posOf(label)).say(new InvariantMessage.TwoClausesShareOneName(ident(label), typeName)).build());
                 }
                 name = Optional.of(ident(label));
             }

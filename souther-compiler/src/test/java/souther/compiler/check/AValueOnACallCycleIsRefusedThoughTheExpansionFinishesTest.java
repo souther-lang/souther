@@ -66,7 +66,7 @@ class AValueOnACallCycleIsRefusedThoughTheExpansionFinishesTest {
         List<Diagnostic> found = diagnose(CYCLE);
 
         assertEquals(1, found.size(), "one mistake, one report: " + found);
-        assertEquals("check.value.cycle", found.get(0).messageKey());
+        assertEquals("name.a-value-reaches-itself", found.get(0).messageKey());
     }
 
     /** And the helper it goes round is not what is wrong with it: on its own it compiles. */

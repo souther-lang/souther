@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.msg.ArithmeticMessage;
 import souther.compiler.types.Type;
 
 import java.util.List;
@@ -57,9 +58,7 @@ sealed interface ArithmeticCheck {
      * belong to the rule, so that adding a rule cannot leave the diagnostic behind.
      */
     sealed interface Refusal {
-        String messageKey();
-
-        List<Object> messageArgs();
+        souther.compiler.diag.msg.Message said();
 
         Side side();
 
@@ -70,46 +69,41 @@ sealed interface ArithmeticCheck {
          * too: what {@code +} takes beside a newtype is not what {@code *} takes, and a fix written
          * for one of them sends the author from this refusal into the next. Where they differ, the
          * fix says both rather than guessing which operator asked. */
-        default String hintKey() {
-            return messageKey() + ".hint";
+        default souther.compiler.diag.msg.Message hint() {
+            return null;
         }
     }
 
     /** Not a number at all: the rule the newtype rules were carved out of. */
     record OperandNotArithmetic(Type operand, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.operand";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(operand));
-        }
-
-        @Override public String hintKey() {
-            return null;   // Int or Decimal is the whole of it; there is nothing else to say
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.AnOperandIsNotANumber(Type.show(operand));
         }
     }
 
     /** A newtype whose value is not directly Int or Decimal — over another newtype, or over
      * something that was never a number. Arithmetic reaches one wrapping and no further. */
     record NoDirectNumericBase(Type newtype, Type wrapped, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.nested";
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.ANewtypeWithNoDirectNumericBase(
+                    Type.show(newtype, wrapped), Type.show(wrapped, newtype));
         }
 
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(newtype, wrapped), Type.show(wrapped, newtype));
+        @Override public souther.compiler.diag.msg.Message hint() {
+            return new ArithmeticMessage.ReachTheBaseWithValue(
+                    Type.show(newtype, wrapped), Type.show(wrapped, newtype));
         }
     }
 
     /** Two unlike newtypes: nothing says a quantity of one is a quantity of the other. */
     record DifferentNewtypes(Type left, Type right) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.incompatible";
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.TwoDifferentNewtypes(Type.show(left, right),
+                    Type.show(right, left));
         }
 
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(left, right), Type.show(right, left));
+        @Override public souther.compiler.diag.msg.Message hint() {
+            return new ArithmeticMessage.ConvertOneToTheOthersNewtype();
         }
 
         @Override public Side side() {
@@ -119,12 +113,13 @@ sealed interface ArithmeticCheck {
 
     /** A product of two newtypes is a quantity in neither of them. */
     record ProductChangesDimension(Type left, Type right) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.product";
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.AProductChangesDimension(Type.show(left, right),
+                    Type.show(right, left));
         }
 
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(left, right), Type.show(right, left));
+        @Override public souther.compiler.diag.msg.Message hint() {
+            return new ArithmeticMessage.ComputeOnValueAndBuildTheProduct();
         }
 
         @Override public Side side() {
@@ -136,12 +131,13 @@ sealed interface ArithmeticCheck {
      * same newtype, a quantity per quantity where they are not, and the language expresses
      * neither. */
     record QuotientChangesDimension(Type left, Type right) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.quotient";
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.AQuotientChangesDimension(Type.show(left, right),
+                    Type.show(right, left));
         }
 
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(left, right), Type.show(right, left));
+        @Override public souther.compiler.diag.msg.Message hint() {
+            return new ArithmeticMessage.ComputeOnValueAndBuildTheQuotient();
         }
 
         @Override public Side side() {
@@ -152,36 +148,41 @@ sealed interface ArithmeticCheck {
     /** A value of some other base beside a newtype. Reading its own base is one rule of the
      * newtype, asked by every operator, and not a rule of scaling. */
     record ValueOfAnotherBase(Type newtype, Type base, Type value, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.base";
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.AValueOfAnotherBase(Type.show(newtype, value),
+                    Type.show(base), Type.show(value, newtype));
         }
 
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(newtype, value), Type.show(base), Type.show(value, newtype));
+        @Override public souther.compiler.diag.msg.Message hint() {
+            return new ArithmeticMessage.WhatEachOperatorTakesBesideANewtype(
+                    Type.show(newtype, value), Type.show(base));
         }
     }
 
     /** A value of the newtype's own base that was not written out: only a literal is read as the
      * newtype standing beside it. */
     record BareValueIsNotALiteral(Type newtype, Type value, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.scalar";
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.OnlyALiteralIsReadAsTheNewtype(
+                    Type.show(newtype, value), Type.show(value, newtype));
         }
 
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(newtype, value), Type.show(value, newtype));
+        @Override public souther.compiler.diag.msg.Message hint() {
+            return new ArithmeticMessage.BuildItWhereTheValueComesFrom(
+                    Type.show(newtype, value));
         }
     }
 
     /** A number over a newtype is an inverse, so the dimension changes even though scaling does
      * not. */
     record ReciprocalChangesDimension(Type value, Type newtype) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.reciprocal";
+        @Override public souther.compiler.diag.msg.Message said() {
+            return new ArithmeticMessage.AReciprocalChangesDimension(
+                    Type.show(value, newtype), Type.show(newtype, value));
         }
 
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(value, newtype), Type.show(newtype, value));
+        @Override public souther.compiler.diag.msg.Message hint() {
+            return new ArithmeticMessage.ComputeOnValueAndBuildTheReciprocal();
         }
 
         @Override public Side side() {

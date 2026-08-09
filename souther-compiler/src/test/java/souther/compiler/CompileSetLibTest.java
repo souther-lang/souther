@@ -124,6 +124,6 @@ class CompileSetLibTest {
                     constructs Out
                 let go (r) = Out { s = Set.empty() }
                 """));
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertEquals("name.it-is-not-a-function-here", e.diagnostic().messageKey());
     }
 }

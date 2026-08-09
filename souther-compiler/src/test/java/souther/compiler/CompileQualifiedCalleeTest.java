@@ -161,7 +161,7 @@ class CompileQualifiedCalleeTest {
                 let go (i) = Out { m = unknown.member(i.n) }
                 """);
 
-        assertEquals("check.unknown.name.msg", e.diagnostic().messageKey());
+        assertEquals("name.no-value-of-that-name-in-scope", e.diagnostic().messageKey());
         assertTrue(e.getMessage().contains("`unknown`"), e.getMessage());
         assertEquals("unknown".length(),
                 e.diagnostic().region().end().column() - e.diagnostic().region().start().column());
@@ -186,7 +186,7 @@ class CompileQualifiedCalleeTest {
                 }
                 """);
 
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertEquals("name.it-is-not-a-function-here", e.diagnostic().messageKey());
         assertTrue(e.getMessage().contains("`d.count`"), e.getMessage());
         assertEquals("d.count".length(),
                 e.diagnostic().region().end().column() - e.diagnostic().region().start().column(),

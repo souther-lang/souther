@@ -4,6 +4,7 @@ import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
@@ -776,9 +777,9 @@ final class BodyGen {
         private void unreachable(Core.Unreachable u, Type expected) {
             Type shape = expected != null ? expected : u.type();
             if (shape instanceof Type.Never) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1307, "check.unreachable.untyped")
+                throw CompileException.of(Diagnostic
                                 .at(u.pos(), "unreachable".length())
-                                .hint("check.unreachable.untyped.hint").build());
+                                .hint(new NameMessage.WriteItWhereTheTypeIsStated()).say(new NameMessage.NothingSaysWhatThisPositionHolds()).build());
             }
             code.loadConstant(abortMessage(u));
             code.invokestatic(CD_UnreachableReached, "reached", MTD_reached);

@@ -3,6 +3,8 @@ package souther.compiler.derive;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
@@ -327,11 +329,11 @@ public final class Deriver {
      */
     private static CompileException noCodec(Type t, Ast.Data d, String field, SourcePos pos) {
         if (t instanceof Type.TupleOf) {
-            return CompileException.of(Diagnostic.of(DiagnosticCode.E1311, "check.derive.tuplefield")
-                            .at(pos).args(where(d, field), Type.show(t)).build());
+            return CompileException.of(Diagnostic
+                            .at(pos).say(new DataMessage.ATupleHasNoExternalRepresentation(where(d, field), Type.show(t))).build());
         }
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1311, "check.derive.nocodec")
-                        .at(pos).args(where(d, field), Type.show(t)).build());
+        return CompileException.of(Diagnostic
+                        .at(pos).say(new DataMessage.NoCodecCanBeDerived(where(d, field), Type.show(t))).build());
     }
 
     /** Where the field was written, for a diagnostic to point at. A field a data takes in through

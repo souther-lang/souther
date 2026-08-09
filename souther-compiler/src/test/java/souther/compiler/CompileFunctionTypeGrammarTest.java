@@ -83,7 +83,7 @@ class CompileFunctionTypeGrammarTest {
                 data R = { h: Hidden }
                 behavior run : (r: R) -> R
                 """);
-        assertEquals("check.derive.nocodec", d.messageKey());
+        assertEquals("data.no-codec-can-be-derived", d.messageKey());
     }
 
     // `T?` is `Option<T>` for whatever T is. Where `?` may be written is a rule of its own, and it is
@@ -111,6 +111,6 @@ class CompileFunctionTypeGrammarTest {
                 module demo
                 data R = { f: ((Int) -> Bool)? }
                 """);
-        assertEquals("check.derive.nocodec", d.messageKey());
+        assertEquals("data.no-codec-can-be-derived", d.messageKey());
     }
 }

@@ -43,7 +43,7 @@ class CompileConstructionInInvariantTest {
                 data Table = List<Int>
                     invariant ok = List.all(x -> Yen(0).value <= x, value)
                 """);
-        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", e.diagnostic().messageKey());
         assertEquals(4, e.diagnostic().region().start().line());
     }
 
@@ -55,7 +55,7 @@ class CompileConstructionInInvariantTest {
                 data Table = List<Int>
                     invariant ok = List.all(x -> Yen { value = 0 }.value <= x, value)
                 """);
-        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", e.diagnostic().messageKey());
         assertEquals(4, e.diagnostic().region().start().line());
     }
 
@@ -68,7 +68,7 @@ class CompileConstructionInInvariantTest {
                 data Table = Int
                     invariant ok = atLeastZero(value)
                 """);
-        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", e.diagnostic().messageKey());
         assertEquals(3, e.diagnostic().region().start().line(),
                 "the error is at the construction, which is in the helper");
     }
@@ -82,7 +82,7 @@ class CompileConstructionInInvariantTest {
                 data Table = Int
                     invariant ok = atLeastZero(value)
                 """);
-        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", e.diagnostic().messageKey());
         assertEquals(3, e.diagnostic().region().start().line());
     }
 
@@ -98,7 +98,7 @@ class CompileConstructionInInvariantTest {
                 data Table = Int
                     invariant ok = outer(value)
                 """);
-        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", e.diagnostic().messageKey());
         assertEquals(3, e.diagnostic().region().start().line(),
                 "`inner` holds the construction; `outer` only passes through");
     }
@@ -121,7 +121,7 @@ class CompileConstructionInInvariantTest {
                         """);
         List<Diagnostic> down = Located.diagnosticsOf(Compiler.diagnoseModules(sources)).get("down");
         assertEquals(1, down.size(), () -> "expected one diagnostic, got " + down);
-        assertEquals("check.invariant.construct.named", down.get(0).messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", down.get(0).messageKey());
     }
 
     // --- what the diagnostic says ------------------------------------------------------------
@@ -135,7 +135,7 @@ class CompileConstructionInInvariantTest {
                 data Table = List<Int>
                     invariant ok = List.all(x -> atLeastZero(x), value)
                 """);
-        assertEquals(List.of("Table", "Yen", "ok"), List.of(e.diagnostic().args()));
+        assertEquals(List.of("Table", "Yen", "ok"), List.copyOf(e.diagnostic().values().values()));
     }
 
     @Test
@@ -147,7 +147,7 @@ class CompileConstructionInInvariantTest {
                 data Table = List<Int>
                     invariant List.all(x -> atLeastZero(x), value)
                 """);
-        assertEquals("check.invariant.construct", e.diagnostic().messageKey());
+        assertEquals("invariant.the-invariant-constructs-a-data", e.diagnostic().messageKey());
     }
 
     /** The construction and the clause that reaches it are two places, so the diagnostic carries
@@ -162,7 +162,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = atLeastZero(value)
                 """);
         assertEquals(1, e.diagnostic().secondary().size());
-        assertEquals("check.invariant.construct.here",
+        assertEquals("invariant.the-clause-reaches-that-construction",
                 e.diagnostic().secondary().get(0).labelKey());
         assertEquals(5, e.diagnostic().secondary().get(0).region().start().line());
     }
@@ -182,7 +182,7 @@ class CompileConstructionInInvariantTest {
                 data Table = List<Int>
                     invariant ok = List.all(x -> atLeastZero(x), value)
                 """);
-        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", e.diagnostic().messageKey());
         assertEquals(3, e.diagnostic().region().start().line());
         assertEquals(34, e.diagnostic().region().start().column(),
                 "the construction in the helper, not the combinator the clause calls");
@@ -201,7 +201,7 @@ class CompileConstructionInInvariantTest {
                         x -> Yen(0).value <= x,
                         value)
                 """);
-        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals("invariant.the-named-clause-constructs-a-data", e.diagnostic().messageKey());
         assertEquals(5, e.diagnostic().region().start().line());
         assertEquals(14, e.diagnostic().region().start().column());
     }
@@ -231,8 +231,8 @@ class CompileConstructionInInvariantTest {
                     invariant high = List.all(x -> atLeastZero(x), value)
                 """)));
         List<String> clauses = found.get("m").stream()
-                .filter(d -> "check.invariant.construct.named".equals(d.messageKey()))
-                .map(d -> String.valueOf(d.args()[2]))
+                .filter(d -> "invariant.the-named-clause-constructs-a-data".equals(d.messageKey()))
+                .map(d -> String.valueOf(d.values().get("clause")))
                 .toList();
         assertEquals(List.of("low", "high"), clauses);
     }
@@ -248,7 +248,7 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> Yen(0).value <= x, value) && Yen(1).value >= 0
                 """))).get("m");
         assertEquals(1, found.stream()
-                .filter(d -> d.messageKey().startsWith("check.invariant.construct")).count());
+                .filter(d -> "E1105".equals(d.code())).count());
     }
 
     // --- the rule is about constructing, not about the newtype --------------------------------

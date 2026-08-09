@@ -170,7 +170,7 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Note = Option<String>
                 """));
-        assertEquals("check.newtype.optional", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("data.a-newtype-may-not-wrap-an-optional", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -180,7 +180,7 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Note = String?
                 """));
-        assertEquals("check.newtype.optional", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("data.a-newtype-may-not-wrap-an-optional", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test

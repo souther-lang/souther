@@ -126,7 +126,7 @@ class CompileTypeVariableTest {
                 let run (i) = Out { counts = emptyLike(i.names) }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> compileCore(core));
-        assertEquals("check.field.type", e.diagnostic().messageKey(),
+        assertEquals("data.a-field-expects-another-type", e.diagnostic().messageKey(),
                 "the call answers a list of Strings, which the field does not take: " + e.getMessage());
     }
 

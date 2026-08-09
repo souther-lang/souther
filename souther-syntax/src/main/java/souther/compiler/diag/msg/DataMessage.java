@@ -70,4 +70,67 @@ public sealed interface DataMessage extends Message {
     /** A data reaches itself through a field that is always there, so none of it can be built. */
     @Code(DiagnosticCode.E1013)
     record DataCannotBeConstructed(String data) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1010)
+    record ACaseDeclaresTheDiscriminatorField(String caseName, String field, String sum) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1010)
+    record TheTagAndTheFieldWantOneKey(String field) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1010)
+    record AMemberDeclaresTheDiscriminatorField(String member, String field, String behavior) implements DataMessage {}
+
+    @Code(DiagnosticCode.E2010)
+    record TheWrittenValueViolatesTheInvariant(String value) implements DataMessage {}
+
+    @Code(DiagnosticCode.E2010)
+    record TheWrittenValueViolatesTheClause(String value, String clause) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1018)
+    record ItCannotBeConstructedHere(String data) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1017)
+    record AConstructionCannotBeWrittenHere(String data) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1008)
+    record ADataWithAnEmptyBody(String data) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1008)
+    record WriteItAsAUnitDataOrGiveItFields(String data) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1502)
+    record ADataTakesTheStandardLibraryQualifier(String data) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1311)
+    record NoCodecCanBeDerived(String data, String why) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1311)
+    record ATupleHasNoExternalRepresentation(String data, String what) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1011)
+    record ADataIsAlreadyDefined(String data) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1011)
+    record ALetIsAlreadyDefined(String name) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1012)
+    record ALetAndADataShareOneSpelling(String name) implements DataMessage {}
+
+    @Code(DiagnosticCode.E2106)
+    record AFieldTakesAMethodOfObject(String data, String field) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1311)
+    record ATupleCannotBeAField(String data, String field) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1317)
+    record AFieldExpectsAnotherType(String field, String expects, String got) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1802)
+    record ANewtypeWrapsOneValue(String newtype, String applied) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1009)
+    record ANewtypeMayNotWrapAnOptional(String newtype, String wraps) implements DataMessage {}
+
+    @Code(DiagnosticCode.E1009)
+    record WrapTheValueAndWriteTheQuestionMarkOnTheField(String newtype) implements DataMessage {}
 }

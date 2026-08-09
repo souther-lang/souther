@@ -27,7 +27,7 @@ class WhereAReportIsSaidIsReadOffWhereItPointsTest {
 
     /** A report pointing at line 3 of {@code positionsFile}, found by a key naming {@code keysFile}. */
     private static Db.Found found(String positionsFile, String keysFile, Report.Delivery delivery) {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "name.no-value-of-that-name-in-scope")
                 .at(new SourcePos(3, 3, positionsFile), 4).build();
         return new Db.Found("m", keysFile, Report.saidAt(d, delivery));
     }

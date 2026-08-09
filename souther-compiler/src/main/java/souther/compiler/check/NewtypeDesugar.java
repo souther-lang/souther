@@ -3,6 +3,8 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
@@ -76,9 +78,9 @@ public final class NewtypeDesugar {
                 TypeName built = call.denotes() instanceof ValueName.OfType named ? named.type() : null;
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
-                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.newtype.arity")
-                                        .at(call.name().region()).args(call.written(), args.size())
-                                        .build());
+                        throw CompileException.of(Diagnostic
+                                        .at(call.name().region())
+                                        .say(new DataMessage.ANewtypeWrapsOneValue(call.written(), String.valueOf(args.size()))).build());
                     }
                     yield new Ast.NewData(
                             new Ast.Name(call.name(), built),

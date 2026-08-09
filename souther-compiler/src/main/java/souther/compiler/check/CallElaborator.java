@@ -5,6 +5,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -350,21 +352,21 @@ public final class CallElaborator {
             // A type applied to an argument is a construction, and every place a construction is
             // allowed rewrites it before the check reads it. Reaching here means it was written
             // somewhere no rewrite covers, so say what it is rather than what it is not.
-            case ValueName.OfType named -> CompileException.of(Diagnostic.of(DiagnosticCode.E1017, "check.construct.position")
-                            .at(call.name().region()).args(named.name()).build());
+            case ValueName.OfType named -> CompileException.of(Diagnostic
+                            .at(call.name().region()).say(new DataMessage.AConstructionCannotBeWrittenHere(named.name())).build());
             // A binding applied to arguments, whose type here is not a function. Either it is not one
             // — a value applied as though it were — or it has no type yet, which is what an inference
             // probe sees when it types a body before the binding it asks about has one and reads the
             // report to find out. The same sentence answers both: at the point of the report, this
             // name is not a function here.
-            case ValueName.Local _ -> CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
-                            .at(call.name().region()).args(call.written()).build());
+            case ValueName.Local _ -> CompileException.of(Diagnostic
+                            .at(call.name().region()).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
             // A name the language itself gives (`None`), applied. `Some`/`None` applications are
             // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
-            case ValueName.Builtin b -> CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.builtin.notfunction")
-                            .at(call.name().region()).args(b.name()).build());
+            case ValueName.Builtin b -> CompileException.of(Diagnostic
+                            .at(call.name().region()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
             // thrown out at the top of typeOfCall, before any of the work above
             case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
             case null -> unelaborated("nothing", call);
@@ -439,12 +441,12 @@ public final class CallElaborator {
             if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
                 throw stepError;
             }
-            Diagnostic.Builder b = Diagnostic.of(DiagnosticCode.E1815, "check.fold.seed.untyped")
+            Diagnostic.Builder b = Diagnostic
                     .at(Elaborator.region(args.get(seed)));
             if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
-                b.secondary(stepError.diagnostic().region(), "check.fold.seed.here");
+                b.secondary(stepError.diagnostic().region(), new NameMessage.TheAccumulatorsTypeStaysUnknown());
             }
-            throw CompileException.of(b.build());
+            throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
         }
         for (int i = 0; i < args.size(); i++) {
             Type param = signature.params().get(i);
@@ -472,9 +474,9 @@ public final class CallElaborator {
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
         if (entry != null && entry.declaration().params().isEmpty()) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.apply.notfunction")
-                            .at(call.name().region()).args(call.written())
-                            .hint("check.stdlib.value.hint", call.written()).build());
+            throw CompileException.of(Diagnostic
+                            .at(call.name().region())
+                            .hint(new NameMessage.WriteItOnItsOwn(call.written())).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
         }
         // A shipped kernel behaves like a built-in: check the call against the declared signature
         // and yield its result type; the backend emits the primitive for its key. A Souther-bodied
@@ -533,8 +535,8 @@ public final class CallElaborator {
                 // applied (`deps.count(x)`) is quoted with a dot in it and reaches a binding, and
                 // what is wrong with it is that it is not a function, which the report below says.
                 if (call.reachedAs() instanceof ReachName.OfLibrary) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
-                                    .at(call.name().region()).args(call.written()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(call.name().region()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
                 }
                 // A helper another module declares is expanded where it is called, or — where it
                 // recurses — bound as a signature and answered above. Reaching here it is neither,

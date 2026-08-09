@@ -310,7 +310,7 @@ class CompileMapLibTest {
                     constructs Out
                 let go (r) = Out { m = Map.empty() }
                 """));
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertEquals("name.it-is-not-a-function-here", e.diagnostic().messageKey());
         assertTrue(e.getMessage().contains("Map.empty"), e.getMessage());
     }
 }

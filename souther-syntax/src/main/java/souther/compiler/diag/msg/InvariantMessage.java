@@ -47,4 +47,31 @@ public sealed interface InvariantMessage extends Message {
     @Code(DiagnosticCode.E1106)
     record TheInvariantReachesAPartialHelper(String data, String partial, String through)
             implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1105)
+    record TheInvariantConstructsAData(String data, String constructs) implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1105)
+    record TheNamedClauseConstructsAData(String data, String constructs, String clause) implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1105)
+    record TheClauseReachesThatConstruction(String clause) implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1105)
+    record ThisClauseReachesThatConstruction() implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1103)
+    record TwoClausesShareOneName(String clause, String data) implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1102)
+    record AUnitDataHasNothingToObserve(String data) implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1104)
+    record UnderscoreCannotNameAClause(String data) implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1104)
+    record NameTheClauseOrLeaveItUnnamed() implements InvariantMessage {}
+
+    @Code(DiagnosticCode.E1106)
+    record AnInvariantAnswersOnEveryPath(String data) implements InvariantMessage {}
 }

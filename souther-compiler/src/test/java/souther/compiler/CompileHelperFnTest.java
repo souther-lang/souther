@@ -137,7 +137,7 @@ class CompileHelperFnTest {
                 let run (n) = Out(alpha(n))
                 """));
         assertEquals("E1813", e.code());
-        assertEquals("alpha", e.diagnostic().args()[0],
+        assertEquals("alpha", e.diagnostic().values().get("helper"),
                 "the first-declared member of the cycle is the one reported");
     }
 

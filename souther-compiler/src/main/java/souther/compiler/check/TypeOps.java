@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
@@ -1608,10 +1609,10 @@ public final class TypeOps {
                             .build());
         }
         Set<String> known = symbols.namesInScope();
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.type.msg")
+        return CompileException.of(Diagnostic
                         .at(written.region())
-                        .args(written.quoted())
+                        
                         .suggestion(Suggest.candidate(canonical, known))
-                        .build());
+                        .say(new NameMessage.NoTypeOfThatName(written.quoted())).build());
     }
 }

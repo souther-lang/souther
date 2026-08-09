@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -251,8 +253,8 @@ public final class TypeChecker {
         Map<String, Ast.FnDef> fns = new HashMap<>();
         for (Ast.FnDef fn : module.fns()) {
             if (fns.put(fn.name(), fn) != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.let")
-                                .at(fn.pos()).args(fn.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(fn.pos()).say(new DataMessage.ALetIsAlreadyDefined(fn.name())).build());
             }
         }
         Set<String> allBehaviors = new HashSet<>();
@@ -463,8 +465,8 @@ public final class TypeChecker {
                 continue;
             }
             if (symbols.containsKey(def.name())) {
-                rejected.add(CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.data")
-                                .at(def.pos()).args(def.name()).build()));
+                rejected.add(CompileException.of(Diagnostic
+                                .at(def.pos()).say(new DataMessage.ADataIsAlreadyDefined(def.name())).build()));
                 continue;
             }
             symbols.put(def.name(), def);

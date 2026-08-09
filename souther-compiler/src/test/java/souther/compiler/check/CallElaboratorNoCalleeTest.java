@@ -59,8 +59,8 @@ class CallElaboratorNoCalleeTest {
         RuntimeException e = answerFor(
                 new ValueName.OfType("Yen", new TypeName("m", "Yen"), null));
         CompileException c = assertInstanceOf(CompileException.class, e);
-        assertEquals("check.construct.position", c.diagnostic().messageKey());
-        assertEquals(List.of("Yen"), List.of(c.diagnostic().args()));
+        assertEquals("data.a-construction-cannot-be-written-here", c.diagnostic().messageKey());
+        assertEquals(List.of("Yen"), List.copyOf(c.diagnostic().values().values()));
     }
 
     /**
@@ -73,7 +73,7 @@ class CallElaboratorNoCalleeTest {
     void aBindingIsToldItIsNotAFunction() {
         RuntimeException e = answerFor(new ValueName.Local("f",
                 new BindingId(new BindingOwner.OfValue("m.a", "g"), 0)));
-        assertEquals("check.apply.notfunction",
+        assertEquals("name.it-is-not-a-function-here",
                 assertInstanceOf(CompileException.class, e).diagnostic().messageKey());
     }
 
@@ -86,8 +86,8 @@ class CallElaboratorNoCalleeTest {
     void aBuiltinIsToldItIsNotAFunction() {
         RuntimeException e = answerFor(new ValueName.Builtin("HALF_UP"));
         CompileException c = assertInstanceOf(CompileException.class, e);
-        assertEquals("check.builtin.notfunction", c.diagnostic().messageKey());
-        assertEquals(List.of("HALF_UP"), List.of(c.diagnostic().args()));
+        assertEquals("name.a-name-the-language-gives-is-not-a-function", c.diagnostic().messageKey());
+        assertEquals(List.of("HALF_UP"), List.copyOf(c.diagnostic().values().values()));
     }
 
     /**

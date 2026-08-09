@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.InjectionMessage;
@@ -401,9 +403,9 @@ public final class SpecChecker {
             if (carrying == null) {
                 continue;
             }
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1010, "check.member.discriminatorfield")
-                            .at(b.pos()).args(carrying.name(), DISCRIMINATOR, b.name())
-                            .hint("check.case.discriminatorfield.hint", DISCRIMINATOR).build());
+            throw CompileException.of(Diagnostic
+                            .at(b.pos())
+                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(DISCRIMINATOR)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), DISCRIMINATOR, b.name())).build());
         }
     }
 

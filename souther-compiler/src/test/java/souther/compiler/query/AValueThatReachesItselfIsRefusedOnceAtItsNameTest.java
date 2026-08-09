@@ -67,7 +67,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
 
     private static Diagnostic cycleIn(List<Diagnostic> found) {
         List<Diagnostic> cycles = found.stream()
-                .filter(d -> "check.value.cycle".equals(d.messageKey()))
+                .filter(d -> "name.a-value-reaches-itself".equals(d.messageKey()))
                 .toList();
         assertEquals(1, cycles.size(), "one value reaching itself, one refusal: " + found);
         return cycles.get(0);
@@ -78,7 +78,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
         List<Diagnostic> found = diagnose(CYCLE);
 
         assertEquals(1, found.size(), "one mistake, one report: " + found);
-        assertEquals("check.value.cycle", found.get(0).messageKey());
+        assertEquals("name.a-value-reaches-itself", found.get(0).messageKey());
     }
 
     @Test
@@ -87,7 +87,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
         Diagnostic beside = cycleIn(diagnose(CYCLE_AND_ONE_MORE));
 
         assertEquals(alone.messageKey(), beside.messageKey());
-        assertEquals(List.of(alone.args()), List.of(beside.args()));
+        assertEquals(List.copyOf(alone.values().values()), List.copyOf(beside.values().values()));
         assertEquals(alone.region(), beside.region(),
                 "the refusal is about `step`, and where `step` is written did not move");
     }
@@ -106,7 +106,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
     void nothingElseIsSaidAboutAModuleWithOne() {
         List<Diagnostic> found = diagnose(CYCLE_AND_ONE_MORE);
 
-        assertTrue(found.stream().anyMatch(d -> "check.value.cycle".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> "name.a-value-reaches-itself".equals(d.messageKey())),
                 "the cycle: " + found);
         assertEquals(1, found.size(), "one refusal, said once: " + found);
     }

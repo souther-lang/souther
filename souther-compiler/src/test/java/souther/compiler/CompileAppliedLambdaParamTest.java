@@ -143,7 +143,7 @@ class CompileAppliedLambdaParamTest {
 
                                 let check (o) = Result { ns = List.map((x) -> x(o.n), [1, 2]) }
                                 """));
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertEquals("name.it-is-not-a-function-here", e.diagnostic().messageKey());
     }
 
     private Object field(BytesClassLoader loader, Object check, Map<String, ?> order, String name)

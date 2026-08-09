@@ -11,6 +11,8 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
@@ -347,9 +349,9 @@ public final class Names {
         private Report unknownBehavior(Ast.Var ref, Set<String> candidates) {
             WrittenName written = ref.written();
             String name = written.canonical();
-            return Report.raised(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.behavior.msg")
-                            .at(written.region()).args(written.quoted())
-                            .suggestion(Suggest.candidate(name, candidates)).build());
+            return Report.raised(Diagnostic
+                            .at(written.region())
+                            .suggestion(Suggest.candidate(name, candidates)).say(new NameMessage.NoBehaviorOfThatNameInThisPipeline(written.quoted())).build());
         }
 
         /** Records why a name denotes nothing, and gives it the name that says so. */
@@ -1461,8 +1463,8 @@ public final class Names {
             // of that name hides it — from every module, since the qualifier is not this module's to
             // shadow. Refused where it is declared, as a reserved module name is (see Front).
             if (Prelude.isQualifier(def.name())) {
-                reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1502, "check.data.qualifier")
-                                .at(def.pos()).args(def.name()).build()));
+                reports.add(Report.raised(Diagnostic
+                                .at(def.pos()).say(new DataMessage.ADataTakesTheStandardLibraryQualifier(def.name())).build()));
             }
             declared.put(def.name(), def);
         }
@@ -1474,8 +1476,8 @@ public final class Names {
             if (implementing.contains(fn.name()) || !declared.containsKey(fn.name())) {
                 continue;
             }
-            reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1012, "check.dup.valuename")
-                            .at(fn.pos()).args(fn.name()).build()));
+            reports.add(Report.raised(Diagnostic
+                            .at(fn.pos()).say(new DataMessage.ALetAndADataShareOneSpelling(fn.name())).build()));
         }
         // What this module declares under a name, whichever kind of declaration it is: a data, a
         // `let`, a behavior. A behavior and its `let` are one of them, so the set is what is asked

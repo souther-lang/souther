@@ -15,6 +15,7 @@ import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -520,9 +521,13 @@ public final class Output {
                     String shown = check.typeName() + "("
                             + (check.value() instanceof String s ? "\"" + s + "\"" : check.value()) + ")";
                     String clause = failingClause(db, check, ctfe);
-                    reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E2010, clause == null
-                                            ? "check.const.invariant" : "check.const.invariant.clause")
-                                    .at(check.pos()).args(shown, clause).build()));
+                    reports.add(Report.raised(Diagnostic.at(check.pos())
+                                    .say(clause == null
+                                            ? new DataMessage.TheWrittenValueViolatesTheInvariant(
+                                                    shown)
+                                            : new DataMessage.TheWrittenValueViolatesTheClause(
+                                                    shown, clause))
+                                    .build()));
                 }
             }
             return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);

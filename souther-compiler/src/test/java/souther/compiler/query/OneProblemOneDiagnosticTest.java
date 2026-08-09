@@ -107,7 +107,7 @@ class OneProblemOneDiagnosticTest {
         // The duplicate, and the name that denotes nothing. Not "unknown type A" as well: the first
         // A is still a declaration, so B's field still means something.
         assertEquals(2, found.size(), "the duplicate and the unknown name, and no more: " + found);
-        assertTrue(found.stream().anyMatch(d -> "check.dup.data".equals(d.messageKey())));
-        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())));
+        assertTrue(found.stream().anyMatch(d -> "data.a-data-is-already-defined".equals(d.messageKey())));
+        assertTrue(found.stream().anyMatch(d -> "name.no-type-of-that-name".equals(d.messageKey())));
     }
 }

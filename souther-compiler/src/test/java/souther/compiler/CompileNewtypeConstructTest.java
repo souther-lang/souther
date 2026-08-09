@@ -142,8 +142,8 @@ class CompileNewtypeConstructTest {
                 let make (x) = Code("AB")
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.const.invariant.clause", e.diagnostics().get(0).messageKey());
-        assertEquals("lower", e.diagnostics().get(0).args()[1],
+        assertEquals("data.the-written-value-violates-the-clause", e.diagnostics().get(0).messageKey());
+        assertEquals("lower", e.diagnostics().get(0).values().get("clause"),
                 "the first clause the constant breaks, in declaration order");
     }
 

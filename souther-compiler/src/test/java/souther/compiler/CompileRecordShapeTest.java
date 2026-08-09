@@ -132,7 +132,7 @@ class CompileRecordShapeTest {
                 data Odd = { toString: String }
                 """));
 
-        assertEquals("check.field.objectname", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("data.a-field-takes-a-method-of-object", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test

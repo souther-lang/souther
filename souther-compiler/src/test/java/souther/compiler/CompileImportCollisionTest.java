@@ -244,7 +244,7 @@ class CompileImportCollisionTest {
 
         assertEquals(List.of("import.imported-name-collides-with-a-declaration"),
                 diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
-        assertEquals(List.of("check.unknown.type.msg"),
+        assertEquals(List.of("name.no-type-of-that-name"),
                 diagnostics.get("d.sou").stream().map(Diagnostic::messageKey).toList());
     }
 

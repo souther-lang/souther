@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.AttemptMessage;
@@ -192,8 +194,8 @@ public final class Elaborator {
             // so nothing has to be read off its applications
             case Ast.Block block when expected instanceof Type.FnOf want ->
                     elaborateFunctionValue(block, want.params(), env, ctx);
-            case Ast.Block block -> throw CompileException.of(Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
-                            .at(block.pos()).build());
+            case Ast.Block block -> throw CompileException.of(Diagnostic
+                            .at(block.pos()).say(new NameMessage.ABlockIsNotAValue()).build());
             // What the name is was answered when the module's names were resolved; what is left here
             // is its type. A binding is looked up, a unit data is its own value (spec 8.4), and
             // anything else is not a value — reported below under the name that was written.
@@ -241,9 +243,9 @@ public final class Elaborator {
                     throw new Unanswerable(nd.pos());
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1018, "check.construct.no")
-                                    .at(built.name().region()).args(built.name().quoted())
-                                    .build());
+                    throw CompileException.of(Diagnostic
+                                    .at(built.name().region())
+                                    .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
                 // the construction when it was inlined, so Core reads the binding it copies from
@@ -582,9 +584,9 @@ public final class Elaborator {
         if (TypeOps.assignable(valueType, declared, symbols)) {
             return;
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.let.annotation")
-                        .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
-                        .diff(Type.show(valueType, declared), Type.show(declared, valueType)).build());
+        throw CompileException.of(Diagnostic
+                        .at(li.pos())
+                        .diff(Type.show(valueType, declared), Type.show(declared, valueType)).say(new NameMessage.TheBindingDeclaresAnotherType(li.name(), Type.show(declared), Type.show(valueType))).build());
     }
 
     /**
@@ -1223,8 +1225,8 @@ public final class Elaborator {
 
     static void rejectBuiltinShadow(String name, SourcePos pos) {
         if (BUILTIN_VALUES.contains(name)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1019, "check.builtin.shadow")
-                            .at(pos, name.length()).args(name).build());
+            throw CompileException.of(Diagnostic
+                            .at(pos, name.length()).say(new NameMessage.ABindingMayNotShadowABuiltIn(name)).build());
         }
     }
 
@@ -1319,11 +1321,11 @@ public final class Elaborator {
             return CompileException.of(Diagnostic.of(DiagnosticCode.E1024, "check.notavalue")
                             .at(v.written().region()).args(v.name(), denotes).build());
         }
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
+        return CompileException.of(Diagnostic
                         .at(v.written().region())
-                        .args(v.name())
+                        
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))
-                        .build());
+                        .say(new NameMessage.NoValueOfThatNameInScope(v.name())).build());
     }
 
     /**

@@ -36,7 +36,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
 
     /** A report about module {@code m} whose primary region was read from {@code positionsFile}. */
     private static Db.Found about(String positionsFile) {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
+        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "name.no-value-of-that-name-in-scope")
                 .at(new SourcePos(2, 1, positionsFile), 4).build();
         return new Db.Found("m", null, Report.of(d));
     }

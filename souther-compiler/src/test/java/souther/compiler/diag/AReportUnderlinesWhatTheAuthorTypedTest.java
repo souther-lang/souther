@@ -48,8 +48,8 @@ class AReportUnderlinesWhatTheAuthorTypedTest {
                 data Box = { v: %s }
                 """.formatted(NFD));
 
-        assertTrue(List.of(report.args()).contains(NFD),
-                "a reader is told about the name they wrote: " + List.of(report.args()));
+        assertTrue(List.copyOf(report.values().values()).contains(NFD),
+                "a reader is told about the name they wrote: " + List.copyOf(report.values().values()));
         assertEquals(NFD.length(), width(report),
                 "the underline stops inside the name it is about");
     }

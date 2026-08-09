@@ -225,7 +225,7 @@ class CompileNamedInvariantClauseTest {
                     invariant same = List.length(value) >= 1
                     invariant same = List.allDistinctBy(x -> x, value)
                 """));
-        assertEquals("check.invariant.duplicate", e.diagnostics().get(0).messageKey());
+        assertEquals("invariant.two-clauses-share-one-name", e.diagnostics().get(0).messageKey());
     }
 
     /**
@@ -240,7 +240,7 @@ class CompileNamedInvariantClauseTest {
                 data Positive = Int
                     invariant _ = value > 0
                 """));
-        assertEquals("check.invariant.underscore", e.diagnostics().get(0).messageKey());
+        assertEquals("invariant.underscore-cannot-name-a-clause", e.diagnostics().get(0).messageKey());
         assertEquals(3, e.diagnostics().get(0).pos().line(), "reported at the clause, not at a use");
     }
 
@@ -317,7 +317,7 @@ class CompileNamedInvariantClauseTest {
                 data Order = { ...Common, lines: Int }
                     invariant sound = lines >= 1
                 """));
-        assertEquals("check.invariant.duplicate", e.diagnostics().get(0).messageKey());
+        assertEquals("invariant.two-clauses-share-one-name", e.diagnostics().get(0).messageKey());
     }
 
     /**

@@ -74,9 +74,9 @@ class ANameThatDenotesNothingCostsOneDefinitionTest {
     void theLanguageServerIsAnsweredWithDiagnosticsForAFileBeingTyped() {
         // `diagnoseModules` is the server's path. A throw here is not a diagnostic it can show, and
         // it takes the dispatch loop with it.
-        assertEquals(List.of("check.unknown.name.msg"), messageKeys(IN_AN_ARM),
+        assertEquals(List.of("name.no-value-of-that-name-in-scope"), messageKeys(IN_AN_ARM),
                 "the file being typed answers with the name that denotes nothing");
-        assertTrue(messageKeys(AS_THE_SPEC_WRITES_IT).contains("check.unknown.name.msg"),
+        assertTrue(messageKeys(AS_THE_SPEC_WRITES_IT).contains("name.no-value-of-that-name-in-scope"),
                 "and so does the shape the specification is written in");
     }
 
@@ -85,14 +85,14 @@ class ANameThatDenotesNothingCostsOneDefinitionTest {
         // Everything that follows from the broken name is that one mistake seen from another angle.
         // Telling the author to annotate `a` as well sends them at a parameter that is not the
         // problem: fixing `Nope` is what settles it.
-        assertEquals(List.of("check.unknown.name.msg"), messageKeys(IN_AN_ARM),
+        assertEquals(List.of("name.no-value-of-that-name-in-scope"), messageKeys(IN_AN_ARM),
                 "the parameter beside the name is not reported as undetermined");
     }
 
     @Test
     void everyOtherDefinitionInTheModuleIsStillChecked() {
         // The point of abandoning one definition: an author fixing one name is still told the rest.
-        assertEquals(List.of("check.unknown.name.msg", "check.unknown.name.msg"), messageKeys("""
+        assertEquals(List.of("name.no-value-of-that-name-in-scope", "name.no-value-of-that-name-in-scope"), messageKeys("""
                 module demo
                 let f (a) = if a == 1 then a else Nope
                 let h (b) = b + Missing

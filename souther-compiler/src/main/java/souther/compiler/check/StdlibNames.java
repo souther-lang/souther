@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.Prelude;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 
@@ -37,7 +38,7 @@ final class StdlibNames {
             return null;
         }
         String list = Prelude.candidateList(bare);
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1025, "check.stdlib.qualified.msg")
-                        .at(region).args(written, list).build());
+        return CompileException.of(Diagnostic
+                        .at(region).say(new NameMessage.WriteAStandardLibraryNameQualified(written, list)).build());
     }
 }

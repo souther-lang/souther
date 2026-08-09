@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
@@ -929,8 +930,8 @@ public final class Resolve {
         if (dot < 0 || !Prelude.isQualifier(name.substring(0, dot))) {
             return null;
         }
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1506, "check.stdlib.notfunction")
-                        .at(written.region()).args(written.quoted()).build());
+        return CompileException.of(Diagnostic
+                        .at(written.region()).say(new NameMessage.NotAStandardLibraryFunction(written.quoted())).build());
     }
 
     private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
@@ -951,9 +952,9 @@ public final class Resolve {
             return bareLibraryName;
         }
         List<String> candidates = reachable(bound);
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
-                        .at(written.region()).args(written.quoted())
-                        .suggestion(Suggest.candidate(name, candidates)).build());
+        return CompileException.of(Diagnostic
+                        .at(written.region())
+                        .suggestion(Suggest.candidate(name, candidates)).say(new NameMessage.NoValueOfThatNameInScope(written.quoted())).build());
     }
 
     /**

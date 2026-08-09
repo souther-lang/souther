@@ -102,7 +102,7 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 let f (a) = 1 + a.n
                 """);
 
-        assertEquals(List.of("check.unknown.type.msg"), keys,
+        assertEquals(List.of("name.no-type-of-that-name"), keys,
                 "the name that denotes nothing, and nothing about adding it: " + keys);
     }
 }

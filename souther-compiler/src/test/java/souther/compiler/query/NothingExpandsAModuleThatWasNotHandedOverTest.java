@@ -99,7 +99,7 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
         List<Report> reports = db.ask(new Shapes.Expandable("m.a")).reports();
         assertFalse(reports.isEmpty(), "the question that owns the rule says what is wrong");
         assertTrue(reports.stream().anyMatch(r -> r.diagnostic() != null
-                        && "check.value.cycle".equals(r.diagnostic().messageKey())),
+                        && "name.a-value-reaches-itself".equals(r.diagnostic().messageKey())),
                 "and says it as a value cycle: " + reports);
     }
 }

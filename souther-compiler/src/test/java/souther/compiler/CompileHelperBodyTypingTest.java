@@ -722,7 +722,7 @@ class CompileHelperBodyTypingTest {
                 behavior f : (a: A) -> X constructs X
                 let f (a) = X(describe(a))
                 """;
-        assertEquals(List.of("check.rechelper.return"),
+        assertEquals(List.of("name.a-recursive-helper-must-declare-its-return-type"),
                 Located.diagnosticsOf(Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)))
                         .get("demo.sou").stream()
                         .map(souther.compiler.diag.Diagnostic::messageKey).toList(),
@@ -805,7 +805,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(bad([ 1 ]))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.arith.operand", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("arithmetic.an-operand-is-not-a-number", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
