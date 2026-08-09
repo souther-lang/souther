@@ -180,6 +180,11 @@ public final class Diagnostic {
         return new Builder(null, null).at(pos);
     }
 
+    /** The same, underlining {@code width} columns from {@code pos}. */
+    public static Builder at(SourcePos pos, int width) {
+        return new Builder(null, null).at(pos, width);
+    }
+
     public static Builder of(DiagnosticCode code, String messageKey) {
         return new Builder(Objects.requireNonNull(code, "a diagnostic reports a rule, and a rule has"
                 + " a code; `literal` is the one path without one"), messageKey);
