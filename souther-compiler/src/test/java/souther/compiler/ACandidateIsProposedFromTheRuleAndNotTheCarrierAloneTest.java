@@ -216,6 +216,130 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     }
 
     /**
+     * An element offering several values offers all of them to the collection built around it.
+     *
+     * <p>Which is the same thing the position itself is owed, one level down. {@code Word} proposes the
+     * shortest string its format accepts and the string its minimum asks for, and the decoder settles
+     * which; a list that took the first of those and stopped would report the combination as refused
+     * while a list of the second is a value the model plainly admits. Collapsing the element to one
+     * value moves the defect this whole change is about from the collection to what it holds.
+     */
+    @Test
+    void anElementOfferingSeveralValuesOffersThemAllThroughTheCollection() {
+        String row = generatedRow(model("""
+                data Word = String
+                    invariant shaped = String.matches("x*", value)
+                    invariant longEnough = String.length(value) >= 5
+
+                data Words = List<Word>
+                    invariant someWords = List.length(value) >= 1
+                """, "words: Words", "words = Words([Word(\"xxxxx\")])"));
+
+        assertEquals("T { kind = Overseas, words = Words([Word(\"xxxxx\")]) }", row);
+    }
+
+    /** The same of what a map holds under its keys. */
+    @Test
+    void aValueOfferingSeveralOfThemOffersThemAllThroughTheMap() {
+        String row = generatedRow(model("""
+                data Word = String
+                    invariant shaped = String.matches("x*", value)
+                    invariant longEnough = String.length(value) >= 5
+
+                data Words = Map<String, Word>
+                    invariant someWords = Map.size(value) >= 1
+                """, "words: Words", "words = Words([(\"k\", Word(\"xxxxx\"))])"));
+
+        assertEquals("T { kind = Overseas, words = Words([(\"x\", Word(\"xxxxx\"))]) }", row);
+    }
+
+    /**
+     * Elements that differ are elements of the type, not numbers counted from nothing.
+     *
+     * <p>A set of two needs a second value no rule of the element refuses. Counting {@code 0, 1, 2} for
+     * distinctness offers a number the element's own bound rejects, and the set is then refused for the
+     * element rather than for anything about its size — the same collapse as above, arrived at from the
+     * other side.
+     */
+    @Test
+    void aSetsSecondElementComesFromInsideTheElementsOwnBound() {
+        String row = generatedRow(model("""
+                data Positive = Int
+                    invariant atLeastTen = value >= 10
+
+                data Positives = Set<Positive>
+                    invariant enough = Set.size(value) >= 2
+                """, "ns: Positives", "ns = Positives([Positive(10), Positive(11)])"));
+
+        assertEquals("T { kind = Overseas, ns = Positives([Positive(10), Positive(11)]) }", row);
+    }
+
+    /**
+     * The same of a map's keys, which have to differ for the same reason.
+     *
+     * <p>Keyed by a string, because a map that crosses the boundary is a JSON object and its keys are
+     * strings (<<e1314>>). The rule the second key has to keep is its length rather than a bound, and
+     * it is the same question: a key made without reading the key's own rules is a key the map is
+     * refused for.
+     */
+    @Test
+    void aMapsSecondKeyComesFromInsideTheKeysOwnRules() {
+        String row = generatedRow(model("""
+                data Code = String
+                    invariant longEnough = String.length(value) >= 3
+
+                data ByCode = Map<Code, String>
+                    invariant enough = Map.size(value) >= 2
+                """, "by: ByCode", "by = ByCode([(Code(\"aaa\"), \"a\"), (Code(\"bbbb\"), \"b\")])"));
+
+        assertEquals("T { kind = Overseas, by = ByCode([(Code(\"xxx\"), \"x\"), "
+                + "(Code(\"xxxx\"), \"x\")]) }", row);
+    }
+
+    /**
+     * A type written in terms of itself is what the descent gives up on.
+     *
+     * <p>No value of it exists, so the giving up is the right answer and not a limit reached. What
+     * matters is that it is reported the way any other refusal is, rather than descending forever.
+     */
+    @Test
+    void aTypeWrittenInTermsOfItselfIsGivenUpOn() {
+        String source = model("""
+                data Nest = List<Nest>
+                    invariant someNest = List.length(value) >= 1
+                """, "nest: Nest", "nest = Nest([])");
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+
+        assertNotNull(compilation.db().ask(new Adequacy.Generated(compilation.modules().get(0)))
+                .value(), "asking for the rows comes back rather than descending forever");
+    }
+
+    /**
+     * A chain of names is not a type written in terms of itself.
+     *
+     * <p>What the descent has to give up on is a value inside itself, and how many names a value wears
+     * on the way down is not that. A count of levels cannot tell the two apart, so it is the names being
+     * expanded that say when to stop.
+     */
+    @Test
+    void aLongChainOfNamesIsStillBuilt() {
+        String row = generatedRow(model("""
+                data L1 = String
+                data L2 = L1
+                data L3 = L2
+                data L4 = L3
+                data L5 = L4
+
+                data Deep = List<L5>
+                    invariant someDeep = List.length(value) >= 1
+                """, "deep: Deep", "deep = Deep([L5(L4(L3(L2(L1(\"a\")))))])"));
+
+        assertEquals("T { kind = Overseas, deep = Deep([L5(L4(L3(L2(L1(\"x\")))))]) }", row);
+    }
+
+    /**
      * A rule the reader has nothing to say about leaves the position where it was.
      *
      * <p>The guarantee is that a minimum this recognises is used, not that a witness is found for

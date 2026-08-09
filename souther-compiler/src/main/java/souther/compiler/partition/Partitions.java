@@ -720,19 +720,21 @@ public final class Partitions {
      */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
                                                    NumericDomain.Bounds within) {
-        return representativesOf(type, symbols, within, 0);
+        return representativesOf(type, symbols, within, java.util.Set.of());
     }
 
     /**
-     * The same, {@code depth} values inside the one a position was asked for.
+     * The same, with the newtypes this is already inside the value of.
      *
-     * <p>Counted because what stands for a collection is built from what stands for its element, which
-     * is this question again. A type written in terms of itself would ask it forever, and a value below
-     * the bound is given up on rather than invented.
+     * <p>Carried because what stands for a collection is built from what stands for its element, which
+     * is this question again. A name met while its own value is being built is a type written in terms
+     * of itself and is given up on — the names and not a count of them, since how many names a value
+     * wears on the way down is not what has to be stopped.
      */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
-                                                   NumericDomain.Bounds within, int depth) {
-        if (type == null || depth > Witnesses.MAX_DEPTH) {
+                                                   NumericDomain.Bounds within,
+                                                   java.util.Set<TypeName> expanding) {
+        if (type == null) {
             return List.of();
         }
         if (type == Type.INT || type == Type.DECIMAL) {
@@ -773,7 +775,7 @@ public final class Partitions {
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
                 && data.newtype()) {
-            return insideTheNewtype(ref.name(), symbols, within, depth).stream()
+            return insideTheNewtype(ref.name(), symbols, within, expanding).stream()
                     .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
@@ -802,6 +804,32 @@ public final class Partitions {
         BigDecimal least = sized.min().value();
         return least.signum() <= 0 || least.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0
                 ? 0 : least.intValueExact();
+    }
+
+    /**
+     * The {@code index}th number the rules on {@code type} leave it able to hold, or null where it has
+     * no such number.
+     *
+     * <p>Asked where several values of one type are needed and they have to differ — the elements of a
+     * set, the keys of a map. Counted from inside the range rather than from zero, because a second
+     * value the type itself refuses would have the collection refused for its elements while saying
+     * nothing about how many of them there are.
+     *
+     * <p>Only a whole number steps. Between two decimals there is no next value, so a dense carrier
+     * names the one number inside its range and no more.
+     */
+    static BigDecimal numberInside(Type type, Symbols symbols, int index) {
+        Type base = TypeOps.numericBase(type, symbols);
+        if (base == null) {
+            return null;
+        }
+        NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), null);
+        BigDecimal from = inside(range, base == Type.DECIMAL);
+        if (from == null || base != Type.INT) {
+            return from != null && index == 0 ? from : null;
+        }
+        BigDecimal stepped = from.add(BigDecimal.valueOf(index));
+        return holdsNumber(range, stepped) ? stepped : null;
     }
 
     /**
@@ -893,11 +921,19 @@ public final class Partitions {
      * other.
      */
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
-        return insideTheNewtype(newtype, symbols, null, 0);
+        return insideTheNewtype(newtype, symbols, null, java.util.Set.of());
     }
 
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols,
-                                                          NumericDomain.Bounds within, int depth) {
+                                                          NumericDomain.Bounds within,
+                                                          java.util.Set<TypeName> expanding) {
+        // Already inside this one's own value, so the type is written in terms of itself and there is
+        // nothing to hand back. Which is the answer and not a limit: no value of such a type exists.
+        if (expanding.contains(newtype)) {
+            return List.of();
+        }
+        java.util.Set<TypeName> inside = new java.util.LinkedHashSet<>(expanding);
+        inside.add(newtype);
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
@@ -923,12 +959,9 @@ public final class Partitions {
         // minimum are two proposals and not a choice between them: each is what one rule asks for, and
         // which of them the whole of the rules admits is the decoder's answer rather than an order
         // settled here.
-        FixtureTemplate enough = Witnesses.holding(base, leastHeld(new Type.Ref(newtype), symbols),
-                symbols, depth);
-        if (enough != null) {
-            candidates.add(enough);
-        }
-        candidates.addAll(representativesOf(base, symbols, null, depth + 1));
+        candidates.addAll(Witnesses.holding(base, leastHeld(new Type.Ref(newtype), symbols),
+                symbols, inside));
+        candidates.addAll(representativesOf(base, symbols, null, inside));
 
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
         for (FixtureTemplate each : candidates) {
