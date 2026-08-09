@@ -173,11 +173,11 @@ class CompileLetAnnotationTest {
         assertEquals(2L, out.get("n"));
     }
 
-    // A lambda binding takes no annotation: a function type may be written only in a helper's
-    // parameter, so whatever ordinary type is written here is a lie. The binding is expanded away at
-    // its applications, so the rule is read on the surface body rather than after lowering.
+    // An annotation on a lambda binding is held against the lambda: an ordinary type does not
+    // describe a function, so it settles nothing. The binding is expanded away at its applications,
+    // so the rule is read on the surface body rather than after lowering.
     @Test
-    void anAnnotationOnALambdaBindingIsRejected() {
+    void anOrdinaryAnnotationOnALambdaBindingIsRejected() {
         Diagnostic d = diagnosticOf("""
                 module demo
                 data In = { v: Int }
@@ -189,14 +189,14 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.fn.title", d.titleKey());
-        assertInstanceOf(HelperMessage.AFunctionTypeIsWrittenOutsideAHelperParameter.class, d.said());
+        assertInstanceOf(HelperMessage.AnAnnotationOnAFunctionBindingIsNotAFunctionType.class, d.said());
         assertEquals("f", d.values().get("binding"));
     }
 
     // The other shape a function binding takes — one an `if` chooses, which stays a first-class Fn
     // rather than being expanded away — is rejected by the same rule, with the same message.
     @Test
-    void anAnnotationOnARuntimeChosenFunctionIsRejected() {
+    void anOrdinaryAnnotationOnARuntimeChosenFunctionIsRejected() {
         Diagnostic d = diagnosticOf("""
                 module demo
                 data In = { v: Int }
@@ -208,7 +208,30 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.fn.title", d.titleKey());
-        assertInstanceOf(HelperMessage.AFunctionTypeIsWrittenOutsideAHelperParameter.class, d.said());
+        assertInstanceOf(HelperMessage.AnAnnotationOnAFunctionBindingIsNotAFunctionType.class, d.said());
+    }
+
+    // The other side of the same rule, and the one that says what E1810 does not report: a function
+    // type in a local annotation is admitted, as it is in every type position no external
+    // representation is required at. Without this the rejections above would still pass if the check
+    // refused every annotation on a function.
+    @Test
+    void aFunctionTypeAnnotationOnALambdaBindingIsAccepted() throws Exception {
+        String src = """
+                module demo
+                data In = { v: Int }
+                data Out = { v: Int }
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = {
+                    let f: (Int) -> Int = (x) -> x + 1
+                    Out { v = f(i.v) }
+                }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("v", 41L));
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
+        assertEquals(42L, out.get("v"));
     }
 
     // A sum annotation widens a case value to its sum, so the body's `match` sees both arms.

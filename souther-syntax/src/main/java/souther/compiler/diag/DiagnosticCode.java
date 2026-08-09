@@ -126,7 +126,7 @@ public enum DiagnosticCode {
     E1807("a-function-binding-has-one-type", "check.fn.title"),
     E1808("a-function-bindings-type-is-known", "check.fn.title"),
     E1809("a-block-is-not-a-value", "check.block.title"),
-    E1810("a-function-type-is-written-only-on-a-helper-parameter", "check.fn.title"),
+    E1810("an-annotation-on-a-function-binding-is-a-function-type", "check.fn.title"),
     E1811("a-helper-parameter-states-its-type", "check.helper.title"),
     E1812("a-helper-answers-what-it-declares", "check.helper.title"),
     E1813("a-recursive-helper-declares-its-return-type", "check.helper.title"),
