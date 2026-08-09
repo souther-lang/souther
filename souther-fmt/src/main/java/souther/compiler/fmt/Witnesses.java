@@ -155,6 +155,76 @@ final class Witnesses {
         return out;
     }
 
+    /**
+     * What the conditional-layout rule has against {@code source}.
+     *
+     * <p>One witness per group the width decided. A group is not its boundaries: written down the
+     * page it moves every one of them, and what was decided was whether the line it would take fits.
+     *
+     * <p>Matched against the opportunities rather than against the breaks. Where the canonical form
+     * keeps a group whole there is no break of its to point at, and a source that broke inside it
+     * has still departed from the decision — so what is asked of each opportunity is whether the
+     * source has a line ending at the same place.
+     *
+     * <p>A group written down the page because it holds a forced break is not this rule's. That
+     * decision was taken before the width was asked, and reporting it here would tell an author to
+     * close up a line that a comment or a member of its own keeps open.
+     */
+    static List<Witness> conditional(String source, Formatter.CanonicalForm canonical) {
+        Layout layout = canonical.layout();
+        List<SyntaxToken> had = code(CstParser.parse(source).root());
+        List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
+        if (had.size() != writes.size()) {
+            throw new IllegalStateException(
+                    "the source has " + had.size() + " tokens and its canonical form "
+                            + writes.size() + "; the two cannot be held side by side");
+        }
+        Map<Doc.GroupRef, Outcome> outcomes = new IdentityHashMap<>();
+        Map<Doc.GroupRef, Integer> where = new IdentityHashMap<>();
+        for (GroupDecision d : layout.decisions()) {
+            outcomes.put(d.group(), d.outcome());
+        }
+        Map<Doc.GroupRef, Boolean> broken = new IdentityHashMap<>();
+        for (Opportunity o : layout.opportunities()) {
+            where.merge(o.settledBy(), o.at(), Math::min);
+            Boolean already = broken.get(o.settledBy());
+            broken.put(o.settledBy(),
+                    (already != null && already) || brokeInSource(source, had, writes, o.at()));
+        }
+
+        List<Witness> out = new ArrayList<>();
+        for (Map.Entry<Doc.GroupRef, Integer> e : where.entrySet()) {
+            Outcome outcome = outcomes.get(e.getKey());
+            if (!(outcome instanceof Outcome.Flat) && !(outcome instanceof Outcome.BrokenByWidth)) {
+                continue;   // settled by what it holds, before the width was asked
+            }
+            boolean whole = outcome instanceof Outcome.Flat;
+            boolean sourceWhole = !Boolean.TRUE.equals(broken.get(e.getKey()));
+            if (whole != sourceWhole) {
+                out.add(new Witness.Conditional(new Witness.Group(e.getKey(), e.getValue()),
+                        whole, sourceWhole));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether the source broke at the adjacency the canonical form has an opportunity at.
+     *
+     * <p>The opportunity stands between two of the canonical form's tokens, and the source's
+     * answer is what it wrote between the same two of its own.
+     */
+    private static boolean brokeInSource(String source, List<SyntaxToken> had,
+            List<SyntaxToken> writes, int at) {
+        for (int i = 0; i + 1 < writes.size(); i++) {
+            if (writes.get(i).end() <= at && at <= writes.get(i + 1).start()) {
+                return source.substring(had.get(i).end(), had.get(i + 1).start())
+                        .indexOf('\n') >= 0;
+            }
+        }
+        return false;
+    }
+
     /** The file's items, in the order the canonical form writes them. */
     private static List<Place> topLevel(Formatter.CanonicalForm canonical) {
         Place file = canonical.construction().places().file();

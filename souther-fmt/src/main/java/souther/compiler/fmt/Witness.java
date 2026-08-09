@@ -73,4 +73,24 @@ sealed interface Witness {
      * between them, and how many the source wrote.
      */
     record Separation(Items unit, int canonical, int source) implements Witness {}
+
+    /**
+     * The conditional-layout rule's unit: one group, and where in the canonical form it stands.
+     *
+     * <p>The group and not the boundaries under it. One record literal written down the page moves
+     * every member boundary it holds, and the rule was evaluated once — whether the line this would
+     * take is within the width.
+     */
+    record Group(Doc.GroupRef group, int at) {}
+
+    /**
+     * The conditional-layout rule at one group: whether the canonical form writes it on one line,
+     * and whether the source did.
+     *
+     * <p>Only for a group the width decided. One written down the page because it holds something
+     * that cannot be laid out flat was settled before this rule was asked, and the forced-layout
+     * rule is what answers for it.
+     */
+    record Conditional(Group unit, boolean canonicalIsWhole, boolean sourceIsWhole)
+            implements Witness {}
 }

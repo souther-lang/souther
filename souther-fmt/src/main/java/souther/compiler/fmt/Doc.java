@@ -247,7 +247,7 @@ sealed interface Doc {
                     // decision settles it. The formatter writes none, which is its own check.
                     if (it.within() != null) {
                         opportunities.add(new Opportunity(l.ref(), it.within(),
-                                it.mode != Mode.FLAT));
+                                it.mode != Mode.FLAT, sb.length()));
                     }
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
