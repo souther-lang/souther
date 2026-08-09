@@ -158,6 +158,15 @@ final class Gaps {
             case TokenDoc.Gap g -> out.add(new GapSlot(g.policy()));
             case TokenDoc.Node n -> collect(n.doc(),
                     new Within(n.kind(), within, within == null ? 0 : within.depth() + 1), out);
+            // A place names a position and joins nothing, so the construct a boundary belongs to is
+            // found past it: two tokens on either side of a place are joined by whatever holds it.
+            case TokenDoc.At a -> collect(a.doc(), within, out);
+            case TokenDoc.Carries c -> throw new IllegalStateException(
+                    "a carrier reached the layout unresolved (" + c.which() + " of " + c.place()
+                            + "); the comments go in before the boundaries are answered");
+            case TokenDoc.Vacant v -> throw new IllegalStateException(
+                    "brackets reached the layout without being told what is between them ("
+                            + v.construct() + ")");
             case TokenDoc.Nest n -> collect(n.doc(), within, out);
             case TokenDoc.Group g -> collect(g.doc(), within, out);
             case TokenDoc.Concat c -> {
@@ -251,6 +260,9 @@ final class Gaps {
             case TokenDoc.Comment c -> Doc.text(c.text());
             case TokenDoc.Trailing t -> Doc.trailing(t.text());
             case TokenDoc.Node n -> lower(n.doc(), answers, next);
+            case TokenDoc.At a -> lower(a.doc(), answers, next);
+            case TokenDoc.Carries _, TokenDoc.Vacant _ -> throw new IllegalStateException(
+                    "a carrier reached the layout unresolved");
             case TokenDoc.Nest n -> Doc.nest(n.indent(), lower(n.doc(), answers, next));
             case TokenDoc.Group g -> Doc.group(lower(g.doc(), answers, next));
             case TokenDoc.Concat c -> {

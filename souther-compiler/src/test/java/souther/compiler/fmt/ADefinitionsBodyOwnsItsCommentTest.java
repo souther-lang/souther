@@ -1,8 +1,16 @@
 package souther.compiler.fmt;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.cst.CstParser;
+import souther.compiler.cst.SyntaxKind;
+import souther.compiler.cst.SyntaxNode;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A comment written above what a definition or an {@code if} writes after its keyword stays there.
@@ -102,28 +110,106 @@ class ADefinitionsBodyOwnsItsCommentTest {
     }
 
     /**
-     * A definition written as a lambda is left as it was. Its parameters move to the left of the
-     * {@code =}, so what the canonical form writes after the {@code =} is not the child the source
-     * has there — it is that child's body, a level further down. The comment is about that body and
-     * the construct the source gives it to is the lambda, and until the two are the same question
-     * this is one construct where the comment still travels to the declaration.
-     *
-     * <p>Held here so that it is a stated limit rather than a case nobody tried. Making it right
-     * needs the canonical structure to be something a comment can be filed against, which is
-     * issue #444.
+     * And so does one written as a lambda. Its parameters move to the left of the {@code =}, so what
+     * the canonical form writes after the {@code =} is not the child the source has there — it is
+     * that child's body, a level further down. The comment is about that body, and the body is a
+     * place of the canonical form whether or not the source has a construct in that position.
      */
     @Test
-    void butADefinitionWrittenAsALambdaIsLeftAsItWas() {
+    void andSoDoesOneWrittenAsALambda() {
         assertEquals("""
                 module m
 
-                // about the body
-                let f (x) = x
+                let f (x) =
+                    // about the body
+                    x
                 """, Formatter.format("""
                 module m
                 let f = (x) ->
                     // about the body
                     x
                 """));
+    }
+
+    /** A lambda whose body is another lambda lifts the outer one only, so what is written after the
+     * {@code =} is the inner lambda and the comment is above all of it. */
+    @Test
+    void andOneWhoseBodyIsAnotherLambda() {
+        assertEquals("""
+                module m
+
+                let g (x) =
+                    // about the body
+                    (y) -> x
+                """, Formatter.format("""
+                module m
+                let g = (x) ->
+                    // about the body
+                    (y) -> x
+                """));
+    }
+
+    /**
+     * And the place that carries it is the body's.
+     *
+     * <p>Read from the text alone this case cannot be told from the one it used to be: a comment
+     * carried by the declaration is written on the line before the body too, and the count of
+     * comments is the same either way. What has to be true is that the place handed the comment is
+     * the one the lambda's last expression child was written at — which is not the place the source
+     * has a construct at, and is why asking the source tree a second time answered wrongly here.
+     */
+    @Test
+    void andTheCarrierIsTheBodysPlaceAndNotTheDefinitions() {
+        SyntaxNode root = CstParser.parse("""
+                module m
+                let f = (x) ->
+                    // about the body
+                    x
+                """).root();
+        Formatter.Construction built = Formatter.build(root);
+
+        SyntaxNode lambda = only(root, SyntaxKind.LAMBDA_EXPR);
+        SyntaxNode body = childOf(lambda, SyntaxKind.VAR_EXPR);
+        Place carrier = carrierOf(built, Carrier.ABOVE);
+
+        assertEquals(List.of(new Written.Construct(body)), built.places().sourcesOf(carrier),
+                "the comment is carried by the place the lambda's body was written at");
+        assertNotSame(carrier, built.places().placesOf(new Written.Construct(lambda.parent())).get(0),
+                "and not by the definition's own place, which is where it used to travel to");
+        assertTrue(built.places().sourcesOf(carrier.parent())
+                        .contains(new Written.Construct(lambda.parent())),
+                "the carrier is one of the definition's places: " + carrier.parent());
+    }
+
+    /** The one place a comment was handed in that direction. */
+    private static Place carrierOf(Formatter.Construction built, Carrier which) {
+        List<Place> found = new ArrayList<>();
+        for (var e : built.carriers().entrySet()) {
+            if (!e.getValue().getOrDefault(which, List.of()).isEmpty()) {
+                found.add(e.getKey());
+            }
+        }
+        assertEquals(1, found.size(), "one place carries the fixture's one comment: " + found);
+        return found.get(0);
+    }
+
+    private static SyntaxNode only(SyntaxNode from, SyntaxKind kind) {
+        List<SyntaxNode> out = new ArrayList<>();
+        descend(from, kind, out);
+        assertEquals(1, out.size(), "the fixture writes one " + kind);
+        return out.get(0);
+    }
+
+    private static void descend(SyntaxNode n, SyntaxKind kind, List<SyntaxNode> out) {
+        if (n.kind() == kind) {
+            out.add(n);
+        }
+        for (SyntaxNode c : n.childNodes()) {
+            descend(c, kind, out);
+        }
+    }
+
+    private static SyntaxNode childOf(SyntaxNode n, SyntaxKind kind) {
+        return n.child(kind).orElseThrow();
     }
 }

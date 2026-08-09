@@ -39,14 +39,23 @@ class EveryTokenTheDocumentLaysOutIsOneTokenOfTheOutputTest {
         return out;
     }
 
+    /** Every arm is written out and none of them is a {@code default}: a document that grows a way
+     *  of holding a token has to be answered for here, and a {@code default} would take the new one
+     *  as holding none. */
     private static void collect(TokenDoc doc, List<TokenDoc.Token> out) {
         switch (doc) {
             case TokenDoc.Token t -> out.add(t);
             case TokenDoc.Node n -> collect(n.doc(), out);
+            case TokenDoc.At a -> collect(a.doc(), out);
             case TokenDoc.Nest n -> collect(n.doc(), out);
             case TokenDoc.Group g -> collect(g.doc(), out);
             case TokenDoc.Concat c -> c.parts().forEach(part -> collect(part, out));
-            default -> { }
+            case TokenDoc.Nil _, TokenDoc.Comment _, TokenDoc.Trailing _, TokenDoc.Gap _,
+                    TokenDoc.MustBreak _ -> { }
+            case TokenDoc.Carries c -> throw new IllegalStateException(
+                    "the document under test still holds an unanswered carrier: " + c);
+            case TokenDoc.Vacant v -> throw new IllegalStateException(
+                    "the document under test still holds brackets nobody has filled: " + v);
         }
     }
 
