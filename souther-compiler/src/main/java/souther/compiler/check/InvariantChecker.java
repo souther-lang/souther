@@ -8,6 +8,7 @@ import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -22,6 +23,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.SequencedSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -633,7 +636,7 @@ public final class InvariantChecker {
      * reaches here: the walk opens it before anything is checked, so what a field is given is a
      * value and not a choice of two.
      */
-    private Verdict verdictOf(Core.NewData nd, Ast.Data type, Known k, Denotations at) {
+    private Judgment verdictOf(Core.NewData nd, Ast.Data type, Known k, Denotations at) {
         Map<String, BindingId> fields = clauses.bindingsOf(nd.typeName(), type);
         Map<BindingId, Core> given = new HashMap<>();
         for (Core.FieldInit fi : nd.inits()) {
@@ -725,13 +728,24 @@ public final class InvariantChecker {
 
     /** The discharge verdict for a construction of {@code type} whose fields are being given
      * {@code given}. */
-    private Verdict verdictOf(TypeName named, Ast.Data type, Map<BindingId, Core> given, Known k,
-                              Denotations at, boolean decidesFalse) {
+    private Judgment verdictOf(TypeName named, Ast.Data type, Map<BindingId, Core> given, Known k,
+                               Denotations at, boolean decidesFalse) {
         // What the construction hands over that no clause may be read against. A clause naming one of
         // them is left to the run-time check, and one that is decided outright is still decided: what
         // cannot be guarded is not the same as what cannot be computed.
         Set<Core> unnamed = unnamed(given.values(), k, at);
-        List<Predicates.Clause> owed = new ArrayList<>();
+        List<Owing> owed = new ArrayList<>();
+        // Which clauses came out settled and which did not, in the order they were declared. What is
+        // reported of a construction that may abort is the clause the guards did not establish, and
+        // the invariant is the conjunction of its clauses — so every one of them is read before the
+        // answer is decided, and each is remembered by the name its author gave it.
+        SequencedSet<String> unsettled = new LinkedHashSet<>();
+        SequencedSet<String> settled = new LinkedHashSet<>();
+        boolean refutedAlone = false;
+        // Whether any clause is unsettled, which is not the same as whether any named one is: a
+        // clause MAY be written without a name, and one that was is still a clause the guards did
+        // not establish. Reading the answer off the names alone made an unnamed clause discharge.
+        boolean unknown = false;
         // A clause the check cannot read here owes nothing and proves nothing, and the two are not
         // the same answer. Kept apart: a clause that owes nothing because it folded to what it is read
         // with is discharged, and one that owes nothing because nothing here could be asked of it is
@@ -740,21 +754,24 @@ public final class InvariantChecker {
         // A newtype construction from a value written out is the constant check's to report: it names
         // the clause that failed. It reads the construction as written, so a name given the value is
         // not one it sees, and this check says it instead — which is what `decidesFalse` carries.
-        for (Core stated : clauses.statedAt(named, type, given)) {
-            Predicates.Owed o = predicates.obligations(stated, k, at, unnamed, decidesFalse);
+        for (Clauses.Stated stated : clauses.statedAt(named, type, given)) {
+            Predicates.Owed o = predicates.obligations(stated.expr(), k, at, unnamed, decidesFalse);
             unreadable |= o.unreadable();
-            owed.addAll(o.clauses());
+            for (Predicates.Clause one : o.clauses()) {
+                owed.add(new Owing(stated, one));
+            }
         }
         if (owed.isEmpty()) {
-            return unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
+            return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED,
+                    unsettled, settled);
         }
         NumericDomain dom = k.numbers();
         // The same clauses read against the same site, under what would be known here had no
         // condition on the path settled anything. What each clause states of the sizes it names holds
         // either way, so both readings take it.
         NumericDomain alone = k.unguarded().numbers();
-        for (Predicates.Clause c : owed) {
-            for (Predicates.Constraint known : c.known()) {
+        for (Owing owing : owed) {
+            for (Predicates.Constraint known : owing.clause().known()) {
                 Map<String, Granularity> kinds = terms.kindsOf(known.form());
                 dom = dom.assume(known.form(), known.rel(), kinds);
                 alone = alone.assume(known.form(), known.rel(), kinds);
@@ -765,29 +782,76 @@ public final class InvariantChecker {
         // invariant refuted on the values alone, whatever another clause needed to be refuted —
         // stopping at the first refutation would answer with whichever clause was declared first.
         boolean alongside = false;
-        boolean unknown = false;
-        for (Predicates.Clause c : owed) {
+        for (Owing owing : owed) {
+            Predicates.Clause c = owing.clause();
             if (c.dischargedBy(dom, k.facts())) {
+                if (owing.said() != null) {
+                    settled.add(owing.said());
+                }
                 continue;
             }
             if (!c.refutedBy(dom, k.facts())) {
                 unknown = true;
+                if (owing.said() != null) {
+                    unsettled.add(owing.said());
+                }
                 continue;
             }
             if (c.refutedBy(alone, k.unguarded().facts())) {
-                return Verdict.REFUTED_ALONE;
+                refutedAlone = true;
             }
             alongside = true;
+            if (owing.said() != null) {
+                unsettled.add(owing.said());
+            }
+        }
+        if (refutedAlone) {
+            return new Judgment(Verdict.REFUTED_ALONE, unsettled, settled);
         }
         if (alongside) {
-            return Verdict.REFUTED_NOT_ALONE;
+            return new Judgment(Verdict.REFUTED_NOT_ALONE, unsettled, settled);
         }
         if (unknown) {
-            return Verdict.UNKNOWN;
+            return new Judgment(Verdict.UNKNOWN, unsettled, settled);
         }
         // Every clause that could be read is discharged. One that could not be read still stands, so
         // this is not the whole invariant proven.
-        return unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED;
+        return new Judgment(unreadable ? Verdict.UNREPRESENTABLE : Verdict.PROVED, unsettled,
+                settled);
+    }
+
+    /** One obligation and the clause it was owed by. */
+    private record Owing(Clauses.Stated from, Predicates.Clause clause) {
+
+        /** The name the author gave this clause, or null where they gave it none. A clause MAY be
+         * named, and one that is not is one a reader cannot be sent to by name. */
+        String said() {
+            return from.name();
+        }
+    }
+
+    /**
+     * What the check found, and of which clauses.
+     *
+     * <p>The verdict alone is what used to come back, and it is the conjunction's answer: a reader
+     * told that a construction may violate "its invariant" is told nothing they can act on where the
+     * type declares five clauses and four of them are settled.
+     */
+    record Judgment(Verdict verdict, SequencedSet<String> unsettled, SequencedSet<String> settled) {
+
+        /**
+         * What two readings of one construction found, together.
+         *
+         * <p>A clause is unsettled here if either reading left it so — what one branch established
+         * is not established where the other did not — and settled only where both settled it.
+         */
+        static Judgment of(Judgment a, Judgment b) {
+            SequencedSet<String> unsettled = new LinkedHashSet<>(a.unsettled());
+            unsettled.addAll(b.unsettled());
+            SequencedSet<String> settled = new LinkedHashSet<>(a.settled());
+            settled.retainAll(b.settled());
+            return new Judgment(Verdict.of(a.verdict(), b.verdict()), unsettled, settled);
+        }
     }
 
     /** Whether the constant check reads this construction: a newtype's, over a value written where
@@ -801,24 +865,32 @@ public final class InvariantChecker {
      * warning; a discharged or non-expressible invariant says nothing. An {@code attempted}
      * construction raises no warning: what the warning reports is a possible abort, and an attempt
      * takes its else branch instead. */
-    private void report(Core at, Ast.Data type, SourcePos pos, boolean attempted, Verdict verdict) {
+    private void report(Core at, Ast.Data type, SourcePos pos, boolean attempted,
+                        Judgment judgment) {
+        Verdict verdict = judgment.verdict();
         List<Said> watching = WATCHING;
         if (watching != null && capturing == null) {
             watching.add(new Said(type.name(), pos, verdict));
         }
         if (capturing != null) {
             capturing.found().put(new Occurrence(asWritten(at)),
-                    new Reported(type, pos, verdict, attempted));
+                    new Reported(type, pos, judgment, attempted));
             return;
         }
         switch (verdict) {
-            case REFUTED_ALONE -> reportViolation(type, pos, "check.invariant.violation.alone");
-            case REFUTED_NOT_ALONE ->
-                    reportViolation(type, pos, "check.invariant.violation.assumed");
+            case REFUTED_ALONE -> reportViolation(type, pos, judgment, false);
+            case REFUTED_NOT_ALONE -> reportViolation(type, pos, judgment, true);
             case UNKNOWN -> {
                 if (!attempted) {
-                    warnings.add(Diagnostic.of(DiagnosticCode.E2011, "check.invariant.unproven").at(pos).args(type.name())
-                            .hint("check.invariant.reify", type.name()).build());
+                    String named = String.join(", ", judgment.unsettled());
+                    warnings.add(Diagnostic.at(pos)
+                            .say(named.isEmpty()
+                                    ? new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(
+                                            type.name())
+                                    : new InvariantMessage.TheGuardsDoNotEstablish(type.name(),
+                                            named, String.join(", ", judgment.settled())))
+                            .hint(new InvariantMessage.ReifyTheRelationOntoAnInput(type.name()))
+                            .build());
                 }
             }
             // Nothing was asked here, so nothing is said. Whether that is the right thing to say of a
@@ -830,7 +902,12 @@ public final class InvariantChecker {
     }
 
     /** What a construction came out as where it is being read on a branch rather than said. */
-    private record Reported(Ast.Data type, SourcePos pos, Verdict verdict, boolean attempted) {}
+    private record Reported(Ast.Data type, SourcePos pos, Judgment judgment, boolean attempted) {
+
+        Verdict verdict() {
+            return judgment.verdict();
+        }
+    }
 
     /**
      * Which construction a reading found: the one in the body as it was written. A reading is that
@@ -1098,11 +1175,11 @@ public final class InvariantChecker {
                 // Written inside one branch, so the other reading did not discharge it — it was not
                 // there to discharge. What the reading that reached it found is what it is.
                 Reported said = x != null ? x : y;
-                report(one.of(), said.type(), said.pos(), said.attempted(), said.verdict());
+                report(one.of(), said.type(), said.pos(), said.attempted(), said.judgment());
                 continue;
             }
             report(one.of(), x.type(), x.pos(), x.attempted(),
-                    Verdict.of(x.verdict(), y.verdict()));
+                    Judgment.of(x.judgment(), y.judgment()));
         }
     }
 
@@ -1110,9 +1187,22 @@ public final class InvariantChecker {
      * fails the invariant on its own, or it fails under what else is known where it stands. The check
      * knows which of the two decided it and not what within the second did, so neither message names
      * a guard. */
-    private void reportViolation(Ast.Data type, SourcePos pos, String reason) {
-        errors.add(CompileException.of(Diagnostic.of(DiagnosticCode.E2010, reason)
-                        .at(pos).args(type.name()).build()));
+    private void reportViolation(Ast.Data type, SourcePos pos, Judgment judgment,
+                                 boolean onAPath) {
+        String named = String.join(", ", judgment.unsettled());
+        errors.add(CompileException.of(Diagnostic.at(pos)
+                .say(onAPath
+                        ? named.isEmpty()
+                                ? new InvariantMessage.TheValueIsRejectedOnAReachablePathUnnamed(
+                                        type.name())
+                                : new InvariantMessage.TheValueIsRejectedOnAReachablePath(
+                                        type.name(), named)
+                        : named.isEmpty()
+                                ? new InvariantMessage.TheValueIsOneTheInvariantRejectsUnnamed(
+                                        type.name())
+                                : new InvariantMessage.TheValueIsOneTheInvariantRejects(
+                                        type.name(), named))
+                .build()));
     }
 
     // --- introducing a binding -----------------------------------------------------------------
@@ -1237,9 +1327,9 @@ public final class InvariantChecker {
         });
         Known out = k;
         List<Quantified> quantified = new ArrayList<>();
-        for (Core stated : clauses.statedAt(ref.name(), data, given)) {
-            predicates.quantifiedBy(stated, at, true, quantified);
-            out = predicates.assume(predicates.obligations(stated, out, at, false), out,
+        for (Clauses.Stated stated : clauses.statedAt(ref.name(), data, given)) {
+            predicates.quantifiedBy(stated.expr(), at, true, quantified);
+            out = predicates.assume(predicates.obligations(stated.expr(), out, at, false), out,
                     Known.Held.OF_THE_VALUE);
         }
         out = out.and(quantified);

@@ -19,6 +19,76 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CompileInvariantDischargeTest {
 
+    /**
+     * The warning names the clauses it could not establish, and the ones it did.
+     *
+     * <p>An invariant is the conjunction of its clauses and the check judges them one at a time, so
+     * it knows which of them the guards left standing. Saying only that "its invariant" may be
+     * violated leaves an author to find that out by writing one guard at a time and recompiling —
+     * which is what it cost when this said nothing: three clauses here, one of them established.
+     */
+    @Test
+    void theWarningNamesTheClauseItCouldNotEstablish() {
+        Compiler.Compiled c = Compiler.compileWithWarnings("""
+                module demo
+
+                data Yen = Decimal
+                    invariant nonNegative = value >= 0m
+
+                data Installment =
+                    { payment: Yen
+                    , interest: Decimal
+                    , principalPortion: Decimal
+                    }
+                    invariant interestNotNegative = interest >= 0m
+                    invariant principalPortionNotNegative = principalPortion >= 0m
+                    invariant portionsMakeThePayment = interest + principalPortion == payment.value
+
+                behavior split : (payment: Yen, interest: Decimal) -> Installment
+                    constructs Installment
+
+                let split (payment, interest) =
+                    Installment {
+                        payment = payment,
+                        interest = interest,
+                        principalPortion = payment.value - interest
+                    }
+                """);
+        String said = c.warnings().stream()
+                .filter(d -> "E2011".equals(d.code()))
+                .map(d -> souther.compiler.diag.Messages.render(d.said(), java.util.Locale.ENGLISH))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("expected an E2011"));
+        assertTrue(said.contains("interestNotNegative"), said);
+        assertTrue(said.contains("principalPortionNotNegative"), said);
+        assertTrue(said.contains("portionsMakeThePayment"), said);
+    }
+
+    /** A clause written without a name cannot be named, and the warning says what it can. */
+    @Test
+    void anUnnamedClauseLeavesTheWarningSayingTheInvariant() {
+        Compiler.Compiled c = Compiler.compileWithWarnings("""
+                module demo
+
+                data Bound =
+                    { low: Int
+                    , high: Int
+                    }
+                    invariant low <= high
+
+                behavior widen : (low: Int, high: Int) -> Bound
+                    constructs Bound
+
+                let widen (low, high) = Bound { low = low, high = high }
+                """);
+        String said = c.warnings().stream()
+                .filter(d -> "E2011".equals(d.code()))
+                .map(d -> souther.compiler.diag.Messages.render(d.said(), java.util.Locale.ENGLISH))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("expected an E2011"));
+        assertTrue(said.contains("its invariant"), said);
+    }
+
     private static long warnings(Compiler.Compiled c) {
         return c.warnings().stream()
                 .filter(d -> d.severity() == Severity.WARNING).count();

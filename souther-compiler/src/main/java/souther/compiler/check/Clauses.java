@@ -63,6 +63,8 @@ final class Clauses {
                 TypeOps.effectiveInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
     }
 
+    private final Map<TypeName, List<TypeOps.Declared>> declaredClauses = new HashMap<>();
+
     /** What {@code data}'s fields are. */
     Map<String, Type> fieldsOf(Ast.Data data) {
         return fields.computeIfAbsent(data, d -> TypeOps.fieldTypes(d, symbols));
@@ -128,15 +130,31 @@ final class Clauses {
      * it owes where one is being built are the same clauses read the same way, and they differ only
      * in what the fields are given — a read of each field, or the value each is being handed.
      */
-    List<Core> statedAt(TypeName named, Ast.Data data, Map<BindingId, Core> given) {
-        List<Core> stated = new ArrayList<>();
-        for (Ast.InvariantClause inv : of(named, data)) {
-            Core one = statedAt(inv.expr(), named, data, given);
+    List<Stated> statedAt(TypeName named, Ast.Data data, Map<BindingId, Core> given) {
+        List<Stated> stated = new ArrayList<>();
+        for (TypeOps.Declared inv : declared(named, data)) {
+            Core one = statedAt(inv.clause().expr(), named, data, given);
             if (one != null) {
-                stated.add(one);
+                stated.add(new Stated(inv.clause().name().orElse(null), inv.declaredOn(), one));
             }
         }
         return stated;
+    }
+
+    /**
+     * One clause as it reads at a construction, with the name the author gave it and the declaration
+     * it was written on.
+     *
+     * <p>A check that judges the clauses one at a time has something to say about the one it could
+     * not settle, and what it says it by is the name — which the clauses were flattened out of
+     * before reaching here, leaving every unproven clause reported as "the invariant".
+     */
+    record Stated(String name, TypeName declaredOn, Core expr) {}
+
+    /** Every clause of {@code named}, each with the declaration that wrote it. */
+    List<TypeOps.Declared> declared(TypeName named, Ast.Data data) {
+        return declaredClauses.computeIfAbsent(named, name ->
+                TypeOps.declaredInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
     }
 
     /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every
