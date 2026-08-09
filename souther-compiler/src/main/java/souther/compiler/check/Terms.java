@@ -44,6 +44,22 @@ final class Terms {
      * atom's name is made: the key and the kind of number behind it are decided in one step, and
      * anywhere else would be a second place that has to agree about which is which. */
     private final Map<String, Granularity> atomKinds = new HashMap<>();
+    /**
+     * Every canonical shape this has built, and the name it goes by.
+     *
+     * <p>What a term is made of is a graph and not a tree: a name read twice is one value read twice,
+     * and `+let (a, b) = t+` reads `+t+` twice by itself. A shape written out in full holds a copy of
+     * each of its parts, so a part read twice is written twice, and a chain of them doubles per link —
+     * twenty-four links asked for more characters than an array can hold. Held under a name, a shape
+     * that reads another holds the name and not the shape, and what a link adds is a name.
+     *
+     * <p>The names are the identity the rest of this asks about, and two shapes are one name exactly
+     * when they are the same shape. That is the same equality the strings had — a shape is compared by
+     * its parts' names, which are compared the same way, all the way down to what a location is
+     * called. So naming an expression still answers what the expression answers, which is what makes a
+     * name an alias.
+     */
+    private final Map<String, String> shapes = new HashMap<>();
 
     Terms(Symbols symbols) {
         this.symbols = symbols;
@@ -241,12 +257,26 @@ final class Terms {
     /** {@link #sizeAtom}, with the atom it names recorded as a whole number. A size counts elements,
      * so there is nothing to decide about it. */
     String sizeAtomOf(Core e, java.util.function.Function<Core, String> key) {
-        return named(sizeAtom(e, key), Granularity.DISCRETE);
+        return named(shared(sizeAtom(e, key)), Granularity.DISCRETE);
     }
 
     /** {@link #sizeKey}, with the atom it names recorded. */
     String sizeKeyOf(ValueName size, String container) {
-        return named(sizeKey(size, container), Granularity.DISCRETE);
+        return named(shared(sizeKey(size, container)), Granularity.DISCRETE);
+    }
+
+    /** {@code shape} under the name it goes by here, so that what reads it reads the name. */
+    private String shared(String shape) {
+        if (shape == null) {
+            return null;
+        }
+        String had = shapes.get(shape);
+        if (had != null) {
+            return had;
+        }
+        String name = "@" + shapes.size();
+        shapes.put(shape, name);
+        return name;
     }
 
     /** {@code key}, with how its values are spaced recorded against it. */
@@ -376,26 +406,26 @@ final class Terms {
             case Core.Str s -> quoted(s.value());
             case Core.Bool b -> Boolean.toString(b.value());
             case Core.UnitValue u -> u.data().toString();
-            case Core.Neg n -> wrap("-", termKey(n.operand(), at, bound, depth));
+            case Core.Neg n -> shared(wrap("-", termKey(n.operand(), at, bound, depth)));
             case Core.Binary b -> {
                 String l = termKey(b.left(), at, bound, depth);
                 String r = termKey(b.right(), at, bound, depth);
-                yield l == null || r == null ? null : binaryKey(b.op(), l, r);
+                yield l == null || r == null ? null : shared(binaryKey(b.op(), l, r));
             }
-            case Core.ListLit l -> elementsKey("[", l.elements(), at, bound, depth, "]");
-            case Core.Tuple t -> elementsKey("(", t.elements(), at, bound, depth, ")");
-            case Core.TupleGet g -> wrap("." + g.index(), termKey(g.tuple(), at, bound, depth));
-            case Core.If iff -> elementsKey("if(", List.of(iff.cond(), iff.then(), iff.els()),
-                    at, bound, depth, ")");
+            case Core.ListLit l -> shared(elementsKey("[", l.elements(), at, bound, depth, "]"));
+            case Core.Tuple t -> shared(elementsKey("(", t.elements(), at, bound, depth, ")"));
+            case Core.TupleGet g -> shared(wrap("." + g.index(), termKey(g.tuple(), at, bound, depth)));
+            case Core.If iff -> shared(elementsKey("if(", List.of(iff.cond(), iff.then(), iff.els()),
+                    at, bound, depth, ")"));
             case Core.Block b -> {
                 Map<BindingId, String> inner = binding(bound, b.params(), depth);
-                yield wrap("\\" + b.params().size(), termKey(b.body(), at, inner, depth + 1));
+                yield shared(wrap("\\" + b.params().size(), termKey(b.body(), at, inner, depth + 1)));
             }
             case Core.LetIn li -> {
                 String value = termKey(li.value(), at, bound, depth);
                 Map<BindingId, String> inner = binding(bound, List.of(li.binder()), depth);
                 String body = termKey(li.body(), at, inner, depth + 1);
-                yield value == null || body == null ? null : "let(" + value + ", " + body + ")";
+                yield value == null || body == null ? null : shared("let(" + value + ", " + body + ")");
             }
             // A construction is a pure function of its fields, and a closure that builds one is what a
             // mapping usually is. Fields are keyed in name order, so two sites writing them in
@@ -411,12 +441,14 @@ final class Terms {
                     }
                     sb.append(i == 0 ? "" : ", ").append(inits.get(i).name()).append('=').append(v);
                 }
-                yield sb.append('}').toString();
+                yield shared(sb.append('}').toString());
             }
             // Only the operations the representation kept standing: they are the library's own, so
             // they are pure and one written call is one value.
-            case Core.PreservedCall c ->
-                    elementsKey(c.operation().name() + "(", c.args(), at, bound, depth, ")");
+            // Named like the rest, and the one whose spelling something else reproduces: a size
+            // atom is built from the same shape by `sizeKey`, so both reach the same name.
+            case Core.PreservedCall c -> shared(
+                    elementsKey(c.operation().name() + "(", c.args(), at, bound, depth, ")"));
             default -> null;
         };
     }
