@@ -55,15 +55,28 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 """.formatted(declaration, field, written);
     }
 
-    /** The one row the generator writes for that combination, as the text an author is offered. */
-    private static String generatedRow(String source) {
+    /**
+     * What the generator came back with for that combination.
+     *
+     * <p>The diagnostics are held to as well as the rows. A written fixture that breaks the rule it is
+     * written under leaves a model that does not compile, and a test asking such a model for its rows
+     * gets an empty answer that agrees with whatever it expected of one.
+     */
+    private static Generator.GenerationResult generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.diagnostics().values().stream()
+                .flatMap(List::stream).toList(), "the model under test compiles");
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
-        assertNotNull(all, "the model under test compiles");
-        Generator.GenerationResult filled = all.get("look").pairs();
+        assertNotNull(all, "the rows come back");
+        return all.get("look").pairs();
+    }
+
+    /** The one row the generator writes for that combination, as the text an author is offered. */
+    private static String generatedRow(String source) {
+        Generator.GenerationResult filled = generated(source);
         assertEquals(List.of(), filled.unresolved(),
                 "the combination is one a value exists for, so nothing is left unresolved");
         assertEquals(1, filled.rows().size(), "one combination is uncovered, so one row is written");
@@ -297,6 +310,95 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     }
 
     /**
+     * A key and a value are two parts of one value, so their proposals meet each other.
+     *
+     * <p>The search a row is found by is over the positions of the behavior, and a map is one of those
+     * positions. What its key proposes and what its value proposes are settled inside it or not at all:
+     * a key at its second proposal beside a value at its first is a map the model admits, and nothing
+     * outside this can arrive at that pair.
+     */
+    @Test
+    void aMapsKeyAndValueProposalsMeetEachOther() {
+        String row = generatedRow(model("""
+                data Key = String
+                    invariant shaped = String.matches("x*", value)
+                    invariant longEnough = String.length(value) >= 5
+
+                data Val = String
+                    invariant shaped = String.matches("a{5}", value)
+
+                data M = Map<Key, Val>
+                    invariant nonEmpty = Map.size(value) >= 1
+                """, "m: M", "m = M([(Key(\"xxxxx\"), Val(\"aaaaa\"))])"));
+
+        assertEquals("T { kind = Overseas, m = M([(Key(\"xxxxx\"), Val(\"aaaaa\"))]) }", row);
+    }
+
+    /**
+     * A proposal a rule was read to build is not spent by how many rules were read before it.
+     *
+     * <p>Each format contributes the shortest string it accepts and the minimum contributes a string of
+     * its length, and the minimum's is last because it is added last. A budget over the whole list drops
+     * the one this change exists to add as soon as enough formats are written above it — and drops it
+     * only inside a collection, so the same `Word` is writable at a position of its own and not as an
+     * element.
+     */
+    @Test
+    void aProposalIsNotDroppedForTheNumberOfRulesReadBeforeIt() {
+        String row = generatedRow(model("""
+                data Word = String
+                    invariant p1 = String.matches("x*", value)
+                    invariant p2 = String.matches("x{2,}", value)
+                    invariant p3 = String.matches("x{3,}", value)
+                    invariant longEnough = String.length(value) >= 5
+
+                data Words = List<Word>
+                    invariant nonEmpty = List.length(value) >= 1
+                """, "words: Words", "words = Words([Word(\"xxxxx\")])"));
+
+        assertEquals("T { kind = Overseas, words = Words([Word(\"xxxxx\")]) }", row);
+    }
+
+    /**
+     * A minimum past what a row can carry is not built.
+     *
+     * <p>The count comes from the model, so a rule can ask for a million of something. Building that
+     * would take a row nobody could read to find out what the decoder already says about it, and the
+     * bound belongs here rather than on the proposals: what is given up on is a collection this would
+     * have invented, not a candidate some rule was read to produce.
+     */
+    @Test
+    void aMinimumPastWhatARowCanCarryIsNotBuilt() {
+        // No row of its own, because no fixture anybody can write satisfies the rule — which is what
+        // makes this the shape that reaches the builder with the whole count to build.
+        String source = """
+                module nd.gen
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
+                data Many = List<String>
+                    invariant huge = List.length(value) >= 1000000
+
+                data T = { kind: Kind, many: Many }
+
+                behavior look : (t: T) -> Int
+
+                let look (t) = 1
+                """;
+        Generator.GenerationResult filled = generated(source);
+
+        assertEquals(List.of(), filled.rows(),
+                "no row, rather than one carrying a million elements");
+        assertTrue(filled.unresolved().stream().allMatch(left ->
+                        left.reason() == Generator.UnresolvedCombination.Reason
+                                .ALL_CANDIDATES_REJECTED),
+                "and refused, which is what a rule nothing can be built for is: "
+                        + filled.unresolved());
+    }
+
+    /**
      * A type written in terms of itself is what the descent gives up on.
      *
      * <p>No value of it exists, so the giving up is the right answer and not a limit reached. What
@@ -304,16 +406,31 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      */
     @Test
     void aTypeWrittenInTermsOfItselfIsGivenUpOn() {
-        String source = model("""
+        // No row of its own: no fixture anybody can write satisfies a rule about a type that has no
+        // values, and a model carrying one would not compile.
+        Generator.GenerationResult filled = generated("""
+                module nd.gen
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
                 data Nest = List<Nest>
                     invariant someNest = List.length(value) >= 1
-                """, "nest: Nest", "nest = Nest([])");
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
-        compilation.answerEverything();
 
-        assertNotNull(compilation.db().ask(new Adequacy.Generated(compilation.modules().get(0)))
-                .value(), "asking for the rows comes back rather than descending forever");
+                data T = { kind: Kind, nest: Nest }
+
+                behavior look : (t: T) -> Int
+
+                let look (t) = 1
+                """);
+
+        assertEquals(List.of(), filled.rows(), "no value of it exists");
+        assertTrue(filled.unresolved().stream().allMatch(left ->
+                        left.reason() == Generator.UnresolvedCombination.Reason
+                                .ALL_CANDIDATES_REJECTED),
+                "and the answer comes back rather than descending forever: "
+                        + filled.unresolved());
     }
 
     /**
@@ -354,13 +471,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                         && List.length(value) >= 2
                     invariant notTwo = List.length(value) /= 2
                 """, "tags: Tags", "tags = Tags([\"a\", \"b\", \"c\"])");
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly());
-        compilation.answerEverything();
-        Map<String, Adequacy.Filling> all = compilation.db()
-                .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
-        assertNotNull(all, "the model under test compiles");
-        Generator.GenerationResult filled = all.get("look").pairs();
+        Generator.GenerationResult filled = generated(source);
 
         assertEquals(List.of(), filled.rows(), "two equal elements is not a list of two distinct ones");
         assertTrue(filled.unresolved().stream().allMatch(left ->

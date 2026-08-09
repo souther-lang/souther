@@ -20,16 +20,23 @@ import java.util.Set;
  * refuses the one value on offer. Read the minimum before the value is chosen and it is instead the
  * size the value is built at.
  *
- * <p>Proposals, and several of them. Nothing here decides whether a newtype accepts what it is handed:
- * that is the decoder's answer and it is asked afterwards, which is what lets a value be built from the
- * part of a rule this can read while the rest of the rule refuses it. A position offering one value is
- * exactly the defect this is about, so a collection is offered one proposal per value its element
- * offers rather than one built from the first of them — an element that proposes a format and a minimum
- * would otherwise have the choice between them made here, a level below where it was left open.
+ * <p>Proposals, and every one of them. Nothing here decides whether a newtype accepts what it is
+ * handed: that is the decoder's answer and it is asked afterwards, which is what lets a value be built
+ * from the part of a rule this can read while the rest of the rule refuses it. A position offering one
+ * value is exactly the defect this is about, so a value built around another carries every proposal the
+ * inner one made — a format and a minimum reaching the decoder separately at a position is a choice
+ * that has to keep reaching it from inside a collection.
  *
- * <p>Per element and not across them. What a row is searched for is already the product of what its
- * positions offer, and taking a product again inside one position would spend that search on
- * assignments the position is not what they are about.
+ * <p>Which is why a map's key and value meet each other. They are two parts of one value and the
+ * search around this is over the behavior's positions, so a key at its second proposal beside a value
+ * at its first is a map nothing outside here can arrive at. Nearest first, so that a search which stops
+ * has walked the low proposals of both rather than every one of the key's against the value's first.
+ *
+ * <p>What is bounded is what this invents rather than what it read. A set's second element and a map's
+ * second key are variations made up to tell values apart, and they stop as soon as there are enough;
+ * the count a rule asked for stops being worth building long before a row carrying it is one anybody
+ * would read. Nothing prunes a candidate some rule was read to produce — the search that walks them is
+ * bounded and says so when it stops, which is the honest place for a limit.
  *
  * <p>A tree, because a collection holds values that have rules of their own, and what stands for a list
  * of a newtype is what stands for that newtype in a list. That question is the one the position itself
@@ -39,9 +46,9 @@ import java.util.Set;
  */
 final class Witnesses {
 
-    /** How many proposals one collection is worth. Each is another assignment for the search around it
-     * to walk, and the values past a few are variations on the ones before them. */
-    private static final int MAX_PROPOSALS = 3;
+    /** How many elements a proposed collection is worth building. A row is offered for somebody to read
+     * and complete, and a minimum past this asks for one nobody would. */
+    private static final int MOST_ELEMENTS = 64;
 
     /**
      * Values of {@code carrier} holding at least {@code least} of whatever counts it, or none where
@@ -53,7 +60,7 @@ final class Witnesses {
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
                                          Set<TypeName> expanding) {
-        if (carrier == null || least <= 0) {
+        if (carrier == null || least <= 0 || least > MOST_ELEMENTS) {
             return List.of();
         }
         // A string is counted by its characters, and one character is as good as another where the
@@ -91,29 +98,39 @@ final class Witnesses {
                 return List.of();
             }
             List<FixtureTemplate> out = new ArrayList<>();
-            // Paired off rather than crossed: a key's proposals and a value's are each about their own
-            // rules, and a map refused for its keys is not told apart from one refused for its values
-            // by trying every combination of the two.
-            for (int i = 0; i < Math.min(MAX_PROPOSALS, Math.max(keys.size(), values.size())); i++) {
-                FixtureTemplate value = values.get(Math.min(i, values.size() - 1));
-                List<FixtureTemplate> entries = new ArrayList<>();
-                for (FixtureTemplate key : distinctFrom(keys.get(Math.min(i, keys.size() - 1)),
-                        map.key(), least, symbols)) {
-                    entries.add(FixtureTemplate.entry(key, value));
+            // Every pair, nearest first. A key's rules and a value's are answered together or not at
+            // all — the pair is inside one position, so no search outside can put a key's second
+            // proposal beside a value's first — and taking them in step would offer only the pairs
+            // whose two proposals happen to have been read in the same order.
+            for (int apart = 0; apart <= keys.size() + values.size() - 2; apart++) {
+                for (int i = Math.max(0, apart - values.size() + 1);
+                        i <= Math.min(apart, keys.size() - 1); i++) {
+                    FixtureTemplate value = values.get(apart - i);
+                    List<FixtureTemplate> entries = new ArrayList<>();
+                    for (FixtureTemplate key
+                            : distinctFrom(keys.get(i), map.key(), least, symbols)) {
+                        entries.add(FixtureTemplate.entry(key, value));
+                    }
+                    out.add(FixtureTemplate.collection(entries));
                 }
-                out.add(FixtureTemplate.collection(entries));
             }
             return List.copyOf(out);
         }
         return List.of();
     }
 
-    /** What the position at {@code type} would itself be offered, which is what a value built around it
-     * has to keep offering. */
+    /**
+     * What the position at {@code type} would itself be offered, which is what a value built around it
+     * has to keep offering.
+     *
+     * <p>All of them. Each is what one rule was read to produce — the shortest string a format accepts,
+     * a string of the length a minimum asks for, the value the carrier stands for — so a budget over
+     * this list drops a candidate on the strength of how many rules were read before it. The minimum's
+     * is added last of those, which is exactly the one such a budget takes away.
+     */
     private static List<FixtureTemplate> proposalsFor(Type type, Symbols symbols,
                                                       Set<TypeName> expanding) {
-        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols, null, expanding);
-        return stands.size() <= MAX_PROPOSALS ? stands : stands.subList(0, MAX_PROPOSALS);
+        return Partitions.representativesOf(type, symbols, null, expanding);
     }
 
     /**
