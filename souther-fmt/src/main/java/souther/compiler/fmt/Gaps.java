@@ -161,6 +161,7 @@ final class Gaps {
             // A place names a position and joins nothing, so the construct a boundary belongs to is
             // found past it: two tokens on either side of a place are joined by whatever holds it.
             case TokenDoc.At a -> collect(a.doc(), within, out);
+            case TokenDoc.PointOf _ -> { }
             case TokenDoc.Carries c -> throw new IllegalStateException(
                     "a carrier reached the layout unresolved (" + c.which() + " of " + c.place()
                             + "); the comments go in before the boundaries are answered");
@@ -261,6 +262,7 @@ final class Gaps {
             case TokenDoc.Trailing t -> Doc.trailing(t.text());
             case TokenDoc.Node n -> lower(n.doc(), answers, next);
             case TokenDoc.At a -> Doc.at(a.place(), lower(a.doc(), answers, next));
+            case TokenDoc.PointOf p -> Doc.pointOf(p.place());
             case TokenDoc.Carries _, TokenDoc.Vacant _ -> throw new IllegalStateException(
                     "a carrier reached the layout unresolved");
             case TokenDoc.Nest n -> Doc.nest(n.indent(), lower(n.doc(), answers, next));

@@ -84,6 +84,14 @@ sealed interface TokenDoc {
     record Carries(Place place, Carrier which) implements TokenDoc {}
 
     /**
+     * Where a place is, for a place that writes nothing of its own. A place naming the line a
+     * construct opens with carries the comment written at the end of it and emits no text, so it
+     * has a position and no region — and this says the position rather than claiming the place
+     * wrote something, which is what an {@link At} says.
+     */
+    record PointOf(Place place) implements TokenDoc {}
+
+    /**
      * Brackets with no member written between them.
      *
      * <p>What goes there is one line or none, and which of the two depends on whether the place was
@@ -129,6 +137,10 @@ sealed interface TokenDoc {
 
     /** What the place carries at the end of the line it ends. Written where the construct holding
      *  it has finished writing that line, which is not always straight after the place. */
+    static TokenDoc pointOf(Place place) {
+        return new PointOf(place);
+    }
+
     static TokenDoc endsTheLineOf(Place place) {
         return new Carries(place, Carrier.TRAILING);
     }

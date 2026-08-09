@@ -147,7 +147,11 @@ public final class Formatter {
                                 + missing.get(0).start() + ": "
                                 + missing.get(0).text().stripTrailing());
             }
-            return new CanonicalForm(construction, construction.doc().resolve().layout(WIDTH));
+            Layout laid = construction.doc().resolve().layout(WIDTH);
+            // The file's place is the output, which is the run's answer and not one a construct
+            // emits: nothing writes the file, and every place it made is somewhere inside it.
+            return new CanonicalForm(construction, laid.and(construction.places().fileOf(file),
+                    new Extent(0, laid.text().length())));
         } catch (StackOverflowError _) {
             throw tooDeep();
         }
@@ -735,9 +739,11 @@ public final class Formatter {
                         ASSIGN, GAP,
                         childAt(bind, firstExprChildOpt(b).orElseThrow(), Opening.NONE)))));
             }
-            input = concat(input, GAP, TokenDoc.node(with.get().kind(),
+            // The `with` is the clause's own, as a product block's braces are, so the place is
+            // what it wrote and not what its bindings cover.
+            input = concat(input, GAP, TokenDoc.node(with.get().kind(), TokenDoc.at(ofTheWith,
                     concat(TokenDoc.token(SyntaxKind.WITH_KW, "with"), GAP,
-                            group(nest(INDENT, separated(withEndComments(ofTheWith, binds)))))));
+                            group(nest(INDENT, separated(withEndComments(ofTheWith, binds))))))));
         }
 
         List<TokenDoc> segs = new ArrayList<>();
@@ -969,7 +975,9 @@ public final class Formatter {
         }
         lines.add(TokenDoc.carries(run, Carrier.AT_END));
         lines.add(concat(HARD_GAP, RBRACE));
-        return TokenDoc.node(body.kind(), concat(lines));
+        // The place is the whole block and not what its members cover: the braces are the block's,
+        // so the members leave them out and where the block is is where it wrote.
+        return TokenDoc.node(body.kind(), TokenDoc.at(run, concat(lines)));
     }
 
     /**

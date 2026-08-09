@@ -85,6 +85,7 @@ final class Place {
                 collect(a.doc(), written, seen);
             }
             case TokenDoc.Carries c -> first(c.place(), written, seen);
+            case TokenDoc.PointOf p -> first(p.place(), written, seen);
             case TokenDoc.Vacant v -> first(v.place(), written, seen);
             case TokenDoc.Node n -> collect(n.doc(), written, seen);
             case TokenDoc.Nest n -> collect(n.doc(), written, seen);

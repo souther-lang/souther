@@ -51,7 +51,7 @@ class EveryTokenTheDocumentLaysOutIsOneTokenOfTheOutputTest {
             case TokenDoc.Group g -> collect(g.doc(), out);
             case TokenDoc.Concat c -> c.parts().forEach(part -> collect(part, out));
             case TokenDoc.Nil _, TokenDoc.Comment _, TokenDoc.Trailing _, TokenDoc.Gap _,
-                    TokenDoc.MustBreak _ -> { }
+                    TokenDoc.MustBreak _, TokenDoc.PointOf _ -> { }
             case TokenDoc.Carries c -> throw new IllegalStateException(
                     "the document under test still holds an unanswered carrier: " + c);
             case TokenDoc.Vacant v -> throw new IllegalStateException(

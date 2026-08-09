@@ -45,6 +45,9 @@ sealed interface Doc {
      * layout says where it ended up. */
     record At(Place place, Doc doc) implements Doc {}
 
+    /** Where a place is, for one that writes nothing of its own. */
+    record PointOf(Place place) implements Doc {}
+
     /**
      * Which group a group is. Two groups written the same way are still two of them, and a layout
      * that kept its decisions by their shape would keep one — so this is an identity and carries
@@ -97,6 +100,10 @@ sealed interface Doc {
         return new At(place, doc);
     }
 
+    static Doc pointOf(Place place) {
+        return new PointOf(place);
+    }
+
     static Doc group(Doc doc) {
         return new Group(new GroupRef(), doc);
     }
@@ -130,7 +137,11 @@ sealed interface Doc {
     default Layout layout(int width) {
         List<GroupDecision> decisions = new ArrayList<>();
         List<Newline> breaks = new ArrayList<>();
-        java.util.Map<Place, Span> spans = new java.util.LinkedHashMap<>();
+        java.util.Map<Place, Extent> extents = new java.util.LinkedHashMap<>();
+        // A place that writes a region and also carries a comment has both an `At` and a
+        // point; the region is where it is, so the points are kept apart and read only
+        // for the places no region located.
+        java.util.Map<Place, Extent> points = new java.util.LinkedHashMap<>();
         java.util.Map<Place, Integer> opened = new java.util.IdentityHashMap<>();
         StringBuilder sb = new StringBuilder();
         Deque<Item> todo = new ArrayDeque<>();
@@ -139,7 +150,7 @@ sealed interface Doc {
         while (!todo.isEmpty()) {
             Item it = todo.pop();
             if (it.closes != null) {
-                spans.put(it.closes, new Span(opened.get(it.closes), sb.length()));
+                extents.put(it.closes, new Extent(opened.get(it.closes), sb.length()));
                 continue;
             }
             switch (it.doc) {
@@ -156,6 +167,8 @@ sealed interface Doc {
                 }
                 case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc(), null,
                         new Nesting(n.ref(), it.under)));
+                case PointOf p -> points.putIfAbsent(p.place(),
+                        new Extent(sb.length(), sb.length()));
                 case At a -> {
                     // The close is pushed first so that it is popped after everything written at
                     // the place, which is what makes the span the interval the place occupies.
@@ -191,7 +204,8 @@ sealed interface Doc {
                 case MustBreak _ -> { }
             }
         }
-        return new Layout(sb.toString(), decisions, spans, breaks);
+        points.forEach(extents::putIfAbsent);
+        return new Layout(sb.toString(), decisions, extents, breaks);
     }
 
     /** Writes a break and says what it wrote. */
@@ -241,6 +255,7 @@ sealed interface Doc {
                 case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc()));
                 case Group g -> todo.push(new Item(it.indent, it.mode, g.doc()));
                 case At a -> todo.push(new Item(it.indent, it.mode, a.doc()));
+                case PointOf _ -> { }
                 case Line l -> {
                     if (it.mode == Mode.FLAT) {
                         remaining -= l.flat().length();
