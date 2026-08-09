@@ -23,14 +23,17 @@ Souther -> arbitrary Java API              forbidden (only via a non-implemented
 ```
 
 Because Souther cannot reach into Java freely, it also ships no DB/HTTP/file APIs of its
-own — those live behind injected behaviors. Arbitrary JVM calls are a compile error
-(E1401), which points the modeler at declaring a behavior without a `let` and providing
-the implementation from Java.
+own — those live behind injected behaviors. The language offers no path to one: there is
+no syntax and no name-resolution route by which a body reaches a JVM API, so a spelling
+such as `java.time.LocalDate.now` is not a call the compiler recognises and refuses. It
+names no qualifier the language knows, and its root is reported as a name that is not in
+scope like any other. Reaching the outside world is declaring a behavior without a `let`
+and providing the implementation from Java.
 
 Keeping the arrow one-way is what preserves the closed construction paths (ADR-0002) and
 keeps every business branch in the output sum rather than hidden in a foreign call.
 
 ## References
 
-- Specification: `[#asymmetric-interop]`, `[#out-of-scope]`, `[#e1401]`
+- Specification: `[#asymmetric-interop]`, `[#out-of-scope]`
 - ADR-0002 (closed construction paths), ADR-0006 (outside-world via missing implementation), ADR-0007 (unmarked sum output)

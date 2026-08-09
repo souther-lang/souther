@@ -157,6 +157,32 @@ public final class Symbols {
         return contains(candidate) && exposes(target, candidate.name()) ? candidate : null;
     }
 
+    /**
+     * The module of this compilation that exposes {@code name}, or null where that is not exactly
+     * one module.
+     *
+     * <p>Asked where a bare name resolved to nothing, so that a name left off an import list is told
+     * apart from a name nothing declares. This module is not among them: what it declares is already
+     * in scope, so reaching here means it does not.
+     *
+     * <p>Exactly one, because the answer is written into a report as the module to reach for. Two
+     * modules exposing the spelling makes naming either one a guess, and a guess in a hint is worse
+     * than the silence it replaces — the reader is already being told the name is not in scope.
+     */
+    public String moduleExposing(String name) {
+        String found = null;
+        for (String other : new java.util.TreeSet<>(registry.moduleNames())) {
+            if (other.equals(module) || !registry.exposedBy(other).contains(name)) {
+                continue;
+            }
+            if (found != null) {
+                return null;
+            }
+            found = other;
+        }
+        return found;
+    }
+
     /** The module a qualifier names — a module of this compilation, or an import alias — or null
      * when it names none. Used to tell "unknown module" apart from "unknown type in a known
      * module". */

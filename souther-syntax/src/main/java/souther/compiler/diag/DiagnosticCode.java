@@ -87,7 +87,6 @@ public enum DiagnosticCode {
     E1323("a-matches-pattern-is-a-literal-regular-expression", "check.type.mismatch.title"),
     E1324("newtype-arithmetic-follows-the-units", "check.type.mismatch.title"),
     E1325("a-boundary-carries-the-models-own-vocabulary", "check.boundary.title"),
-    E1401("no-arbitrary-jvm-calls", "e1401.title"),
     E1402("core-privileges-stay-in-the-core", "parse.title"),
 
     // --- modules, requirements, composition ---

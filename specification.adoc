@@ -4122,7 +4122,7 @@ Reported at the `+match+` (<<branches-agree-on-a-type>>). It answers with one va
 [#e1302-removed]
 === (retired)
 
-E1302 is retired. `+.sou+` has no `+throw+` and no `+catch+` to reject: the rule that a failure is answered as a case of the output rather than raised is carried by the grammar, and a Java method named in an expression is E1401 (<<out-of-scope>>).
+E1302 is retired. `+.sou+` has no `+throw+` and no `+catch+` to reject: the rule that a failure is answered as a case of the output rather than raised is carried by the grammar, and a Java method named in an expression names nothing the language knows, so it is reported as a name that is not in scope (<<out-of-scope>>, <<e1023>>).
 
 [#e1303]
 === Writing an option case
@@ -4342,15 +4342,10 @@ Reported at the operator (<<newtype-arithmetic-follows-the-units>>). Which rule 
 
 Reported at the parameter, or at the behavior for its output (<<a-boundary-carries-the-models-own-vocabulary>>). `+DivisionByZero+` and `+NotANumber+` say what `+Int.divide+` and `+String.toInt+` can answer, `+RoundingMode+` says what `+Decimal.round+` takes, and `+Raw+` is reserved; each is the language's account of one of its own operations. A behavior that has the same thing to report declares the case — `+data Undivided+`, answered as `+-> Int | Undivided+` — so that what the behavior publishes stays its own even when the language's account of itself changes. Reported wherever the name stands in what crosses, at any depth and as a member of an output union.
 
-[#e1401]
-=== Arbitrary Java calls
+[#e1401-removed]
+=== (retired)
 
-[,text]
-----
-`java.time.LocalDate.now` is not a behavior or a builtin.
-Hint: Declare a behavior without a `let` and implement it from Java; arbitrary JVM calls
-are not allowed.
-----
+E1401 is retired. It was raised where a name applied to arguments resolved to nothing, which is what E1023 says (<<e1023>>), and nothing established that such a name was on the JVM. `+java.time.LocalDate.now+`, which this section used as its example, is read from a root `+java+` that names no qualifier and resolves to nothing, so it was reported as an unknown name and not as this. That arbitrary Java calls are out of scope is a design decision and stays one (<<no-arbitrary-jvm-calls>>); it was never a thing a compile could find.
 
 [#e1402]
 === A core form is written outside the core
@@ -4852,7 +4847,7 @@ Reported at the call (<<what-is-summed-is-a-number>>). The same shape as <<e1816
 Hint: Call it from the behavior's own `let` and pass the result in, or name it in `depends on`.
 ----
 
-Reported at the call (<<a-helper-does-not-call-a-behavior>>). A helper is expanded into whatever calls it and travels to an importing module as source, so what it may name is what travels with it; a `+>->+` composition is composed with a behavior rather than calling one. Not <<e1401>>, which is about a name that is no behavior at all.
+Reported at the call (<<a-helper-does-not-call-a-behavior>>). A helper is expanded into whatever calls it and travels to an importing module as source, so what it may name is what travels with it; a `+>->+` composition is composed with a behavior rather than calling one. Not <<e1023>>, which is a name that resolves to nothing; this one resolves, to a behavior.
 
 [#e1901]
 === Example target is not a behavior

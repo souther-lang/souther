@@ -48,6 +48,8 @@ public sealed interface NameMessage extends Message {
     @Code(DiagnosticCode.E1023)
     record NoValueOfThatNameInScope(String name) implements NameMessage, Reported {}
 
+    record ItIsExposedByAnotherModule(String module, String name) implements NameMessage, Supporting {}
+
     @Code(DiagnosticCode.E1023)
     record NoTypeOfThatName(String name) implements NameMessage, Reported {}
 

@@ -113,8 +113,10 @@ class CompileDependsOnClauseTest {
         assertEquals("E1607", e.code(), e.getMessage());
     }
 
+    /** A callee nothing declares is a name that resolves to nothing, whatever the clause says: the
+     *  absence of a `depends on` neither excuses it nor makes it a different kind of error. */
     @Test
-    void anArbitraryCallWithNoDependsOnClauseIsStillE1401() {
+    void aCalleeNoDependsOnClauseNamesIsStillAnUnresolvedName() {
         String src = """
                 module demo
                 data A = { x: Int }
@@ -124,7 +126,7 @@ class CompileDependsOnClauseTest {
                 let use (a) = someJavaMethod(a)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("E1401", e.code(), e.getMessage());
+        assertEquals("E1023", e.code(), e.getMessage());
     }
 
     /**
