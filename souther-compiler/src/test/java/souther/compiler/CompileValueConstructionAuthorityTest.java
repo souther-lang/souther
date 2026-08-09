@@ -229,6 +229,54 @@ class CompileValueConstructionAuthorityTest {
         assertEquals("E1002", e.code(), e.getMessage());
     }
 
+    /** A value reached through values of the same module. The mark is written over the whole
+     * expansion by the substitution no other substitution is inside, so what it says of a
+     * construction does not depend on how many names stood between the behavior and it. */
+    @Test
+    void aValueReachedThroughValuesOfThisModuleCarriesTheSameWay() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module m
+
+                data Hours = Decimal invariant value >= 0.0m
+                data TooShort
+
+                let baseHours = Hours(20.0m)
+                let namedHours = baseHours
+                let floorHours = namedHours
+
+                behavior judge : (h: Hours) -> Hours | TooShort
+                    constructs TooShort
+                let judge (h) = {
+                    guard h >= floorHours else TooShort
+                    h
+                }
+                """));
+    }
+
+    /** The same, with a helper expanded on the way. A helper call becomes an expansion, whose
+     * `given` is not a slot of the walk that rebuilds an expression, so this is the shape that says
+     * the outermost substitution reaches what the ones under it produced. */
+    @Test
+    void aValueReachedThroughAValueThatExpandsAHelperCarriesTheSameWay() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module m
+
+                data Hours = Decimal invariant value >= 0.0m
+                data TooShort
+
+                let floorOf (d) = Hours(d)
+                let baseHours = floorOf(20.0m)
+                let floorHours = baseHours
+
+                behavior judge : (h: Hours) -> Hours | TooShort
+                    constructs TooShort
+                let judge (h) = {
+                    guard h >= floorHours else TooShort
+                    h
+                }
+                """));
+    }
+
     /** A unit data is constructed by being named, so it has no construction node to carry the mark
      * — the name carries it. A value standing for one reaches the reading behavior by that path. */
     @Test

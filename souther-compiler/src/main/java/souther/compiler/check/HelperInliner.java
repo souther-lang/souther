@@ -1315,6 +1315,15 @@ public final class HelperInliner {
      *
      * <p>What it holds is the path and not what it has seen: a value named twice in one body is
      * substituted twice, side by side, and only one inside the other is re-entry.
+     *
+     * <p>The path is also what says whose job the mark is. What a value carried is written over the
+     * whole expansion once it is whole, by the substitution no other substitution is inside — the
+     * outermost one holds every subtree the ones under it produced, and the mark is a flag, so
+     * writing it there says of each node what writing it at every level said. Written at every
+     * level it is written over each subtree once per level that subtree is under, which is the
+     * depth of a chain of values times its length. The walk allocates nothing — rebuilding an
+     * expression hands back what it was given where nothing changed — so what it costs is the
+     * walking, and nothing downstream of it can see that it ran twice.
      */
     private Ast.Expr substituted(String reached, Ast.Expr body) {
         if (!substituting.add(reached)) {
@@ -1323,7 +1332,8 @@ public final class HelperInliner {
                     + " values are not well founded is refused before a body of it is expanded");
         }
         try {
-            return HelperNames.carriedByValue(inline(body));
+            Ast.Expr expanded = inline(body);
+            return substituting.size() == 1 ? HelperNames.carriedByValue(expanded) : expanded;
         } finally {
             substituting.remove(reached);
         }
