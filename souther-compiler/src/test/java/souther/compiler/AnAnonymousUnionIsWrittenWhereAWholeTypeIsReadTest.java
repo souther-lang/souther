@@ -10,15 +10,17 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Where {@code A | B} may be written, held against the compiler rather than against a sentence.
+ * Where {@code A | B} is read as a type, and which of those positions take it, held against the
+ * compiler rather than against a sentence.
  *
  * <p>Two rules decide it between them and neither owns the other's half. Which positions read a whole
  * type is the grammar's answer ({@code a-type-is-written-in-a-type-position}); what a behavior's
  * boundary admits is the representation's ({@code a-parameter-names-one-type}). Read together they
- * say the form is written wherever a whole type is read and refused at one position, which is not the
- * same claim as the one four sentences used to make — that it appears only in a behavior's output.
+ * say the form is read wherever a whole type is read and admitted by every one of those positions but
+ * one, which is not the claim five sentences used to make — that it appears only in a behavior's
+ * output.
  *
- * <p>Held here because prose cannot be run. The document said the narrower thing in four places for
+ * <p>Held here because prose cannot be run. The document said the narrower thing in five places for
  * as long as nothing measured it, and each of those places was true of the boundary and false of a
  * signature.
  */
@@ -59,14 +61,15 @@ class AnAnonymousUnionIsWrittenWhereAWholeTypeIsReadTest {
     }
 
     /**
-     * Every position a whole type is read in takes one.
+     * Every position a whole type is read in takes one, except the one the boundary refuses.
      *
-     * <p>Asked as one map rather than one test each, because what is being held is that the set
-     * matches — a position dropping out of it is the defect, and a test per position reports that as
-     * one failure beside several passes.
+     * <p>That exception is a behavior's parameter and it is held below, so what this holds is the
+     * rest: the positions no representation rule reaches. Asked as one map rather than one test each,
+     * because what is being held is that the set matches — a position dropping out of it is the
+     * defect, and a test per position reports that as one failure beside several passes.
      */
     @Test
-    void everyPositionAWholeTypeIsReadInTakesOne() {
+    void everyNonBoundaryWholeTypePositionTakesOne() {
         Map<String, String> positions = new LinkedHashMap<>();
         positions.put("helper parameter", "let f (x: A | B) : Int = 1");
         positions.put("helper declared return", "let f (n: Int) : A | B = A { a = n }");
