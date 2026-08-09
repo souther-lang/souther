@@ -3644,13 +3644,21 @@ The model author does not write this type name in Souther source; they only writ
 
 [[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler reads. The limit is stated as the compiler's rather than as any one pass's, and it is reached while reading, so it is reported at the token that reached it — including by the formatter, which reads sources it cannot compile. Breaking the nesting into named parts is how a text past it is written instead.
 
-[[source-structural-complexity-is-bounded]]A definition MUST NOT be structurally more complex than the compiler holds. Its complexity is counted over what the source wrote: a name or a literal is one, a construct is one more than the deepest thing it holds, an application is its argument count more than the deepest of what it applies and is applied to, and a name that reaches a value counts that value's complexity where the value is substituted (<<fn-value-semantics>>). A block needs no rule of its own — each of its statements is a binding the ones after it are written inside — so a long block and a deeply written expression are counted the same way, and what a statement holds is counted from where that statement stands.
+[[source-structural-complexity-is-bounded]]A definition MUST have a structural complexity of 320 or less. Its complexity is counted over what the source wrote:
+
+* a name or a literal is one;
+* a construct is one more than the deepest thing it holds;
+* an application of a helper that is substituted at the call (<<fn-rules>>) is its argument count more than the deepest of what it holds, since each argument is bound where the body is put; an application that is not substituted — a behavior, a recursive helper, a function a binding holds — is a construct like any other;
+* a binding site is the number of bindings it introduces, counted through the patterns it is written with: a name introduces one, a tuple pattern one for the value and its elements' own, a record pattern one for the value and one per field it names, and a case pattern one for the value and its inner pattern's own;
+* a name that reaches a value counts that value's complexity where the value is substituted (<<fn-value-semantics>>).
+
+A block needs no rule of its own — each of its statements is a binding site the ones after it are written inside — so a long block and a deeply written expression are counted the same way, and what a statement holds is counted from where that statement stands.
 
 This is a separate limit from the one above, and neither implies the other. Nesting is bounded as the source is read; complexity is bounded over what the source says, which the reading does not settle: a module writes its declarations flat and substitution composes them, so a source that nests barely at all can be arbitrarily complex. It is reported at the construct that exceeded it — the block, the definition, or the value whose substitution composed it — and never as a nesting to flatten, since naming parts is what composes complexity rather than what reduces it.
 
 The limit is a property of the language, not of a compiler's internal representation. What a compiler builds from a definition, and how deep that is, is its own choice; what a definition may say is this.
 
-A compiler states the runtime it holds this bound on. Every phase descends what it builds by recursion, so what a definition may say and what it takes to walk one are the same question asked from two sides, and a stack left to whatever a platform defaults to would make a source compile in one place and not another. This compiler is supported on a 4 MB thread stack — the `+souther+` binary sets it, an editor launching the language server passes it, and the tests run with it — against a source at the bound needing about a megabyte. The number is this implementation's and moves with it; the bound above does not.
+A compiler states the runtime it holds this bound on. Every phase descends what it builds by recursion, so what a definition may say and what it takes to walk one are the same question asked from two sides, and a stack left to whatever a platform defaults to would make a source compile in one place and not another. This compiler is supported on a 4 MB thread stack, against a source at the bound needing about a megabyte. The `+souther+` binary sets it for itself and this compiler's tests run with it; a host that launches the language server, or the compiler as a library, is the one that gives it that stack, and this is what it has to give. The number is this implementation's and moves with it; the bound above does not.
 
 [[running-out-of-room-is-reported]]A compiler that runs out of room MUST report it rather than fail. Every phase descends what it builds by recursion, and running out of stack is not a diagnostic, so left alone it reaches the author as a trace and takes an editor's session with it. No position is claimed: where the stack ended is not a fact about the source.
 
@@ -5422,7 +5430,7 @@ Naming parts with `+let+` is not the answer to this one — it is what a block a
 
 [,text]
 ----
-I ran out of room reading this. What a source may nest and what a definition may say are both
+I ran out of room working on this. What a source may nest and what a definition may say are both
 bounded, and a source past either is refused with the place it happened, so this is not a report
 about the source: on the stack this compiler is supported on, something it built went deeper than
 anything it accepted should. Either the stack it was given is smaller than that, or this is a shape

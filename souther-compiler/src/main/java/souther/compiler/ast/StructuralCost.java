@@ -137,12 +137,12 @@ public final class StructuralCost {
                 continue;
             }
             if (node instanceof Ast.Var name) {
-                Ast.Expr body = Path.holds(step.path(), name.name())
+                Ast.Expr body = Path.holds(step.path(), name.reaches())
                         ? null
                         : reaches.substitutedAt(name);
                 if (body != null) {
                     todo.add(new Step(body, step.above(), name,
-                            new Path(name.name(), step.path())));
+                            new Path(name.reaches(), step.path())));
                     continue;
                 }
             }
@@ -168,15 +168,22 @@ public final class StructuralCost {
      *  names being substituted around it. */
     private record Step(Ast.Expr node, int above, Ast.Var by, Path path) {}
 
-    /** The names a step is inside the substitution of, innermost first. Shared between the steps
-     *  that came from one, which is what makes holding one per step cost nothing to copy. */
-    private record Path(String name, Path outer) {
+    /**
+     * What a step is inside the substitution of, innermost first. Shared between the steps that came
+     * from one, which is what makes holding one per step cost nothing to copy.
+     *
+     * <p>Held by what each name reaches — the key the table is asked with — rather than by how it
+     * was spelled. Two spellings can reach one declaration and one spelling can reach two, so a
+     * path of spellings would call a walk round on itself where it is not, and let one through
+     * where it is.
+     */
+    private record Path(String reaches, Path outer) {
 
         /** Whether {@code looked} is on {@code path} — of which nothing being substituted is one of
          *  the answers, and the one the root is asked with. */
         static boolean holds(Path path, String looked) {
             for (Path at = path; at != null; at = at.outer()) {
-                if (at.name().equals(looked)) {
+                if (at.reaches().equals(looked)) {
                     return true;
                 }
             }

@@ -3,11 +3,17 @@ package souther.compiler.ast;
 import org.junit.jupiter.api.Test;
 import souther.compiler.frontend.CstFrontend;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The cost is a number over what the source wrote, and it composes. */
 class StructuralCostTest {
+
+    /** What a lowered pattern costs besides its bindings: the {@code $t.0} or {@code $r.field} a
+     *  binding takes its value from, which is a read off a name. */
+    private static final int READING_THE_VALUE_OUT = 2;
 
     private static int costOf(String body) {
         Ast.Module m = CstFrontend.parse("module m exposing (f)\n\n"
@@ -79,6 +85,47 @@ class StructuralCostTest {
 
         assertTrue(costOf(first) < costOf(last),
                 "a deep statement at the top is nearer the surface than one at the bottom");
+    }
+
+    /**
+     * What a pattern is charged and what lowering it builds are the same number.
+     *
+     * <p>The charge is counted from the pattern the author wrote — the value and what is taken out
+     * of it — and never from the bindings it becomes, so that changing how a pattern is lowered
+     * cannot change what compiles. Which leaves one thing to hold: that this lowering writes a
+     * level per binding and not more than a fixed amount besides, so that holding the charge holds
+     * the walks too.
+     *
+     * <p>The amount besides is reading the value out. A binding's value is {@code $t.0} or
+     * {@code $r.field} — two levels hanging off the spine rather than along it — so the deepest way
+     * down a lowered pattern is its bindings and then that, whatever the pattern was. A lowering
+     * that wrote a level per binding and nothing else would come in under this, and one that wrote
+     * a level per anything else would come in over it.
+     */
+    @Test
+    void aPatternCostsTheBindingsItIntroducesAndLoweringWritesOneLevelEach() {
+        record Case(String pattern, String data, int bindings) {}
+        List<Case> cases = List.of(
+                new Case("(a, b)", null, 3),
+                new Case("(a, b, c)", null, 4),
+                new Case("{ f0, f1, f2 }", "data R = { f0: String, f1: String, f2: String }", 4),
+                new Case("{ f0 }", "data R = { f0: String }", 2));
+
+        for (Case one : cases) {
+            String source = "module m exposing (f" + (one.data() == null ? "" : ", R") + ")\n\n"
+                    + (one.data() == null ? "" : one.data() + "\n\n")
+                    + "behavior f : (r: " + (one.data() == null ? "(Int, Int, Int)" : "R")
+                    + ") -> Int\nlet f (" + one.pattern() + ") = 1\n";
+            Ast.Module m = CstFrontend.parse(source);
+            Ast.FnDef fn = m.fns().stream().filter(d -> d.written().spelling().equals("f"))
+                    .findFirst().orElseThrow();
+            int built = StructuralCost.of(((Ast.FnBody.Written) fn.body()).expr());
+
+            int levels = built - 1;   // the body under it is the last level
+            assertTrue(one.bindings() <= levels && levels <= one.bindings() + READING_THE_VALUE_OUT,
+                    "`" + one.pattern() + "` is charged " + one.bindings()
+                            + " bindings, and lowering it builds " + levels + " levels");
+        }
     }
 
     /** Every definition the language ships is far inside the bound; a bound that the prelude was

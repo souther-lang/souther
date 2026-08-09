@@ -450,6 +450,13 @@ public final class AstBuilder {
             }
             body = lambda.body();
         }
+        // What the definition says, as written — asked of the body and of the patterns its
+        // parameters are written with, and asked before those patterns are folded into it. A
+        // pattern is a binding site, and what it costs is the bindings it introduces (spec
+        // [#source-structural-complexity-is-bounded]); folding it makes one level per binding, so
+        // measuring the fold would give the same number today and would make the answer a fact
+        // about this lowering rather than about the source.
+        int costs = StructuralCost.of(body) + bindingsIntroducedBy(paramPatterns);
         // a pattern parameter took a fresh name above; it opens itself at the top of the body, so
         // the helper still takes plain names and nothing downstream sees a pattern
         for (int i = paramPatterns.size() - 1; i >= 0; i--) {
@@ -461,10 +468,6 @@ public final class AstBuilder {
                 body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at), body, at);
             }
         }
-        // What the definition says, as written. A block was counted above by its statements alone,
-        // which is what the fold needed to know before it ran; this is the whole of it, and holds
-        // what a statement carries as well as how many there are.
-        int costs = StructuralCost.of(body);
         if (costs > StructuralCost.MAX) {
             throw errorWithHint(pos,
                     new DeclarationMessage.ADefinitionIsMoreStructureThanIsHeld(
@@ -1105,14 +1108,25 @@ public final class AstBuilder {
     }
 
     private Ast.Expr foldStatements(List<SyntaxNode> stmts, int index, SyntaxNode result) {
-        // Before the fold and not after it. Each statement is a binding the ones after it are
-        // written inside, so folding them descends once per statement — a block long enough to be
+        // Before the fold and not after it. Each statement is a binding site the ones after it are
+        // written inside, so folding them descends once per binding — a block long enough to be
         // refused is a block long enough to run this out on the way to saying so.
-        if (index == 0 && stmts.size() > StructuralCost.MAX) {
-            throw errorWithHint(pos(stmts.get(StructuralCost.MAX)),
-                    new DeclarationMessage.ABlockHasMoreStatementsThanADefinitionHolds(
-                            stmts.size(), StructuralCost.MAX),
-                    new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
+        //
+        // Counted in bindings rather than statements: `let (a, b) = t` is one statement and two
+        // names, and what the ones after it are written inside is the names.
+        if (index == 0) {
+            int bindings = 0;
+            for (SyntaxNode s : stmts) {
+                bindings += s.kind() == SyntaxKind.LET_DESTRUCTURE
+                        ? bindingsIntroducedBy(patternChild(s))
+                        : 1;
+            }
+            if (bindings > StructuralCost.MAX) {
+                throw errorWithHint(pos(stmts.get(stmts.size() - 1)),
+                        new DeclarationMessage.ABlockHasMoreStatementsThanADefinitionHolds(
+                                bindings, StructuralCost.MAX),
+                        new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
+            }
         }
         if (index == stmts.size()) {
             return expr(result);   // a block always ends in a result expression
@@ -1162,6 +1176,44 @@ public final class AstBuilder {
      * to field reads — so nothing past this point has to know a pattern was written. It is the same
      * lowering a {@code match} arm does; the difference is only that here there is one arm.
      */
+    /** How many bindings {@code patterns} introduce between them — what they cost, counted from
+     *  what the source wrote rather than from the shape {@link #bindPattern} folds them into. */
+    private int bindingsIntroducedBy(List<SyntaxNode> patterns) {
+        int bindings = 0;
+        for (SyntaxNode pat : patterns) {
+            bindings += pat == null ? 0 : bindingsIntroducedBy(pat);
+        }
+        return bindings;
+    }
+
+    /**
+     * How many bindings one pattern introduces.
+     *
+     * <p>The value itself is one, and what is taken out of it is one each: an element of a tuple,
+     * a field a record pattern names, what a case pattern opens. A pattern written inside one of
+     * those counts its own the same way. Nothing here reads the tree the pattern becomes — this is
+     * what the author wrote, and it is what the bound is over.
+     */
+    private int bindingsIntroducedBy(SyntaxNode pat) {
+        return switch (pat.kind()) {
+            case PATTERN_NAME -> 1;
+            case PATTERN_TUPLE -> {
+                List<SyntaxNode> elems = patternChildren(pat);
+                if (elems.size() == 1) {
+                    yield bindingsIntroducedBy(elems.get(0));   // `(p)` is grouping
+                }
+                int bindings = 1;
+                for (SyntaxNode elem : elems) {
+                    bindings += bindingsIntroducedBy(elem);
+                }
+                yield bindings;
+            }
+            case PATTERN_CTOR -> 1 + bindingsIntroducedBy(patternChild(pat));
+            case PATTERN_RECORD -> 1 + childNodes(pat, SyntaxKind.PATTERN_FIELD).size();
+            default -> 1;
+        };
+    }
+
     private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos) {
         return switch (pat.kind()) {
             case PATTERN_NAME -> new Ast.LetIn(binderOf(pat), value, rest, pos);

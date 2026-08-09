@@ -59,6 +59,52 @@ class AnAcceptedSourceBuildsNoDeeperThanTheBoundTest {
                 .append(names).append("\n").toString();
     }
 
+    /** A record pattern of {@code fields} names, taken apart in a parameter: what a pattern costs
+     *  is the bindings it introduces, and lowering it writes one level each. */
+    private static String recordPattern(int fields) {
+        StringBuilder sb = new StringBuilder("module m exposing (f, R)\n\ndata R = {\n");
+        for (int i = 0; i < fields; i++) {
+            sb.append("    f").append(i).append(": String").append(i < fields - 1 ? "," : "").append("\n");
+        }
+        sb.append("}\n\nbehavior f : (r: R) -> String\nlet f ({ ");
+        for (int i = 0; i < fields; i++) {
+            sb.append(i == 0 ? "" : ", ").append("f").append(i);
+        }
+        return sb.append(" }) = f0\n").toString();
+    }
+
+    /**
+     * A block whose statements take one tuple apart again and again: a binding site that is more
+     * than one binding.
+     *
+     * <p>Each takes the same tuple apart rather than the one before it. A chain that feeds each
+     * destructure into the next is exponential in the compiler as it stands (issue #563), which is
+     * a size and not a depth — this bound is over the second, and a fixture written the other way
+     * would fail here for a reason this is not about.
+     */
+    private static String destructuringBlock(int statements) {
+        StringBuilder sb = new StringBuilder("module m exposing (f)\n\n"
+                + "behavior f : (x: Int) -> Int\nlet f (x) = {\n    let t = (x, x)\n");
+        for (int i = 0; i < statements; i++) {
+            sb.append("    let (a").append(i).append(", b").append(i).append(") = t\n");
+        }
+        return sb.append("    x\n}\n").toString();
+    }
+
+    /** A 255-argument helper, applied where it is spliced: the widest expansion a definition may
+     *  hold, under what nesting is left for it. */
+    private static String widestExpansion(int nesting) {
+        StringBuilder sb = new StringBuilder("module m exposing (f)\n\nlet h (");
+        for (int i = 0; i < 255; i++) {
+            sb.append(i == 0 ? "" : ", ").append("p").append(i).append(": Int");
+        }
+        sb.append(") = p0\n\nbehavior f : (x: Int) -> Int\nlet f (x) = h(");
+        for (int i = 0; i < 255; i++) {
+            sb.append(i == 0 ? "" : ", ").append("x");
+        }
+        return sb.append(")").append(" + 1".repeat(nesting)).append("\n").toString();
+    }
+
     /** A block of statements over a chain of values: two producers in one definition. */
     private static String blockOverAChain() {
         StringBuilder sb = new StringBuilder("module m exposing (f)\n\nlet v0 = 1\n");
@@ -80,7 +126,10 @@ class AnAcceptedSourceBuildsNoDeeperThanTheBoundTest {
                 new Case("a block at the bound", block(StructuralCost.MAX)),
                 new Case("a chain of values at the bound", valueChain(StructuralCost.MAX, 1)),
                 new Case("a chain of deep bodies", valueChain(StructuralCost.MAX, 60)),
-                new Case("a block over a chain", blockOverAChain()));
+                new Case("a block over a chain", blockOverAChain()),
+                new Case("a record taken apart in a parameter", recordPattern(200)),
+                new Case("a block of destructurings", destructuringBlock(100)),
+                new Case("the widest expansion, under nesting", widestExpansion(50)));
 
         for (Case one : cases) {
             Compilation compilation = Compiler.compiled(one.source(), "m");
