@@ -84,6 +84,12 @@ public final class Compiler {
      * command line and the editor ask for — did not, so the same source was a diagnostic through one
      * door and a stack trace through another. What decides the answer is the compiler, not which
      * signature a caller reached for.
+     *
+     * <p>Around what an entry point does with the compilation as well as around the driving of it.
+     * Taking the classes off a driven compilation reads a key the driver already asked, so it walks
+     * nothing today — but that is a fact about the order two lines happen to be in, and a region
+     * that holds only while they stay in it is not a boundary. Nesting is why it can be said twice:
+     * the inner one answers first, and the outer one covers what is left.
      */
     private static <T> T driven(java.util.function.Supplier<T> compilation) {
         try {
@@ -117,7 +123,7 @@ public final class Compiler {
      */
     private static Map<String, byte[]> compiling(String source, String defaultModuleName,
                                                  List<Located> warningsOut) {
-        return classesOf(compiled(source, defaultModuleName, warningsOut));
+        return driven(() -> classesOf(compiled(source, defaultModuleName, warningsOut)));
     }
 
     /**
@@ -348,8 +354,8 @@ public final class Compiler {
 
     private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
-        return new LinkedHashMap<>(
-                linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes());
+        return driven(() -> new LinkedHashMap<>(
+                linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes()));
     }
 
     /** As {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}, on a budget of its own
