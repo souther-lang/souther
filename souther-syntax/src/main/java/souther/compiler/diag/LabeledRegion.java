@@ -19,7 +19,7 @@ public record LabeledRegion(Region region, String sourceId, String labelKey, Obj
 
     /** A label written as a message. */
     public LabeledRegion(Region region, String sourceId, Message said) {
-        this(region, sourceId, said.key(), new Object[0], said);
+        this(region, sourceId, said.entry(), new Object[0], said);
     }
 
     /** A label written as a key and its arguments. */

@@ -46,7 +46,7 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 let f (a) = ("x" ++ 1) + a.n
                 """);
 
-        assertTrue(keys.contains("check.concat.msg"),
+        assertTrue(keys.contains("type.joins-two-lists-or-two-strings"),
                 "the operand that said what was wrong with it is reported: " + keys);
     }
 
@@ -62,9 +62,9 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 let f (a) = 1 && ("x" ++ 1)
                 """);
 
-        assertTrue(keys.contains("check.type.mismatch.msg"),
+        assertTrue(keys.contains("type.it-does-not-have-the-type-it-needs-here"),
                 "`1` is not a Bool, and that is what `&&` was given first: " + keys);
-        assertFalse(keys.contains("check.concat.msg"),
+        assertFalse(keys.contains("type.joins-two-lists-or-two-strings"),
                 "the operand beside it was never read: " + keys);
     }
 
@@ -80,7 +80,7 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 let f (a) = 1 && a.n
                 """);
 
-        assertTrue(keys.contains("check.type.mismatch.msg"),
+        assertTrue(keys.contains("type.it-does-not-have-the-type-it-needs-here"),
                 "`1` is not a Bool, whatever stands beside it: " + keys);
     }
 
@@ -91,7 +91,7 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 let f (a) = a.n + ("x" ++ 1)
                 """);
 
-        assertFalse(keys.contains("check.concat.msg"),
+        assertFalse(keys.contains("type.joins-two-lists-or-two-strings"),
                 "reading stopped at the operand with no type, so nothing beside it was read: " + keys);
     }
 

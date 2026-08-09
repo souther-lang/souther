@@ -27,7 +27,7 @@ class CompileFunctionBoundaryTest {
                 data R = { v: Int }
                 behavior run : (p: (Int) -> Bool) -> R
                 """);
-        assertEquals("check.param.function", d.messageKey());
+        assertEquals("type.a-parameter-carries-a-function", d.messageKey());
     }
 
     @Test
@@ -37,7 +37,7 @@ class CompileFunctionBoundaryTest {
                 data R = { v: Int }
                 behavior run : (r: R) -> (Int) -> Bool
                 """);
-        assertEquals("check.output.function", d.messageKey());
+        assertEquals("type.an-output-carries-a-function", d.messageKey());
     }
 
     @Test
@@ -47,6 +47,6 @@ class CompileFunctionBoundaryTest {
                 data R = { v: Int }
                 behavior run : (m: Map<String, List<(Int) -> Bool>>) -> R
                 """);
-        assertEquals("check.param.function", d.messageKey());
+        assertEquals("type.a-parameter-carries-a-function", d.messageKey());
     }
 }

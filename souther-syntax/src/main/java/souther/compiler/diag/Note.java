@@ -14,7 +14,7 @@ public record Note(String messageKey, Object[] args, Message said) {
 
     /** A hint written as a message. */
     public Note(Message said) {
-        this(said.key(), new Object[0], said);
+        this(said.entry(), new Object[0], said);
     }
 
     /** A hint written as a key and its arguments. */

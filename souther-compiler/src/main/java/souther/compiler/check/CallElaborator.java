@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
@@ -84,9 +85,9 @@ public final class CallElaborator {
                 || TypeOps.supportsOrdering(answered, ctx.symbols())) {
             return;
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1816, "check.ordered.key")
-                        .at(call.pos()).args(call.written(), Type.show(answered))
-                        .hint("check.ordered.hint").build());
+        throw CompileException.of(Diagnostic
+                        .at(call.pos())
+                        .hint(new TypeMessage.MapToAnOrderedFieldFirst()).say(new TypeMessage.TheKeyMustBeAnOrderedValue(call.written(), Type.show(answered))).build());
     }
 
     /**
@@ -591,16 +592,16 @@ public final class CallElaborator {
     static void validateRegexPattern(Ast.Expr e) {
         String pattern = ConstEval.evalString(e).orElse(null);
         if (pattern == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1323, "check.matches.constant")
-                            .at(e.pos()).build());
+            throw CompileException.of(Diagnostic
+                            .at(e.pos()).say(new TypeMessage.ThePatternMustBeWrittenOut()).build());
         }
         try {
             java.util.regex.Pattern.compile(pattern);
         } catch (java.util.regex.PatternSyntaxException ex) {
             // getDescription() is the one-line reason ("Unclosed character class near index 3");
             // getMessage() would also dump the pattern and a caret, which the source region already shows.
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1323, "check.matches.regex")
-                            .at(e.pos()).args(ex.getDescription()).build());
+            throw CompileException.of(Diagnostic
+                            .at(e.pos()).say(new TypeMessage.ThePatternIsNotARegularExpression(ex.getDescription())).build());
         }
     }
 
@@ -641,19 +642,19 @@ public final class CallElaborator {
                 return position;
             }
             if (position == null || BottomInfer.isBottom(position)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1815, "check.numeric.empty")
-                                .at(call.name().region()).args(call.written())
-                                .hint("check.numeric.empty.hint").build());
+                throw CompileException.of(Diagnostic
+                                .at(call.name().region())
+                                .hint(new TypeMessage.AnnotateThePositionTheCallFeeds()).say(new TypeMessage.OverTheEmptyListTheSeedDecides(call.written())).build());
             }
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.numeric.result")
+            throw CompileException.of(Diagnostic
                             .at(call.name().region())
-                            .args(call.written(), Type.show(position))
-                            .hint("check.numeric.result.hint").build());
+                            
+                            .hint(new TypeMessage.ANewtypeIsBuiltFromTheResult(call.written())).say(new TypeMessage.ItAnswersANumberAndThisPositionNeedsAnother(call.written(), Type.show(position))).build());
         }
         throw CompileException.of(Diagnostic.of(DiagnosticCode.E1817, "check.numeric")
                         .at(call.name().region())
                         .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
-                        .hint("check.numeric.hint").build());
+                        .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).build());
     }
 
     /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
@@ -667,7 +668,7 @@ public final class CallElaborator {
     static CompileException needsOrdered(SourcePos pos, String subject, Type element, String legacy) {
         return CompileException.of(Diagnostic.of(DiagnosticCode.E1816, "check.ordered").at(pos)
                         .args(subject, Localizable.of("kind.ordered.list"), Type.show(element))
-                        .hint("check.ordered.hint").build());
+                        .hint(new TypeMessage.MapToAnOrderedFieldFirst()).build());
     }
 
     /** A written date — {@code Date("2026-07-01")} / {@code DateTime("2026-07-01T09:00")}. The
@@ -678,8 +679,8 @@ public final class CallElaborator {
     static Type temporalLiteral(Ast.Apply call) {
         boolean isDate = "Date".equals(call.reaches());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1322, "check.temporal.literal")
-                            .at(call.name().region()).args(call.written()).build());
+            throw CompileException.of(Diagnostic
+                            .at(call.name().region()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
         parseTemporal(call.written(), lit.value(), call.pos());
         return isDate ? Type.DATE : Type.DATETIME;
@@ -693,8 +694,8 @@ public final class CallElaborator {
                     ? java.time.LocalDate.parse(text)
                     : java.time.LocalDateTime.parse(text);
         } catch (java.time.format.DateTimeParseException _) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1322, "check.temporal.malformed")
-                            .at(pos, fn.length()).args(fn, text).build());
+            throw CompileException.of(Diagnostic
+                            .at(pos, fn.length()).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
         }
     }
 

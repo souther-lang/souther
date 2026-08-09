@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.types.Type;
@@ -70,8 +71,8 @@ public final class BinaryElaborator {
                 Type lt = left.type();
                 Type rt = right.type();
                 if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1319, "check.compare.ordered")
-                                    .at(bin.pos()).args(Type.show(lt), Type.show(rt)).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
                 }
                 yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }
@@ -113,14 +114,14 @@ public final class BinaryElaborator {
                 Type lt = BottomInfer.bottomAsEmptyList(lraw);
                 Type rt = BottomInfer.bottomAsEmptyList(rraw);
                 if (!(lt instanceof Type.ListOf lo) || !(rt instanceof Type.ListOf ro)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1319, "check.concat.msg")
+                    throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2)
                                     .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
                                             "check.operand", Type.show(lt, rt))
                                     .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
                                             "check.operand", Type.show(rt, lt))
-                                    .args(Type.show(lt, rt), Type.show(rt, lt))
-                                    .build());
+                                    
+                                    .say(new TypeMessage.JoinsTwoListsOrTwoStrings(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
                 yield new Core.Binary(bin.op(), left, right,
                         Type.list(BottomInfer.unifyElem(lo.element(), ro.element(), bin.pos())), bin.pos());
@@ -147,8 +148,8 @@ public final class BinaryElaborator {
                 if (!TypeOps.supportsEquality(lt, ctx.symbols())
                         || !TypeOps.supportsEquality(rt, ctx.symbols())) {
                     Type carrier = TypeOps.supportsEquality(lt, ctx.symbols()) ? rt : lt;
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1319, "check.equality.function")
-                                    .at(bin.pos(), 2).args(Type.show(carrier)).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos(), 2).say(new TypeMessage.AFunctionHasNoValueToCompare(Type.show(carrier))).build());
                 }
                 Set<TypeName> lCases = TypeOps.leafCases(lt, ctx.symbols());
                 Set<TypeName> rCases = TypeOps.leafCases(rt, ctx.symbols());
@@ -156,14 +157,14 @@ public final class BinaryElaborator {
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
                 if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())
                         && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1319, "check.compare.msg")
+                    throw CompileException.of(Diagnostic
                                     .at(bin.pos(), 2)
                                     .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
                                             "check.operand", Type.show(lt, rt))
                                     .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
                                             "check.operand", Type.show(rt, lt))
-                                    .args(Type.show(lt, rt), Type.show(rt, lt))
-                                    .build());
+                                    
+                                    .say(new TypeMessage.TheseTwoCannotBeCompared(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
                 yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }

@@ -220,7 +220,7 @@ class CompileDestructuringTest {
                 behavior countTags : (t: Tags) -> Int
                 let countTags (Labels(xs)) = length(xs)
                 """));
-        assertEquals("check.open.mismatch", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.the-pattern-opens-another-type", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -286,7 +286,7 @@ class CompileDestructuringTest {
                     Out { v = x }
                 }
                 """));
-        assertEquals("check.open.notnewtype", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -305,7 +305,7 @@ class CompileDestructuringTest {
                     Out { v = 1 }
                 }
                 """));
-        assertEquals("check.open.mismatch", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.the-pattern-opens-another-type", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -324,7 +324,7 @@ class CompileDestructuringTest {
                     Out { v = 1 }
                 }
                 """));
-        assertEquals("check.open.notnewtype", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
         assertTrue(e.getMessage().contains("match") || e.diagnostic().notes().toString().contains("match"),
                 "the report points at `match`: " + e.getMessage());
     }
@@ -366,7 +366,7 @@ class CompileDestructuringTest {
                             1
                         }
                         """)));
-        assertEquals("check.open.mismatch", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.the-pattern-opens-another-type", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -406,7 +406,7 @@ class CompileDestructuringTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = Out { v = map((Paid(x)) -> 1, i.ss) }
                 """));
-        assertEquals("check.open.notnewtype", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -423,6 +423,6 @@ class CompileDestructuringTest {
                     Out { v = s }
                 }
                 """));
-        assertEquals("check.open.notnewtype", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.not-a-newtype-to-open-in-a-binding", e.diagnostic().messageKey(), e.getMessage());
     }
 }

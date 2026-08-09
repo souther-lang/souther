@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
@@ -83,11 +84,12 @@ public final class Elaborator {
         }
         // which collection asked is part of the answer: a Set asks whether two elements are equal and
         // a Map whether two keys are, and the report says which of the two it was
-        String key = bad instanceof TypeOps.UncomparableIn.MapKey
-                ? "check.map.key.function" : "check.set.function";
-        String what = bad instanceof TypeOps.UncomparableIn.MapKey ? "key" : "element";
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1315, key)
-                        .at(c.pos()).args(Type.show(bad.type())).build());
+        throw CompileException.of(Diagnostic.at(c.pos())
+                .say(bad instanceof TypeOps.UncomparableIn.MapKey
+                        ? new TypeMessage.AMapKeyIsComparedAndAFunctionIsNot(Type.show(bad.type()))
+                        : new TypeMessage.ASetElementIsComparedAndAFunctionIsNot(
+                                Type.show(bad.type())))
+                .build());
     }
 
     private static Core elaborating(Ast.Expr e, Scope env, CheckContext ctx,
@@ -122,12 +124,12 @@ public final class Elaborator {
                 Core tuple = elaborate(tg.tuple(), env, ctx);
                 Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1320, "check.tuple.pattern")
-                                    .at(tg.pos()).args(Type.show(tt)).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(tg.pos()).say(new TypeMessage.ATuplePatternNeedsATuple(Type.show(tt))).build());
                 }
                 if (to.elements().size() != tg.arity()) {   // exact arity, in either direction (Elm)
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1320, "check.tuple.arity")
-                                    .at(tg.pos()).args(tg.arity(), to.elements().size()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(tg.pos()).say(new TypeMessage.ThePatternBindsAnotherNumberOfNames(String.valueOf(tg.arity()), String.valueOf(to.elements().size()))).build());
                 }
                 yield new Core.TupleGet(tuple, tg.index(), tg.arity(),
                         to.elements().get(tg.index()), tg.pos());
@@ -136,10 +138,10 @@ public final class Elaborator {
                 Core operand = elaborate(neg.operand(), env, ctx);
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1319, "check.neg.msg")
+                    throw CompileException.of(Diagnostic
                                     .at(new Region(neg.pos(), region(neg.operand()).end()))
-                                    .args(Type.show(t))
-                                    .build());
+                                    
+                                    .say(new TypeMessage.UnaryMinusNeedsANumber(Type.show(t))).build());
                 }
                 yield new Core.Neg(operand, t, neg.pos());
             }
@@ -276,14 +278,12 @@ public final class Elaborator {
                 if (joined != null) {
                     yield new Core.If(cond, then, els, joined, iff.pos());
                 }
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
+                throw CompileException.of(Diagnostic
                                 .at(iff.pos(), 2)
-                                .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())),
-                                        "check.if.then", Type.show(tt))
-                                .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())),
-                                        "check.if.else", Type.show(et))
-                                .hint("check.if.hint")
-                                .build());
+                                .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())), new TypeMessage.TheThenBranchProduces(Type.show(tt)))
+                                .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())), new TypeMessage.TheElseBranchProduces(Type.show(et)))
+                                .hint(new TypeMessage.MakeBothBranchesProduceOneType())
+                                .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
             }
             case Ast.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
@@ -318,14 +318,12 @@ public final class Elaborator {
                     arms.add(new Core.ElseArm(arm.clause(), body));
                     Type next = TypeOps.join(joined, body.type());
                     if (next == null) {
-                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
+                        throw CompileException.of(Diagnostic
                                         .at(ic.pos(), 2)
-                                        .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
-                                                "check.if.then", Type.show(then.type()))
-                                        .secondary(Region.ofWidth(arm.body().pos(), width(arm.body())),
-                                                "check.if.else", Type.show(body.type()))
-                                        .hint("check.if.hint")
-                                        .build());
+                                        .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())), new TypeMessage.TheThenBranchProduces(Type.show(then.type())))
+                                        .secondary(Region.ofWidth(arm.body().pos(), width(arm.body())), new TypeMessage.TheElseBranchProduces(Type.show(body.type())))
+                                        .hint(new TypeMessage.MakeBothBranchesProduceOneType())
+                                        .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
                     }
                     joined = next;
                 }
@@ -555,18 +553,18 @@ public final class Elaborator {
         String opened = li.opens().written();
         TypeName layer = li.opens().denotes();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.open.notnewtype")
-                            .at(li.pos()).args(opened)
-                            .hint("check.open.notnewtype.hint").build());
+            throw CompileException.of(Diagnostic
+                            .at(li.pos())
+                            .hint(new TypeMessage.ABindingOpensOnlyWhatEveryValueHas()).say(new TypeMessage.NotANewtypeToOpenInABinding(opened)).build());
         }
         // compared as types, not as the text of a name: a type is reachable through the module that
         // declares it, so `probe.a.Tags` and an imported bare `Tags` are the one type
         if (!(valueType instanceof Type.Ref r) || !r.name().equals(layer)) {
             String shown = layer.name();
             String actual = Type.show(valueType);
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.open.mismatch")
-                            .at(li.pos()).args(shown, actual)
-                            .diff(actual, shown).build());
+            throw CompileException.of(Diagnostic
+                            .at(li.pos())
+                            .diff(actual, shown).say(new TypeMessage.ThePatternOpensAnotherType(shown, actual)).build());
         }
     }
 
@@ -1268,12 +1266,12 @@ public final class Elaborator {
     static void requireType(Ast.Expr e, Type actual, Type expected,
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.type.mismatch.msg")
+            throw CompileException.of(Diagnostic
                             .at(region(e))
-                            .args(what)
+                            
                             .diff(Type.show(actual, expected), Type.show(expected, actual))
-                            .hint("check.type.mismatch.hint")
-                            .build());
+                            .hint(new TypeMessage.AdjustTheValueOrThePosition())
+                            .say(new TypeMessage.ItDoesNotHaveTheTypeItNeedsHere(what)).build());
         }
     }
 

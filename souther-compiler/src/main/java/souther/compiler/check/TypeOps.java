@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -208,8 +209,8 @@ public final class TypeOps {
         for (Type m : members) {
             TypeName name = memberName(m);
             if (name == null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1613, "check.union.members")
-                                .at(ret.pos()).args(Type.show(m)).build());
+                throw CompileException.of(Diagnostic
+                                .at(ret.pos()).say(new TypeMessage.NotAUnionMember(Type.show(m))).build());
             }
             names.add(name);
         }
@@ -618,9 +619,9 @@ public final class TypeOps {
                 } else if (arg == Type.NOTHING) {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (!assignable(arg, bound, symbols) && !assignable(bound, arg, symbols)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
-                                    .at(pos).args(what, Type.show(bound), Type.show(arg))
-                                    .diff(Type.show(arg, bound), Type.show(bound, arg)).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(pos)
+                                    .diff(Type.show(arg, bound), Type.show(bound, arg)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(bound), Type.show(arg))).build());
                 }
             }
             case Type.ListOf p when arg instanceof Type.ListOf a ->
@@ -647,9 +648,9 @@ public final class TypeOps {
             }
             default -> {
                 if (!assignable(arg, param, symbols)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
-                                    .at(pos).args(what, Type.show(param), Type.show(arg))
-                                    .diff(Type.show(arg, param), Type.show(param, arg)).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(pos)
+                                    .diff(Type.show(arg, param), Type.show(param, arg)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(param), Type.show(arg))).build());
                 }
             }
         }
@@ -1468,7 +1469,7 @@ public final class TypeOps {
                 // a set holds no duplicates, which is a question about equality of its elements
                 Type element = typeArg(ref, symbols, "set", 3,
                         "Set needs a type argument, e.g. Set<String>");
-                requireEquality(element, symbols, ref, "check.set.function",
+                requireEquality(element, symbols, ref, false,
                         "a Set has no duplicate elements, and a function has no value to compare");
                 yield Type.set(element);
             }
@@ -1481,7 +1482,7 @@ public final class TypeOps {
                 Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
                 Type key = ref.tupleElems() == null
                         ? Type.STRING : resolveTerm(ref.tupleElems().get(0), symbols);
-                requireEquality(key, symbols, ref, "check.map.key.function",
+                requireEquality(key, symbols, ref, true,
                         "a Map finds a value by its key, and a function has no value to compare");
                 yield Type.map(key, value);
             }
@@ -1554,11 +1555,14 @@ public final class TypeOps {
     }
 
     /** Refuses a collection whose element or key a function makes uncomparable. */
-    private static void requireEquality(Type t, Symbols symbols, Ast.TypeRef at, String key,
+    private static void requireEquality(Type t, Symbols symbols, Ast.TypeRef at, boolean aMapKey,
                                         String message) {
         if (!supportsEquality(t, symbols)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1315, key)
-                            .at(at.pos()).args(Type.show(t)).build());
+            throw CompileException.of(Diagnostic.at(at.pos())
+                    .say(aMapKey
+                            ? new TypeMessage.AMapKeyIsComparedAndAFunctionIsNot(Type.show(t))
+                            : new TypeMessage.ASetElementIsComparedAndAFunctionIsNot(Type.show(t)))
+                    .build());
         }
     }
 
@@ -1566,7 +1570,7 @@ public final class TypeOps {
     private static Type typeArg(Ast.TypeRef ref, Symbols symbols, String key, int width,
                                 String message) {
         if (ref.arg() == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1316, "check.typearg." + key)
+            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1316, "type.a-" + key + "-needs-its-type")
                             .at(ref.pos(), width).build());
         }
         return resolveTerm(ref.arg(), symbols);

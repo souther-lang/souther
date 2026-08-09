@@ -48,7 +48,7 @@ class ASignatureThatDoesNotBuildTest {
         List<Db.Found> found = compiled().db().allReports();
 
         assertEquals(1, found.size(), "one signature that does not build, one diagnostic: " + found);
-        assertEquals("check.union.members", found.get(0).report().diagnostic().messageKey());
+        assertEquals("type.not-a-union-member", found.get(0).report().diagnostic().messageKey());
     }
 
     @Test

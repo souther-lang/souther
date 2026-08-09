@@ -34,7 +34,7 @@ class CompileFunctionEqualityTest {
                     R { same = p == q }
                 }
                 """);
-        assertEquals("check.equality.function", d.messageKey());
+        assertEquals("type.a-function-has-no-value-to-compare", d.messageKey());
     }
 
     @Test
@@ -50,7 +50,7 @@ class CompileFunctionEqualityTest {
                     R { n = Set.size(s) }
                 }
                 """);
-        assertEquals("check.set.function", d.messageKey());
+        assertEquals("type.a-set-element-is-compared-and-a-function-is-not", d.messageKey());
     }
 
     @Test
@@ -66,7 +66,7 @@ class CompileFunctionEqualityTest {
                     R { n = Map.size(m) }
                 }
                 """);
-        assertEquals("check.map.key.function", d.messageKey());
+        assertEquals("type.a-map-key-is-compared-and-a-function-is-not", d.messageKey());
     }
 
     // The set `distinct` grows to remember what it has seen is never written down, so only the
@@ -84,7 +84,7 @@ class CompileFunctionEqualityTest {
                     R { n = List.length(List.distinct(fs)) }
                 }
                 """);
-        assertEquals("check.set.function", d.messageKey());
+        assertEquals("type.a-set-element-is-compared-and-a-function-is-not", d.messageKey());
     }
 
     // A Set asks whether two elements are equal and a Map whether two keys are. Those are different
@@ -101,7 +101,7 @@ class CompileFunctionEqualityTest {
                     R { n = Map.size(Map.singleton(p, 1)) }
                 }
                 """);
-        assertEquals("check.map.key.function", d.messageKey());
+        assertEquals("type.a-map-key-is-compared-and-a-function-is-not", d.messageKey());
     }
 
     @Test
@@ -117,6 +117,6 @@ class CompileFunctionEqualityTest {
                     R { n = Map.size(List.groupBy((i) -> p, xs)) }
                 }
                 """);
-        assertEquals("check.map.key.function", d.messageKey());
+        assertEquals("type.a-map-key-is-compared-and-a-function-is-not", d.messageKey());
     }
 }

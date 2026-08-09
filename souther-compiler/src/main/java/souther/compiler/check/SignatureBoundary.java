@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -157,15 +158,15 @@ final class SignatureBoundary {
 
     private static CompileException union(Type.Union u, Where where) {
         String shown = Type.show(u);
-        return where.refusal(DiagnosticCode.E1312, "check.param.union", shown);
+        return where.refusal(new TypeMessage.AParameterIsAnAnonymousUnion(where.name(), shown));
     }
 
     /** A tuple is expression-level only: it has no external representation, so it cannot cross a
      *  decoder or an encoder. A tuple in a helper's signature is fine — it never touches a codec. */
     private static CompileException tuple(Where where) {
         return where.parameter()
-                ? where.refusal(DiagnosticCode.E1311, "check.param.tuple")
-                : where.refusal(DiagnosticCode.E1311, "check.output.tuple");
+                ? where.refusal(new TypeMessage.AParameterIsATuple(where.name()))
+                : where.refusal(new TypeMessage.AnOutputIsATuple(where.name()));
     }
 
     /** A function has no external representation at any depth, since one hides as easily inside a
@@ -173,8 +174,8 @@ final class SignatureBoundary {
     private static CompileException function(Type whole, Where where) {
         String shown = Type.show(whole);
         return where.parameter()
-                ? where.refusal(DiagnosticCode.E1311, "check.param.function", shown)
-                : where.refusal(DiagnosticCode.E1311, "check.output.function", shown);
+                ? where.refusal(new TypeMessage.AParameterCarriesAFunction(where.name(), shown))
+                : where.refusal(new TypeMessage.AnOutputCarriesAFunction(where.name(), shown));
     }
 
     /**
@@ -186,8 +187,10 @@ final class SignatureBoundary {
     private static CompileException optional(Type.OptionOf o, Where where) {
         String shown = Type.show(o);
         return where.parameter()
-                ? where.hinted(DiagnosticCode.E1313, "check.param.optional", "check.optional.hint", shown)
-                : where.hinted(DiagnosticCode.E1313, "check.output.optional", "check.optional.hint", shown);
+                ? where.hinted(new TypeMessage.AParameterCarriesAnOptional(where.name(), shown),
+                        new TypeMessage.AModelTypeOwnsTheAbsence())
+                : where.hinted(new TypeMessage.AnOutputCarriesAnOptional(where.name(), shown),
+                        new TypeMessage.AModelTypeOwnsTheAbsence());
     }
 
     /** What to write instead, said of the optional rather than of the position it was found in: the
@@ -195,8 +198,12 @@ final class SignatureBoundary {
      *  behavior's type would be advice about something else. */
     private static CompileException foreignName(TypeName foreign, Where where) {
         return where.parameter()
-                ? where.hinted(DiagnosticCode.E1325, "check.param.foreignname", "check.foreignname.hint", foreign.name())
-                : where.hinted(DiagnosticCode.E1325, "check.output.foreignname", "check.foreignname.hint", foreign.name());
+                ? where.hinted(new TypeMessage.AParameterTakesATypeTheLanguageDeclares(
+                                where.name(), foreign.name()),
+                        new TypeMessage.DeclareItAsATypeOfTheModel())
+                : where.hinted(new TypeMessage.AnOutputIsATypeTheLanguageDeclares(
+                                where.name(), foreign.name()),
+                        new TypeMessage.DeclareItAsATypeOfTheModel());
     }
 
     /** What to write instead. Said as declaring a type rather than as supplying a codec: the name is
@@ -204,8 +211,10 @@ final class SignatureBoundary {
     private static CompileException notAKey(Type key, Where where) {
         String shown = Type.show(key);
         return where.parameter()
-                ? where.hinted(DiagnosticCode.E1314, "check.map.key.param", "check.map.key.hint", shown)
-                : where.hinted(DiagnosticCode.E1314, "check.map.key.output", "check.map.key.hint", shown);
+                ? where.hinted(new TypeMessage.AParameterMapCannotBeKeyedByThat(where.name(), shown),
+                        new TypeMessage.AMapIsAJsonObjectKeyedByStrings())
+                : where.hinted(new TypeMessage.AnOutputMapCannotBeKeyedByThat(where.name(), shown),
+                        new TypeMessage.AMapIsAJsonObjectKeyedByStrings());
     }
 
     /**
@@ -239,12 +248,17 @@ final class SignatureBoundary {
             return region == null ? builder.at(pos) : builder.at(region);
         }
 
-        CompileException refusal(DiagnosticCode code, String key, Object... rest) {
-            return CompileException.of(diagnostic(code, key).args(args(rest)).build());
+        CompileException refusal(souther.compiler.diag.msg.Message said) {
+            Diagnostic.Builder builder = Diagnostic.say(said);
+            return CompileException.of(
+                    (region == null ? builder.at(pos) : builder.at(region)).build());
         }
 
-        CompileException hinted(DiagnosticCode code, String key, String hint, Object... rest) {
-            return CompileException.of(diagnostic(code, key).args(args(rest)).hint(hint).build());
+        CompileException hinted(souther.compiler.diag.msg.Message said,
+                                souther.compiler.diag.msg.Message hint) {
+            Diagnostic.Builder builder = Diagnostic.say(said).hint(hint);
+            return CompileException.of(
+                    (region == null ? builder.at(pos) : builder.at(region)).build());
         }
 
         /** What the subject is called, then whatever the rule adds. Every one of these messages

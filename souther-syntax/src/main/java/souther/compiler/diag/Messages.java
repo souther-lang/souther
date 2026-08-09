@@ -120,9 +120,9 @@ public final class Messages {
      */
     public static String render(Message message, Locale locale) {
         Objects.requireNonNull(locale, NEEDS_A_LANGUAGE);
-        String template = lookup(message.key(), locale);
+        String template = lookup(message.entry(), locale);
         if (template == null) {
-            return message.key();
+            return message.entry();
         }
         Map<String, Object> values = MessageValues.of(message);
         StringBuilder out = new StringBuilder(template.length() + 32);

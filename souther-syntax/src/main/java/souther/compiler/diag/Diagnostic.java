@@ -236,7 +236,7 @@ public final class Diagnostic {
             }
             this.said = message;
             this.code = reports.value();
-            this.messageKey = message.key();
+            this.messageKey = message.entry();
             return this;
         }
 
@@ -325,7 +325,10 @@ public final class Diagnostic {
             }
             List<Note> filled = new ArrayList<>(notes.size());
             for (Note n : notes) {
-                filled.add(n.args().length == 0 ? new Note(n.messageKey(), args) : n);
+                // A hint written as a message carries its own values and takes none from here: filling
+            // it would rebuild it without the message, and it would then render its entry's names
+            // as themselves.
+            filled.add(n.said() == null && n.args().length == 0 ? new Note(n.messageKey(), args) : n);
             }
             return filled;
         }

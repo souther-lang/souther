@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.CodecMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -498,10 +499,10 @@ public final class DataChecker {
             // its keys are strings. Inside a body the same map may be keyed by anything (ADR-0040).
             Type badKey = TypeOps.nonBoundaryMapKey(e.getValue(), ctx.symbols());
             if (badKey != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
+                throw CompileException.of(Diagnostic
                                 .at(fieldRegion(ctx.data(), e.getKey()))
-                                .args(ctx.data().name() + "." + e.getKey(), Type.show(badKey))
-                                .hint("check.map.key.hint").build());
+                                
+                                .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(ctx.data().name() + "." + e.getKey(), Type.show(badKey))).build());
             }
         }
 

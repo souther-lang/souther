@@ -214,7 +214,7 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Stock = Map<Int, Int>
                 """));
-        assertEquals("check.map.key.field", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("type.a-fields-map-cannot-be-keyed-by-that", e.diagnostic().messageKey(), e.getMessage());
         assertTrue(e.getMessage().contains("`Stock`") && !e.getMessage().contains("Stock.value"),
                 "the complaint names the newtype, not a field the author never wrote: " + e.getMessage());
     }

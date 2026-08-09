@@ -3,6 +3,7 @@ package souther.compiler.derive;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
@@ -281,9 +282,9 @@ public final class Deriver {
      * helps nobody.
      */
     private static CompileException badMapKey(Type key, Ast.Data d, String field, SourcePos pos) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
-                        .at(pos).args(where(d, field), Type.show(key))
-                        .hint("check.map.key.hint").build());
+        return CompileException.of(Diagnostic
+                        .at(pos)
+                        .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(where(d, field), Type.show(key))).build());
     }
 
     /** How to name the place a boundary complaint belongs to. A newtype's single field is implicit —

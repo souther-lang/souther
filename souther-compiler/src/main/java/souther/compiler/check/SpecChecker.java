@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.InjectionMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -378,9 +379,9 @@ public final class SpecChecker {
             if (clash == null) {
                 continue;
             }
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1613, "check.union.samename")
-                            .at(b.pos()).args(clash[1].name(), clash[0].module(), clash[1].module())
-                            .hint("check.union.samename.hint").build());
+            throw CompileException.of(Diagnostic
+                            .at(b.pos())
+                            .hint(new TypeMessage.AMemberIsNamedByItsWrittenName()).say(new TypeMessage.OneNameForTwoMembers(clash[1].name(), clash[0].module(), clash[1].module())).build());
         }
     }
 

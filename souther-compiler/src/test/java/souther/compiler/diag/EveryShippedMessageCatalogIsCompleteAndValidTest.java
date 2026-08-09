@@ -544,6 +544,14 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
             if (leaf.getAnnotation(souther.compiler.diag.msg.Code.class) == null) {
                 wrong.add(leaf.getName() + " names no code");
             }
+            // A component's accessor would override the interface's own method, and every reader
+            // asking which entry to render would be answered that component's value instead.
+            for (String value : MessageValues.namesOf(leaf.asSubclass(Message.class))) {
+                if ("entry".equals(value)) {
+                    wrong.add(leaf.getName() + " carries a value called `entry`, which is what a"
+                            + " message answers with the entry it renders through");
+                }
+            }
         }
         wrong.sort(String::compareTo);
         assertEquals(List.of(), wrong,

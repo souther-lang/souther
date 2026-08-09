@@ -18,10 +18,18 @@ package souther.compiler.diag.msg;
  * messages rather than one entry that selects between two sentences.
  */
 public sealed interface Message permits AttemptMessage, CodecMessage, DataMessage, ExampleMessage, HelperMessage,
-        ImportMessage, InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage {
+        ImportMessage, InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage,
+        TypeMessage {
 
-    /** The catalog entry this renders through, read off where the message is declared. */
-    default String key() {
+    /**
+     * The catalog entry this renders through, read off where the message is declared.
+     *
+     * <p>Named for what it answers rather than {@code key}, because a record's component of that
+     * name would override it: a message about a map key carried one, and every reader of it was
+     * answered the key's value where the entry's name was meant. The build refuses a component that
+     * takes this name.
+     */
+    default String entry() {
         return MessageKeys.of(getClass());
     }
 }

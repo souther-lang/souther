@@ -150,7 +150,7 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
     @Test
     void twoNumbersOfUnlikeBasesAreThePlainMismatchTheyAlwaysWere() {
         Diagnostic d = refusalOf("(n: Int, d: Decimal) : Int", "n * d");
-        assertEquals("check.type.mismatch.msg", d.messageKey(),
+        assertEquals("type.it-does-not-have-the-type-it-needs-here", d.messageKey(),
                 "Int beside Decimal is said by a found-versus-expected block, not by a sentence");
     }
 
