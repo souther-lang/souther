@@ -142,7 +142,7 @@ class EveryBoundaryIsAnsweredBeforeADocumentIsRenderedTest {
                 TokenDoc.token(SyntaxKind.IDENT, "a"),
                 TokenDoc.SOFT_GAP,
                 TokenDoc.comment("// why"),
-                TokenDoc.HARD_GAP,
+                TokenDoc.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE),
                 TokenDoc.token(SyntaxKind.IDENT, "b"))), WIDE));
 
         assertThrows(IllegalStateException.class, () -> TokenDoc.node(SyntaxKind.BLOCK_EXPR,
@@ -150,7 +150,7 @@ class EveryBoundaryIsAnsweredBeforeADocumentIsRenderedTest {
                         TokenDoc.token(SyntaxKind.IDENT, "a"),
                         TokenDoc.GAP,
                         TokenDoc.comment("// why"),
-                        TokenDoc.HARD_GAP,
+                        TokenDoc.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE),
                         TokenDoc.token(SyntaxKind.IDENT, "b"))).resolve());
     }
 
@@ -160,7 +160,7 @@ class EveryBoundaryIsAnsweredBeforeADocumentIsRenderedTest {
     void aBoundaryThatAlwaysBreaksIsNotAsked() {
         TokenDoc unlisted = TokenDoc.node(SyntaxKind.BLOCK_EXPR, TokenDoc.concat(
                 TokenDoc.token(SyntaxKind.LBRACE, "{"),
-                TokenDoc.HARD_GAP,
+                TokenDoc.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                 TokenDoc.token(SyntaxKind.LBRACE, "{")));
         assertEquals("{\n{", render(unlisted, WIDE));
     }

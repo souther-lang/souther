@@ -257,6 +257,8 @@ final class Gaps {
         return switch (doc) {
             case TokenDoc.Nil _ -> Doc.NIL;
             case TokenDoc.MustBreak _ -> Doc.mustBreak();
+            // Written where a comment stands, so the obligation is the comment's and is spelled
+            // there rather than chosen here.
             case TokenDoc.Token t -> Doc.text(t.lexeme());
             case TokenDoc.Comment c -> Doc.text(c.text());
             case TokenDoc.Trailing t -> Doc.trailing(t.text());
@@ -277,7 +279,7 @@ final class Gaps {
             case TokenDoc.Gap g -> {
                 String flat = answers.get(next[0]++);
                 yield switch (g.policy()) {
-                    case ALWAYS -> Doc.hardline();
+                    case ALWAYS -> Doc.hardline(g.forced());
                     case MAY -> flat.isEmpty() ? Doc.softline() : Doc.line();
                     case NEVER -> flat.isEmpty() ? Doc.NIL : Doc.text(flat);
                 };

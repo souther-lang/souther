@@ -9,9 +9,8 @@ package souther.compiler.fmt;
  * cannot say whether another width would have kept it whole, and working that out means measuring
  * the group again.
  *
- * <p>Which rule the thing that refused answers to is not here. This says that the flat layout was
- * refused rather than not fitted; naming the obligation behind a forced break is the forced-layout
- * rule's, and it can be given without changing this.
+ * <p>This says that the flat layout was refused rather than not fitted. Which obligation the thing
+ * that refused was written for is the thing's own, and is read from it.
  */
 sealed interface Outcome {
 
@@ -23,8 +22,14 @@ sealed interface Outcome {
 
     /**
      * Written down the page because something in it cannot share a line with what follows, and
-     * that thing. Naming it is what lets the obligation behind it be given later without the group
-     * being measured again to find out which of them it was.
+     * that thing — which carries the obligation it was written for, so the group can be asked why
+     * it broke without being measured again to find out which of them it was.
      */
-    record BrokenByForcedLayout(Doc refusing) implements Outcome {}
+    record BrokenByForcedLayout(Doc.Refuses refusing) implements Outcome {
+
+        /** The obligation the group was written down the page for. */
+        Obligation obligation() {
+            return refusing.obligation();
+        }
+    }
 }

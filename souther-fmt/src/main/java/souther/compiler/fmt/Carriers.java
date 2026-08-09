@@ -98,14 +98,16 @@ final class Carriers {
         return TokenDoc.node(vacant.construct(), TokenDoc.group(TokenDoc.concat(
                 vacant.open(),
                 TokenDoc.nest(vacant.indent(), TokenDoc.concat(TokenDoc.SOFT_GAP,
-                        TokenDoc.MUST_BREAK, TokenDoc.join(TokenDoc.HARD_GAP, comments))),
+                        TokenDoc.MUST_BREAK, TokenDoc.join(
+                                TokenDoc.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE),
+                                comments))),
                 TokenDoc.SOFT_GAP, vacant.close())));
     }
 
     /**
      * What a filled slot is written as.
      *
-     * <p>A comment written above the place goes on a line of its own, and the {@link TokenDoc#HARD_GAP}
+     * <p>A comment written above the place goes on a line of its own, and the forced boundary
      * after it is what makes the enclosing group break: a {@code //} on a line the group had
      * collapsed would swallow everything after it.
      */
@@ -117,9 +119,11 @@ final class Carriers {
         List<TokenDoc> parts = new ArrayList<>();
         for (TokenDoc c : comments) {
             switch (slot.which()) {
-                case ABOVE -> parts.add(TokenDoc.concat(c, TokenDoc.HARD_GAP));
+                case ABOVE -> parts.add(TokenDoc.concat(c,
+                        TokenDoc.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE)));
                 case TRAILING -> parts.add(c);
-                case AT_END -> parts.add(TokenDoc.concat(TokenDoc.HARD_GAP, c));
+                case AT_END -> parts.add(TokenDoc.concat(
+                        TokenDoc.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE), c));
             }
         }
         return TokenDoc.concat(parts);
