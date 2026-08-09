@@ -1271,4 +1271,74 @@ class CompileInvariantDischargeTest {
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
                 "what is reported is a clause a guard could discharge, and the comprehension is not one");
     }
+
+    /**
+     * Two steps settle {@code withinCap} here: the guard relates the value to {@code outstanding},
+     * and {@code Bal}'s own invariant relates {@code outstanding} to {@code principal.value}. The
+     * guarded value is a difference, so what the guard states names three terms and is of neither
+     * shape the domain derives in — it is kept as written, and it composes with the input's relation
+     * all the same.
+     */
+    @Test
+    void aGuardOverAComputedValueChainsWithTheInputsInvariant() {
+        String m = """
+                module demo
+                data M = { cap: Decimal, v: Decimal }
+                    invariant withinCap = v <= cap
+                data Yen = Decimal
+                    invariant nonNegative = value >= 0m
+                data Bal = { principal: Yen, outstanding: Decimal }
+                    invariant outstandingWithinPrincipal = outstanding <= principal.value
+                behavior take : (bal: Bal, x: Decimal, y: Decimal) -> M | No constructs M, No
+                let take (bal, x, y) = {
+                    guard x - y <= bal.outstanding else No
+                    M { cap = bal.principal.value, v = x - y }
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard and `Bal`'s invariant together give `v <= cap`");
+    }
+
+    /** A name given the difference answers the same as the difference written where it is used. */
+    @Test
+    void namingTheComputedValueChangesNothingAboutWhatTheGuardEstablished() {
+        String m = """
+                module demo
+                data M = { cap: Decimal, v: Decimal }
+                    invariant withinCap = v <= cap
+                data Yen = Decimal
+                    invariant nonNegative = value >= 0m
+                data Bal = { principal: Yen, outstanding: Decimal }
+                    invariant outstandingWithinPrincipal = outstanding <= principal.value
+                behavior take : (bal: Bal, x: Decimal, y: Decimal) -> M | No constructs M, No
+                let take (bal, x, y) = {
+                    let d = x - y
+                    guard d <= bal.outstanding else No
+                    M { cap = bal.principal.value, v = d }
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a name for the difference is the difference");
+    }
+
+    /** What carries the guard onward is whatever the derived fragment proves of the difference
+     * between the two, and an interval bound is that as much as a relation between two fields is. */
+    @Test
+    void aGuardOverAComputedValueChainsWithAnIntervalTheInputGuarantees() {
+        String m = """
+                module demo
+                data Capped = { c: Decimal }
+                    invariant under = c <= 100m
+                data Small = { s: Decimal }
+                    invariant under = s <= 100m
+                behavior take : (cap: Capped, x: Decimal, y: Decimal) -> Small | No
+                    constructs Small, No
+                let take (cap, x, y) = {
+                    guard x - y <= cap.c else No
+                    Small { s = x - y }
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard and `Capped`'s bound together give `s <= 100m`");
+    }
 }
