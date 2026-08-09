@@ -25,7 +25,7 @@ class CompileRoundingModeBoundaryTest {
 
                 data Policy = { mode: RoundingMode }
                 """));
-        assertEquals("check.codec.nodecoder", e.diagnostic().messageKey());
+        assertEquals("codec.has-no-decoder", e.diagnostic().messageKey());
         assertTrue(e.getMessage().contains("RoundingMode"), e.getMessage());
     }
 

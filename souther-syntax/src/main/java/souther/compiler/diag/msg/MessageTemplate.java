@@ -51,7 +51,8 @@ public record MessageTemplate(List<Part> parts) {
      *
      * <p>A name is a Java identifier, because it is a record component's name. Anything else between
      * braces is malformed rather than literal text: an entry that meant a brace and an entry that
-     * misspelled a value look the same to a reader, and the second is the one worth failing on.
+     * misspelled a value look the same to a reader, and the second is the one worth failing on. An
+     * entry that means a brace writes it twice.
      */
     public static MessageTemplate parse(String written) {
         List<Part> parts = new ArrayList<>();
@@ -59,6 +60,24 @@ public record MessageTemplate(List<Part> parts) {
         StringBuilder text = new StringBuilder();
         while (at < written.length()) {
             char c = written.charAt(at);
+            // A brace of its own is written twice. An entry filled by name has no quoting to undo,
+            // so this is the one place a brace can be said to be itself — and the parser that reads
+            // an entry and the check that holds it to naming values read it the same way.
+            if ((c == '{' || c == '}') && at + 1 < written.length()
+                    && written.charAt(at + 1) == c) {
+                text.append(c);
+                at += 2;
+                continue;
+            }
+            // A closing brace on its own is refused for the same reason an opening one is: the two
+            // are the same rule, and a grammar that closed only one of them would take `{name}}` —
+            // a placeholder and a stray brace — for something a reader was meant to see.
+            if (c == '}') {
+                flush(text, parts);
+                parts.add(new Part.Malformed("}", "a closing brace nothing opens"));
+                at++;
+                continue;
+            }
             if (c != '{') {
                 text.append(c);
                 at++;

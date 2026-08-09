@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.MatchMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
@@ -34,8 +35,7 @@ public final class MatchElaborator {
                     st, env, ctx, expected);
         }
         if (!(st instanceof Type.Ref ref) || !(ctx.symbols().get(ref.name()) instanceof Ast.SumData sum)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1202, "check.match.notsum")
-                            .at(m.pos(), 5).args(Type.show(st)).build());
+            throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.TheSubjectIsNotASum(Type.show(st))).build());
         }
         return elaborateCasesMatch(m, scrutinee, new HashSet<>(TypeOps.caseNames(sum)),
                 "data `" + sum.name() + "`", st, env, ctx, expected);
@@ -62,12 +62,12 @@ public final class MatchElaborator {
                 break;
             }
         }
-        Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1203, "check.match.notcase")
-                .at(c.pos()).args(caseName, what);
+        Diagnostic.Builder d = Diagnostic.at(c.pos())
+                .say(new MatchMessage.NotACaseOf(caseName, what));
         if (otherSum != null) {
-            d = d.hint("check.match.notcase.other", caseName, otherSum);
+            d = d.hint(new MatchMessage.ItIsACaseOfAnotherSum(caseName, otherSum));
             if (c.pos().line() == m.pos().line()) {
-                d = d.hint("check.match.notcase.online");
+                d = d.hint(new MatchMessage.AMatchInAnArmTakesTheArmsAfterIt());
             }
         }
         return CompileException.of(d.build());
@@ -90,16 +90,16 @@ public final class MatchElaborator {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
                 if (!covered.add(caseName)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1204, "check.match.overlap")
-                                    .at(c.pos()).args(written.written()).build());
+                    throw CompileException.of(Diagnostic.at(c.pos())
+                            .say(new MatchMessage.MatchedByMoreThanOneCase(written.written()))
+                            .build());
                 }
             }
             Type bindType = c.caseTypes().size() == 1
                     ? caseBindType(c.caseTypes().get(0).denotes()) : scrutinee;
             if (c.unwrapAsserts() != null) {
                 if (c.caseTypes().size() != 1) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1207, "check.match.newtype.orpattern")
-                                    .at(c.pos()).build());
+                    throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOrPatternOpensNothing()).build());
                 }
                 checkUnwrapAsserts(c, ctx.symbols());
             }
@@ -120,8 +120,7 @@ public final class MatchElaborator {
             throw nonExhaustive(m.pos(), what, missing);
         }
         if (branchType == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1205, "check.match.nocases")
-                            .at(m.pos(), 5).build());
+            throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.ThisMatchHasNoCases()).build());
         }
         return new Core.Match(scrutineeCore, arms, branchType, m.pos());
     }
@@ -135,8 +134,7 @@ public final class MatchElaborator {
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
             if (c.caseTypes().size() != 1) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1207, "check.match.option.orpattern")
-                                .at(c.pos()).build());
+                throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.AnOptionMatchTakesNoOrPattern()).build());
             }
             Ast.Name arm = c.caseTypes().get(0);
             String caseType = arm.written();
@@ -146,19 +144,16 @@ public final class MatchElaborator {
             } else if (TypeName.NONE.equals(arm.denotes())) {
                 bind = null;
             } else {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1203, "check.match.option.notcase")
-                                .at(c.pos()).args(caseType).build());
+                throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.NotACaseOfAnOptional(caseType)).build());
             }
             if (c.unwrapAsserts() != null) {
                 if (!TypeName.SOME.equals(arm.denotes())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.match.option.nopayload")
-                                    .at(c.pos()).args(caseType).build());
+                    throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.TheCaseHasNoValueToOpen(caseType)).build());
                 }
                 checkOptionUnwrapAsserts(c, element, ctx.symbols());
             }
             if (!covered.add(arm.denotes())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1204, "check.match.overlap")
-                                .at(c.pos()).args(caseType).build());
+                throw CompileException.of(Diagnostic.at(c.pos()).say(new MatchMessage.MatchedByMoreThanOneCase(caseType)).build());
             }
             Core body = Elaborator.liftIntoOption(
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
@@ -230,8 +225,10 @@ public final class MatchElaborator {
         // imported bare `金額` names
         if (!(element instanceof Type.Ref r) || !r.name().equals(first.denotes())) {
             String elementName = element instanceof Type.Ref r2 ? r2.name().name() : Type.show(element);
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.match.newtype.mismatch")
-                            .at(c.pos()).args("Some", elementName, first.written()).build());
+            throw CompileException.of(Diagnostic.at(c.pos())
+                    .say(new MatchMessage.TheNewtypeWrapsAnotherType("Some", elementName,
+                            first.written()))
+                    .build());
         }
         checkOpenedLayers(c, layers, symbols, false);
     }
@@ -246,11 +243,10 @@ public final class MatchElaborator {
             TypeName layer = opened.get(i).denotes();
             Type inner = TypeOps.newtypeInner(layer, symbols);
             if (inner == null) {
-                Diagnostic.Builder d =
-                        Diagnostic.of(DiagnosticCode.E1206, "check.match.newtype.notnewtype")
-                                .at(c.pos()).args(name);
+                Diagnostic.Builder d = Diagnostic.at(c.pos())
+                        .say(new MatchMessage.NotANewtypeToOpen(name));
                 if (i == 0 && firstOpensTheCase) {
-                    d = d.hint("check.match.newtype.notnewtype.hint");
+                    d = d.hint(new MatchMessage.BindTheMatchedValueInstead(name));
                 }
                 throw CompileException.of(d.build());
             }
@@ -260,8 +256,10 @@ public final class MatchElaborator {
                 // through its module opens the same one an imported bare name does
                 if (!(inner instanceof Type.Ref ir) || !ir.name().equals(next.denotes())) {
                     String innerName = inner instanceof Type.Ref r ? r.name().name() : Type.show(inner);
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.match.newtype.mismatch")
-                                    .at(c.pos()).args(name, innerName, next.written()).build());
+                    throw CompileException.of(Diagnostic.at(c.pos())
+                            .say(new MatchMessage.TheNewtypeWrapsAnotherType(name, innerName,
+                                    next.written()))
+                            .build());
                 }
             }
         }
@@ -287,9 +285,9 @@ public final class MatchElaborator {
         if (joined != null) {
             return joined;
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1208, "check.match.branchtypes")
-                        .at(c.pos()).args(Type.show(branchType), Type.show(bt))
-                        .diff(Type.show(bt, branchType), Type.show(branchType, bt)).build());
+        throw CompileException.of(Diagnostic.at(c.pos())
+                .say(new MatchMessage.TheBranchesDisagree(Type.show(branchType), Type.show(bt)))
+                .diff(Type.show(bt, branchType), Type.show(branchType, bt)).build());
     }
 
     /** A non-exhaustive-match error (E1201) listing every missing case. The legacy message names the
