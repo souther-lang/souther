@@ -443,14 +443,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // three, with nothing saying the fourth did not apply — and hid the fact worth reading,
             // which is that a behavior answering a bare primitive gets less scrutiny than one
             // answering a sum.
-            String said = switch (signature.reason()) {
+            out.append(String.format("    signature   %s%n", switch (signature.reason()) {
                 case NOT_A_SUM -> "not applicable (this behavior's output is not a sum)";
-                // An absence of evidence is not a gap, and the arms say so by staying quiet too.
-                case NO_ROWS -> null;
-            };
-            if (said != null) {
-                out.append(String.format("    signature   %s%n", said));
-            }
+                case NO_ROWS -> "not measured (no row names this behavior)";
+            }));
             return;
         }
         boolean decided = signature.status() == MeasurementStatus.COMPLETE;
@@ -628,11 +624,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             // author reads is the one place that difference shows.
             String said = switch (branch.reason()) {
                 case NO_BODY -> "not applicable (this behavior has no body)";
-                case UNREADABLE -> "unavailable (the arms could not be measured)";
-                // A build that did not ask, and a behavior nobody wrote a row for, are both quiet.
-                // The first is one fact about the run and saying it against every behavior repeats it;
-                // the second is what writing a row turns on, and an absence of evidence is not a gap.
-                case NOT_ASKED, NO_ROWS -> null;
+                case UNREADABLE -> "not measured (the arms could not be read)";
+                case NO_ROWS -> "not measured (no row names this behavior)";
+                // The one measure a report says nothing about, because it is not a measure of this
+                // report: what was asked for is an input to the whole run, and a line repeating it
+                // against every behavior says one fact as many times as the module has behaviors.
+                // Every other way of having no number is about this behavior and is said here.
+                case NOT_ASKED -> null;
             };
             if (said != null) {
                 out.append(String.format("    branch      %s%n", said));
@@ -827,6 +825,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return;
         }
         ObjectNode out = behavior.putObject("partition");
+        // Each measure's own answer, beside the entries it answered with. Read off the arrays alone,
+        // a reader has the same two empties this report used to confuse: a behavior with no
+        // positions to divide and one whose positions could not be read both write `[]`, and only
+        // this says which. `branch` has carried its own status from the first version; these two are
+        // the same measure-level fact in the one place that had nowhere to put it.
+        measured(out.putObject("axesMeasure"),
+                partition.partitioned().status(), partition.partitioned().reason());
+        measured(out.putObject("boundariesMeasure"),
+                partition.bounded().status(), partition.bounded().reason());
         ArrayNode axes = out.putArray("axes");
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             ObjectNode a = axes.addObject();

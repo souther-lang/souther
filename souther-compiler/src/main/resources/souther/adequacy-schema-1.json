@@ -111,6 +111,32 @@
       "required": ["axes", "boundaries", "pairs", "notDerivable", "omitted"],
       "additionalProperties": false,
       "properties": {
+        "axesMeasure": {
+          "type": "object",
+          "description": "Whether the positions were measured at all, which the `axes` array cannot say: an empty one is what a behavior with no position to divide has and what a behavior whose positions could not be read has. Not in `required`: a document written before this field existed is still a document of this version.",
+          "required": ["status"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "$ref": "#/$defs/status" },
+            "reason": {
+              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `no_axis_derived` is a reading that produced no position — which is not itself evidence that the model divides none; `no_subject` is a behavior with no positions of its own, a `>->` composition, which is measured at its stages.",
+              "enum": ["no_axis_derived", "no_subject"]
+            }
+          }
+        },
+        "boundariesMeasure": {
+          "type": "object",
+          "description": "The same for the lines. An empty `boundaries` array is what a model with no bound has and what a model whose bounds the reading could not reach has.",
+          "required": ["status"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "$ref": "#/$defs/status" },
+            "reason": {
+              "description": "Why there is no measure, present exactly where `status` is `unavailable`. `no_lines_derived` is a reading that produced no obligation — which is not itself evidence that the model draws no line; `no_subject` is a behavior with no positions of its own.",
+              "enum": ["no_lines_derived", "no_subject"]
+            }
+          }
+        },
         "axes": {
           "type": "array",
           "items": {
@@ -204,7 +230,7 @@
         },
         "notDerivable": {
           "type": "array",
-          "description": "Positions the model draws no line through. Not a gap — a statement that there was nothing to measure.",
+          "description": "Positions the current reading drew no line through. Not a gap: no row is owed here and none is missing. Not a statement that the model has no boundary there either — a bound one type away from the position a behavior takes lands in this list, and the reading that produced it cannot tell that from a position nothing bounds. Read `boundariesMeasure` for whether the measure was made.",
           "items": { "type": "string" }
         },
         "omitted": {
