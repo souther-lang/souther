@@ -113,7 +113,31 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     /** No elements. A list, a set and a map are all written this way in a fixture: what the position
      * is decides what the empty brackets become. */
     public static FixtureTemplate emptyCollection() {
-        return new FixtureTemplate("[]", new Ast.ListLit(List.of(), NOWHERE));
+        return collection(List.of());
+    }
+
+    /**
+     * A collection of what it holds, in the order the elements were chosen.
+     *
+     * <p>The same brackets for all three, for the same reason the empty one has them: a fixture writes
+     * a set as its elements and a map as its entry pairs, and which of them the brackets are is what
+     * the position declares rather than anything spelled here.
+     */
+    public static FixtureTemplate collection(List<FixtureTemplate> elements) {
+        List<Ast.Expr> values = new ArrayList<>();
+        List<String> written = new ArrayList<>();
+        for (FixtureTemplate each : elements) {
+            values.add(each.value());
+            written.add(each.text());
+        }
+        return new FixtureTemplate("[" + String.join(", ", written) + "]",
+                new Ast.ListLit(List.copyOf(values), NOWHERE));
+    }
+
+    /** One entry of a map: the pair a fixture writes a key and its value as. */
+    public static FixtureTemplate entry(FixtureTemplate key, FixtureTemplate value) {
+        return new FixtureTemplate("(" + key.text() + ", " + value.text() + ")",
+                new Ast.Tuple(List.of(key.value(), value.value()), NOWHERE));
     }
 
     /** A record, field by field, in the order the fields were declared. */
