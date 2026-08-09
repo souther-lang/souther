@@ -652,7 +652,33 @@ public final class Generator {
                 || conditioned.reason() == UnresolvedCombination.Reason.SEARCH_LIMIT) {
             return new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
         }
-        return product;
+        // Every value that was offered was refused, which is only the whole story where every value
+        // the rules allow was offered. A position that read a count past what a row is built to carry,
+        // or that has more pairings than are built at once, held something back, and saying so is the
+        // difference between a fact about the model and a fact about this.
+        UnresolvedCombination.Reason held = heldBack(subject, p, decided);
+        return held == null ? product : new Outcome(null, held, null);
+    }
+
+    /** Why a position of this parameter offered less than its rules allow, or null where none did. */
+    private static UnresolvedCombination.Reason heldBack(Subject subject, int p,
+                                                         Map<String, List<FixtureTemplate>> decided) {
+        List<Position> found = new ArrayList<>();
+        positionsUnder(subject.types().get(p), TermPath.of(subject.parameters().get(p)),
+                subject.symbols(), 0, found, decided.keySet());
+        UnresolvedCombination.Reason held = null;
+        for (Position each : found) {
+            UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols());
+            // Nothing of the shape having been built outranks some of it having been: the first says
+            // the search never had what the rule asks for, and a reader owed one sentence is owed that.
+            if (here == UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE) {
+                return here;
+            }
+            if (here != null) {
+                held = here;
+            }
+        }
+        return held;
     }
 
     /**

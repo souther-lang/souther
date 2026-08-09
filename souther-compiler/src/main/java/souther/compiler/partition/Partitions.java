@@ -720,6 +720,20 @@ public final class Partitions {
      */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
                                                    NumericDomain.Bounds within) {
+        return representativesOf(type, symbols, within, java.util.Set.of());
+    }
+
+    /**
+     * The same, with the newtypes this is already inside the value of.
+     *
+     * <p>Carried because what stands for a collection is built from what stands for its element, which
+     * is this question again. A name met while its own value is being built is a type written in terms
+     * of itself and is given up on — the names and not a count of them, since how many names a value
+     * wears on the way down is not what has to be stopped.
+     */
+    static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
+                                                   NumericDomain.Bounds within,
+                                                   java.util.Set<TypeName> expanding) {
         if (type == null) {
             return List.of();
         }
@@ -744,9 +758,10 @@ public final class Partitions {
         if (type == Type.DATETIME) {
             return List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
         }
-        // The empty one, for every collection. It is the value that always builds — a rule about a
-        // collection bounds its size or its elements, and neither can refuse having none — and a row
-        // whose collection is not what it is about should say so by carrying nothing.
+        // The empty one, for every collection nothing has said otherwise about. A row whose collection
+        // is not what it is about should say so by carrying nothing, and where no rule counts what the
+        // position holds there is nothing else to go on. What a rule does say is read a layer out, at
+        // the newtype the rule is written on.
         if (type instanceof Type.ListOf || type instanceof Type.SetOf || type instanceof Type.MapOf) {
             return List.of(FixtureTemplate.emptyCollection());
         }
@@ -760,10 +775,78 @@ public final class Partitions {
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
                 && data.newtype()) {
-            return insideTheNewtype(ref.name(), symbols, within).stream()
+            return insideTheNewtype(ref.name(), symbols, within, expanding).stream()
                     .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
+    }
+
+    /**
+     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
+     * require none.
+     *
+     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
+     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
+     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
+     * and a size chained after the mapping that drops duplicates would count the wrong things — and
+     * that absence is a fact about the decoder rather than about what the rule says.
+     */
+    static int leastHeld(Type type, Symbols symbols) {
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        if (counts == null) {
+            return 0;
+        }
+        Bounds sized = boundsOf(type, symbols, Type.INT, counts);
+        if (sized == null || sized.min() == null) {
+            return 0;
+        }
+        // A count is a whole number, so the end a size bound leaves is one the rule admits.
+        BigDecimal least = sized.min().value();
+        return least.signum() <= 0 || least.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0
+                ? 0 : least.intValueExact();
+    }
+
+    /**
+     * Why a position offered less than its rules allow, or null where it offered everything.
+     *
+     * <p>Two things are told apart from a refusal here, and both are facts about this rather than about
+     * the model. A count past what a row is built to carry means no value of the shape the rule asks
+     * for was built at all — a list of a million exists and somebody could write one — so a reader told
+     * "every value tried was refused" would go looking for the rule that refuses a value nothing
+     * refuses. More pairings between a map's key and value than are built at once means values of the
+     * shape were built and refused and more of them were never reached, which is a search that stopped.
+     *
+     * <p>Asked only where nothing was written. It re-reads what a position could have offered, and a
+     * row that was written has no reason to pay for that.
+     */
+    static Generator.UnresolvedCombination.Reason notBuilt(Type type, Symbols symbols) {
+        return Witnesses.heldBackFor(TypeOps.base(type, symbols), leastHeld(type, symbols), symbols);
+    }
+
+    /**
+     * The {@code index}th number the rules on {@code type} leave it able to hold, or null where it has
+     * no such number.
+     *
+     * <p>Asked where several values of one type are needed and they have to differ — the elements of a
+     * set, the keys of a map. Counted from inside the range rather than from zero, because a second
+     * value the type itself refuses would have the collection refused for its elements while saying
+     * nothing about how many of them there are.
+     *
+     * <p>Only a whole number steps. Between two decimals there is no next value, so a dense carrier
+     * names the one number inside its range and no more.
+     */
+    static BigDecimal numberInside(Type type, Symbols symbols, int index) {
+        Type base = TypeOps.numericBase(type, symbols);
+        if (base == null) {
+            return null;
+        }
+        NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), null);
+        BigDecimal from = inside(range, base == Type.DECIMAL);
+        if (from == null || base != Type.INT) {
+            return from != null && index == 0 ? from : null;
+        }
+        BigDecimal stepped = from.add(BigDecimal.valueOf(index));
+        return holdsNumber(range, stepped) ? stepped : null;
     }
 
     /**
@@ -855,11 +938,19 @@ public final class Partitions {
      * other.
      */
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
-        return insideTheNewtype(newtype, symbols, null);
+        return insideTheNewtype(newtype, symbols, null, java.util.Set.of());
     }
 
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols,
-                                                          NumericDomain.Bounds within) {
+                                                          NumericDomain.Bounds within,
+                                                          java.util.Set<TypeName> expanding) {
+        // Already inside this one's own value, so the type is written in terms of itself and there is
+        // nothing to hand back. Which is the answer and not a limit: no value of such a type exists.
+        if (expanding.contains(newtype)) {
+            return List.of();
+        }
+        java.util.Set<TypeName> inside = new java.util.LinkedHashSet<>(expanding);
+        inside.add(newtype);
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
@@ -881,7 +972,13 @@ public final class Partitions {
                 }
             }
         }
-        candidates.addAll(representativesOf(base, symbols));
+        // What the rules say the value holds, before the value that would hold nothing. A format and a
+        // minimum are two proposals and not a choice between them: each is what one rule asks for, and
+        // which of them the whole of the rules admits is the decoder's answer rather than an order
+        // settled here.
+        candidates.addAll(Witnesses.holding(base, leastHeld(new Type.Ref(newtype), symbols),
+                symbols, inside));
+        candidates.addAll(representativesOf(base, symbols, null, inside));
 
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
         for (FixtureTemplate each : candidates) {
