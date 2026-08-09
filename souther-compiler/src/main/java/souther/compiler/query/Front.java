@@ -4,6 +4,7 @@ import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
@@ -333,8 +334,8 @@ public final class Front {
                 PublishedModule published = PublishedModule.read(name, classes);
                 if (published == null) {
                     if (neededBy.containsKey(name) && !Prelude.isQualifier(name)) {
-                        reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1504, "check.module.pathincomplete").args(name, neededBy.get(name))
-                                .hint("check.module.pathincomplete.hint", name).build()));
+                        reports.add(Report.of(Diagnostic.say(new ModuleMessage.AModuleItNeedsIsNotOnThePath(name, neededBy.get(name)))
+                                .hint(new ModuleMessage.AddItToThisProjectsDependencies(name)).build()));
                     }
                     continue;   // written in a source being compiled: still that import's own error
                 }
@@ -515,8 +516,8 @@ public final class Front {
             if (id.equals(layout.idOfModule().get(m.name()))) {
                 return Answer.of(m.name());
             }
-            return Answer.absent(Report.raised(Diagnostic.of(DiagnosticCode.E1503, "check.module.duplicate")
-                            .at(m.pos()).args(m.name()).build()));
+            return Answer.absent(Report.raised(Diagnostic.say(new ModuleMessage.DuplicateModule(m.name()))
+                            .at(m.pos()).build()));
         }
     }
 
@@ -677,8 +678,8 @@ public final class Front {
             if (PublishedModule.read(name, path.declarations()) == null) {
                 return Answer.of(Boolean.FALSE);
             }
-            return Answer.absent(Report.raised(Diagnostic.of(DiagnosticCode.E1503, "check.module.shadowspath")
-                            .args(name).hint("check.module.shadowspath.hint", name).build()));
+            return Answer.absent(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath(name))
+                            .hint(new ModuleMessage.RenameItOrDropTheDependency(name)).build()));
         }
     }
 
@@ -752,15 +753,15 @@ public final class Front {
      * when the name is the module's to take. */
     static Report reservedNamespace(String name, SourcePos pos) {
         if (name.equals(RESERVED) || name.startsWith(RESERVED + ".")) {
-            return Report.raised(Diagnostic.of(DiagnosticCode.E1502, "check.module.reserved")
-                            .at(pos).args(name).build());
+            return Report.raised(Diagnostic.say(new ModuleMessage.TheModuleIsInTheReservedNamespace(name))
+                            .at(pos).build());
         }
         // The short qualifiers are how the standard library is reached (`List.map`, `import
         // String`); a user module by one of these names would shadow the library and could not be
         // imported.
         if (Prelude.isQualifier(name)) {
-            return Report.raised(Diagnostic.of(DiagnosticCode.E1502, "check.module.qualifier")
-                            .at(pos).args(name).build());
+            return Report.raised(Diagnostic.say(new ModuleMessage.TheModuleTakesTheStandardLibraryQualifier(name))
+                            .at(pos).build());
         }
         return null;
     }

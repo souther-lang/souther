@@ -105,7 +105,7 @@ class CascadeStopsAtTheCauseTest {
         assertEquals(1, found.size(),
                 "the import line that names nothing, and no conflict with it: " + found);
         assertTrue(found.stream()
-                        .anyMatch(d -> "check.import.unknownmodule".equals(d.messageKey())),
+                        .anyMatch(d -> "module.unknown-module".equals(d.messageKey())),
                 "which line is wrong: " + found);
     }
 

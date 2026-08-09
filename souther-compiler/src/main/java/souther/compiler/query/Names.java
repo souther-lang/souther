@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.ImportMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -288,8 +289,8 @@ public final class Names {
                 return bare(ref, bare, unknown);   // this module, named through itself
             }
             if (!db.ask(new Front.ModuleNames()).value().contains(target)) {
-                return nothing(ref, Report.raised(Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
-                                .at(ref.pos()).args(qualifier, bare).build()));
+                return nothing(ref, Report.raised(Diagnostic.say(new ModuleMessage.NoModuleOfThatName(qualifier, bare))
+                                .at(ref.pos()).build()));
             }
             Answer<Set<String>> declared = db.ask(new Front.Behaviors(target));
             if (!declared.present()) {
@@ -546,8 +547,8 @@ public final class Names {
                 Set<String> exposed = registry.exposedBy(imp.module());
                 for (String imported : imp.names()) {
                     if (!exposed.contains(imported)) {
-                        reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1507, "check.import.notexposed")
-                                        .at(imp.pos()).args(imported, imp.module()).build()));
+                        reports.add(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleDoesNotExposeIt(imported, imp.module()))
+                                        .at(imp.pos()).build()));
                         nameless(scope, List.of(imported));
                         continue;
                     }
@@ -559,8 +560,8 @@ public final class Names {
                         if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
                             continue;
                         }
-                        reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E1506, "check.import.notdefined")
-                                        .at(imp.pos()).args(imported, imp.module()).build()));
+                        reports.add(Report.raised(Diagnostic.say(new ModuleMessage.TheModuleDeclaresNoSuchName(imported, imp.module()))
+                                        .at(imp.pos()).build()));
                         nameless(scope, List.of(imported));
                         continue;
                     }
@@ -807,10 +808,10 @@ public final class Names {
                             || used.contains(new Use(imported.text(), imp.module(), imported.text()))) {
                         continue;
                     }
-                    reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1922, "check.import.unused")
+                    reports.add(Report.of(Diagnostic.say(new ModuleMessage.ImportedButNeverUsedUnderThisName(imported.written().quoted()))
                             .at(imported.written().region())
-                            .args(imported.written().quoted())
-                            .hint("check.import.unused.hint")
+                            
+                            .hint(new ModuleMessage.TakeItOffTheImportList())
                             .build()));
                 }
             }
@@ -1413,8 +1414,8 @@ public final class Names {
     }
 
     static Report unknownModule(Ast.Import imp) {
-        return Report.raised(Diagnostic.of(DiagnosticCode.E1504, "check.import.unknownmodule")
-                        .at(imp.pos()).args(imp.module()).build());
+        return Report.raised(Diagnostic.say(new ModuleMessage.UnknownModule(imp.module()))
+                        .at(imp.pos()).build());
     }
 
     /**
@@ -1430,9 +1431,9 @@ public final class Names {
         if (taken == null) {
             return null;
         }
-        return Report.raised(Diagnostic.of(DiagnosticCode.E1508, "check.import.aliastaken")
-                        .at(imp.pos()).args(imp.alias(), taken)
-                        .hint("check.import.aliastaken.hint").build());
+        return Report.raised(Diagnostic.say(new ModuleMessage.TheAliasIsAlreadyTaken(imp.alias(), taken))
+                        .at(imp.pos())
+                        .hint(new ModuleMessage.AnAliasIsANameNothingElseAnswersTo()).build());
     }
 
     /**
@@ -1543,12 +1544,11 @@ public final class Names {
                             .hint(new ImportMessage.RenameOrQualifyTheCollidingName())
                             .build());
         }
-        Diagnostic.Builder b = Diagnostic.of(DiagnosticCode.E1508, "check.import.duplicate").at(imp.pos()).args(name, earlier.module(), imp.module())
-                .secondary(Region.point(earlier.pos()), "check.import.duplicate.first", name,
-                        earlier.module());
+        Diagnostic.Builder b = Diagnostic.at(imp.pos())
+                .secondary(Region.point(earlier.pos()), new ModuleMessage.ItWasAlreadyImportedHere(name, earlier.module()));
         return Report.raised((earlier.module().equals(imp.module())
-                        ? b.hint("check.import.duplicate.same.hint")
-                        : b.hint("check.import.duplicate.hint", name, imp.module())).build());
+                        ? b.hint(new ModuleMessage.TheSameNameIsImportedTwiceFromOneModule())
+                        : b.hint(new ModuleMessage.ImportAtMostOneAndQualifyTheOther(name, imp.module()))).say(new ModuleMessage.TheNameIsImportedFromTwoModules(name, earlier.module(), imp.module())).build());
     }
 
     /** Every type written in {@code m}: its data's fields, and its behaviors' and fns' signatures. */

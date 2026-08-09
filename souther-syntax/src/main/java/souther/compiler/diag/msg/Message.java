@@ -18,7 +18,7 @@ package souther.compiler.diag.msg;
  * messages rather than one entry that selects between two sentences.
  */
 public sealed interface Message permits AttemptMessage, CodecMessage, DataMessage, ExampleMessage, HelperMessage,
-        ImportMessage, InvariantMessage, MatchMessage {
+        ImportMessage, InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage {
 
     /** The catalog entry this renders through, read off where the message is declared. */
     default String key() {

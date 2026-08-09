@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
@@ -292,8 +293,8 @@ public final class TypeChecker {
             // could narrow. Reject it rather than accept a form that reads as a granularity that
             // does not exist.
             if (dot >= 0) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1610, "check.exposing.granular")
-                                .at(module.pos()).args(e.substring(0, dot), e).build());
+                throw CompileException.of(Diagnostic.say(new ModuleMessage.ExposingIsTypeGranular(e.substring(0, dot), e))
+                                .at(module.pos()).build());
             }
             // an exposed name must be one of this module's own definitions. An imported name that is
             // merely visible here is not re-exported — importers reach it from its declaring module.
@@ -307,13 +308,17 @@ public final class TypeChecker {
                     continue;
                 }
                 boolean imported = symbols.inScope(e);
-                String key = imported ? "check.exposing.imported" : "check.exposing.notdefined";
+
                 String why = imported
                         ? " is imported into this module, not defined here; `exposing` lists a"
                           + " module's own definitions and does not re-export imported names"
                         : ", which is not a data or behavior of this module";
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1609, key)
-                                .at(module.pos()).args(e).build());
+                throw CompileException.of(Diagnostic.at(module.pos())
+                        .say(imported
+                                ? new ModuleMessage.ExposingNamesAnImportedName(e)
+                                : new ModuleMessage
+                                        .ExposingNamesSomethingThisModuleDoesNotDeclare(e))
+                        .build());
             }
             exposed.add(e);
         }

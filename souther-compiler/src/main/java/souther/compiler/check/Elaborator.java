@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -402,17 +403,17 @@ public final class Elaborator {
                     without.add(c.name());
                 }
             }
-            Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1321, "check.access.sum")
-                    .at(fa.name().region()).args(fa.field(), Type.show(target));
+            Diagnostic.Builder d = Diagnostic
+                    .at(fa.name().region());
             if (!without.isEmpty()) {
-                d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
+                d = d.hint(new ModuleMessage.TheseCasesHaveNoSuchField(fa.field(), String.join(", ", without)));
             } else if (target instanceof Type.Ref) {
                 // Every case has the field and the read still fails, so what is missing is the shared
                 // spread. Without saying so the author reads "a sum has no fields" while looking at
                 // the field in every case.
-                d = d.hint("check.access.sum.unshared", fa.field());
+                d = d.hint(new ModuleMessage.EveryCaseDeclaresItsOwn(fa.field()));
             }
-            throw CompileException.of(d.build());
+            throw CompileException.of(d.say(new ModuleMessage.CannotReadAFieldOnASum(fa.field(), Type.show(target))).build());
         }
         throw CompileException.of(Diagnostic.of(DiagnosticCode.E1321, "check.access")
                         .at(fa.name().region()).args(fa.field()).build());
@@ -506,7 +507,7 @@ public final class Elaborator {
                 }
                 return value;
             }
-            throw CompileException.of(Diagnostic.at(arg.pos()).say(new HelperMessage.ThisExpectsABlock(fnName)).build());
+            throw CompileException.of(Diagnostic.say(new HelperMessage.ThisExpectsABlock(fnName)).at(arg.pos()).build());
         }
         if (block.params().size() != paramTypes.size()) {
             throw CompileException.of(Diagnostic.at(block.pos())

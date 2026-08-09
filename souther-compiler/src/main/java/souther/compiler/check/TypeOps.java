@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
@@ -1588,15 +1589,17 @@ public final class TypeOps {
             String name = canonical.substring(dot + 1);
             String module = symbols.moduleOfQualifier(qualifier);
             if (module == null) {
-                return CompileException.of(Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
-                                .at(written.region()).args(qualifier, name)
+                return CompileException.of(Diagnostic.say(new ModuleMessage.NoModuleOfThatName(qualifier, name))
+                                .at(written.region())
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build());
             }
             boolean declared = symbols.contains(new TypeName(module, name));
-            return CompileException.of(Diagnostic.of(declared ? DiagnosticCode.E1507 : DiagnosticCode.E1506,
-                                    declared ? "check.qualified.notexposed" : "check.qualified.notdefined")
-                            .at(written.region()).args(name, module)
+            return CompileException.of(Diagnostic.at(written.region())
+                            .say(declared
+                                    ? new ModuleMessage.ItIsDeclaredThereAndNotExposed(name, module)
+                                    : new ModuleMessage.TheModuleDeclaresNoSuchQualifiedName(name,
+                                            module))
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
                             .build());
         }

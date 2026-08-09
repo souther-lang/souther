@@ -22,6 +22,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -293,9 +294,9 @@ public final class Bodies {
          * that is one becomes a field here too — so the two cannot both be reached.
          */
         private Report collision(String bare, String earlier, Ast.Import imp) {
-            return Report.raised(Diagnostic.of(DiagnosticCode.E1508, "check.import.behaviordup")
-                            .at(imp.pos()).args(bare, earlier, imp.module())
-                            .hint("check.import.behaviordup.hint", bare).build());
+            return Report.raised(Diagnostic.say(new ModuleMessage.ABehaviorIsNamedFromTwoModules(bare, earlier, imp.module()))
+                            .at(imp.pos())
+                            .hint(new ModuleMessage.ABehaviorsNameIsAlsoItsInjectedField(bare)).build());
         }
     }
 

@@ -305,7 +305,7 @@ class UnresolvedNamesTest {
         assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get("a.sou"),
                 "the reserved module name is x's mistake, not this one's");
         assertTrue(Located.diagnosticsOf(c.diagnostics()).get("x.sou").stream()
-                        .anyMatch(d -> "check.module.reserved".equals(d.messageKey())),
+                        .anyMatch(d -> "module.the-module-is-in-the-reserved-namespace".equals(d.messageKey())),
                 "and it is reported there: " + Located.diagnosticsOf(c.diagnostics()).get("x.sou"));
         assertEquals(Map.of(), c.classes(),
                 "a composition whose stage nobody can name is not emitted");

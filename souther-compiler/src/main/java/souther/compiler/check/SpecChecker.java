@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.InjectionMessage;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
@@ -467,8 +469,12 @@ public final class SpecChecker {
             // Read through the includes: a spread flattens another data's fields into this one, so
             // they are this data's fields on the generated class and carry their types with them.
             for (Map.Entry<String, Type> f : TypeOps.fieldTypes(data, symbols).entrySet()) {
-                refuseHidden(f.getValue(), "check.surface.field", data.name(), f.getKey(),
-                        "check.surface.hint", data.pos(), symbols, exposeAll, exposed);
+                refuseHidden(f.getValue(),
+                        hidden -> new ModuleMessage.AnExposedFieldRestsOnWhatIsKept(data.name(),
+                                f.getKey(), hidden),
+                        hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                data.name()),
+                        data.pos(), symbols, exposeAll, exposed);
             }
         }
         // A published definition may not rest on a type the module keeps to itself: a reader would
@@ -489,16 +495,23 @@ public final class SpecChecker {
                 continue;
             }
             for (Ast.FnParam p : fn.params()) {
-                refuseHidden(TypeOps.resolveParamType(p.type(), symbols), "check.surface.param",
-                        fn.name(), p.name(), "check.surface.hint", fn.pos(), symbols, exposeAll,
-                        exposed);
+                refuseHidden(TypeOps.resolveParamType(p.type(), symbols),
+                        hidden -> new ModuleMessage.AnExposedArgumentRestsOnWhatIsKept(fn.name(),
+                                p.name(), hidden),
+                        hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                fn.name()),
+                        fn.pos(), symbols, exposeAll, exposed);
             }
             // A definition whose check did not settle a type has none to ask about: it failed its own
             // check, which is reported, or it returns a function, which does not cross into another
             // module as a value (ADR-0004).
             Type stands = definitionTypes.get(fn.name());
             if (stands != null) {
-                refuseHidden(stands, "check.surface.value", fn.name(), null, "check.surface.hint",
+                refuseHidden(stands,
+                        hidden -> new ModuleMessage.AnExposedValueRestsOnWhatIsKept(fn.name(),
+                                hidden),
+                        hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                fn.name()),
                         fn.pos(), symbols, exposeAll, exposed);
             }
         }
@@ -511,19 +524,36 @@ public final class SpecChecker {
             if (sig == null || (!injected && !exposed.contains(b.name()))) {
                 continue;
             }
-            String inKey = injected ? "check.inject.hiddeninput" : "check.surface.input";
-            String outKey = injected ? "check.inject.hiddenoutput" : "check.surface.output";
-            String hint = injected ? "check.inject.hidden.hint" : "check.surface.hint";
+            java.util.function.Function<String, souther.compiler.diag.msg.Message> hint =
+                    injected
+                            ? hidden -> new InjectionMessage
+                                    .TheBaseClassIsPublicWhateverExposingSays(hidden)
+                            : hidden -> new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(
+                                    hidden, b.name());
             for (Type in : sig.inputTypes()) {
-                refuseHidden(in, inKey, b.name(), null, hint, b.pos(), symbols, exposeAll, exposed);
+                refuseHidden(in,
+                        hidden -> injected
+                                ? new InjectionMessage.AnInjectedInputRestsOnWhatIsKept(b.name(),
+                                        hidden)
+                                : new ModuleMessage.AnExposedInputRestsOnWhatIsKept(b.name(),
+                                        hidden),
+                        hint, b.pos(), symbols, exposeAll, exposed);
             }
-            refuseHidden(sig.outputType(), outKey, b.name(), null, hint, b.pos(),
-                    symbols, exposeAll, exposed);
+            refuseHidden(sig.outputType(),
+                    hidden -> injected
+                            ? new InjectionMessage.AnInjectedOutputRestsOnWhatIsKept(b.name(),
+                                    hidden)
+                            : new ModuleMessage.AnExposedOutputRestsOnWhatIsKept(b.name(), hidden),
+                    hint, b.pos(), symbols, exposeAll, exposed);
         }
     }
 
-    private static void refuseHidden(Type written, String key, String owner, String field,
-                                     String hint, SourcePos pos, Symbols symbols,
+    private static void refuseHidden(Type written,
+                                     java.util.function.Function<String,
+                                             souther.compiler.diag.msg.Message> say,
+                                     java.util.function.Function<String,
+                                             souther.compiler.diag.msg.Message> hint,
+                                     SourcePos pos, Symbols symbols,
                                      boolean exposeAll, Set<String> exposed) {
         if (written == null) {
             return;   // an unresolved reference has its own error
@@ -542,9 +572,10 @@ public final class SpecChecker {
             return;
         }
         String name = hidden[0].name();
-        Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1611, key).at(pos);
-        d = field == null ? d.args(owner, name) : d.args(owner, field, name);
-        throw CompileException.of(d.hint(hint, name, owner).build());
+        throw CompileException.of(Diagnostic.at(pos)
+                .say(say.apply(name))
+                .hint(hint.apply(name))
+                .build());
     }
 
     /** Whether a reader outside the declaring module can write {@code name}. */

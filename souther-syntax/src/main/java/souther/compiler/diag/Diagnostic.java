@@ -182,6 +182,11 @@ public final class Diagnostic {
      * A builder for a diagnostic that reports a known rule. The code carries the title, so the two
      * agree at every site reporting that rule and neither is given here.
      */
+    /** A diagnostic saying {@code message}, which {@link Builder#at} then gives a place. */
+    public static Builder say(Message message) {
+        return new Builder(null, null).say(message);
+    }
+
     /** A diagnostic about a place, which {@link Builder#say} then gives what it says. */
     public static Builder at(Region region) {
         return new Builder(null, null).at(region);

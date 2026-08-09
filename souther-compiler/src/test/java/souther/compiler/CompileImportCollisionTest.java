@@ -219,7 +219,7 @@ class CompileImportCollisionTest {
                         data Line = { a: Int }
                         """)));
 
-        assertEquals(List.of("check.import.notexposed"),
+        assertEquals(List.of("module.the-module-does-not-expose-it"),
                 diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
     }
 

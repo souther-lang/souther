@@ -38,7 +38,7 @@ class OneProblemOneDiagnosticTest {
                 """).get("a.sou");
 
         assertEquals(1, found.size(), "one unknown import, one diagnostic: " + found);
-        assertEquals("check.import.unknownmodule", found.get(0).messageKey());
+        assertEquals("module.unknown-module", found.get(0).messageKey());
     }
 
     @Test

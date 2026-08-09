@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
@@ -881,17 +882,22 @@ public final class Backend {
             String what = owner != null ? owner.name() : e.getValue().get(0);
             TypeName sameName = byBridgeName.put(bridge, member);
             if (sameName != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.bridge.collision.member")
-                                .at(pos).args(sameName.qualified(), member.qualified(), bridge)
-                                .hint("check.bridge.collision.member.hint").build());
+                throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(sameName.qualified(), member.qualified(), bridge))
+                                .at(pos)
+                                .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
             }
-            String collidesWith = localTypes.contains(bridge) ? "check.bridge.collision.data"
-                    : behaviorClassOwner.containsKey(bridge) ? "check.bridge.collision.behavior" : null;
-            if (collidesWith != null) {
-                String other = localTypes.contains(bridge) ? bridge : behaviorClassOwner.get(bridge);
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, collidesWith)
-                                .at(pos).args(what, member.name(), bridge, other)
-                                .hint("check.bridge.collision.hint", bridge).build());
+            boolean aData = localTypes.contains(bridge);
+            boolean aBehavior = behaviorClassOwner.containsKey(bridge);
+            if (aData || aBehavior) {
+                String other = aData ? bridge : behaviorClassOwner.get(bridge);
+                throw CompileException.of(Diagnostic.at(pos)
+                                .say(aData
+                                        ? new ModuleMessage.AMemberReachesTheUnionThroughAData(what,
+                                                member.name(), bridge, other)
+                                        : new ModuleMessage
+                                                .AMemberReachesTheUnionThroughABehavior(what,
+                                                        member.name(), bridge, other))
+                                .hint(new ModuleMessage.RenameTheMemberOrTheTypeItCollidesWith(bridge)).build());
             }
         }
     }

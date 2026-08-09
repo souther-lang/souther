@@ -48,7 +48,7 @@ class ImportOfAnUnusableModuleTest {
         assertEquals(1, found.get("evil.sou").size(),
                 "the module that took a reserved name is what is wrong: " + found.get("evil.sou"));
         assertTrue(found.get("evil.sou").stream()
-                        .anyMatch(d -> "check.module.reserved".equals(d.messageKey())));
+                        .anyMatch(d -> "module.the-module-is-in-the-reserved-namespace".equals(d.messageKey())));
         assertEquals(List.of(), found.get("main.sou"),
                 "app.main can see the module; what is wrong with it is not app.main's to hear: "
                         + found.get("main.sou"));
