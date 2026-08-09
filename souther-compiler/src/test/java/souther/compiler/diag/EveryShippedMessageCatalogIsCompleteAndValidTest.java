@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.doc.SpecDocument;
 import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageKeys;
@@ -656,6 +657,49 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
             }
         }
         return found;
+    }
+
+    /** What a message cites: {@code (spec <anchor>)}, in any language.
+     *
+     * <p>Whatever stands there, not what an anchor looks like. Written to match an anchor's shape,
+     * this reads a citation that is not one — the section numbers these replaced — as no citation at
+     * all, and the rule holds over the ones already correct. */
+    private static final Pattern CITES = Pattern.compile("\\(spec ([^)]+)\\)");
+
+    /**
+     * Every section a message sends a reader to is a section they can read.
+     *
+     * <p>These were section numbers — {@code (spec 19.5)} — which nothing accepts as a name: the
+     * lookup takes anchors and diagnostic codes, and offered {@code e1905} and {@code e1915} as
+     * near-misses for {@code 19.5}, which is worse than answering nothing. Numbers also move. The
+     * chapter those four cited had become the twenty-first by the time this was written, so they
+     * were wrong twice over: unlookuppable, and pointing at a number that no longer meant what the
+     * sentence said it did.
+     *
+     * <p>An anchor is neither. It is what the reader types, and it moves with the section it names.
+     */
+    @Test
+    void everySectionAMessageCitesIsOneAReaderCanRead() throws IOException {
+        Set<String> anchors = new TreeSet<>();
+        for (SpecDocument.Section section : SpecDocument.bundled().sections()) {
+            anchors.add(section.anchor());
+        }
+        assertFalse(anchors.isEmpty(), "found no sections at all — the spec did not load");
+        List<String> dangling = new ArrayList<>();
+        for (Catalog catalog : catalogs()) {
+            Properties entries = load(catalog.path());
+            for (String key : entries.stringPropertyNames()) {
+                Matcher cited = CITES.matcher(entries.getProperty(key));
+                while (cited.find()) {
+                    if (!anchors.contains(cited.group(1))) {
+                        dangling.add(catalog.path().getFileName() + ": " + key + " cites `"
+                                + cited.group(1) + "`");
+                    }
+                }
+            }
+        }
+        dangling.sort(String::compareTo);
+        assertEquals(List.of(), dangling, "a message sends a reader to a section that is not there");
     }
 
     private static Set<String> ownedByAMessage() {
