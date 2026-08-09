@@ -3652,6 +3652,10 @@ The limit is a property of the language, not of a compiler's internal representa
 
 A compiler states the runtime it holds this bound on. Every phase descends what it builds by recursion, so what a definition may say and what it takes to walk one are the same question asked from two sides, and a stack left to whatever a platform defaults to would make a source compile in one place and not another. This compiler is supported on a 4 MB thread stack — the `+souther+` binary sets it, an editor launching the language server passes it, and the tests run with it — against a source at the bound needing about a megabyte. The number is this implementation's and moves with it; the bound above does not.
 
+[[running-out-of-room-is-reported]]A compiler that runs out of room MUST report it rather than fail. Every phase descends what it builds by recursion, and running out of stack is not a diagnostic, so left alone it reaches the author as a trace and takes an editor's session with it. No position is claimed: where the stack ended is not a fact about the source.
+
+This is not either of the limits above said again. Both of those are reached at a place in the source and reported there; this is reached wherever a walk happened to end, and on the stated runtime a source that passed both should not reach it at all. Reaching it is therefore a report about the compiler or about the stack it was given, and it says so rather than asking the author to change anything.
+
 [,text]
 ----
 Source -> Lexer -> Parser -> AST
@@ -5377,15 +5381,18 @@ As E2102, for the other thing a class file runs out of. The pool belongs to the 
 The pool is run out of two ways and the message says which: referring to an entry the class file cannot address, which names the entry that was wanted, and holding more entries than it can write out, which names how many there are. They are one code because the author's move is the same.
 
 [#e2104]
-=== A source nests deeper than the compiler walks
+=== A source nests deeper than the compiler reads
 
 [,text]
 ----
-An expression in this source nests too deeply for the compiler to walk. Name its parts with `let` to
-flatten it.
+This nests deeper than I read. Break it into parts that have names, so each one is read on its own
+and says what it is: a binding for a value, a declaration for a type. What those parts add up to is
+bounded too, and far above this.
 ----
 
-Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). It is reached while reading, so it is reported wherever the reading is done, including by the formatter, which reads sources it cannot compile. What a pass built from the source may be deeper than the source was; that is <<e2107>>, and this limit says nothing about it.
+Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). It is reached while reading, so it is reported wherever the reading is done, including by the formatter, which reads sources it cannot compile, and at the token that reached it.
+
+Naming the parts is the answer to this one, and what the parts add up to is a separate limit — <<e2107>>, which is far above this one and counted differently. What a pass builds from a source may be deeper than the source was; this limit says nothing about that.
 
 [#e2107]
 === A definition is more complex than the compiler holds
@@ -5409,6 +5416,20 @@ Substituting `{value}` here makes {costs} levels of structure, and a definition 
 Reported where a definition says more than the compiler holds (<<source-structural-complexity-is-bounded>>), at whichever construct exceeded it: the block, the definition as written, or the value whose substitution composed it. The three are one limit counted one way, and which of them is reported is where the count first passed it.
 
 Naming parts with `+let+` is not the answer to this one — it is what a block and a substitution are made of, and both are counted. What reduces it is writing less structure: a behavior of its own, which is a definition of its own and counted on its own.
+
+[#e2108]
+=== The compiler ran out of room
+
+[,text]
+----
+I ran out of room reading this. What a source may nest and what a definition may say are both
+bounded, and a source past either is refused with the place it happened, so this is not a report
+about the source: on the stack this compiler is supported on, something it built went deeper than
+anything it accepted should. Either the stack it was given is smaller than that, or this is a shape
+the bounds do not hold yet.
+----
+
+Reported where a walk exhausted the stack (<<running-out-of-room-is-reported>>). It carries no position and asks for nothing: a source within <<source-nesting-is-bounded>> and <<source-structural-complexity-is-bounded>>, read on the runtime the compiler states, does not reach it.
 
 [#e2105]
 === Two declarations become one class

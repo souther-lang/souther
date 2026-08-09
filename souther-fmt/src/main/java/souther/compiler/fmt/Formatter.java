@@ -435,7 +435,7 @@ public final class Formatter {
      * it was reached wherever the stack happened to end, which is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.say(new DeclarationMessage.ItNestsDeeperThanIsRead()).build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
     }
 
     // --- layout ---

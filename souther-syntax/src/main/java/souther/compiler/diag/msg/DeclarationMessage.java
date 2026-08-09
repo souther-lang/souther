@@ -149,6 +149,9 @@ public sealed interface DeclarationMessage extends Message {
     @Code(DiagnosticCode.E2104)
     record ItNestsDeeperThanIsRead() implements DeclarationMessage, Reported {}
 
+    @Code(DiagnosticCode.E2108)
+    record TheCompilerRanOutOfRoom() implements DeclarationMessage, Reported {}
+
     @Code(DiagnosticCode.E2107)
     record ABlockHasMoreStatementsThanADefinitionHolds(int statements, int holds)
             implements DeclarationMessage, Reported {}

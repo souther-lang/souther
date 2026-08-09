@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
@@ -99,17 +99,21 @@ public final class Compiler {
     }
 
     /**
-     * A source whose expressions nest deeper than the compiler can walk. Every phase descends an
-     * expression by recursion — parsing, inlining, checking, emitting — so past some depth the stack
-     * runs out. That is not a {@code CompileException}, so left alone it passes through the recovery
-     * boundary and reaches the author as a stack trace. It is reported like any other thing the
-     * compiler cannot accept.
+     * The compiler ran out of room. Every phase descends what it builds by recursion, so a walk
+     * that is handed something deep enough exhausts the stack — which is not a
+     * {@code CompileException}, so left alone it passes through the recovery boundary and reaches
+     * the author as a stack trace. It is reported like any other thing the compiler cannot accept.
      *
-     * <p>The depth is not a written limit, so no position is claimed: the failure belongs to the
-     * source as a whole, and the author's move is the same wherever it landed — name the parts.
+     * <p>Not a report about nesting. What a source may nest is bounded as it is read, and what a
+     * definition may say is bounded over what it says, so on the stack this compiler is supported
+     * on a source that got past both should not arrive here. Arriving here says the stack was
+     * smaller than that, or that something builds depth no bound is holding — neither of which the
+     * author can be told to flatten.
+     *
+     * <p>No position is claimed: where the stack ended is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.say(new NameMessage.TheExpressionNestsTooDeeply()).build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.TheCompilerRanOutOfRoom()).build());
     }
 
     /**

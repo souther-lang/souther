@@ -17,9 +17,6 @@ public sealed interface NameMessage extends Message {
     @Code(DiagnosticCode.E1019)
     record ABindingMayNotShadowABuiltIn(String name) implements NameMessage, Reported {}
 
-    @Code(DiagnosticCode.E2104)
-    record TheExpressionNestsTooDeeply() implements NameMessage, Reported {}
-
     @Code(DiagnosticCode.E1815)
     record TheElementTypeCannotBeInferredHere() implements NameMessage, Reported {}
 
