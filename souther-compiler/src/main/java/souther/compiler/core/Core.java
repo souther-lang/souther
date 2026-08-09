@@ -159,8 +159,10 @@ public sealed interface Core {
     }
 
     /**
-     * A call a representation kept standing on purpose: resolved to the declaration it names, typed
-     * from that declaration's signature, and deliberately not expanded.
+     * A name a representation kept standing on purpose: resolved to the declaration it names, typed
+     * from what that declaration settled, and deliberately not expanded. A call is one, with its
+     * arguments; a reference to a value is one with none, since reading a value's name is running
+     * its body (ADR-0072) and a representation that did not substitute it kept that.
      *
      * <p>Not a call this compiler failed to expand. Which calls survive is a representation's to
      * decide ({@link souther.compiler.check.InliningPolicy}): an analysis that has rules about an

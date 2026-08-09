@@ -76,6 +76,12 @@ public final class ValueCycles {
             valuesRead(e.getValue().writtenBody(), own, out);
             edges.put(e.getKey(), out);
         }
+        // Which names lie on a cycle, worked out once over the whole graph. What is asked of each
+        // value below is whether it reaches itself, and a search per value answers it by walking
+        // everything that value reaches — over a chain of values that is the chain again per link.
+        // The path a report names is still found by the search below, which runs for the one value
+        // that is refused and for no other.
+        Set<String> reachesItself = onACycle(edges);
         for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
             if (!e.getValue().params().isEmpty()) {
                 continue;   // a helper's own recursion is the call graph's business
@@ -93,6 +99,9 @@ public final class ValueCycles {
                                 .at(block.pos()).build(),
                         "a block is not a value: `let " + e.getKey() + "` writes no parameters, so it"
                                 + " defines a value, and a block cannot be one (spec 12.5)");
+            }
+            if (!reachesItself.contains(e.getKey())) {
+                continue;
             }
             List<String> path = new ArrayList<>();
             if (pathBackTo(e.getKey(), e.getKey(), edges, new LinkedHashSet<>(), path)) {
@@ -131,6 +140,82 @@ public final class ValueCycles {
         }
         Ast.forEachChild(e, c -> valuesRead(c, reachable, out));
     }
+
+    /**
+     * The names of {@code edges} that reach themselves: the ones in a strongly connected group of
+     * more than one, and the ones with an edge to themselves.
+     *
+     * <p>Tarjan's, written with its own stack rather than the call stack. A module's definitions
+     * nest as deeply as they are chained, and this walk is over the same chain that made the walk
+     * worth doing — a recursive one would answer by running out of stack on the input it was added
+     * for.
+     */
+    private static Set<String> onACycle(Map<String, Set<String>> edges) {
+        Map<String, Integer> index = new LinkedHashMap<>();
+        Map<String, Integer> low = new LinkedHashMap<>();
+        Set<String> open = new LinkedHashSet<>();       // on the component stack
+        List<String> component = new ArrayList<>();
+        Set<String> found = new LinkedHashSet<>();
+        int next = 0;
+        for (String root : edges.keySet()) {
+            if (index.containsKey(root)) {
+                continue;
+            }
+            List<Walking> frames = new ArrayList<>();
+            frames.add(new Walking(root, edges.getOrDefault(root, Set.of()).iterator()));
+            index.put(root, next);
+            low.put(root, next++);
+            open.add(root);
+            component.add(root);
+            while (!frames.isEmpty()) {
+                Walking frame = frames.get(frames.size() - 1);
+                String at = frame.node();
+                if (frame.edges().hasNext()) {
+                    String to = frame.edges().next();
+                    if (!index.containsKey(to)) {
+                        index.put(to, next);
+                        low.put(to, next++);
+                        open.add(to);
+                        component.add(to);
+                        frames.add(new Walking(to, edges.getOrDefault(to, Set.of()).iterator()));
+                    } else if (open.contains(to)) {
+                        low.put(at, Math.min(low.get(at), index.get(to)));
+                    }
+                    continue;
+                }
+                frames.remove(frames.size() - 1);
+                if (!frames.isEmpty()) {
+                    String under = frames.get(frames.size() - 1).node();
+                    low.put(under, Math.min(low.get(under), low.get(at)));
+                }
+                if (low.get(at).equals(index.get(at))) {
+                    List<String> group = new ArrayList<>();
+                    String popped;
+                    do {
+                        popped = component.remove(component.size() - 1);
+                        open.remove(popped);
+                        group.add(popped);
+                    } while (!popped.equals(at));
+                    // One name is a group of its own unless it names itself: a group of one has no
+                    // way round except an edge back to where it started.
+                    if (group.size() > 1 || edges.getOrDefault(at, Set.of()).contains(at)) {
+                        found.addAll(group);
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * A node the walk is inside, and the edges of it that are left.
+     *
+     * <p>The iterator is the frame's, taken once when the frame is pushed. A frame is resumed once
+     * per edge it has, so a frame that worked out where it had got to would read the node's edges
+     * once per edge — which over a name that reaches many is that name's edges squared, and a chain
+     * says nothing about it because every name there reaches one.
+     */
+    private record Walking(String node, java.util.Iterator<String> edges) {}
 
     /** Records into {@code path} a route from {@code from} back to {@code target}, or answers false. */
     private static boolean pathBackTo(String from, String target, Map<String, Set<String>> edges,

@@ -1,13 +1,15 @@
 package souther.compiler.check;
 
 import souther.compiler.Prelude;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * The calls the representation being typed keeps standing, and the signature each was declared with.
+ * The names the representation being typed keeps standing, and what each of them is known to be: a
+ * signature for a call, a settled type for a reference to a value.
  *
  * <p>Which calls a representation keeps is the representation's to decide
  * ({@link InliningPolicy}), so it is decided once, where that representation is built, and handed to
@@ -25,11 +27,59 @@ import java.util.Map;
  * one this representation never said it would keep, is this compiler having failed to expand it, and
  * is reported as that rather than typed.
  */
-public record Preserved(Map<ValueName, CompleteSignature> operations) {
+public record Preserved(Map<ValueName, CompleteSignature> operations, SettledValues values) {
+
+    /**
+     * What a value's own check settled it as, asked by the name it was resolved to.
+     *
+     * <p>A lookup rather than a map, because the answers arrive while the representation is being
+     * read: a module's values are checked one after another, each against what the ones it names
+     * were settled as, and a snapshot taken per definition would copy the whole set once per
+     * definition — the cost this was for.
+     */
+    @FunctionalInterface
+    public interface SettledValues {
+
+        /** Nothing settled: every value is substituted, which is what every representation but the
+         * standalone check of a value does. */
+        SettledValues NONE = _ -> null;
+
+        /** The type {@code name} was settled as, or null where nothing settled it. */
+        Type typeOf(ValueName name);
+    }
 
     /** Every representation that keeps nothing standing — the tree the backend emits from, and every
      *  expression checked outside one. */
-    public static final Preserved NONE = new Preserved(Map.of());
+    public static final Preserved NONE = new Preserved(Map.of(), SettledValues.NONE);
+
+    public Preserved(Map<ValueName, CompleteSignature> operations) {
+        this(operations, SettledValues.NONE);
+    }
+
+    /**
+     * A representation that keeps a reference to each of {@code settled} standing, under the type
+     * that value's own check settled for it.
+     *
+     * <p>What a value means is settled where it is declared and is the same wherever it is named
+     * (ADR-0072), so a check that has that answer already needs nothing from the value's body. The
+     * one it does not have is what the value is a constant of: that is folded into the reference
+     * where the reference is written, so everything downstream reads a literal exactly as it did
+     * when the whole body was copied there.
+     */
+    public static Preserved valuesAlreadySettled(SettledValues settled) {
+        return new Preserved(Map.of(), settled);
+    }
+
+    /**
+     * The type {@code name} was settled as, or null where this representation does not keep a
+     * reference to it standing.
+     *
+     * <p>Asked of what the name was resolved to, as an operation is: a binding spelled like a value
+     * is a binding, and two modules' same-named values are two values.
+     */
+    public Type valueKept(ValueName name) {
+        return name == null ? null : values.typeOf(name);
+    }
 
     /**
      * What {@link InliningPolicy#DISCHARGE} keeps: the language's own operations, each under the

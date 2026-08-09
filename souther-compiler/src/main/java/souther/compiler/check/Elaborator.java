@@ -231,6 +231,13 @@ public final class Elaborator {
                     }
                     yield value;
                 }
+                // A value this representation kept standing, read as the type its own check
+                // settled. What the value is a constant of is not asked here: that is folded into
+                // the reference where the reference is written, so nothing downstream of this has
+                // to learn that a name can stand for one.
+                case ValueName.Helper _ when ctx.preserved().valueKept(v.denotes()) != null ->
+                        new Core.PreservedCall(v.denotes(), List.of(),
+                                ctx.preserved().valueKept(v.denotes()), v.pos());
                 default -> throw notAValue(v, env);
             };
             case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);

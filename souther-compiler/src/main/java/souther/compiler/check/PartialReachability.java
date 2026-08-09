@@ -11,6 +11,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,10 +59,28 @@ final class PartialReachability {
      * module's fns hold both under names of one shape. */
     private final Map<String, List<String>> calls;
 
+    /**
+     * The names of this graph from which a {@code partial} one is reachable, and the {@code partial}
+     * ones themselves. Worked out once, backwards from those, so that asking whether a declaration
+     * reaches one is a lookup.
+     *
+     * <p>The search below is what a report's path comes from and is unchanged. What this saves is the
+     * search that finds nothing: it walks everything the declaration reaches before it can say so,
+     * and every declaration is asked, so over a chain that is the chain again per link. Where the
+     * answer is no, no path was going to be built.
+     *
+     * <p>Backwards from every {@code partial} name reaches exactly the names the forward search
+     * would: the forward one stops at the first {@code partial} node and does not expand it, and a
+     * path that ran on through one would be a longer path to a node this already holds.
+     */
+    private final Set<String> reachingPartial;
+
     private final HelperInliner inliner;
 
-    private PartialReachability(Map<String, List<String>> calls, HelperInliner inliner) {
+    private PartialReachability(Map<String, List<String>> calls, Set<String> reachingPartial,
+                                HelperInliner inliner) {
         this.calls = calls;
+        this.reachingPartial = reachingPartial;
         this.inliner = inliner;
     }
 
@@ -80,7 +99,37 @@ final class PartialReachability {
             }
             // an intrinsic declares no body to read what it reaches out of
         }
-        return new PartialReachability(calls, inliner);
+        return new PartialReachability(calls, reachingPartial(calls, inliner), inliner);
+    }
+
+    /** Every name of {@code calls} from which a {@code partial} one is reachable, the
+     * {@code partial} ones included. */
+    private static Set<String> reachingPartial(Map<String, List<String>> calls,
+                                               HelperInliner inliner) {
+        Map<String, List<String>> back = new LinkedHashMap<>();
+        Set<String> nodes = new LinkedHashSet<>(calls.keySet());
+        calls.forEach((from, tos) -> {
+            for (String to : tos) {
+                nodes.add(to);
+                back.computeIfAbsent(to, _ -> new ArrayList<>()).add(from);
+            }
+        });
+        Set<String> reaching = new LinkedHashSet<>();
+        Deque<String> work = new ArrayDeque<>();
+        for (String node : nodes) {
+            Ast.FnDef declared = inliner.helper(node);
+            if (declared != null && declared.partial() && reaching.add(node)) {
+                work.add(node);
+            }
+        }
+        while (!work.isEmpty()) {
+            for (String previous : back.getOrDefault(work.poll(), List.of())) {
+                if (reaching.add(previous)) {
+                    work.add(previous);
+                }
+            }
+        }
+        return reaching;
     }
 
     /**
@@ -134,6 +183,12 @@ final class PartialReachability {
      * about the caller. A node is visited once, so a cycle is walked once.
      */
     private Optional<List<String>> search(List<String> seeds) {
+        // Whether one is reachable at all is a lookup; the marker is still read off the declaration
+        // beside it, because a name this graph never saw — one an invariant clause alone reaches —
+        // is in no set built from the graph.
+        if (seeds.stream().noneMatch(seed -> reachingPartial.contains(seed) || isPartial(seed))) {
+            return Optional.empty();
+        }
         Map<String, String> from = new HashMap<>();
         Set<String> seen = new HashSet<>();
         Deque<String> work = new ArrayDeque<>();

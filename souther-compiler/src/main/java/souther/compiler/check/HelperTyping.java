@@ -10,6 +10,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Deque;
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -42,8 +45,24 @@ public final class HelperTyping {
                                      Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Map<String, Ast.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
-        for (Ast.FnDef h : inliner.held().values()) {
+        // What each value of this module was settled as, filled in as they are checked. A value is
+        // checked against these rather than against a copy of the body each of them stands for,
+        // which is the same answer worked out once instead of once per name that reaches it.
+        Map<ValueName, Type> settledTypes = new HashMap<>();
+        Map<ValueName, Object> settledConstants = new HashMap<>();
+        Preserved standing = Preserved.valuesAlreadySettled(settledTypes::get);
+        for (Ast.FnDef h : valuesBeforeTheValuesThatNameThem(inliner)) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
+            // A helper reads a settled value as a value does. A helper's body is expanded into
+            // whoever calls it, and a value it names is expanded into that expansion, so a chain of
+            // values written through helpers reaches every link exactly as one written without them
+            // — and would copy every link, once per helper, for the same reason.
+            //
+            // What settles one is narrower: a value of this module, which is what has an answer to
+            // read. A helper settles nothing, and neither does a value the module took on to emit.
+            boolean settles = h.params().isEmpty() && h.declaredBy(inliner.moduleName());
+            ValueName settled = settles
+                    ? new ValueName.Helper(inliner.moduleName(), h.name()) : null;
             Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
@@ -74,7 +93,16 @@ public final class HelperTyping {
             // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
             // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
             Ast.Expr emitted = loweredBodies.get(h.name());
-            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.writtenBody(), inliner.bodyOf(h.name()));
+            // Not what the backend emits, and not a recursive helper's own body: a value is
+            // substituted at each of its references, and those two are trees that run.
+            boolean reading = emitted == null && !recursive;
+            Ast.Expr body = emitted != null ? emitted
+                    : inliner.readingSettledValues(reading ? standing : Preserved.NONE,
+                                    reading ? settledConstants::get : _ -> null)
+                            .inline(h.writtenBody(), inliner.bodyOf(h.name()));
+            // Back for everything below, which reads a body with every value copied into it as it
+            // always was: the arguments checked against the surface, and every other reader.
+            inliner.readingSettledValues(Preserved.NONE, _ -> null);
             if (recursive && body == null) {
                 // Lower keeps every recursive helper as a fn of the lowered module, and the backend
                 // emits from that same list, so a recursive helper without a lowered body would leave
@@ -113,9 +141,19 @@ public final class HelperTyping {
             // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn(), symbols);
-            Core elaboratedBody = Elaborator.elaborate(body, tenv, new CheckContext(symbols, null, reqSigs), declaredReturn);
+            Core elaboratedBody = Elaborator.elaborate(body, tenv,
+                    new CheckContext(symbols, null, reqSigs)
+                            .preserving(reading ? standing : Preserved.NONE),
+                    declaredReturn);
             Type bodyType = elaboratedBody.type();
             elaborated.definitionTypes.put(h.name(), bodyType);
+            if (settled != null) {
+                settledTypes.put(settled, bodyType);
+                // What it is a constant of, read off the body it was checked as. A reference to it
+                // is written out as that constant, so every position that asks whether an
+                // expression is known at compile time goes on reading a literal.
+                ConstEval.eval(body).ifPresent(c -> settledConstants.put(settled, c));
+            }
             if (emitted != null) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
             }
@@ -133,6 +171,85 @@ public final class HelperTyping {
                 }
             }
         }
+    }
+
+    /**
+     * The declarations this pass checks, each value after the values it names.
+     *
+     * <p>A value is checked against what the values it names were settled as, so those have to be
+     * settled first. The source may write them the other way round — nothing says a value must be
+     * declared above the one that reads it — and the order they are checked in is not the order
+     * they are written in for that reason alone.
+     *
+     * <p>Reaching is not only writing the name. A value reaches another by reading it and by
+     * calling a helper that reads it — the two kinds of edge {@link ValueCycles} follows together,
+     * for the same reason: a body's expansion goes through the helpers it calls, so what is behind
+     * one is reached exactly as a name written outright is. Following only the first would leave a
+     * chain written through helpers settling in the order it was declared, and a chain written
+     * bottom to top copied again per link.
+     *
+     * <p>Every declaration is a node, a helper as much as a value, because a helper is what carries
+     * the second kind of edge and is itself checked against what it reaches.
+     *
+     * <p>Stable otherwise: two declarations that reach neither the other stay in the order the
+     * module wrote them. What is checked does not depend on the order — what is not yet settled is
+     * copied, as it was before any of this — so this decides what is worked out twice and nothing
+     * else.
+     *
+     * <p>A cycle has no such order, and there is none to find: {@link ValueCycles} refuses a value
+     * that reaches itself before a body of this module is expanded, and a cycle of helpers alone is
+     * a recursion the language allows. Either way its members are left in the order they were
+     * written, each copying the other, which is the answer this pass gave before there was an order
+     * at all.
+     */
+    private static List<Ast.FnDef> valuesBeforeTheValuesThatNameThem(HelperInliner inliner) {
+        Map<String, Ast.FnDef> held = inliner.held();
+        Map<String, Set<String>> names = new LinkedHashMap<>();
+        for (Map.Entry<String, Ast.FnDef> e : held.entrySet()) {
+            if (!(e.getValue().body() instanceof Ast.FnBody.Written written)) {
+                continue;
+            }
+            Set<String> reached = new LinkedHashSet<>();
+            HelperInliner.helperCallsIn(written.expr(), held, reached);
+            ValueCycles.valuesRead(written.expr(), held, reached);
+            reached.retainAll(held.keySet());
+            names.put(e.getKey(), reached);
+        }
+        // Depth-first with its own stack. A module's values chain as deeply as the author wrote
+        // them, and the chain is what this is for, so the call stack is the wrong one to walk it on.
+        List<Ast.FnDef> ordered = new ArrayList<>();
+        Set<String> placed = new LinkedHashSet<>();
+        for (String root : held.keySet()) {
+            if (placed.contains(root)) {
+                continue;
+            }
+            Deque<String> pending = new ArrayDeque<>();
+            pending.push(root);
+            Set<String> opened = new LinkedHashSet<>();
+            while (!pending.isEmpty()) {
+                String at = pending.peek();
+                if (placed.contains(at)) {
+                    pending.pop();
+                    continue;
+                }
+                // Opened once: its names go on the stack above it, and when it comes round again
+                // every one of them has been placed. A name already open is one this walk came
+                // through, which is a cycle — refused elsewhere, and left in place here so that
+                // this terminates whatever it is handed.
+                if (opened.add(at)) {
+                    for (String read : names.getOrDefault(at, Set.of())) {
+                        if (!placed.contains(read) && !opened.contains(read)) {
+                            pending.push(read);
+                        }
+                    }
+                    continue;
+                }
+                pending.pop();
+                placed.add(at);
+                ordered.add(held.get(at));
+            }
+        }
+        return ordered;
     }
 
     /**
