@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
 
@@ -53,7 +54,7 @@ class ANameThatDenotesNothingCostsOneDefinitionTest {
     }
 
     private static List<String> messageKeys(String source) {
-        return diagnosed(source).stream().map(l -> l.diagnostic().said().entry()).toList();
+        return diagnosed(source).stream().map(l -> MessageKeys.of(l.diagnostic().said())).toList();
     }
 
     @Test

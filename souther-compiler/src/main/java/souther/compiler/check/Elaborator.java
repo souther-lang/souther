@@ -476,7 +476,8 @@ public final class Elaborator {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
         }
         throw CompileException.of(Diagnostic.at(stepArg.pos())
-                .say(new HelperMessage.TheFunctionTakesAnotherType(fnName, Type.show(narrowGot),
+                .say(new HelperMessage.TheStepAnswersAnotherTypeThanTheAccumulator(fnName,
+                        Type.show(narrowGot),
                         Type.show(TypeOps.substitute(declaredStep.result(), bind))))
                 .build());
     }

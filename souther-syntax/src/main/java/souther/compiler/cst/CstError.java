@@ -2,6 +2,7 @@ package souther.compiler.cst;
 
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.msg.Message;
+import souther.compiler.diag.msg.MessageCodes;
 
 /**
  * A syntax problem recorded during lexing or parsing, positioned by absolute offset so it does not
@@ -22,7 +23,7 @@ public record CstError(int offset, int width, Message said) {
 
     /** The rule the text broke. */
     public DiagnosticCode code() {
-        return said.reports();
+        return MessageCodes.of(said);
     }
 
     public static CstError of(int offset, int width, Message said) {

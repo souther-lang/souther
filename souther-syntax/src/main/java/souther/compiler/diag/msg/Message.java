@@ -1,7 +1,5 @@
 package souther.compiler.diag.msg;
 
-import souther.compiler.diag.DiagnosticCode;
-
 /**
  * What a diagnostic says, as the values it is about.
  *
@@ -12,42 +10,22 @@ import souther.compiler.diag.DiagnosticCode;
  * showing it is not expressible.
  *
  * <p>Which catalog entry a message renders through, and which code it reports, are read off the
- * message's own type — {@link MessageKeys} for the first, {@link Code} for the second. Neither is a
- * string a site chooses, so two messages cannot name one entry and a message cannot name none.
+ * message's own type — {@link MessageKeys} for the first, {@link MessageCodes} for the second.
+ * Neither is a string a site chooses, so two messages cannot name one entry and a message cannot
+ * name none.
+ *
+ * <p>Both are functions of the type and not methods here. A record component generates an accessor,
+ * so a method on this interface is one a message could answer for itself: a component named
+ * {@code key} once answered every reader asking which entry to render, and a component named
+ * {@code reports} would have let a site report whatever code it was handed. What is declared here is
+ * nothing, so there is nothing for a component to stand in front of.
  *
  * <p>A value the reader should not see is not a component: a position is a {@code Region}, a value
  * shown only in a hint belongs to the hint's own message, and a wording that turns on a value is two
  * messages rather than one entry that selects between two sentences.
  */
-public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage, CodecMessage, DataMessage, DeclarationMessage, ExampleMessage, HelperMessage,
-        ImportMessage, InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage,
-        NameMessage, ParseMessage, TypeMessage {
-
-    /**
-     * The catalog entry this renders through, read off where the message is declared.
-     *
-     * <p>Named for what it answers rather than {@code key}, because a record's component of that
-     * name would override it: a message about a map key carried one, and every reader of it was
-     * answered the key's value where the entry's name was meant. The build refuses a component that
-     * takes this name.
-     */
-    default String entry() {
-        return MessageKeys.of(getClass());
-    }
-
-    /**
-     * The rule this reports, read off {@link Code} where the message is declared.
-     *
-     * <p>A message with no code is refused here rather than rendered without one, because a
-     * diagnostic a reader cannot look up is the thing the code exists to prevent. The build refuses
-     * it earlier still.
-     */
-    default DiagnosticCode reports() {
-        Code code = getClass().getAnnotation(Code.class);
-        if (code == null) {
-            throw new IllegalStateException("a message reports a rule, and "
-                    + getClass().getName() + " names no code");
-        }
-        return code.value();
-    }
+public sealed interface Message permits ArithmeticMessage, AttemptMessage, BehaviorMessage,
+        CodecMessage, DataMessage, DeclarationMessage, ExampleMessage, HelperMessage, ImportMessage,
+        InjectionMessage, InvariantMessage, MatchMessage, ModuleMessage, NameMessage, ParseMessage,
+        TypeMessage {
 }

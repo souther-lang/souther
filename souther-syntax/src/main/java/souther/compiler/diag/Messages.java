@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageTemplate;
 import souther.compiler.diag.msg.MessageValues;
@@ -120,9 +121,9 @@ public final class Messages {
      */
     public static String render(Message message, Locale locale) {
         Objects.requireNonNull(locale, NEEDS_A_LANGUAGE);
-        String template = lookup(message.entry(), locale);
+        String template = lookup(MessageKeys.of(message), locale);
         if (template == null) {
-            return message.entry();
+            return MessageKeys.of(message);
         }
         Map<String, Object> values = MessageValues.of(message);
         StringBuilder out = new StringBuilder(template.length() + 32);

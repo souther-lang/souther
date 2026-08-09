@@ -55,6 +55,14 @@ public final class JsonRenderer implements DiagnosticRenderer {
                 }
                 s.put("region", region(other.region()));
                 s.put("label", Messages.render(other.said(), locale));
+                // A label is a message like the line above it and carries values of its own — the
+                // type an operand has, the clause a construction reaches — so a tool reads them by
+                // name here too. Written for one of the three and not the others is how a reader of
+                // this interface comes to parse a sentence for the one that was left out.
+                Map<String, Object> labelled = new LinkedHashMap<>();
+                MessageValues.of(other.said()).forEach((name, value) ->
+                        labelled.put(name, Messages.text(value, locale)));
+                s.put("values", labelled);
                 secs.add(s);
             }
             obj.put("secondary", secs);

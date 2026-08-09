@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
@@ -44,7 +45,7 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
      * the path each diagnostic names, asked for by name. */
     private static List<String> pathsOf(String source, String key) {
         return diagnosed(source).stream()
-                .filter(d -> key.equals(d.said().entry()))
+                .filter(d -> key.equals(MessageKeys.of(d.said())))
                 .map(d -> String.valueOf(d.values().get("through")))
                 .toList();
     }

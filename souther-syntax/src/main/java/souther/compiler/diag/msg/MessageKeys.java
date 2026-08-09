@@ -12,10 +12,19 @@ import java.util.Locale;
  * <p>Derived rather than written beside the message, so that two messages cannot name one entry and
  * a message cannot name none. What that costs is that renaming a message renames its entry, which
  * the build reports as an entry no message names.
+ *
+ * <p>A function of the message's type rather than a method on the message, for the reason
+ * {@link MessageCodes} gives: a record component generates an accessor, and one named {@code key}
+ * once answered every reader asking which entry to render.
  */
 public final class MessageKeys {
 
     private MessageKeys() {
+    }
+
+    /** The entry {@code message} renders through. */
+    public static String of(Message message) {
+        return of(message.getClass());
     }
 
     /** The entry {@code message} renders through. */

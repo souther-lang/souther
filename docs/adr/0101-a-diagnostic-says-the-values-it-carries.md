@@ -66,7 +66,13 @@ data.spread-field-collision=Field `{field}` from `...{from}` conflicts with the 
 
 The catalog key is derived from where the record is declared — the area, then the record's name in
 kebab — so it is not a string a site chooses, two records cannot name one key, and a record without
-a key does not compile. The code is read off the record. A site writes:
+a key does not compile. The code is read off the record the same way. Both derivations are functions
+of the message's type and neither is a method on the message: a record component generates an
+accessor, so a method would be one a message could answer for itself. A component named `key` did
+exactly that, and every reader asking which entry to render was handed the key's value instead. A
+component named `reports` would have let a site report whatever code it was passed, past an
+annotation saying otherwise. `Message` declares nothing, so there is nothing for a component to
+stand in front of. A site writes:
 
 ```java
 Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, heldBy))
@@ -75,7 +81,7 @@ Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, hel
 `Diagnostic.of(DiagnosticCode, String)`, `Builder#args(Object...)` and the `legacyBody` parameter
 are removed. `getMessage()` renders the same record in English, so a message exists once.
 
-The build holds every message to six rules, over every shipped locale:
+The build holds every message to seven rules, over every shipped locale:
 
 1. every message is a record and names the rule it reports;
 2. every record's derived key is in the catalog;
@@ -83,7 +89,15 @@ The build holds every message to six rules, over every shipped locale:
 4. every `{name}` in a text is a component of that record, and a brace holding anything else is
    refused rather than shown;
 5. no catalog key is unreferenced by any record;
-6. every code has at least one record.
+6. every declared record is built by some site;
+7. every code is reported by a record that rule 6 found a site for.
+
+Rules 6 and 7 are one property in two halves, and the second is worth nothing without the first.
+Read off the records that are *declared*, rule 7 says only that every code has a declaration
+carrying it — which stays true when the sites that reported a rule move to another number and the
+record they used is left behind. Read off the records some site *builds*, it says what it is meant
+to: nothing sends a reader to that chapter any more. A declared message nothing builds is also a
+sentence shipped in every catalog that no compile can produce, which is rule 6 on its own.
 
 Rule 1 is why the messages are records at all rather than a convention: a leaf of the hierarchy that
 is not one carries no components, so every rule under it is silent about it. Rule 4 reads the entry
@@ -111,7 +125,9 @@ so a rule is an error or a warning by its identity and not by the site that rais
 `--format json` gains a `values` object beside the rendered `message`, keyed by component name. A
 tool that wants the clause reads `clause`; before this it would have had to parse English. Each value
 is written as the text it renders as, so what a component's Java type is stays a fact about the
-compiler rather than part of that interface.
+compiler rather than part of that interface. The message, each hint and each secondary label all
+carry one: a diagnostic points at more than one place and says something about each, and writing it
+for one of the three leaves a reader of this interface parsing a sentence for the others.
 
 What tells two diagnostics apart carries the message too. The store keeps one report per identity,
 and a message holds its values as components rather than in the old array, so an identity that read

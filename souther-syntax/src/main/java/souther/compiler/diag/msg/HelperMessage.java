@@ -105,6 +105,11 @@ public sealed interface HelperMessage extends Message {
     record TheFunctionTakesAnotherType(String call, String given, String takes)
             implements HelperMessage {}
 
+    /** A fold's step answers a type the accumulator it builds cannot hold. */
+    @Code(DiagnosticCode.E1806)
+    record TheStepAnswersAnotherTypeThanTheAccumulator(String call, String answers,
+            String accumulator) implements HelperMessage {}
+
     /** A function value's type cannot be read where it is written. */
     @Code(DiagnosticCode.E1808)
     record TheFunctionsTypeCannotBeRead(String name) implements HelperMessage {}

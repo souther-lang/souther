@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Located;
 
@@ -36,7 +37,7 @@ class TheOperandThatFailedFirstIsTheOneReportedTest {
                 %s
                 """.formatted(NOWHERE, body)));
         return found.getOrDefault("demo", List.of()).stream()
-                .map(l -> l.diagnostic().said().entry()).toList();
+                .map(l -> MessageKeys.of(l.diagnostic().said())).toList();
     }
 
     @Test

@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.MessageTemplate;
@@ -544,34 +545,60 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
             if (leaf.getAnnotation(souther.compiler.diag.msg.Code.class) == null) {
                 wrong.add(leaf.getName() + " names no code");
             }
-            // A component's accessor would override the interface's own method, and every reader
-            // asking which entry to render would be answered that component's value instead.
-            for (String value : MessageValues.namesOf(leaf.asSubclass(Message.class))) {
-                if ("entry".equals(value)) {
-                    wrong.add(leaf.getName() + " carries a value called `entry`, which is what a"
-                            + " message answers with the entry it renders through");
-                }
-            }
         }
         wrong.sort(String::compareTo);
         assertEquals(List.of(), wrong,
                 "a message is a record whose components are its values, and it reports a rule");
     }
 
+    /** A message written at a site: {@code new AreaMessage.TheThing(}, however it is wrapped. */
+    private static final Pattern BUILT =
+            Pattern.compile("new\\s+(\\w+Message)\\s*\\.\\s*(\\w+)\\s*\\(");
+
     /**
-     * Every rule a reader can be told to look up has something that tells them.
+     * Every message the hierarchy declares is one some site builds.
      *
-     * <p>A code with no message is a chapter of the manual nothing sends anyone to. It is how a rule
-     * gets documented and then quietly stops being reported: the code stays, the site that raised it
-     * moves to another one, and nothing says the first is now unreachable. Held from the codes'
-     * side, because the messages' side is already held — a message names a code or it does not
-     * compile.
+     * <p>A declared message nothing builds is a sentence in every catalog that no compile can
+     * produce, and it is what a code left behind looks like: the sites that reported a rule move to
+     * another number and the record they used stays, still naming the old one. Without this, the
+     * rule below reads that record and answers that the code is reported.
+     *
+     * <p>A tripwire and not a proof, like the surface test next door: what it reads is the source
+     * text, so a message built through a variable would read as unbuilt. That is the direction that
+     * costs a green build rather than a wrong one.
      */
     @Test
-    void everyCodeIsReportedByAMessage() {
+    void everyMessageIsBuiltSomewhere() throws IOException {
+        List<String> unbuilt = new ArrayList<>();
+        for (Class<? extends Message> message : messages()) {
+            if (!built().contains(message.getEnclosingClass().getSimpleName() + "."
+                    + message.getSimpleName())) {
+                unbuilt.add(message.getName());
+            }
+        }
+        unbuilt.sort(String::compareTo);
+        assertEquals(List.of(), unbuilt, "declared and never raised — no compile can show these");
+    }
+
+    /**
+     * Every rule a reader can be told to look up is reported by a message some site builds.
+     *
+     * <p>A code nothing reports is a chapter of the manual nothing sends anyone to. It is how a rule
+     * gets documented and then quietly stops being reported: the sites move to another number, and
+     * the number they left says nothing about having been abandoned.
+     *
+     * <p>Read off the messages that are built rather than the ones that are declared, which is the
+     * difference between this holding and it appearing to. A record kept beside the code it used to
+     * report answers the declared question and not this one.
+     */
+    @Test
+    void everyCodeIsReportedByAMessage() throws IOException {
         Set<DiagnosticCode> reported = new java.util.HashSet<>();
         for (Class<? extends Message> message : messages()) {
-            reported.add(message.getAnnotation(souther.compiler.diag.msg.Code.class).value());
+            if (built().contains(message.getEnclosingClass().getSimpleName() + "."
+                    + message.getSimpleName())) {
+                reported.add(MessageCodes.of(message));
+            }
         }
         List<String> unreported = new ArrayList<>();
         for (DiagnosticCode code : DiagnosticCode.values()) {
@@ -581,7 +608,19 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         }
         unreported.sort(String::compareTo);
         assertEquals(List.of(), unreported,
-                "a code names a rule a reader looks up, and nothing reports these");
+                "a code names a rule a reader looks up, and nothing raises these");
+    }
+
+    /** Every {@code Area.Record} a main source builds. */
+    private static Set<String> built() throws IOException {
+        Set<String> found = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = BUILT.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                found.add(m.group(1) + "." + m.group(2));
+            }
+        }
+        return found;
     }
 
     private static Set<String> ownedByAMessage() {

@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ArithmeticMessage;
 import souther.compiler.diag.CompileException;
@@ -131,8 +132,8 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
         // the base agrees — so the fix beside this refusal has to say which way `/` goes.
         Diagnostic divided = refusalOf("(d: Decimal, a: Amount) : Amount", "d / a");
         assertInstanceOf(ArithmeticMessage.AValueOfAnotherBase.class, divided.said());
-        assertEquals("arithmetic.a-reciprocal-changes-dimension",
-                refusalOf("(n: Int, a: Amount) : Amount", "n / a").said().entry(),
+        assertInstanceOf(ArithmeticMessage.AReciprocalChangesDimension.class,
+                refusalOf("(n: Int, a: Amount) : Amount", "n / a").said(),
                 "which is where an author who only agreed the base would arrive");
     }
 
@@ -169,7 +170,7 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
                 refusalOf("(o: Outer, p: Outer) : Outer", "o + p"));
         for (Diagnostic d : refusals) {
             assertFalse(d.notes().isEmpty(),
-                    d.said().entry() + " refuses a newtype without saying what to write instead");
+                    MessageKeys.of(d.said()) + " refuses a newtype without saying what to write instead");
         }
     }
 

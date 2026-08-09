@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.msg.ArithmeticMessage;
@@ -730,7 +731,7 @@ class CompileHelperBodyTypingTest {
         assertEquals(List.of("name.a-recursive-helper-must-declare-its-return-type"),
                 Located.diagnosticsOf(Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)))
                         .get("demo.sou").stream()
-                        .map(d -> d.said().entry()).toList(),
+                        .map(d -> MessageKeys.of(d.said())).toList(),
                 "the undeclared recursive helper is reported, and nothing else is");
     }
 

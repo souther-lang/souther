@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.BehaviorMessage;
@@ -76,8 +77,8 @@ class CallElaboratorNoCalleeTest {
     void aBindingIsToldItIsNotAFunction() {
         RuntimeException e = answerFor(new ValueName.Local("f",
                 new BindingId(new BindingOwner.OfValue("m.a", "g"), 0)));
-        assertEquals("name.it-is-not-a-function-here",
-                assertInstanceOf(CompileException.class, e).diagnostic().said().entry());
+        assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class,
+                assertInstanceOf(CompileException.class, e).diagnostic().said());
     }
 
     /**

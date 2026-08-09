@@ -1,7 +1,7 @@
 package souther.compiler.diag;
 
 
-import souther.compiler.diag.msg.Code;
+import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
 
 import java.util.ArrayList;
@@ -179,7 +179,7 @@ public final class Diagnostic {
          */
         public Builder say(Message message) {
             this.said = message;
-            this.code = message.reports();
+            this.code = MessageCodes.of(message);
             return this;
         }
 

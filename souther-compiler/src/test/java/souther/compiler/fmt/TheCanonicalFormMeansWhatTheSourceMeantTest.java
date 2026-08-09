@@ -1,5 +1,6 @@
 package souther.compiler.fmt;
 
+import souther.compiler.diag.msg.MessageKeys;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -134,7 +135,7 @@ class TheCanonicalFormMeansWhatTheSourceMeantTest {
         try {
             module = CstFrontend.parse(source);
         } catch (CompileException e) {
-            return "refused " + e.diagnostic().code() + " " + e.diagnostic().said().entry();
+            return "refused " + e.diagnostic().code() + " " + MessageKeys.of(e.diagnostic().said());
         }
         StringBuilder out = new StringBuilder();
         write(module, out);
