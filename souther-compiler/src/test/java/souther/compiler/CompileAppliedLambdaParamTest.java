@@ -1,10 +1,12 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -143,7 +145,7 @@ class CompileAppliedLambdaParamTest {
 
                                 let check (o) = Result { ns = List.map((x) -> x(o.n), [1, 2]) }
                                 """));
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class, e.diagnostic().said());
     }
 
     private Object field(BytesClassLoader loader, Object check, Map<String, ?> order, String name)

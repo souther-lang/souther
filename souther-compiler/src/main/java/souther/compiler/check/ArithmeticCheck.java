@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.msg.ArithmeticMessage;
 import souther.compiler.types.Type;
 
 import java.util.List;
@@ -57,59 +59,50 @@ sealed interface ArithmeticCheck {
      * belong to the rule, so that adding a rule cannot leave the diagnostic behind.
      */
     sealed interface Refusal {
-        String messageKey();
-
-        List<Object> messageArgs();
+        /**
+         * The refusal, as a diagnostic that has what it says and has yet to be pointed anywhere.
+         *
+         * <p>Built by the rule rather than handed over as a message for the caller to build with,
+         * because what a diagnostic is about and what is said beside it are two roles and a rule
+         * knows which of its sentences is which. Read as two values, the caller is the one that has
+         * to keep them apart, and there is no type it could hold them in that says so.
+         *
+         * <p>The fix belongs here for the same reason it belongs to the rule at all: a rule that
+         * refuses without one leaves the author to guess, and the guess a newtype rule invites is to
+         * delete the newtype. A rule that holds for every operator has one fix that has to hold for
+         * every operator too — what {@code +} takes beside a newtype is not what {@code *} takes,
+         * and a fix written for one of them sends the author from this refusal into the next — so
+         * where they differ, the fix says both rather than guessing which operator asked.
+         */
+        Diagnostic.Builder saying();
 
         Side side();
-
-        /** The fix, stated beside the rule. A rule that refuses without one leaves the author to
-         * guess, and the guess a newtype rule invites is to delete the newtype.
-         *
-         * <p>A rule that holds for every operator has one fix that has to hold for every operator
-         * too: what {@code +} takes beside a newtype is not what {@code *} takes, and a fix written
-         * for one of them sends the author from this refusal into the next. Where they differ, the
-         * fix says both rather than guessing which operator asked. */
-        default String hintKey() {
-            return messageKey() + ".hint";
-        }
     }
 
     /** Not a number at all: the rule the newtype rules were carved out of. */
     record OperandNotArithmetic(Type operand, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.operand";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(operand));
-        }
-
-        @Override public String hintKey() {
-            return null;   // Int or Decimal is the whole of it; there is nothing else to say
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.AnOperandIsNotANumber(Type.show(operand)));
         }
     }
 
     /** A newtype whose value is not directly Int or Decimal — over another newtype, or over
      * something that was never a number. Arithmetic reaches one wrapping and no further. */
     record NoDirectNumericBase(Type newtype, Type wrapped, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.nested";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(newtype, wrapped), Type.show(wrapped, newtype));
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.ANewtypeWithNoDirectNumericBase(
+                    Type.show(newtype, wrapped), Type.show(wrapped, newtype)))
+                    .hint(new ArithmeticMessage.ReachTheBaseWithValue(
+                            Type.show(newtype, wrapped), Type.show(wrapped, newtype)));
         }
     }
 
     /** Two unlike newtypes: nothing says a quantity of one is a quantity of the other. */
     record DifferentNewtypes(Type left, Type right) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.incompatible";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(left, right), Type.show(right, left));
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.TwoDifferentNewtypes(Type.show(left, right),
+                    Type.show(right, left)))
+                    .hint(new ArithmeticMessage.ConvertOneToTheOthersNewtype());
         }
 
         @Override public Side side() {
@@ -119,12 +112,10 @@ sealed interface ArithmeticCheck {
 
     /** A product of two newtypes is a quantity in neither of them. */
     record ProductChangesDimension(Type left, Type right) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.product";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(left, right), Type.show(right, left));
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.AProductChangesDimension(Type.show(left, right),
+                    Type.show(right, left)))
+                    .hint(new ArithmeticMessage.ComputeOnValueAndBuildTheProduct());
         }
 
         @Override public Side side() {
@@ -136,12 +127,10 @@ sealed interface ArithmeticCheck {
      * same newtype, a quantity per quantity where they are not, and the language expresses
      * neither. */
     record QuotientChangesDimension(Type left, Type right) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.quotient";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(left, right), Type.show(right, left));
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.AQuotientChangesDimension(Type.show(left, right),
+                    Type.show(right, left)))
+                    .hint(new ArithmeticMessage.ComputeOnValueAndBuildTheQuotient());
         }
 
         @Override public Side side() {
@@ -152,36 +141,32 @@ sealed interface ArithmeticCheck {
     /** A value of some other base beside a newtype. Reading its own base is one rule of the
      * newtype, asked by every operator, and not a rule of scaling. */
     record ValueOfAnotherBase(Type newtype, Type base, Type value, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.base";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(newtype, value), Type.show(base), Type.show(value, newtype));
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.AValueOfAnotherBase(Type.show(newtype, value),
+                    Type.show(base), Type.show(value, newtype)))
+                    .hint(new ArithmeticMessage.WhatEachOperatorTakesBesideANewtype(
+                            Type.show(newtype, value), Type.show(base)));
         }
     }
 
     /** A value of the newtype's own base that was not written out: only a literal is read as the
      * newtype standing beside it. */
     record BareValueIsNotALiteral(Type newtype, Type value, Side side) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.scalar";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(newtype, value), Type.show(value, newtype));
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.OnlyALiteralIsReadAsTheNewtype(
+                    Type.show(newtype, value), Type.show(value, newtype)))
+                    .hint(new ArithmeticMessage.BuildItWhereTheValueComesFrom(
+                            Type.show(newtype, value)));
         }
     }
 
     /** A number over a newtype is an inverse, so the dimension changes even though scaling does
      * not. */
     record ReciprocalChangesDimension(Type value, Type newtype) implements Refusal {
-        @Override public String messageKey() {
-            return "check.arith.newtype.reciprocal";
-        }
-
-        @Override public List<Object> messageArgs() {
-            return List.of(Type.show(value, newtype), Type.show(newtype, value));
+                @Override public Diagnostic.Builder saying() {
+            return Diagnostic.say(new ArithmeticMessage.AReciprocalChangesDimension(
+                    Type.show(value, newtype), Type.show(newtype, value)))
+                    .hint(new ArithmeticMessage.ComputeOnValueAndBuildTheReciprocal());
         }
 
         @Override public Side side() {

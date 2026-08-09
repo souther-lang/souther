@@ -143,7 +143,7 @@ class CompileAdequacyWarningTest {
         for (Db.Found found : compilation.db().allReports()) {
             Diagnostic d = found.report().diagnostic();
             if (d.code() != null && d.code().startsWith("E19")) {
-                codes.add(d.code() + " " + d.args()[0]);
+                codes.add(d.code() + " " + d.values().values().iterator().next());
             }
         }
         assertEquals(List.of(), codes);

@@ -4,6 +4,13 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.diag.msg.InjectionMessage;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
@@ -81,9 +88,9 @@ public final class SpecChecker {
             List<String> path = new ArrayList<>();
             if (reaches(b.name(), b.name(), edges, path, new HashSet<>())) {
                 path.add(b.name());
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1608, "e1608.msg")
-                                .at(b.pos()).args(b.name(), String.join(" -> ", path))
-                                .hint("e1608.hint", b.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(b.pos())
+                                .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(b.name(), String.join(" -> ", path))).build());
             }
         }
     }
@@ -135,14 +142,25 @@ public final class SpecChecker {
                 // what the name was resolved to, so an imported composition is the composition case
                 // rather than the unknown one — scanning this module's own behaviors would only find
                 // the local ones. All are reported at the name, as the clause that names nothing is.
-                String key = calleeSigs.containsKey(req) ? "e1607.nothing"
-                        : required.denotes() instanceof ValueName.Behavior ? "e1607.composition"
-                        : "e1607.unknown";
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1607, key)
-                                .at(required.written().region())
-                                .args(spec.name(), req)
-                                .hint(key + ".hint", spec.name(), req)
-                                .build());
+                boolean dependsOnNothing = calleeSigs.containsKey(req);
+                boolean aComposition = required.denotes() instanceof ValueName.Behavior;
+                throw CompileException.of(Diagnostic.at(required.written().region())
+                        .say(dependsOnNothing
+                                ? new DeclarationMessage
+                                        .DependsOnNamesSomethingThatDependsOnNothing(spec.name(),
+                                                req)
+                                : aComposition
+                                        ? new DeclarationMessage.DependsOnNamesAComposition(
+                                                spec.name(), req)
+                                        : new DeclarationMessage.DependsOnNamesNoSuchBehavior(
+                                                spec.name(), req))
+                        .hint(dependsOnNothing
+                                ? new DeclarationMessage.RemoveItAndCallItDirectly(req)
+                                : aComposition
+                                        ? new DeclarationMessage
+                                                .ACompositionsRequirementsAreNotWritten(req)
+                                        : new DeclarationMessage.DeclareItHereOrImportIt(req))
+                        .build());
             }
         }
     }
@@ -168,7 +186,7 @@ public final class SpecChecker {
         // a signature in `exposing` is only meaningful on a composition behavior
         for (String name : module.exposedOutputs().keySet()) {
             if (!pipeNames.contains(name)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1605, "e1605.notcomposition").at(module.pos()).args(name).build());
+                throw CompileException.of(Diagnostic.at(module.pos()).say(new DeclarationMessage.OnlyACompositionTakesAnOutputSignature(name)).build());
             }
         }
         // every exposed composition must declare its output, matching the inferred one
@@ -186,17 +204,17 @@ public final class SpecChecker {
             Set<TypeName> inferred = TypeOps.leafCases(sig.outputType(), symbols);
             Ast.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1605, "e1605.missing").at(pipe.pos())
-                                .args(pipe.name())
-                                .hint("e1605.missing.hint", pipe.name(), PipelineSigs.caseList(inferred))
-                                .build());
+                throw CompileException.of(Diagnostic.at(pipe.pos())
+                                
+                                .hint(new DeclarationMessage.WriteTheOutputSignature(pipe.name(), PipelineSigs.caseList(inferred)))
+                                .say(new DeclarationMessage.AnExposedCompositionDeclaresItsOutput(pipe.name())).build());
             }
             Set<TypeName> declaredCases = TypeOps.leafCases(TypeOps.successType(declared, symbols), symbols);
             if (!inferred.equals(declaredCases)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1604, "e1604.msg").at(pipe.pos())
-                                .args(pipe.name(), PipelineSigs.caseList(declaredCases), PipelineSigs.caseList(inferred))
-                                .hint("e1604.hint")
-                                .build());
+                throw CompileException.of(Diagnostic.at(pipe.pos())
+                                
+                                .hint(new DeclarationMessage.UpdateTheOutputOrHandleTheCase())
+                                .say(new DeclarationMessage.TheDeclaredOutputIsNotWhatThePipelineProduces(pipe.name(), PipelineSigs.caseList(declaredCases), PipelineSigs.caseList(inferred))).build());
             }
         }
     }
@@ -215,8 +233,8 @@ public final class SpecChecker {
                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                     List<Diagnostic> warnings) {
         if (fn.declaredReturn() != null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.noreturn")
-                            .at(fn.pos()).args(fn.name(), spec.name()).build());
+            throw CompileException.of(Diagnostic
+                            .at(fn.pos()).say(new BehaviorMessage.AnImplementationsReturnComesFromTheBehavior(fn.name(), spec.name())).build());
         }
         for (Ast.Var required : spec.dependsOn()) {
             // A `depends on` naming nothing was reported where it is written. What this fn's trailing
@@ -229,24 +247,24 @@ public final class SpecChecker {
         int nBusiness = spec.params().size();
         int nReq = spec.dependsOn().size();
         if (fn.params().size() != nBusiness + nReq) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.arity")
-                            .at(fn.pos()).args(fn.name(), fn.params().size(), spec.name(), nBusiness, nReq)
-                            .build());
+            throw CompileException.of(Diagnostic
+                            .at(fn.pos())
+                            .say(new BehaviorMessage.TheImplementationTakesAnotherNumberOfParameters(fn.name(), String.valueOf(fn.params().size()), spec.name(), String.valueOf(nBusiness), String.valueOf(nReq))).build());
         }
         for (Ast.FnParam p : fn.params()) {
             // a pattern in parameter position names a type, but it is not an annotation: it opens
             // the input the behavior already typed
             if (p.type() != null && !p.typeFromPattern()) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.noannotate")
-                                .at(p.pos()).args(fn.name(), spec.name(), p.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(p.pos()).say(new BehaviorMessage.AnImplementationsParametersTakeTheirTypesFromIt(fn.name(), spec.name(), p.name())).build());
             }
         }
         for (int i = 0; i < nReq; i++) {
             String got = fn.params().get(nBusiness + i).name();
             String want = spec.dependsOn().get(i).bare();
             if (!got.equals(want)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1615, "check.impl.reqorder")
-                                .at(fn.pos()).args(fn.name(), got, want).build());
+                throw CompileException.of(Diagnostic
+                                .at(fn.pos()).say(new BehaviorMessage.AnInjectedParameterIsOutOfOrder(fn.name(), got, want)).build());
             }
         }
 
@@ -280,9 +298,9 @@ public final class SpecChecker {
                 new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.behavior.return")
-                            .at(body.pos()).args(spec.name(), Type.show(output), Type.show(rt))
-                            .diff(Type.show(rt, output), Type.show(output, rt)).build());
+            throw CompileException.of(Diagnostic
+                            .at(body.pos())
+                            .diff(Type.show(rt, output), Type.show(output, rt)).say(new BehaviorMessage.TheBodyIsNotWhatTheBehaviorReturns(spec.name(), Type.show(output), Type.show(rt))).build());
         }
 
         // One expression (spec 16.4): this single walk sees every construction, including under a
@@ -304,15 +322,15 @@ public final class SpecChecker {
             for (Map.Entry<TypeName, String> built : constructed.originated().entrySet()) {
                 if (!declared.contains(built.getKey())) {
                     String c = built.getValue();
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1002, "e1002.msg").at(spec.pos())
-                                    .args(spec.name(), c).hint("e1002.hint").build());
+                    throw CompileException.of(Diagnostic.at(spec.pos())
+                                    .hint(new DeclarationMessage.AddTheConstructsEntry(spec.name(), c)).say(new DeclarationMessage.ItConstructsWithoutDeclaringIt(spec.name(), c)).build());
                 }
             }
             for (Ast.Name declaredName : spec.constructs()) {
                 String name = declaredName.written();
                 if (!constructed.builds(declaredName.denotes())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1006, "e1006.msg").at(spec.pos())
-                                    .args(spec.name(), name).hint("e1006.hint").build());
+                    throw CompileException.of(Diagnostic.at(spec.pos())
+                                    .hint(new DeclarationMessage.RemoveTheConstructsEntry(name)).say(new DeclarationMessage.ItDeclaresConstructsAndNeverBuilds(spec.name(), name)).build());
                 }
             }
         }
@@ -325,14 +343,14 @@ public final class SpecChecker {
         }
         for (String call : actual) {
             if (!declared.contains(call)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1602, "e1602.msg").at(spec.pos())
-                                .args(fn.name(), call, spec.name()).hint("e1602.hint").build());
+                throw CompileException.of(Diagnostic.at(spec.pos())
+                                .hint(new DeclarationMessage.AddTheDependsOnEntry(call, spec.name())).say(new DeclarationMessage.ItCallsSomethingWithNoImplementation(fn.name(), call, spec.name())).build());
             }
         }
         for (String req : declared) {
             if (!actual.contains(req)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1603, "e1603.msg").at(spec.pos())
-                                .args(spec.name(), req, fn.name()).hint("e1603.hint").build());
+                throw CompileException.of(Diagnostic.at(spec.pos())
+                                .hint(new DeclarationMessage.RemoveTheDependsOnEntry(req)).say(new DeclarationMessage.ItDeclaresDependsOnAndNeverCallsIt(spec.name(), req, fn.name())).build());
             }
         }
         // Intraprocedural invariant discharge: seed from the input
@@ -376,9 +394,9 @@ public final class SpecChecker {
             if (clash == null) {
                 continue;
             }
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1613, "check.union.samename")
-                            .at(b.pos()).args(clash[1].name(), clash[0].module(), clash[1].module())
-                            .hint("check.union.samename.hint").build());
+            throw CompileException.of(Diagnostic
+                            .at(b.pos())
+                            .hint(new TypeMessage.AMemberIsNamedByItsWrittenName()).say(new TypeMessage.OneNameForTwoMembers(clash[1].name(), clash[0].module(), clash[1].module())).build());
         }
     }
 
@@ -397,9 +415,9 @@ public final class SpecChecker {
             if (carrying == null) {
                 continue;
             }
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1010, "check.member.discriminatorfield")
-                            .at(b.pos()).args(carrying.name(), DISCRIMINATOR, b.name())
-                            .hint("check.case.discriminatorfield.hint", DISCRIMINATOR).build());
+            throw CompileException.of(Diagnostic
+                            .at(b.pos())
+                            .hint(new DataMessage.TheTagAndTheFieldWantOneKey(DISCRIMINATOR)).say(new DataMessage.AMemberDeclaresTheDiscriminatorField(carrying.name(), DISCRIMINATOR, b.name())).build());
         }
     }
 
@@ -428,8 +446,8 @@ public final class SpecChecker {
             boolean buildable = symbols.isForeign(built)
                     ? symbols.isExposed(built) : exposeAll || exposed.contains(built.name());
             if (!buildable) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1305, "e1305.msg").at(spec.pos())
-                                .args(spec.name(), c).hint("e1305.hint").build());
+                throw CompileException.of(Diagnostic.at(spec.pos())
+                                .hint(new DeclarationMessage.ExposeItOrMakeItAUnitData(c)).say(new DeclarationMessage.AnInjectedBehaviorConstructsWhatIsKept(spec.name(), c)).build());
             }
         }
     }
@@ -467,8 +485,12 @@ public final class SpecChecker {
             // Read through the includes: a spread flattens another data's fields into this one, so
             // they are this data's fields on the generated class and carry their types with them.
             for (Map.Entry<String, Type> f : TypeOps.fieldTypes(data, symbols).entrySet()) {
-                refuseHidden(f.getValue(), "check.surface.field", data.name(), f.getKey(),
-                        "check.surface.hint", data.pos(), symbols, exposeAll, exposed);
+                refuseHidden(f.getValue(),
+                        hidden -> Diagnostic.say(new ModuleMessage.AnExposedFieldRestsOnWhatIsKept(data.name(),
+                                f.getKey(), hidden))
+                                .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                data.name())),
+                        data.pos(), symbols, exposeAll, exposed);
             }
         }
         // A published definition may not rest on a type the module keeps to itself: a reader would
@@ -489,16 +511,24 @@ public final class SpecChecker {
                 continue;
             }
             for (Ast.FnParam p : fn.params()) {
-                refuseHidden(TypeOps.resolveParamType(p.type(), symbols), "check.surface.param",
-                        fn.name(), p.name(), "check.surface.hint", fn.pos(), symbols, exposeAll,
-                        exposed);
+                refuseHidden(TypeOps.resolveParamType(p.type(), symbols),
+                        hidden -> Diagnostic
+                                .say(new ModuleMessage.AnExposedArgumentRestsOnWhatIsKept(fn.name(),
+                                        p.name(), hidden))
+                                .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                        fn.name())),
+                        fn.pos(), symbols, exposeAll, exposed);
             }
             // A definition whose check did not settle a type has none to ask about: it failed its own
             // check, which is reported, or it returns a function, which does not cross into another
             // module as a value (ADR-0004).
             Type stands = definitionTypes.get(fn.name());
             if (stands != null) {
-                refuseHidden(stands, "check.surface.value", fn.name(), null, "check.surface.hint",
+                refuseHidden(stands,
+                        hidden -> Diagnostic.say(new ModuleMessage.AnExposedValueRestsOnWhatIsKept(fn.name(),
+                                hidden))
+                                .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                fn.name())),
                         fn.pos(), symbols, exposeAll, exposed);
             }
         }
@@ -511,19 +541,44 @@ public final class SpecChecker {
             if (sig == null || (!injected && !exposed.contains(b.name()))) {
                 continue;
             }
-            String inKey = injected ? "check.inject.hiddeninput" : "check.surface.input";
-            String outKey = injected ? "check.inject.hiddenoutput" : "check.surface.output";
-            String hint = injected ? "check.inject.hidden.hint" : "check.surface.hint";
+            // An injected behavior and an exposed one are refused for different reasons and told
+            // different things to do, so each says its refusal and its repair together rather than
+            // the two being chosen apart and paired up here.
             for (Type in : sig.inputTypes()) {
-                refuseHidden(in, inKey, b.name(), null, hint, b.pos(), symbols, exposeAll, exposed);
+                refuseHidden(in,
+                        hidden -> injected
+                                ? Diagnostic
+                                        .say(new InjectionMessage.AnInjectedInputRestsOnWhatIsKept(
+                                                b.name(), hidden))
+                                        .hint(new InjectionMessage
+                                                .TheBaseClassIsPublicWhateverExposingSays(hidden))
+                                : Diagnostic
+                                        .say(new ModuleMessage.AnExposedInputRestsOnWhatIsKept(
+                                                b.name(), hidden))
+                                        .hint(new ModuleMessage
+                                                .WhatReachesOutMayNotRestOnWhatIsKept(hidden,
+                                                        b.name())),
+                        b.pos(), symbols, exposeAll, exposed);
             }
-            refuseHidden(sig.outputType(), outKey, b.name(), null, hint, b.pos(),
-                    symbols, exposeAll, exposed);
+            refuseHidden(sig.outputType(),
+                    hidden -> injected
+                            ? Diagnostic
+                                    .say(new InjectionMessage.AnInjectedOutputRestsOnWhatIsKept(
+                                            b.name(), hidden))
+                                    .hint(new InjectionMessage
+                                            .TheBaseClassIsPublicWhateverExposingSays(hidden))
+                            : Diagnostic
+                                    .say(new ModuleMessage.AnExposedOutputRestsOnWhatIsKept(
+                                            b.name(), hidden))
+                                    .hint(new ModuleMessage.WhatReachesOutMayNotRestOnWhatIsKept(
+                                            hidden, b.name())),
+                    b.pos(), symbols, exposeAll, exposed);
         }
     }
 
-    private static void refuseHidden(Type written, String key, String owner, String field,
-                                     String hint, SourcePos pos, Symbols symbols,
+    private static void refuseHidden(Type written,
+                                     java.util.function.Function<String, Diagnostic.Builder> saying,
+                                     SourcePos pos, Symbols symbols,
                                      boolean exposeAll, Set<String> exposed) {
         if (written == null) {
             return;   // an unresolved reference has its own error
@@ -542,9 +597,7 @@ public final class SpecChecker {
             return;
         }
         String name = hidden[0].name();
-        Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1611, key).at(pos);
-        d = field == null ? d.args(owner, name) : d.args(owner, field, name);
-        throw CompileException.of(d.hint(hint, name, owner).build());
+        throw CompileException.of(saying.apply(name).at(pos).build());
     }
 
     /** Whether a reader outside the declaring module can write {@code name}. */
@@ -584,8 +637,8 @@ public final class SpecChecker {
                 String stage = stages.get(i).bare();
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1702, "check.pipe.multiinput")
-                                    .at(pipe.pos()).args(stage, n, pipe.name()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stage, String.valueOf(n), pipe.name())).build());
                 }
             }
         }

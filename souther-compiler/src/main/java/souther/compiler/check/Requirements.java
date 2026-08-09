@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -114,8 +115,8 @@ public final class Requirements {
         }
         if (!inProgress.add(name)) {
             String path = String.join(" >-> ", inProgress) + " >-> " + name;
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1608, "e1608.msg").at(bd.pos())
-                            .args(name, path).hint("e1608.hint").build());
+            throw CompileException.of(Diagnostic.at(bd.pos())
+                            .hint(new DeclarationMessage.ABehaviorDoesNotRecurse()).say(new DeclarationMessage.ABehaviorReachesItself(name, path)).build());
         }
         Map<String, List<String>> acc = new LinkedHashMap<>();
         switch (bd) {

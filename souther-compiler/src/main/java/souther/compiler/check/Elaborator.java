@@ -4,6 +4,12 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.diag.msg.ModuleMessage;
+import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
@@ -81,11 +87,12 @@ public final class Elaborator {
         }
         // which collection asked is part of the answer: a Set asks whether two elements are equal and
         // a Map whether two keys are, and the report says which of the two it was
-        String key = bad instanceof TypeOps.UncomparableIn.MapKey
-                ? "check.map.key.function" : "check.set.function";
-        String what = bad instanceof TypeOps.UncomparableIn.MapKey ? "key" : "element";
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1315, key)
-                        .at(c.pos()).args(Type.show(bad.type())).build());
+        throw CompileException.of(Diagnostic.at(c.pos())
+                .say(bad instanceof TypeOps.UncomparableIn.MapKey
+                        ? new TypeMessage.AMapKeyIsComparedAndAFunctionIsNot(Type.show(bad.type()))
+                        : new TypeMessage.ASetElementIsComparedAndAFunctionIsNot(
+                                Type.show(bad.type())))
+                .build());
     }
 
     private static Core elaborating(Ast.Expr e, Scope env, CheckContext ctx,
@@ -120,12 +127,12 @@ public final class Elaborator {
                 Core tuple = elaborate(tg.tuple(), env, ctx);
                 Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1320, "check.tuple.pattern")
-                                    .at(tg.pos()).args(Type.show(tt)).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(tg.pos()).say(new TypeMessage.ATuplePatternNeedsATuple(Type.show(tt))).build());
                 }
                 if (to.elements().size() != tg.arity()) {   // exact arity, in either direction (Elm)
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1320, "check.tuple.arity")
-                                    .at(tg.pos()).args(tg.arity(), to.elements().size()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(tg.pos()).say(new TypeMessage.ThePatternBindsAnotherNumberOfNames(String.valueOf(tg.arity()), String.valueOf(to.elements().size()))).build());
                 }
                 yield new Core.TupleGet(tuple, tg.index(), tg.arity(),
                         to.elements().get(tg.index()), tg.pos());
@@ -134,10 +141,10 @@ public final class Elaborator {
                 Core operand = elaborate(neg.operand(), env, ctx);
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1319, "check.neg.msg")
+                    throw CompileException.of(Diagnostic
                                     .at(new Region(neg.pos(), region(neg.operand()).end()))
-                                    .args(Type.show(t))
-                                    .build());
+                                    
+                                    .say(new TypeMessage.UnaryMinusNeedsANumber(Type.show(t))).build());
                 }
                 yield new Core.Neg(operand, t, neg.pos());
             }
@@ -188,8 +195,8 @@ public final class Elaborator {
             // so nothing has to be read off its applications
             case Ast.Block block when expected instanceof Type.FnOf want ->
                     elaborateFunctionValue(block, want.params(), env, ctx);
-            case Ast.Block block -> throw CompileException.of(Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
-                            .at(block.pos()).build());
+            case Ast.Block block -> throw CompileException.of(Diagnostic
+                            .at(block.pos()).say(new NameMessage.ABlockIsNotAValue()).build());
             // What the name is was answered when the module's names were resolved; what is left here
             // is its type. A binding is looked up, a unit data is its own value (spec 8.4), and
             // anything else is not a value — reported below under the name that was written.
@@ -237,9 +244,9 @@ public final class Elaborator {
                     throw new Unanswerable(nd.pos());
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1018, "check.construct.no")
-                                    .at(built.name().region()).args(built.name().quoted())
-                                    .build());
+                    throw CompileException.of(Diagnostic
+                                    .at(built.name().region())
+                                    .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
                 // the construction when it was inlined, so Core reads the binding it copies from
@@ -274,32 +281,31 @@ public final class Elaborator {
                 if (joined != null) {
                     yield new Core.If(cond, then, els, joined, iff.pos());
                 }
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
+                throw CompileException.of(Diagnostic
                                 .at(iff.pos(), 2)
-                                .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())),
-                                        "check.if.then", Type.show(tt))
-                                .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())),
-                                        "check.if.else", Type.show(et))
-                                .hint("check.if.hint")
-                                .build());
+                                .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())), new TypeMessage.TheThenBranchProduces(Type.show(tt)))
+                                .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())), new TypeMessage.TheElseBranchProduces(Type.show(et)))
+                                .hint(new TypeMessage.MakeBothBranchesProduceOneType())
+                                .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
             }
             case Ast.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
                 if (!(built instanceof Core.NewData construct)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2012, "check.attempt.notconstruction")
-                                    .at(region(ic.construct()))
-                                    .hint("check.attempt.notconstruction.hint")
-                                    .build());
+                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                            .say(new AttemptMessage.ThisIsNotAConstruction())
+                            .hint(new AttemptMessage.WriteTheConstructionWhoseInvariantDecides())
+                            .build());
                 }
                 // What decides the branch is the invariant, so a type with none has no failing side
                 // and the else value could never be reached. Reported rather than compiled into a
                 // branch that is not one — the same call a unit data's forbidden invariant makes.
                 if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2013, "check.attempt.noinvariant")
-                                    .at(region(ic.construct()))
-                                    .args(construct.typeName().name())
-                                    .hint("check.attempt.noinvariant.hint")
-                                    .build());
+                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                            .say(new AttemptMessage.TheTypeDeclaresNoInvariant(
+                                    construct.typeName().name()))
+                            .hint(new AttemptMessage.ConstructItDirectlyOrGiveItAnInvariant(
+                                    construct.typeName().name()))
+                            .build());
                 }
                 checkArmsAnswerClauses(ic, construct.typeName(), ctx.symbols());
                 // The binder names the built value, so the success branch reads it at the data's own
@@ -315,14 +321,12 @@ public final class Elaborator {
                     arms.add(new Core.ElseArm(arm.clause(), body));
                     Type next = TypeOps.join(joined, body.type());
                     if (next == null) {
-                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1208, "check.if.msg")
+                        throw CompileException.of(Diagnostic
                                         .at(ic.pos(), 2)
-                                        .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
-                                                "check.if.then", Type.show(then.type()))
-                                        .secondary(Region.ofWidth(arm.body().pos(), width(arm.body())),
-                                                "check.if.else", Type.show(body.type()))
-                                        .hint("check.if.hint")
-                                        .build());
+                                        .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())), new TypeMessage.TheThenBranchProduces(Type.show(then.type())))
+                                        .secondary(Region.ofWidth(arm.body().pos(), width(arm.body())), new TypeMessage.TheElseBranchProduces(Type.show(body.type())))
+                                        .hint(new TypeMessage.MakeBothBranchesProduceOneType())
+                                        .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
                     }
                     joined = next;
                 }
@@ -400,20 +404,20 @@ public final class Elaborator {
                     without.add(c.name());
                 }
             }
-            Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1321, "check.access.sum")
-                    .at(fa.name().region()).args(fa.field(), Type.show(target));
+            Diagnostic.Builder d = Diagnostic
+                    .at(fa.name().region());
             if (!without.isEmpty()) {
-                d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
+                d = d.hint(new ModuleMessage.TheseCasesHaveNoSuchField(fa.field(), String.join(", ", without)));
             } else if (target instanceof Type.Ref) {
                 // Every case has the field and the read still fails, so what is missing is the shared
                 // spread. Without saying so the author reads "a sum has no fields" while looking at
                 // the field in every case.
-                d = d.hint("check.access.sum.unshared", fa.field());
+                d = d.hint(new ModuleMessage.EveryCaseDeclaresItsOwn(fa.field()));
             }
-            throw CompileException.of(d.build());
+            throw CompileException.of(d.say(new ModuleMessage.CannotReadAFieldOnASum(fa.field(), Type.show(target))).build());
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1321, "check.access")
-                        .at(fa.name().region()).args(fa.field()).build());
+        throw CompileException.of(Diagnostic
+                        .at(fa.name().region()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
     }
 
     /**
@@ -472,7 +476,8 @@ public final class Elaborator {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
         }
         throw CompileException.of(Diagnostic.at(stepArg.pos())
-                .say(new HelperMessage.TheFunctionTakesAnotherType(fnName, Type.show(narrowGot),
+                .say(new HelperMessage.TheStepAnswersAnotherTypeThanTheAccumulator(fnName,
+                        Type.show(narrowGot),
                         Type.show(TypeOps.substitute(declaredStep.result(), bind))))
                 .build());
     }
@@ -504,7 +509,7 @@ public final class Elaborator {
                 }
                 return value;
             }
-            throw CompileException.of(Diagnostic.at(arg.pos()).say(new HelperMessage.ThisExpectsABlock(fnName)).build());
+            throw CompileException.of(Diagnostic.say(new HelperMessage.ThisExpectsABlock(fnName)).at(arg.pos()).build());
         }
         if (block.params().size() != paramTypes.size()) {
             throw CompileException.of(Diagnostic.at(block.pos())
@@ -552,18 +557,18 @@ public final class Elaborator {
         String opened = li.opens().written();
         TypeName layer = li.opens().denotes();
         if (TypeOps.newtypeInner(layer, symbols) == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.open.notnewtype")
-                            .at(li.pos()).args(opened)
-                            .hint("check.open.notnewtype.hint").build());
+            throw CompileException.of(Diagnostic
+                            .at(li.pos())
+                            .hint(new TypeMessage.ABindingOpensOnlyWhatEveryValueHas()).say(new TypeMessage.NotANewtypeToOpenInABinding(opened)).build());
         }
         // compared as types, not as the text of a name: a type is reachable through the module that
         // declares it, so `probe.a.Tags` and an imported bare `Tags` are the one type
         if (!(valueType instanceof Type.Ref r) || !r.name().equals(layer)) {
             String shown = layer.name();
             String actual = Type.show(valueType);
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1206, "check.open.mismatch")
-                            .at(li.pos()).args(shown, actual)
-                            .diff(actual, shown).build());
+            throw CompileException.of(Diagnostic
+                            .at(li.pos())
+                            .diff(actual, shown).say(new TypeMessage.ThePatternOpensAnotherType(shown, actual)).build());
         }
     }
 
@@ -581,9 +586,9 @@ public final class Elaborator {
         if (TypeOps.assignable(valueType, declared, symbols)) {
             return;
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.let.annotation")
-                        .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
-                        .diff(Type.show(valueType, declared), Type.show(declared, valueType)).build());
+        throw CompileException.of(Diagnostic
+                        .at(li.pos())
+                        .diff(Type.show(valueType, declared), Type.show(declared, valueType)).say(new NameMessage.TheBindingDeclaresAnotherType(li.name(), Type.show(declared), Type.show(valueType))).build());
     }
 
     /**
@@ -1222,8 +1227,8 @@ public final class Elaborator {
 
     static void rejectBuiltinShadow(String name, SourcePos pos) {
         if (BUILTIN_VALUES.contains(name)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1019, "check.builtin.shadow")
-                            .at(pos, name.length()).args(name).build());
+            throw CompileException.of(Diagnostic
+                            .at(pos, name.length()).say(new NameMessage.ABindingMayNotShadowABuiltIn(name)).build());
         }
     }
 
@@ -1265,12 +1270,12 @@ public final class Elaborator {
     static void requireType(Ast.Expr e, Type actual, Type expected,
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.type.mismatch.msg")
+            throw CompileException.of(Diagnostic
                             .at(region(e))
-                            .args(what)
+                            
                             .diff(Type.show(actual, expected), Type.show(expected, actual))
-                            .hint("check.type.mismatch.hint")
-                            .build());
+                            .hint(new TypeMessage.AdjustTheValueOrThePosition())
+                            .say(new TypeMessage.ItDoesNotHaveTheTypeItNeedsHere(what)).build());
         }
     }
 
@@ -1315,14 +1320,14 @@ public final class Elaborator {
             case null, default -> null;
         };
         if (denotes != null) {
-            return CompileException.of(Diagnostic.of(DiagnosticCode.E1024, "check.notavalue")
-                            .at(v.written().region()).args(v.name(), denotes).build());
+            return CompileException.of(Diagnostic
+                            .at(v.written().region()).say(new DeclarationMessage.ItCannotBeHeldAsAValueHere(v.name(), denotes)).build());
         }
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
+        return CompileException.of(Diagnostic
                         .at(v.written().region())
-                        .args(v.name())
+                        
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))
-                        .build());
+                        .say(new NameMessage.NoValueOfThatNameInScope(v.name())).build());
     }
 
     /**
@@ -1338,9 +1343,12 @@ public final class Elaborator {
         if (!some && !name.equals("None")) {
             return;
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1303, some ? "e1303.some" : "e1303.none")
-                        .at(pos, name.length())
-                        .hint(some ? "e1303.some.hint" : "e1303.none.hint").build());
+        throw CompileException.of(Diagnostic.at(pos, name.length())
+                .say(some ? new DeclarationMessage.SomeIsNotACall()
+                        : new DeclarationMessage.NothingHereIsAskingForNone())
+                .hint(some ? new DeclarationMessage.WriteTheValueOnItsOwn()
+                        : new DeclarationMessage.MakeAbsenceACaseOfItsOwnSum())
+                .build());
     }
 
     /**
@@ -1377,36 +1385,33 @@ public final class Elaborator {
             String name = arm.clause().get();
             answered.add(name);
             if (!named.contains(name)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2014, "check.attempt.unknownclause")
-                                .at(arm.pos(), name.length())
-                                .args(name, typeName.name())
-                                .hint("check.attempt.unknownclause.hint",
-                                        named.isEmpty() ? "-" : String.join(", ", named))
-                                .build());
+                throw CompileException.of(Diagnostic.at(arm.pos(), name.length())
+                        .say(new AttemptMessage.NoClauseOfThatName(name, typeName.name()))
+                        .hint(new AttemptMessage.TheClausesThatCanBeAnswered(
+                                named.isEmpty() ? "-" : String.join(", ", named)))
+                        .build());
             }
         }
         List<String> missing = new ArrayList<>(named);
         missing.removeAll(answered);
         if (!missing.isEmpty()) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2015, "check.attempt.clauseunanswered")
-                            .at(ic.pos(), 2)
-                            .args(String.join(", ", missing), typeName.name())
-                            .hint("check.attempt.clauseunanswered.hint")
-                            .build());
+            throw CompileException.of(Diagnostic.at(ic.pos(), 2)
+                    .say(new AttemptMessage.TheseClausesHaveNoArm(String.join(", ", missing),
+                            typeName.name()))
+                    .hint(new AttemptMessage.AnswerEachOfThemOrGiveTheElseOneValue())
+                    .build());
         }
         if (unnamed && !wildcard) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2016, "check.attempt.unnamedunanswered")
-                            .at(ic.pos(), 2)
-                            .args(typeName.name())
-                            .hint("check.attempt.unnamedunanswered.hint")
-                            .build());
+            throw CompileException.of(Diagnostic.at(ic.pos(), 2)
+                    .say(new AttemptMessage.UnnamedClausesAreLeftUnanswered(typeName.name()))
+                    .hint(new AttemptMessage.AddACatchAllArmOrNameThem())
+                    .build());
         }
         if (!unnamed && wildcard) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E2017, "check.attempt.nothingunnamed")
-                            .at(ic.pos(), 2)
-                            .args(typeName.name())
-                            .hint("check.attempt.nothingunnamed.hint")
-                            .build());
+            throw CompileException.of(Diagnostic.at(ic.pos(), 2)
+                    .say(new AttemptMessage.TheCatchAllArmAnswersNothing(typeName.name()))
+                    .hint(new AttemptMessage.DropTheCatchAllArm(typeName.name()))
+                    .build());
         }
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -99,7 +100,7 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
         List<Report> reports = db.ask(new Shapes.Expandable("m.a")).reports();
         assertFalse(reports.isEmpty(), "the question that owns the rule says what is wrong");
         assertTrue(reports.stream().anyMatch(r -> r.diagnostic() != null
-                        && "check.value.cycle".equals(r.diagnostic().messageKey())),
+                        && r.diagnostic().said() instanceof NameMessage.AValueReachesItself),
                 "and says it as a value cycle: " + reports);
     }
 }

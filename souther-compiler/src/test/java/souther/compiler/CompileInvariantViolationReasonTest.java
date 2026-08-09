@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ class CompileInvariantViolationReasonTest {
     private static String reasonOf(String module) {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(module));
         assertEquals("E2010", e.diagnostic().code(), e.getMessage());
-        return e.diagnostic().messageKey();
+        return MessageKeys.of(e.diagnostic().said());
     }
 
     @Test

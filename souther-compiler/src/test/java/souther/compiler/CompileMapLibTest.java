@@ -1,11 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 import souther.compiler.diag.CompileException;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -310,7 +312,7 @@ class CompileMapLibTest {
                     constructs Out
                 let go (r) = Out { m = Map.empty() }
                 """));
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class, e.diagnostic().said());
         assertTrue(e.getMessage().contains("Map.empty"), e.getMessage());
     }
 }

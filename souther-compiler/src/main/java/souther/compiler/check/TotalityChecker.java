@@ -5,6 +5,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
@@ -99,17 +100,12 @@ final class TotalityChecker {
                     + " `fold`, or mark the helper `partial`";
             Ast.Apply at = firstCall.get(name);
             return at == null
-                    ? error(h, name, "check.totality.notstructural", message)
-                    : error(at, name, "check.totality.notstructural", message);
+                    ? error(h, new BehaviorMessage.NotStructurallyRecursive(name))
+                    : error(at, new BehaviorMessage.NotStructurallyRecursive(name));
         }
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, members, "check.totality.sizechange",
-                "recursive helpers " + members + " are mutually recursive but not size-change"
-                        + " terminating: no argument strictly decreases around every recursive cycle."
-                        + " Recurse on a strictly smaller part obtained by `match`, or mark them"
-                        + " `partial` to opt out — each member needs the word, since each reaches the"
-                        + " others");
+        return error(anchor, new BehaviorMessage.NotSizeChangeTerminating(members));
     }
 
     /** The rejection for a group whose size-change closure exceeds {@link #MAX_CLOSURE}: it may or may
@@ -117,9 +113,7 @@ final class TotalityChecker {
     private static CompileException tooComplex(Set<String> group, Map<String, Ast.FnDef> own) {
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, members, "check.totality.toocomplex",
-                "recursion " + members + " is too complex to prove total by size-change analysis;"
-                        + " mark them `partial` to opt out");
+        return error(anchor, new BehaviorMessage.TooComplexToProveTotal(members));
     }
 
     // --- size-change graphs -------------------------------------------------
@@ -468,14 +462,14 @@ final class TotalityChecker {
 
     /** Said at the helper's own name: `let` comes first, and a report anchored at the definition
      *  underlines the keyword rather than what it is about. */
-    private static CompileException error(Ast.FnDef h, String name, String key, String message) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E2001, key)
-                        .at(h.written().region()).args(name).build());
+    private static <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
+            CompileException error(Ast.FnDef h, M said) {
+        return CompileException.of(Diagnostic.at(h.written().region()).say(said).build());
     }
 
-    private static CompileException error(Ast.Apply call, String name, String key, String message) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E2001, key)
-                        .at(call.name().region()).args(name).build());
+    private static <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
+            CompileException error(Ast.Apply call, M said) {
+        return CompileException.of(Diagnostic.at(call.name().region()).say(said).build());
     }
 
     // --- a direct-child visitor mirroring the one in HelperInliner/TypeChecker ---

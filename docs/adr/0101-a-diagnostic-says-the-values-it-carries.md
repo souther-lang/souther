@@ -66,7 +66,13 @@ data.spread-field-collision=Field `{field}` from `...{from}` conflicts with the 
 
 The catalog key is derived from where the record is declared — the area, then the record's name in
 kebab — so it is not a string a site chooses, two records cannot name one key, and a record without
-a key does not compile. The code is read off the record. A site writes:
+a key does not compile. The code is read off the record the same way. Both derivations are functions
+of the message's type and neither is a method on the message: a record component generates an
+accessor, so a method would be one a message could answer for itself. A component named `key` did
+exactly that, and every reader asking which entry to render was handed the key's value instead. A
+component named `reports` would have let a site report whatever code it was passed, past an
+annotation saying otherwise. `Message` declares nothing, so there is nothing for a component to
+stand in front of. A site writes:
 
 ```java
 Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, heldBy))
@@ -75,15 +81,53 @@ Diagnostic.at(inc.name().region()).say(new SpreadFieldCollision(field, from, hel
 `Diagnostic.of(DiagnosticCode, String)`, `Builder#args(Object...)` and the `legacyBody` parameter
 are removed. `getMessage()` renders the same record in English, so a message exists once.
 
-The build holds every message to six rules, over every shipped locale:
+A hint and a secondary label are messages too — they render, and they carry values of their own —
+but they are not what a diagnostic is about. That is a second role, and the roles are types: a
+`Reported` is the subject and names a rule, a `Supporting` is what is said beside one and names
+none. `say` takes a `Message & Reported`, `hint` and `secondary` take a `Message & Supporting`, and
+every message carries one role and never both. Being a `Reported` and being usable as one are then
+the same thing, which is the property rule 7 rests on: the code on a hint would be a number nothing
+reads, and counted, a rule whose subjects had all moved to another number would go on looking
+reported by the repair written under it.
 
-1. every message is a record and names the rule it reports;
+The roles sit outside the `Message` hierarchy, and a message is written as both — `record X(...)
+implements DataMessage, Reported`. Admitting a role into the hierarchy as a `non-sealed` branch is a
+door out of the sealing: anything at all could implement the role and be a message by doing so, past
+every rule the build holds the declared ones to. What may be a message stays what `Message` permits,
+and what a message is for is said beside it.
+
+A role that is not a supertype cannot be a field or a parameter type on its own, and the two places
+that carried a message for someone else to build with — a syntax error, and a rule of arithmetic —
+say so differently now. `CstError` holds its message as a type variable and is read as
+`CstError<?>`. A `Refusal` hands back the diagnostic it has already said itself, rather than a
+subject and a repair for the caller to pair up: the rule knows which of its sentences is which, and
+the caller has no type it could keep them apart in.
+
+The build holds every message to seven rules, over every shipped locale:
+
+1. every message is a record, a `Reported` one names the rule it reports, and one that is not names
+   no rule;
 2. every record's derived key is in the catalog;
 3. **every component of a record appears in its own text as `{name}`**;
 4. every `{name}` in a text is a component of that record, and a brace holding anything else is
    refused rather than shown;
 5. no catalog key is unreferenced by any record;
-6. every code has at least one record.
+6. every declared record is built by some site;
+7. every code is reported by a record that rule 6 found a site for.
+
+Rules 6 and 7 are one property in two halves, and the second is worth nothing without the first.
+Read off the records that are *declared*, rule 7 says only that every code has a declaration
+carrying it — which stays true when the sites that reported a rule move to another number and the
+record they used is left behind. Read off the records some site *builds*, it says what it is meant
+to: nothing sends a reader to that chapter any more. A declared message nothing builds is also a
+sentence shipped in every catalog that no compile can produce, which is rule 6 on its own.
+
+What makes "built" mean "built as the subject" is the roles being types, not a scan of the source.
+Every message renders, so reading the source for what reaches `say` finds a quarter of the subjects
+— the rest arrive through a helper that takes the message and positions it — and classifying the
+439 by hand put thirteen hints on the wrong side. javac does it exactly, and it is what the split
+was checked with: declare each message either way, and every mistake is a call that does not
+compile.
 
 Rule 1 is why the messages are records at all rather than a convention: a leaf of the hierarchy that
 is not one carries no components, so every rule under it is silent about it. Rule 4 reads the entry
@@ -111,7 +155,9 @@ so a rule is an error or a warning by its identity and not by the site that rais
 `--format json` gains a `values` object beside the rendered `message`, keyed by component name. A
 tool that wants the clause reads `clause`; before this it would have had to parse English. Each value
 is written as the text it renders as, so what a component's Java type is stays a fact about the
-compiler rather than part of that interface.
+compiler rather than part of that interface. The message, each hint and each secondary label all
+carry one: a diagnostic points at more than one place and says something about each, and writing it
+for one of the three leaves a reader of this interface parsing a sentence for the others.
 
 What tells two diagnostics apart carries the message too. The store keeps one report per identity,
 and a message holds its values as components rather than in the old array, so an identity that read
@@ -140,18 +186,38 @@ already written in the language the sites are written in.
 
 ### Migration
 
-Three hundred and ten declarations and 257 sites have to move, and the old constructors go when the
-last of them does — until then `of(DiagnosticCode, String)` and `args(Object...)` stand beside the
-new form and the rules bind only what has moved. Rule 6 cannot be turned on before the last area.
+Three hundred and ten declarations and 257 sites moved, and `of(DiagnosticCode, String)`,
+`args(Object...)`, the keyed `hint`, `secondary` and `secondaryIn`, and the `labelKey`/`labelArgs`
+pair that carried a secondary label are gone with them. A diagnostic now holds one thing that says
+what it is about, and there is no second way to build one.
 
 A migration this wide is not reviewable as a Java diff, so what is reviewed is the rendered output:
 every diagnostic the test corpus emits is captured before a change, in both locales and both
-formats, and has to come back byte-identical except where the wording was deliberately fixed.
+formats, and has to come back byte-identical except where the wording was deliberately fixed. Over
+2,197 compilations that is 26,912 rendered lines, and they came back unchanged.
 
-The areas move by rule rather than by file — an area is what a key's first segment names, and one
-file raises diagnostics of several. The parse area goes last: two of its sites take the code and the
-key as arguments and one reads both off a parse exception, so what they say is chosen while the
-compiler runs rather than where it is written.
+The areas moved by rule rather than by file — an area is what a key's first segment names, and one
+file raises diagnostics of several. The parse area went last, because what it says is chosen while
+the parser runs rather than written at a site. Three things had to be settled there.
+
+`expect(kind, rule)` took the code as an argument: which part of the language is being read decides
+which rule a missing token breaks, and 89 sites passed one of four codes. That parameter is now the
+reading itself — a declaration, an expression, a pattern, an example — and the message follows from
+it. The four messages say one sentence under four codes, which is the shape the model asks for: the
+wording is the same and the chapter the reader is sent to is not.
+
+`parse.expr` was raised with three codes for four mistakes, and said "I expected an expression here."
+for all of them — including the one about a pattern. It is four messages now, each saying what was
+wanted where it was wanted.
+
+Two entries could not say what they carried. `parse.behavior.colon` wrote `behavior {0} :` and its
+one site passed no arguments, so a reader was shown the placeholder; the sentence no longer names
+the behavior. `parse.option.positional` was raised for two different mistakes and could state only
+the first, so the second was invisible; it is two entries.
+
+What stays keyed is not a diagnostic. `run.*` is what the `run` subcommand answers a shell with,
+and `tok.*`, `kind.*` and `diag.*` are phrases written into the sentences above — a token category
+is localized where the sentence is rendered, because the parser that names it has no language.
 
 ### Once it has moved
 
@@ -165,8 +231,12 @@ than separately.
 A message whose wording turns on a value becomes two records and two catalog entries. The catalog
 grows; the sentences become readable in the source.
 
-Rule 5 will find catalog keys no record names. Each is either a message that stopped being raised —
-delete — or one whose site was never migrated — declare. The count is not known until the rules run.
+Rule 7 is held from the codes' side, and it is what says a rule stopped being reported: a code
+whose sites moved to another number leaves nothing that sends a reader to its chapter, and the
+number alone does not say so.
+
+Rule 5 found catalog keys no record names. Each was either a message that had stopped being raised
+or one whose site was never migrated.
 
 ## References
 

@@ -1,11 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -203,6 +205,6 @@ class CompileClosureTest {
                 let maker (n: Int) = (x) -> x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.expects", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(DeclarationMessage.ItExpectsAnotherType.class, e.diagnostic().said(), e.getMessage());
     }
 }

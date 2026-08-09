@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -132,7 +134,7 @@ class CompileRecordShapeTest {
                 data Odd = { toString: String }
                 """));
 
-        assertEquals("check.field.objectname", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(DataMessage.AFieldTakesAMethodOfObject.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test

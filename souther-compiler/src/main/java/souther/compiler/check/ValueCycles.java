@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.ValueName;
 
@@ -94,8 +95,8 @@ public final class ValueCycles {
             boolean declaredAFunction = e.getValue().declaredReturn() != null
                     && e.getValue().declaredReturn().asFn() != null;
             if (!declaredAFunction && e.getValue().writtenBody() instanceof Ast.Block block) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1809, "check.block.notvalue")
-                                .at(block.pos()).build());
+                throw CompileException.of(Diagnostic
+                                .at(block.pos()).say(new NameMessage.ABlockIsNotAValue()).build());
             }
             if (!reachesItself.contains(e.getKey())) {
                 continue;
@@ -104,9 +105,9 @@ public final class ValueCycles {
             if (pathBackTo(e.getKey(), e.getKey(), edges, new LinkedHashSet<>(), path)) {
                 path.add(0, e.getKey());
                 String written = String.join(" -> ", path);
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1022, "check.value.cycle")
+                throw CompileException.of(Diagnostic
                                 .at(e.getValue().written().region())
-                                .args(e.getKey(), written).build());
+                                .say(new NameMessage.AValueReachesItself(e.getKey(), written)).build());
             }
         }
     }

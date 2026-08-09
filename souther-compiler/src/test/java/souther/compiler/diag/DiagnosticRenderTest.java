@@ -1,6 +1,7 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
 
@@ -37,12 +38,10 @@ class DiagnosticRenderTest {
                 + "\"heldBy\":\"...Issued\"}"), out);
     }
 
-    /** A diagnostic not written as a message carries no values object rather than an empty one. */
+    /** A wrapped text carries no values object rather than an empty one: it is not a message. */
     @Test
     void jsonCarriesNoValuesWhereThereIsNoMessage() {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
-                .at(new SourcePos(2, 13), 4)
-                .build();
+        Diagnostic d = Diagnostic.literal(new SourcePos(2, 13), "the compiler was handed this");
         assertFalse(new JsonRenderer().render(d, SRC, Locale.ENGLISH).contains("\"values\""));
     }
 
@@ -61,7 +60,7 @@ class DiagnosticRenderTest {
 
     @Test
     void humanRendererQuotesTheLineAndUnderlinesTheToken() {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
+        Diagnostic d = Diagnostic.say(new DeclarationMessage.NullIsNotPartOfTheLanguage())
                 .at(new SourcePos(2, 13), 4)
                 .build();
         String out = new HumanRenderer(false).render(d, SRC, Locale.ENGLISH);
@@ -72,7 +71,7 @@ class DiagnosticRenderTest {
 
     @Test
     void titleFollowsTheLocale() {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
+        Diagnostic d = Diagnostic.say(new DeclarationMessage.NullIsNotPartOfTheLanguage())
                 .at(new SourcePos(2, 13)).build();
         String en = new HumanRenderer(false).render(d, SRC, Locale.ENGLISH);
         String ja = new HumanRenderer(false).render(d, SRC, Locale.JAPANESE);
@@ -95,7 +94,7 @@ class DiagnosticRenderTest {
 
     @Test
     void jsonRendererCarriesCodeAndRegion() {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1301, "e1301.msg")
+        Diagnostic d = Diagnostic.say(new DeclarationMessage.NullIsNotPartOfTheLanguage())
                 .at(new SourcePos(2, 13), 4)
                 .build();
         String json = new JsonRenderer().render(d, SRC, Locale.JAPANESE);

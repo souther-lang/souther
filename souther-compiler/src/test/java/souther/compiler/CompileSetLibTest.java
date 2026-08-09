@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.Set;
 
 import souther.compiler.diag.CompileException;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -124,6 +126,6 @@ class CompileSetLibTest {
                     constructs Out
                 let go (r) = Out { s = Set.empty() }
                 """));
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class, e.diagnostic().said());
     }
 }

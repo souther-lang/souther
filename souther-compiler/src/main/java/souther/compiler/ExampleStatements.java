@@ -7,6 +7,7 @@ import souther.compiler.check.BoundaryOutput;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
@@ -849,8 +850,9 @@ public final class ExampleStatements {
      * missing where one was written (issue #206).
      */
     static Diagnostic unbuildableFake(SourcePos pos, String dependency, String reason) {
-        return Diagnostic.of(DiagnosticCode.E1908, "check.fake.unbuildable")
-                .at(pos).args(dependency, reason).build();
+        return Diagnostic.at(pos)
+                .say(new ExampleMessage.TheFakeCouldNotBeBuilt(dependency, reason))
+                .build();
     }
 
     /**
@@ -862,16 +864,27 @@ public final class ExampleStatements {
      * written out rather than passed as a number, which a locale would group into a budget nobody set.
      */
     private static Diagnostic unreadableFake(Ast.Fake fk, Unread why) {
-        Diagnostic.Builder said = Diagnostic.of(DiagnosticCode.E1921, why.isDepth() ? "check.fake.unchecked.deep"
-                        : why.isSteps() ? "check.fake.unchecked.steps"
-                        : why.isStack() ? "check.fake.unchecked.stack"
-                        : "check.fake.unchecked.unanswered")
-                .at(fk.pos(), fk.target().length())
-                .args(fk.target(), why.limitShown());
-        return (why.isDepth() ? said.hint("check.fake.unchecked.deep.hint", fk.target())
-                : why.isSteps() ? said.hint("check.fake.unchecked.steps.hint", fk.target())
-                : why.isStack() ? said.hint("check.fake.unchecked.stack.hint", fk.target())
-                : said.hint("check.fake.unchecked.unanswered.hint", fk.target())).build();
+        Diagnostic.Builder said = Diagnostic.at(fk.pos(), fk.target().length())
+                .say(why.isDepth()
+                        ? new ExampleMessage.TheTableReachedItsDepthLimit(fk.target(),
+                                why.limitShown())
+                        : why.isSteps()
+                                ? new ExampleMessage.TheTableSpentItsSteps(fk.target(),
+                                        why.limitShown())
+                                : why.isStack()
+                                        ? new ExampleMessage.TheTableRanOutOfStack(fk.target(),
+                                                why.limitShown())
+                                        : new ExampleMessage.TheTableDidNotAnswer(fk.target(),
+                                                why.limitShown()));
+        return (why.isDepth() ? said.hint(new ExampleMessage.TheTableRecursesTooDeeply(fk.target()))
+                : why.isSteps()
+                        ? said.hint(new ExampleMessage.TheTableGoesRoundTooManyTimes(fk.target()))
+                        : why.isStack()
+                                ? said.hint(new ExampleMessage.TheStackGotThereFirst(fk.target()))
+                                : said.hint(
+                                        new ExampleMessage
+                                                .TheTableNotAnsweringIsNotTheTableBeingWrong(
+                                                        fk.target()))).build();
     }
 
     // --- comparison ---------------------------------------------------------------------------

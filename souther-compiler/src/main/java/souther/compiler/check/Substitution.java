@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
@@ -94,9 +96,9 @@ final class Substitution {
             return;
         }
         Type stated = settle(declared);
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.expects")
-                        .at(pos).args(what, Type.show(stated, actual), Type.show(actual, stated))
-                        .diff(Type.show(actual, stated), Type.show(stated, actual)).build());
+        throw CompileException.of(Diagnostic
+                        .at(pos)
+                        .diff(Type.show(actual, stated), Type.show(stated, actual)).say(new DeclarationMessage.ItExpectsAnotherType(what, Type.show(stated, actual), Type.show(actual, stated))).build());
     }
 
     /**
@@ -291,9 +293,9 @@ final class Substitution {
         if (TypeOps.assignable(at, stands, symbols) || TypeOps.assignable(stands, at, symbols)) {
             return;
         }
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.generic.arg")
-                        .at(pos).args(what, Type.show(held, at), Type.show(at, held))
-                        .diff(Type.show(at, held), Type.show(held, at)).build());
+        throw CompileException.of(Diagnostic
+                        .at(pos)
+                        .diff(Type.show(at, held), Type.show(held, at)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(held, at), Type.show(at, held))).build());
     }
 
     /** Every variable still open read as the bottom, at every depth. */

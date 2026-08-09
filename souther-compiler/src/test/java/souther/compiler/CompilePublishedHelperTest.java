@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ParseMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 
@@ -9,6 +10,7 @@ import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -621,6 +623,7 @@ class CompilePublishedHelperTest {
                         let sized (xs: List<'a>) = count(xs)
                         let go (n) = N(sized([ 1 ]))
                         """), path));
-        assertEquals("parse.typevar.core", written.diagnostic().messageKey(), written.getMessage());
+        assertInstanceOf(ParseMessage.ATypeVariableIsOnlyAllowedInTheCore.class,
+                written.diagnostic().said(), written.getMessage());
     }
 }

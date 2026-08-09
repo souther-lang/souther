@@ -4,7 +4,9 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.HelperMessage;
+import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -332,8 +334,8 @@ public final class HelperTyping {
         for (String name : inliner.recursiveHelpers()) {
             Ast.FnDef h = inliner.helper(name);
             if (h.declaredReturn() == null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1813, "check.rechelper.return")
-                                .at(h.pos()).args(name).build());
+                throw CompileException.of(Diagnostic
+                                .at(h.pos()).say(new NameMessage.ARecursiveHelperMustDeclareItsReturnType(name)).build());
             }
             List<Type> params = new ArrayList<>();
             for (Ast.FnParam p : h.params()) {
@@ -371,8 +373,9 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1);
         String rendered = "invariant -> " + PartialReachability.render(path);
         Ast.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1106, "check.invariant.partial")
-                        .at(at == null ? null : at.name().region()).args(data, reached, rendered).build());
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().region())
+                .say(new InvariantMessage.TheInvariantReachesAPartialHelper(data, reached, rendered))
+                .build());
     }
 
     /** The first application of {@code name} in {@code e}, for the report to underline, or null where
@@ -409,15 +412,16 @@ public final class HelperTyping {
             String constructed = nd.typeName().written();
             String named = clause.name().orElse(null);
             Diagnostic.Builder b = Diagnostic
-                    .of(DiagnosticCode.E1105,
-                            named == null ? "check.invariant.construct"
-                                    : "check.invariant.construct.named")
                     .at(nd.pos(), constructed.length())
-                    .args(data, constructed, named);
+                    .say(named == null
+                            ? new InvariantMessage.TheInvariantConstructsAData(data, constructed)
+                            : new InvariantMessage.TheNamedClauseConstructsAData(data, constructed,
+                                    named));
             if (nd.pos().line() != clause.pos().line()) {
                 b.secondary(Region.point(clause.pos()),
-                        named == null ? "check.invariant.construct.here.unnamed"
-                                : "check.invariant.construct.here", named);
+                        named == null
+                                ? new InvariantMessage.ThisClauseReachesThatConstruction()
+                                : new InvariantMessage.TheClauseReachesThatConstruction(named));
             }
             throw CompileException.of(b.build());
         }
@@ -435,10 +439,9 @@ public final class HelperTyping {
      */
     static void rejectUnreachableInInvariant(Ast.Expr e, String data, Ast.InvariantClause clause) {
         if (e instanceof Ast.Unreachable u) {
-            String named = clause.name().orElse(null);
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1106, "check.invariant.unreachable")
+            throw CompileException.of(Diagnostic
                             .at(u.pos(), "unreachable".length())
-                            .args(data, named).build());
+                            .say(new InvariantMessage.AnInvariantAnswersOnEveryPath(data)).build());
         }
         TypeChecker.forEachChild(e, c -> rejectUnreachableInInvariant(c, data, clause));
     }
@@ -446,8 +449,8 @@ public final class HelperTyping {
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
         if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1814, "check.rechelper.pure")
-                            .at(call.name().region()).args(helper, call.written()).build());
+            throw CompileException.of(Diagnostic
+                            .at(call.name().region()).say(new NameMessage.ARecursiveHelperIsPure(helper, call.written())).build());
         }
         TypeChecker.forEachChild(e, c -> rejectInjectedCalls(c, helper, injected));
     }

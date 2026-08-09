@@ -1,11 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -73,6 +75,6 @@ class CompileLambdaLetTest {
         // It is refused for what is actually missing: nothing here says what the function takes.
         // Applied in this scope its parameter types would be read off the application; carried out
         // of it, only a written type can say.
-        assertEquals("helper.the-functions-type-cannot-be-read", ex.diagnostic().messageKey(), ex.getMessage());
+        assertInstanceOf(HelperMessage.TheFunctionsTypeCannotBeRead.class, ex.diagnostic().said(), ex.getMessage());
     }
 }

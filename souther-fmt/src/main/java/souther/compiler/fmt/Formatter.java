@@ -6,6 +6,7 @@ import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticCode;
 
@@ -414,7 +415,7 @@ public final class Formatter {
      * it was reached wherever the stack happened to end, which is not a fact about the source.
      */
     private static CompileException tooDeep() {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E2104, "parse.toodeep").build());
+        return CompileException.of(Diagnostic.say(new DeclarationMessage.ItNestsDeeperThanIsRead()).build());
     }
 
     // --- layout ---

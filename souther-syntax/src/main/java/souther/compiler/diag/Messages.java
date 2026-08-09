@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageTemplate;
 import souther.compiler.diag.msg.MessageValues;
@@ -120,9 +121,9 @@ public final class Messages {
      */
     public static String render(Message message, Locale locale) {
         Objects.requireNonNull(locale, NEEDS_A_LANGUAGE);
-        String template = lookup(message.key(), locale);
+        String template = lookup(MessageKeys.of(message), locale);
         if (template == null) {
-            return message.key();
+            return MessageKeys.of(message);
         }
         Map<String, Object> values = MessageValues.of(message);
         StringBuilder out = new StringBuilder(template.length() + 32);
@@ -130,7 +131,7 @@ public final class Messages {
             switch (part) {
                 case MessageTemplate.Part.Text text -> out.append(text.written());
                 case MessageTemplate.Part.Value value ->
-                        out.append(String.valueOf(values.get(value.name())));
+                        out.append(text(values.get(value.name()), locale));
                 // The build refuses these, so what is left here is a catalog that got past it. Show
                 // it as written rather than raising: a compiler reporting an error is the worst
                 // place to raise another one.
@@ -138,6 +139,17 @@ public final class Messages {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * One value of a message as text.
+     *
+     * <p>A value written in the catalog itself — the kind of element an operation needs, which is a
+     * phrase and not a name — is rendered in the language the message is being asked in, as it was
+     * when the values were an array. Everything else is what it prints as.
+     */
+    public static String text(Object value, Locale locale) {
+        return value instanceof Localizable l ? get(l.key(), locale, l.args()) : String.valueOf(value);
     }
 
     /** Whether the catalog defines {@code key} for {@code locale} (or its English base). */

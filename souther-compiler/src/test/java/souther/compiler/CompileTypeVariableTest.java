@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Compilation;
 
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -126,7 +128,7 @@ class CompileTypeVariableTest {
                 let run (i) = Out { counts = emptyLike(i.names) }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> compileCore(core));
-        assertEquals("check.field.type", e.diagnostic().messageKey(),
+        assertInstanceOf(DataMessage.AFieldExpectsAnotherType.class, e.diagnostic().said(),
                 "the call answers a list of Strings, which the field does not take: " + e.getMessage());
     }
 

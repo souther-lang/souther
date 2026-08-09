@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.InvariantMessage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
@@ -7,6 +8,7 @@ import souther.compiler.diag.CompileException;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -225,7 +227,7 @@ class CompileNamedInvariantClauseTest {
                     invariant same = List.length(value) >= 1
                     invariant same = List.allDistinctBy(x -> x, value)
                 """));
-        assertEquals("check.invariant.duplicate", e.diagnostics().get(0).messageKey());
+        assertInstanceOf(InvariantMessage.TwoClausesShareOneName.class, e.diagnostics().get(0).said());
     }
 
     /**
@@ -240,7 +242,7 @@ class CompileNamedInvariantClauseTest {
                 data Positive = Int
                     invariant _ = value > 0
                 """));
-        assertEquals("check.invariant.underscore", e.diagnostics().get(0).messageKey());
+        assertInstanceOf(InvariantMessage.UnderscoreCannotNameAClause.class, e.diagnostics().get(0).said());
         assertEquals(3, e.diagnostics().get(0).pos().line(), "reported at the clause, not at a use");
     }
 
@@ -317,7 +319,7 @@ class CompileNamedInvariantClauseTest {
                 data Order = { ...Common, lines: Int }
                     invariant sound = lines >= 1
                 """));
-        assertEquals("check.invariant.duplicate", e.diagnostics().get(0).messageKey());
+        assertInstanceOf(InvariantMessage.TwoClausesShareOneName.class, e.diagnostics().get(0).said());
     }
 
     /**

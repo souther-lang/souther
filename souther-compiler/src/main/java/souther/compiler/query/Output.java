@@ -15,6 +15,8 @@ import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.frontend.CstFrontend;
@@ -519,9 +521,13 @@ public final class Output {
                     String shown = check.typeName() + "("
                             + (check.value() instanceof String s ? "\"" + s + "\"" : check.value()) + ")";
                     String clause = failingClause(db, check, ctfe);
-                    reports.add(Report.raised(Diagnostic.of(DiagnosticCode.E2010, clause == null
-                                            ? "check.const.invariant" : "check.const.invariant.clause")
-                                    .at(check.pos()).args(shown, clause).build()));
+                    reports.add(Report.raised(Diagnostic.at(check.pos())
+                                    .say(clause == null
+                                            ? new DataMessage.TheWrittenValueViolatesTheInvariant(
+                                                    shown)
+                                            : new DataMessage.TheWrittenValueViolatesTheClause(
+                                                    shown, clause))
+                                    .build()));
                 }
             }
             return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);
@@ -686,19 +692,25 @@ public final class Output {
             // Which of the three it was travels into the message, because what to do about them
             // differs — and one of them is not about the model at all.
             souther.compiler.ExampleStatements.Unread why = f.why();
-            Diagnostic.Builder said = Diagnostic.of(DiagnosticCode.E1920, why.isDepth() ? "check.example.disagreement.unread.deep"
-                            : why.isSteps() ? "check.example.disagreement.unread.steps"
-                            : why.isStack() ? "check.example.disagreement.unread.stack"
-                            : "check.example.disagreement.unread.unanswered")
-                    .at(f.at().pos(), f.width())
-                    .args(f.target(), why.limitShown());
+            Diagnostic.Builder said = Diagnostic.at(f.at().pos(), f.width())
+                    .say(why.isDepth()
+                            ? new ExampleMessage.NotComparedTheTableReachedItsDepthLimit(
+                                    f.target(), why.limitShown())
+                            : why.isSteps()
+                                    ? new ExampleMessage.NotComparedTheTableSpentItsSteps(
+                                            f.target(), why.limitShown())
+                                    : why.isStack()
+                                            ? new ExampleMessage.NotComparedTheTableRanOutOfStack(
+                                                    f.target(), why.limitShown())
+                                            : new ExampleMessage.NotComparedTheTableDidNotAnswer(
+                                                    f.target(), why.limitShown()));
             return (why.isDepth()
-                    ? said.hint("check.example.disagreement.unread.deep.hint", f.target())
+                    ? said.hint(new ExampleMessage.TheTableComparedRecursesTooDeeply(f.target()))
                     : why.isSteps()
-                    ? said.hint("check.example.disagreement.unread.steps.hint", f.target())
+                    ? said.hint(new ExampleMessage.TheTableComparedGoesRoundTooManyTimes(f.target()))
                     : why.isStack()
-                    ? said.hint("check.example.disagreement.unread.stack.hint", f.target())
-                    : said.hint("check.example.disagreement.unread.unanswered.hint", f.target()))
+                    ? said.hint(new ExampleMessage.TheStackGotThereFirstWhenComparing(f.target()))
+                    : said.hint(new ExampleMessage.NotAnsweringIsNotTwoAnswers(f.target())))
                     .build();
         }
 
@@ -707,22 +719,24 @@ public final class Output {
         private static Diagnostic said(souther.compiler.ExampleStatements.Disagreement d) {
             souther.compiler.ExampleStatements.Statement recorded = d.recorded();
             souther.compiler.ExampleStatements.Statement standIn = d.standIn();
-            String key = d.viaWith() ? "check.example.disagreement.with"
-                    : "check.example.disagreement";
-            String hintKey = d.viaWith() ? "check.example.disagreement.with.hint"
-                    : "check.example.disagreement.hint";
-            String label = d.viaWith() ? "check.example.disagreement.with.here"
-                    : "check.example.disagreement.here";
+            boolean viaWith = d.viaWith();
             // The second region names its source only when that is another file: within one file
             // there is nothing to say, and the renderer would quote the same name twice.
             String elsewhere = standIn.at().sourceId().equals(recorded.at().sourceId())
                     ? null : standIn.at().sourceId();
-            return Diagnostic.of(DiagnosticCode.E1919, key)
-                    .at(recorded.at().pos(), recorded.width())
-                    .args(d.behavior())
+            return Diagnostic.at(recorded.at().pos(), recorded.width())
+                    .say(viaWith
+                            ? new ExampleMessage.TheRowAndTheWithDisagree(d.behavior())
+                            : new ExampleMessage.TheRowAndTheFakeDisagree(d.behavior()))
                     .secondaryIn(elsewhere,
-                            Region.ofWidth(standIn.at().pos(), standIn.width()), label, d.behavior())
-                    .hint(hintKey, recorded.answer(), standIn.answer())
+                            Region.ofWidth(standIn.at().pos(), standIn.width()),
+                            viaWith ? new ExampleMessage.TheWithIsHere(d.behavior())
+                                    : new ExampleMessage.TheFakeRowIsHere(d.behavior()))
+                    .hint(viaWith
+                            ? new ExampleMessage.WhatTheRowSaysAndWhatTheWithSays(recorded.answer(),
+                                    standIn.answer())
+                            : new ExampleMessage.WhatTheRowSaysAndWhatTheFakeSays(recorded.answer(),
+                                    standIn.answer()))
                     .build();
         }
     }
@@ -922,8 +936,9 @@ public final class Output {
                 for (Ast.FnDef value : parsed.module().fns()) {
                     boolean fresh = taken.add(value.name());
                     if (!fresh && id.equals(sourceId)) {
-                        reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1906, "check.example.file.declared").at(value.written().region())
-                                .args(value.name(), name).build()));
+                        reports.add(Report.of(Diagnostic.at(value.written().region())
+                                .say(new ExampleMessage.TheNameIsAlreadyDeclared(value.name(), name))
+                                .build()));
                     }
                 }
                 if (id.equals(sourceId)) {

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.DiagnosticCode;
 
 
@@ -36,7 +37,7 @@ class AFileThisCompileDoesNotHaveIsNotAFileToFileUnderTest {
 
     /** A report about module {@code m} whose primary region was read from {@code positionsFile}. */
     private static Db.Found about(String positionsFile) {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1023, "check.unknown.name.msg")
+        Diagnostic d = Diagnostic.say(new NameMessage.NoValueOfThatNameInScope("x"))
                 .at(new SourcePos(2, 1, positionsFile), 4).build();
         return new Db.Found("m", null, Report.of(d));
     }

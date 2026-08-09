@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -67,7 +69,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
 
     private static Diagnostic cycleIn(List<Diagnostic> found) {
         List<Diagnostic> cycles = found.stream()
-                .filter(d -> "check.value.cycle".equals(d.messageKey()))
+                .filter(d -> d.said() instanceof NameMessage.AValueReachesItself)
                 .toList();
         assertEquals(1, cycles.size(), "one value reaching itself, one refusal: " + found);
         return cycles.get(0);
@@ -78,7 +80,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
         List<Diagnostic> found = diagnose(CYCLE);
 
         assertEquals(1, found.size(), "one mistake, one report: " + found);
-        assertEquals("check.value.cycle", found.get(0).messageKey());
+        assertInstanceOf(NameMessage.AValueReachesItself.class, found.get(0).said());
     }
 
     @Test
@@ -86,8 +88,8 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
         Diagnostic alone = cycleIn(diagnose(CYCLE));
         Diagnostic beside = cycleIn(diagnose(CYCLE_AND_ONE_MORE));
 
-        assertEquals(alone.messageKey(), beside.messageKey());
-        assertEquals(List.of(alone.args()), List.of(beside.args()));
+        assertEquals(alone.said(), beside.said());
+        assertEquals(List.copyOf(alone.values().values()), List.copyOf(beside.values().values()));
         assertEquals(alone.region(), beside.region(),
                 "the refusal is about `step`, and where `step` is written did not move");
     }
@@ -106,7 +108,7 @@ class AValueThatReachesItselfIsRefusedOnceAtItsNameTest {
     void nothingElseIsSaidAboutAModuleWithOne() {
         List<Diagnostic> found = diagnose(CYCLE_AND_ONE_MORE);
 
-        assertTrue(found.stream().anyMatch(d -> "check.value.cycle".equals(d.messageKey())),
+        assertTrue(found.stream().anyMatch(d -> d.said() instanceof NameMessage.AValueReachesItself),
                 "the cycle: " + found);
         assertEquals(1, found.size(), "one refusal, said once: " + found);
     }

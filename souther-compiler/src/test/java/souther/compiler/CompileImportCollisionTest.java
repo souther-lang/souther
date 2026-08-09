@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -219,8 +220,8 @@ class CompileImportCollisionTest {
                         data Line = { a: Int }
                         """)));
 
-        assertEquals(List.of("check.import.notexposed"),
-                diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
+        assertEquals(List.of("module.the-module-does-not-expose-it"),
+                diagnostics.get("c.sou").stream().map(d -> MessageKeys.of(d.said())).toList());
     }
 
     /**
@@ -243,14 +244,14 @@ class CompileImportCollisionTest {
                         """)));
 
         assertEquals(List.of("import.imported-name-collides-with-a-declaration"),
-                diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
-        assertEquals(List.of("check.unknown.type.msg"),
-                diagnostics.get("d.sou").stream().map(Diagnostic::messageKey).toList());
+                diagnostics.get("c.sou").stream().map(d -> MessageKeys.of(d.said())).toList());
+        assertEquals(List.of("name.no-type-of-that-name"),
+                diagnostics.get("d.sou").stream().map(d -> MessageKeys.of(d.said())).toList());
     }
 
     private static String refused(List<String> modules) {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(modules));
-        return e.diagnostic().messageKey();
+        return MessageKeys.of(e.diagnostic().said());
     }
 }

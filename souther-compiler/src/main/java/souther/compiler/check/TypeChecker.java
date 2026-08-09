@@ -4,6 +4,11 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import java.util.ArrayList;
@@ -249,8 +254,8 @@ public final class TypeChecker {
         Map<String, Ast.FnDef> fns = new HashMap<>();
         for (Ast.FnDef fn : module.fns()) {
             if (fns.put(fn.name(), fn) != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.let")
-                                .at(fn.pos()).args(fn.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(fn.pos()).say(new DataMessage.ALetIsAlreadyDefined(fn.name())).build());
             }
         }
         Set<String> allBehaviors = new HashSet<>();
@@ -292,8 +297,8 @@ public final class TypeChecker {
             // could narrow. Reject it rather than accept a form that reads as a granularity that
             // does not exist.
             if (dot >= 0) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1610, "check.exposing.granular")
-                                .at(module.pos()).args(e.substring(0, dot), e).build());
+                throw CompileException.of(Diagnostic.say(new ModuleMessage.ExposingIsTypeGranular(e.substring(0, dot), e))
+                                .at(module.pos()).build());
             }
             // an exposed name must be one of this module's own definitions. An imported name that is
             // merely visible here is not re-exported — importers reach it from its declaring module.
@@ -307,13 +312,17 @@ public final class TypeChecker {
                     continue;
                 }
                 boolean imported = symbols.inScope(e);
-                String key = imported ? "check.exposing.imported" : "check.exposing.notdefined";
+
                 String why = imported
                         ? " is imported into this module, not defined here; `exposing` lists a"
                           + " module's own definitions and does not re-export imported names"
                         : ", which is not a data or behavior of this module";
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1609, key)
-                                .at(module.pos()).args(e).build());
+                throw CompileException.of(Diagnostic.at(module.pos())
+                        .say(imported
+                                ? new ModuleMessage.ExposingNamesAnImportedName(e)
+                                : new ModuleMessage
+                                        .ExposingNamesSomethingThisModuleDoesNotDeclare(e))
+                        .build());
             }
             exposed.add(e);
         }
@@ -333,8 +342,8 @@ public final class TypeChecker {
                 // one is meaningless: nothing calls those behaviors, and nothing injects them. The
                 // behavior that composes or calls this one carries the requirement instead (13.2).
                 if (!spec.dependsOn().isEmpty()) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1612, "check.inject.depends")
-                                    .at(spec.pos()).args(spec.name()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(spec.pos()).say(new DeclarationMessage.AnInjectionTargetCannotDependOnAnything(spec.name())).build());
                 }
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
                 injectionTargets.add(spec.name());
@@ -393,8 +402,8 @@ public final class TypeChecker {
         collect(errors, abandoned, () -> {
             for (Ast.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1614, "check.impl.compose")
-                                    .at(fn.pos()).args(fn.name()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(fn.pos()).say(new BehaviorMessage.ACompositionIsAlreadyItsOwnImplementation(fn.name())).build());
                 }
             }
         });
@@ -452,13 +461,13 @@ public final class TypeChecker {
                 // Some/None are the built-in Option cases (ADR-0011); a user data of the same name
                 // would make a `| Some v` pattern ambiguous between Option and the user case, so the
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
-                rejected.add(CompileException.of(Diagnostic.of(DiagnosticCode.E1502, "check.sum.optioncase")
-                                .at(def.written().region()).args(def.name()).build()));
+                rejected.add(CompileException.of(Diagnostic
+                                .at(def.written().region()).say(new BehaviorMessage.ABuiltInOptionCaseCannotBeDeclared(def.name())).build()));
                 continue;
             }
             if (symbols.containsKey(def.name())) {
-                rejected.add(CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.data")
-                                .at(def.pos()).args(def.name()).build()));
+                rejected.add(CompileException.of(Diagnostic
+                                .at(def.pos()).say(new DataMessage.ADataIsAlreadyDefined(def.name())).build()));
                 continue;
             }
             symbols.put(def.name(), def);

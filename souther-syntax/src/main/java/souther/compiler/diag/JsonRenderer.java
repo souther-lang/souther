@@ -54,8 +54,15 @@ public final class JsonRenderer implements DiagnosticRenderer {
                     }
                 }
                 s.put("region", region(other.region()));
-                s.put("label", other.said() != null ? Messages.render(other.said(), locale)
-                        : Messages.get(other.labelKey(), locale, other.labelArgs()));
+                s.put("label", Messages.render(other.said(), locale));
+                // A label is a message like the line above it and carries values of its own — the
+                // type an operand has, the clause a construction reaches — so a tool reads them by
+                // name here too. Written for one of the three and not the others is how a reader of
+                // this interface comes to parse a sentence for the one that was left out.
+                Map<String, Object> labelled = new LinkedHashMap<>();
+                MessageValues.of(other.said()).forEach((name, value) ->
+                        labelled.put(name, Messages.text(value, locale)));
+                s.put("values", labelled);
                 secs.add(s);
             }
             obj.put("secondary", secs);
@@ -69,7 +76,7 @@ public final class JsonRenderer implements DiagnosticRenderer {
             // Java type is stays a fact about the compiler rather than part of this interface.
             Map<String, Object> values = new LinkedHashMap<>();
             MessageValues.of(d.said()).forEach((name, value) ->
-                    values.put(name, String.valueOf(value)));
+                    values.put(name, Messages.text(value, locale)));
             obj.put("values", values);
         }
         if (d.diff() != null) {
@@ -82,15 +89,11 @@ public final class JsonRenderer implements DiagnosticRenderer {
         List<Object> hints = new ArrayList<>();
         for (Note note : d.notes()) {
             Map<String, Object> hint = new LinkedHashMap<>();
-            if (note.said() != null) {
-                hint.put("message", Messages.render(note.said(), locale));
-                Map<String, Object> values = new LinkedHashMap<>();
-                MessageValues.of(note.said()).forEach((name, value) ->
-                        values.put(name, String.valueOf(value)));
-                hint.put("values", values);
-            } else {
-                hint.put("message", Messages.get(note.messageKey(), locale, note.args()));
-            }
+            hint.put("message", Messages.render(note.said(), locale));
+            Map<String, Object> values = new LinkedHashMap<>();
+            MessageValues.of(note.said()).forEach((name, value) ->
+                    values.put(name, Messages.text(value, locale)));
+            hint.put("values", values);
             hints.add(hint);
         }
         if (!hints.isEmpty()) {

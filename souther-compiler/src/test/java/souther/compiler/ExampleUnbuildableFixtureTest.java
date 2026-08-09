@@ -1,9 +1,11 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,7 +63,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1903", d.code(), "an expected value that cannot be built is a fixture error");
-        assertEquals("check.example.expected", d.messageKey());
+        assertInstanceOf(ExampleMessage.TheExpectedValueCouldNotBeBuilt.class, d.said());
         assertEquals(null, d.diff(), "there is no value to show against the behavior's result");
     }
 
@@ -73,7 +75,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.value", d.messageKey(),
+        assertInstanceOf(ExampleMessage.TheFakeValueCouldNotBeBuilt.class, d.said(),
                 "the row supplies a fake; what failed is building its value");
     }
 
@@ -85,7 +87,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.missing", d.messageKey());
+        assertInstanceOf(ExampleMessage.ADependencyHasNoFake.class, d.said());
     }
 
     @Test
@@ -99,7 +101,7 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.unbuildable", d.messageKey(),
+        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, d.said(),
                 "the module supplies a fake table; what failed is building one of its rows");
     }
 
@@ -114,8 +116,8 @@ class ExampleUnbuildableFixtureTest {
                 """);
 
         assertEquals("E1908", d.code());
-        assertEquals("check.fake.unbuildable", d.messageKey());
-        assertEquals("quote", d.args()[0], "the dependency the row fakes, named once");
+        assertInstanceOf(ExampleMessage.TheFakeCouldNotBeBuilt.class, d.said());
+        assertEquals("quote", d.values().get("dependency"), "the dependency the row fakes, named once");
     }
 
     @Test

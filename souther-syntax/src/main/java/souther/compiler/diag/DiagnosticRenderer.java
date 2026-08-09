@@ -61,9 +61,7 @@ public interface DiagnosticRenderer {
                     .append(' ').append(d.diff().expectedType());
         }
         for (Note note : d.notes() == null ? List.<Note>of() : d.notes()) {
-            said.append(' ').append(note.said() != null
-                    ? Messages.render(note.said(), written)
-                    : Messages.get(note.messageKey(), written, note.args()));
+            said.append(' ').append(Messages.render(note.said(), written));
         }
         if (d.suggestion() != null) {
             said.append(' ').append(Messages.get("diag.suggestion", written, d.suggestion()));
@@ -71,18 +69,12 @@ public interface DiagnosticRenderer {
         return said.toString();
     }
 
-    /** The message body, from the catalog key or the compatibility literal. */
+    /** The message body, from what it says or the compatibility literal. */
     static String body(Diagnostic d, Locale locale) {
         java.util.Objects.requireNonNull(locale, Messages.NEEDS_A_LANGUAGE);
         if (d.literalMessage() != null) {
             return d.literalMessage();
         }
-        if (d.said() != null) {
-            return Messages.render(d.said(), locale);
-        }
-        if (d.messageKey() != null) {
-            return Messages.get(d.messageKey(), locale, d.args());
-        }
-        return "";
+        return d.said() == null ? "" : Messages.render(d.said(), locale);
     }
 }

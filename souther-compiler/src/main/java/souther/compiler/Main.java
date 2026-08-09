@@ -484,6 +484,10 @@ public final class Main {
      * file, to be told what the gate already knew.
      */
     private static int fmtSubcommand(String[] args) {
+        // Through the CLI's one resolution rather than beside it: a syntax error is the one thing
+        // `fmt` says to a reader, and the language it says it in is the same policy as everywhere
+        // else this command answers in.
+        Locale locale = new RenderOptions().locale();
         boolean write = false;
         boolean check = false;
         List<Path> files = new ArrayList<>();
@@ -528,8 +532,9 @@ public final class Main {
             try {
                 CstParser.Result parsed = CstParser.parse(source);
                 if (!parsed.errors().isEmpty()) {
-                    CstError first = parsed.errors().get(0);
-                    System.err.println(file + ": syntax error: " + first.legacyMessage());
+                    CstError<?> first = parsed.errors().get(0);
+                    System.err.println(file + ": syntax error: "
+                            + Messages.render(first.said(), locale));
                     failed = true;
                     continue;   // the formatter assumes a clean parse; leave a broken file untouched
                 }

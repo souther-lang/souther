@@ -1,5 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
+import souther.compiler.diag.msg.HelperMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.ArithmeticMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
 
@@ -7,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -225,7 +230,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(choose(true, x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
         assertTrue(e.getMessage().contains("choose") && e.getMessage().contains("v"), e.getMessage());
     }
 
@@ -241,7 +246,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(List.length(ignored(x, [ 1, 2 ])))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
         assertTrue(e.getMessage().contains("ignored") && e.getMessage().contains("v"), e.getMessage());
     }
 
@@ -257,7 +262,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(id(x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
         assertTrue(e.getMessage().contains("id") && e.getMessage().contains("v"), e.getMessage());
     }
 
@@ -276,9 +281,10 @@ class CompileHelperBodyTypingTest {
                 let f (l) = X(total(l))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-only-read-through-a-field", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsOnlyReadThroughAField.class, e.diagnostic().said(), e.getMessage());
         assertFalse(e.diagnostic().secondary().isEmpty(), "the open use is labelled");
-        assertEquals("helper.a-field-is-read-off-it-and-that-names-no-type", e.diagnostic().secondary().get(0).labelKey());
+        assertInstanceOf(HelperMessage.AFieldIsReadOffItAndThatNamesNoType.class,
+                e.diagnostic().secondary().get(0).said());
         assertEquals(5, e.diagnostic().secondary().get(0).region().start().line(),
                 "the label sits on `line.qty`, the use that names no type");
     }
@@ -295,7 +301,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(apply((n) -> n * 2, x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-function-typed-parameter-needs-its-type", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AFunctionTypedParameterNeedsItsType.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -310,7 +316,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-function-typed-parameter-needs-its-type", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AFunctionTypedParameterNeedsItsType.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -358,7 +364,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -434,7 +440,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = call(x)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.behavior.notcallablehere", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(BehaviorMessage.ABehaviorCannotBeCalledFromHere.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -504,7 +510,7 @@ class CompileHelperBodyTypingTest {
                 }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -582,7 +588,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -597,7 +603,7 @@ class CompileHelperBodyTypingTest {
                 let f (n) = N(count(n.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-needs-its-type", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterNeedsItsType.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -612,7 +618,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.the-body-is-not-what-the-helper-declares", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.TheBodyIsNotWhatTheHelperDeclares.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -722,10 +728,10 @@ class CompileHelperBodyTypingTest {
                 behavior f : (a: A) -> X constructs X
                 let f (a) = X(describe(a))
                 """;
-        assertEquals(List.of("check.rechelper.return"),
+        assertEquals(List.of("name.a-recursive-helper-must-declare-its-return-type"),
                 Located.diagnosticsOf(Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)))
                         .get("demo.sou").stream()
-                        .map(souther.compiler.diag.Diagnostic::messageKey).toList(),
+                        .map(d -> MessageKeys.of(d.said())).toList(),
                 "the undeclared recursive helper is reported, and nothing else is");
     }
 
@@ -760,7 +766,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(id(x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(HelperMessage.AParameterIsNotDeterminedByTheBody.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -805,7 +811,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(bad([ 1 ]))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.arith.operand", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(ArithmeticMessage.AnOperandIsNotANumber.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test

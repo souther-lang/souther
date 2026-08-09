@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.frontend.CstFrontend;
 
@@ -186,16 +187,16 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         Declarations found = classes.of(binaryName);
         String text = found == null ? null : member.apply(found);
         if (text == null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1504, "check.module.publishedincomplete")
-                            .args(name, m.name()).hint("check.module.publishedincomplete.hint", m.name())
+            throw CompileException.of(Diagnostic.say(new ModuleMessage.TheClassCarryingTheDeclarationIsNotOnThePath(name, m.name()))
+                            .hint(new ModuleMessage.TheJarItCameFromIsIncomplete(m.name()))
                             .build());
         }
         return text;
     }
 
     private static CompileException incompatible(SoutherModuleView m) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1505, "check.module.incompatible")
-                        .args(m.name(), m.compiler())
-                        .hint("check.module.incompatible.hint", m.name()).build());
+        return CompileException.of(Diagnostic.say(new ModuleMessage.TheModuleWasCompiledByAnotherSouther(m.name(), m.compiler()))
+                        
+                        .hint(new ModuleMessage.RebuildItOrCompileAgainstWhatBuiltIt(m.name())).build());
     }
 }

@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.MatchMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
@@ -293,10 +294,10 @@ public final class MatchElaborator {
     /** A non-exhaustive-match error (E1201) listing every missing case. The legacy message names the
      * first missing case, as it did before, so callers reading the text are unchanged. */
     static CompileException nonExhaustive(SourcePos pos, String what, List<String> missing) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1201, "e1201.msg")
+        return CompileException.of(Diagnostic
                         .at(pos, 5)
-                        .args(what)
-                        .hint("e1201.hint", String.join(", ", missing))
-                        .build());
+                        
+                        .hint(new DeclarationMessage.AddACaseFor(String.join(", ", missing)))
+                        .say(new DeclarationMessage.TheMatchDoesNotCoverEveryCase(what)).build());
     }
 }

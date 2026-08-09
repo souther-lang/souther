@@ -1,5 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ParseMessage;
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -8,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -152,7 +156,8 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Pair = (String, Int)
                 """));
-        assertEquals("parse.newtype.tuple", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(ParseMessage.ANewtypeCannotWrapATuple.class, e.diagnostic().said(),
+                e.getMessage());
     }
 
     @Test
@@ -161,7 +166,8 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Rule = (String) -> Bool
                 """));
-        assertEquals("parse.newtype.fntype", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(ParseMessage.ANewtypeCannotWrapAFunction.class, e.diagnostic().said(),
+                e.getMessage());
     }
 
     @Test
@@ -170,7 +176,7 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Note = Option<String>
                 """));
-        assertEquals("check.newtype.optional", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(DataMessage.ANewtypeMayNotWrapAnOptional.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -180,7 +186,7 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Note = String?
                 """));
-        assertEquals("check.newtype.optional", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(DataMessage.ANewtypeMayNotWrapAnOptional.class, e.diagnostic().said(), e.getMessage());
     }
 
     @Test
@@ -204,7 +210,8 @@ class CompileNewtypeCollectionTest {
                 data B
                 data X = List<String> | B
                 """));
-        assertEquals("parse.sum.case.generic", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(ParseMessage.ASumsCasesAreDeclaredNamedData.class, e.diagnostic().said(),
+                e.getMessage());
     }
 
     @Test
@@ -214,7 +221,7 @@ class CompileNewtypeCollectionTest {
                 module demo
                 data Stock = Map<Int, Int>
                 """));
-        assertEquals("check.map.key.field", e.diagnostic().messageKey(), e.getMessage());
+        assertInstanceOf(TypeMessage.AFieldsMapCannotBeKeyedByThat.class, e.diagnostic().said(), e.getMessage());
         assertTrue(e.getMessage().contains("`Stock`") && !e.getMessage().contains("Stock.value"),
                 "the complaint names the newtype, not a field the author never wrote: " + e.getMessage());
     }

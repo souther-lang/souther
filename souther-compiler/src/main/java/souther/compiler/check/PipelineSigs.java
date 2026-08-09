@@ -3,6 +3,8 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
@@ -111,8 +113,8 @@ public final class PipelineSigs {
                 continue;
             }
             if (!inProgress.add(s.bare())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1608, "check.pipe.selfcompose")
-                                .at(pos).args(s.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(pos).say(new BehaviorMessage.APipelineComposesWithItself(s.name())).build());
             }
             flattenInto(sub, pipeStages, out, inProgress, pos);
             inProgress.remove(s.bare());
@@ -155,9 +157,8 @@ public final class PipelineSigs {
             // it runs and are also built for an imported module that was never checked here — so the
             // arity is confirmed rather than assumed, or `route` would index an empty input list.
             if (g.ins().size() != 1) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1702, "check.pipe.multiinput")
-                                .at(pipe.pos()).args(stages.get(i).name(), g.ins().size(),
-                                        pipe.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stages.get(i).name(), String.valueOf(g.ins().size()), pipe.name())).build());
             }
             mainline = route(mainline, g, retired, symbols, pipe.pos());
         }
@@ -168,10 +169,10 @@ public final class PipelineSigs {
             Set<TypeName> inferred = TypeOps.leafCases(out, symbols);
             Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut(), symbols), symbols);
             if (!inferred.equals(declared)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1604, "e1604.msg").at(pipe.pos())
-                                .args(pipe.name(), caseList(declared), caseList(inferred))
-                                .hint("e1604.hint")
-                                .build());
+                throw CompileException.of(Diagnostic.at(pipe.pos())
+                                
+                                .hint(new DeclarationMessage.UpdateTheOutputOrHandleTheCase())
+                                .say(new DeclarationMessage.TheDeclaredOutputIsNotWhatThePipelineProduces(pipe.name(), caseList(declared), caseList(inferred))).build());
             }
         }
         // The pipeline takes whatever its first stage takes (spec 14.1), which arrived admitted with
@@ -252,21 +253,21 @@ public final class PipelineSigs {
                 }
             }
             if (consumed.isEmpty()) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1701, "e1701.msg")
+                throw CompileException.of(Diagnostic
                                 .at(pos)
                                 .diff(Type.show(mainline, in), Type.show(in, mainline))
-                                .hint("e1701.hint")
-                                .build());
+                                .hint(new DeclarationMessage.MakeTheLeftOutputACaseTheRightAccepts())
+                                .say(new DeclarationMessage.TheseBehaviorsCannotBeComposed()).build());
             }
             retired.addAll(passed);
             return g.outputType();
         }
         if (!mainline.equals(in)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1701, "e1701.msg")
+            throw CompileException.of(Diagnostic
                             .at(pos)
                             .diff(Type.show(mainline, in), Type.show(in, mainline))
-                            .hint("e1701.hint")
-                            .build());
+                            .hint(new DeclarationMessage.MakeTheLeftOutputACaseTheRightAccepts())
+                            .say(new DeclarationMessage.TheseBehaviorsCannotBeComposed()).build());
         }
         return g.outputType();
     }

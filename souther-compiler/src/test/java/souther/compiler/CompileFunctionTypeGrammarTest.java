@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.ParseMessage;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.GreenToken;
 import souther.compiler.cst.SyntaxKind;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -83,7 +86,7 @@ class CompileFunctionTypeGrammarTest {
                 data R = { h: Hidden }
                 behavior run : (r: R) -> R
                 """);
-        assertEquals("check.derive.nocodec", d.messageKey());
+        assertInstanceOf(DataMessage.NoCodecCanBeDerived.class, d.said());
     }
 
     // `T?` is `Option<T>` for whatever T is. Where `?` may be written is a rule of its own, and it is
@@ -101,7 +104,7 @@ class CompileFunctionTypeGrammarTest {
                     R { n = v }
                 }
                 """);
-        assertEquals("parse.optional.core", d.messageKey());
+        assertInstanceOf(ParseMessage.AnOptionalIsOnlyWrittenOnAFieldOrInTheCore.class, d.said());
     }
 
     // On a data field, where `?` may be written, the function inside it is what the boundary refuses.
@@ -111,6 +114,6 @@ class CompileFunctionTypeGrammarTest {
                 module demo
                 data R = { f: ((Int) -> Bool)? }
                 """);
-        assertEquals("check.derive.nocodec", d.messageKey());
+        assertInstanceOf(DataMessage.NoCodecCanBeDerived.class, d.said());
     }
 }

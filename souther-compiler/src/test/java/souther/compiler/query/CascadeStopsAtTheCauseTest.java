@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
@@ -52,8 +53,7 @@ class CascadeStopsAtTheCauseTest {
 
         assertEquals(1, found.size(),
                 "the name that denotes nothing, and nothing about adding or appending it: " + found);
-        assertFalse(found.stream().anyMatch(d -> d.args() != null
-                        && List.of(d.args()).contains("?")),
+        assertFalse(found.stream().anyMatch(d -> List.copyOf(d.values().values()).contains("?")),
                 "the error type's own rendering never reaches a message: " + found);
     }
 
@@ -105,7 +105,7 @@ class CascadeStopsAtTheCauseTest {
         assertEquals(1, found.size(),
                 "the import line that names nothing, and no conflict with it: " + found);
         assertTrue(found.stream()
-                        .anyMatch(d -> "check.import.unknownmodule".equals(d.messageKey())),
+                        .anyMatch(d -> d.said() instanceof ModuleMessage.UnknownModule),
                 "which line is wrong: " + found);
     }
 

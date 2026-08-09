@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
 import souther.compiler.diag.DiagnosticCode;
 
 import java.util.List;
@@ -68,8 +69,8 @@ final class PartialHelperUse {
     private static CompileException reachesPartial(Ast.FnDef helper, List<String> path) {
         String reached = path.get(path.size() - 1);
         String rendered = PartialReachability.render(path);
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E2001, "check.totality.reachespartial")
-                        .at(helper.written().region()).args(helper.name(), reached, rendered).build());
+        return CompileException.of(Diagnostic
+                        .at(helper.written().region()).say(new BehaviorMessage.ItReachesAPartialHelper(helper.name(), reached, rendered)).build());
     }
 
     /**
@@ -108,8 +109,8 @@ final class PartialHelperUse {
                 // for a helper that takes arguments becomes a function value, and that is the one a
                 // function type would have to carry the guarantee for and cannot.
                 if (reachability.isPartialFunctionNamed(v)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E2001, "check.totality.partialasvalue")
-                                    .at(v.written().region()).args(v.name()).build());
+                    throw CompileException.of(Diagnostic
+                                    .at(v.written().region()).say(new BehaviorMessage.APartialHelperIsWrittenWhereAValueGoes(v.name())).build());
                 }
             }
             default -> Ast.forEachChild(e, child -> walkForNamedAsValue(child, reachability));

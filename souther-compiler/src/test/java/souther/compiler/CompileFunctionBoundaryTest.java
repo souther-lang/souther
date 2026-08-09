@@ -1,10 +1,12 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -27,7 +29,7 @@ class CompileFunctionBoundaryTest {
                 data R = { v: Int }
                 behavior run : (p: (Int) -> Bool) -> R
                 """);
-        assertEquals("check.param.function", d.messageKey());
+        assertInstanceOf(TypeMessage.AParameterCarriesAFunction.class, d.said());
     }
 
     @Test
@@ -37,7 +39,7 @@ class CompileFunctionBoundaryTest {
                 data R = { v: Int }
                 behavior run : (r: R) -> (Int) -> Bool
                 """);
-        assertEquals("check.output.function", d.messageKey());
+        assertInstanceOf(TypeMessage.AnOutputCarriesAFunction.class, d.said());
     }
 
     @Test
@@ -47,6 +49,6 @@ class CompileFunctionBoundaryTest {
                 data R = { v: Int }
                 behavior run : (m: Map<String, List<(Int) -> Bool>>) -> R
                 """);
-        assertEquals("check.param.function", d.messageKey());
+        assertInstanceOf(TypeMessage.AParameterCarriesAFunction.class, d.said());
     }
 }

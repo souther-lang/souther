@@ -3,6 +3,8 @@ package souther.compiler.codegen;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
@@ -215,13 +217,13 @@ public final class Backend {
         for (Ast.BehaviorDef bd : module.behaviors()) {
             String cls = behaviorClass(bd.name());
             if (localTypes.contains(cls)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.behavior.collision.data")
-                                .at(bd.pos()).args(bd.name(), cls).build());
+                throw CompileException.of(Diagnostic
+                                .at(bd.pos()).say(new BehaviorMessage.ABehaviorCapitalizesOntoAData(bd.name(), cls)).build());
             }
             String prev = behaviorClassOwner.put(cls, bd.name());
             if (prev != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.behavior.collision.behavior")
-                                .at(bd.pos()).args(prev, bd.name(), cls).build());
+                throw CompileException.of(Diagnostic
+                                .at(bd.pos()).say(new BehaviorMessage.TwoBehaviorsCapitalizeToOneClass(prev, bd.name(), cls)).build());
             }
         }
         // A behavior whose output is an anonymous union gets a generated sealed interface
@@ -881,17 +883,22 @@ public final class Backend {
             String what = owner != null ? owner.name() : e.getValue().get(0);
             TypeName sameName = byBridgeName.put(bridge, member);
             if (sameName != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.bridge.collision.member")
-                                .at(pos).args(sameName.qualified(), member.qualified(), bridge)
-                                .hint("check.bridge.collision.member.hint").build());
+                throw CompileException.of(Diagnostic.say(new ModuleMessage.TwoMembersJoinThroughOneCaseClass(sameName.qualified(), member.qualified(), bridge))
+                                .at(pos)
+                                .hint(new ModuleMessage.AMemberGoesByItsOwnNameWithCaseAfterIt()).build());
             }
-            String collidesWith = localTypes.contains(bridge) ? "check.bridge.collision.data"
-                    : behaviorClassOwner.containsKey(bridge) ? "check.bridge.collision.behavior" : null;
-            if (collidesWith != null) {
-                String other = localTypes.contains(bridge) ? bridge : behaviorClassOwner.get(bridge);
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, collidesWith)
-                                .at(pos).args(what, member.name(), bridge, other)
-                                .hint("check.bridge.collision.hint", bridge).build());
+            boolean aData = localTypes.contains(bridge);
+            boolean aBehavior = behaviorClassOwner.containsKey(bridge);
+            if (aData || aBehavior) {
+                String other = aData ? bridge : behaviorClassOwner.get(bridge);
+                throw CompileException.of(Diagnostic.at(pos)
+                                .say(aData
+                                        ? new ModuleMessage.AMemberReachesTheUnionThroughAData(what,
+                                                member.name(), bridge, other)
+                                        : new ModuleMessage
+                                                .AMemberReachesTheUnionThroughABehavior(what,
+                                                        member.name(), bridge, other))
+                                .hint(new ModuleMessage.RenameTheMemberOrTheTypeItCollidesWith(bridge)).build());
             }
         }
     }
@@ -910,15 +917,15 @@ public final class Backend {
             SourcePos pos = owner != null ? owner.pos() : module.pos();
             String what = owner != null ? owner.name() : resultName;
             if (localTypes.contains(resultName)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.result.collision.data")
-                                .at(pos).args(what, resultName)
-                                .hint("check.result.collision.hint", resultName).build());
+                throw CompileException.of(Diagnostic
+                                .at(pos)
+                                .hint(new BehaviorMessage.AUnionOutputReachesJavaThroughThatName(resultName)).say(new BehaviorMessage.AUnionOutputsInterfaceCollidesWithAData(what, resultName)).build());
             }
             String behavior = behaviorClassOwner.get(resultName);
             if (behavior != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2105, "check.result.collision.behavior")
-                                .at(pos).args(what, resultName, behavior)
-                                .hint("check.result.collision.hint", resultName).build());
+                throw CompileException.of(Diagnostic
+                                .at(pos)
+                                .hint(new BehaviorMessage.AUnionOutputReachesJavaThroughThatName(resultName)).say(new BehaviorMessage.AUnionOutputsInterfaceCollidesWithABehavior(what, resultName, behavior)).build());
             }
         }
     }

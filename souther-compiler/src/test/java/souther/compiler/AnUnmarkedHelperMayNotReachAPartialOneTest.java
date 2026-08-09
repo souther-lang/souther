@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
@@ -32,8 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnUnmarkedHelperMayNotReachAPartialOneTest {
 
-    private static final String REACHES = "check.totality.reachespartial";
-    private static final String INVARIANT = "check.invariant.partial";
+    private static final String REACHES = "behavior.it-reaches-a-partial-helper";
+    private static final String INVARIANT = "invariant.the-invariant-reaches-a-partial-helper";
 
     private static List<Diagnostic> diagnosed(String source) {
         return Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("demo", source)))
@@ -41,11 +42,11 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
     }
 
     /** The paths reported under {@code key}, in the order the build found them. The rendered path is
-     * the last argument of both diagnostics that carry one. */
+     * the path each diagnostic names, asked for by name. */
     private static List<String> pathsOf(String source, String key) {
         return diagnosed(source).stream()
-                .filter(d -> key.equals(d.messageKey()))
-                .map(d -> String.valueOf(d.args()[d.args().length - 1]))
+                .filter(d -> key.equals(MessageKeys.of(d.said())))
+                .map(d -> String.valueOf(d.values().get("through")))
                 .toList();
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.MessageCodes;
 import souther.compiler.diag.msg.Message;
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.msg.MessageTemplate;
@@ -531,6 +532,18 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      * rule below is silent about it. A missing {@code @Code} is the same shape of hole: it raises
      * where the message is built rather than where it is declared, which is a use site away from the
      * mistake.
+     *
+     * <p>Which messages must name one is {@link souther.compiler.diag.msg.Reported}: those are what
+     * a diagnostic can be about. A hint or a secondary label is
+     * {@link souther.compiler.diag.msg.Supporting}, and names none — a code there is read by
+     * nothing, and counted by the rule below as a rule something reports.
+     *
+     * <p>Every message carries one of the two roles and never both, which is what makes being a
+     * {@code Reported} the same thing as being usable as one: the builder takes each where it
+     * belongs, so a message written for a hint cannot reach {@code say} and one written as a subject
+     * cannot reach {@code hint}. Held here as well because a leaf could carry neither and fall
+     * through both. The roles sit outside the {@link Message} hierarchy, so this walk never meets
+     * them and what may be a message stays what {@code Message} permits.
      */
     @Test
     void everyMessageIsARecordThatNamesItsRule() {
@@ -541,13 +554,108 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
                 wrong.add(leaf.getName() + " is not a record");
                 continue;
             }
-            if (leaf.getAnnotation(souther.compiler.diag.msg.Code.class) == null) {
-                wrong.add(leaf.getName() + " names no code");
+            boolean reports = souther.compiler.diag.msg.Reported.class.isAssignableFrom(leaf);
+            boolean supports = souther.compiler.diag.msg.Supporting.class.isAssignableFrom(leaf);
+            if (reports == supports) {
+                wrong.add(leaf.getName() + (reports
+                        ? " is both what a diagnostic is about and what is said beside one"
+                        : " is neither what a diagnostic is about nor what is said beside one"));
+            }
+            boolean named = leaf.getAnnotation(souther.compiler.diag.msg.Code.class) != null;
+            if (reports && !named) {
+                wrong.add(leaf.getName() + " reports a rule and names no code");
+            }
+            // A hint's code is read by nothing — a diagnostic's comes from its subject — so one
+            // written here is a number that looks reported and is not.
+            if (supports && named) {
+                wrong.add(leaf.getName() + " is a hint or a label and names a code");
             }
         }
         wrong.sort(String::compareTo);
         assertEquals(List.of(), wrong,
                 "a message is a record whose components are its values, and it reports a rule");
+    }
+
+    /** A message written at a site: {@code new AreaMessage.TheThing(}, however it is wrapped. */
+    private static final Pattern BUILT =
+            Pattern.compile("new\\s+(\\w+Message)\\s*\\.\\s*(\\w+)\\s*\\(");
+
+    /**
+     * Every message the hierarchy declares is one some site builds.
+     *
+     * <p>A declared message nothing builds is a sentence in every catalog that no compile can
+     * produce, and it is what a code left behind looks like: the sites that reported a rule move to
+     * another number and the record they used stays, still naming the old one. Without this, the
+     * rule below reads that record and answers that the code is reported.
+     *
+     * <p>A tripwire and not a proof, like the surface test next door: what it reads is the source
+     * text, so a message built through a variable would read as unbuilt. That is the direction that
+     * costs a green build rather than a wrong one.
+     */
+    @Test
+    void everyMessageIsBuiltSomewhere() throws IOException {
+        List<String> unbuilt = new ArrayList<>();
+        for (Class<? extends Message> message : messages()) {
+            if (!built().contains(message.getEnclosingClass().getSimpleName() + "."
+                    + message.getSimpleName())) {
+                unbuilt.add(message.getName());
+            }
+        }
+        unbuilt.sort(String::compareTo);
+        assertEquals(List.of(), unbuilt, "declared and never raised — no compile can show these");
+    }
+
+    /**
+     * Every rule a reader can be told to look up is reported by a message some site builds.
+     *
+     * <p>A code nothing reports is a chapter of the manual nothing sends anyone to. It is how a rule
+     * gets documented and then quietly stops being reported: the sites move to another number, and
+     * the number they left says nothing about having been abandoned.
+     *
+     * <p>Read off the messages that are built rather than the ones that are declared, which is the
+     * difference between this holding and it appearing to. A record kept beside the code it used to
+     * report answers the declared question and not this one.
+     *
+     * <p>And read off the {@link souther.compiler.diag.msg.Reported} ones, which is what makes
+     * "built" mean "built as a diagnostic's subject". Every message renders, so a scan of the source
+     * cannot tell the subject from the hint written under it — three quarters of the subjects reach
+     * {@code say} through a helper and would read as unbuilt, and a scan that classified them by
+     * hand put thirteen hints on the wrong side. The types say it instead, and they are disjoint: a
+     * {@code Message & Reported} is what {@code say} takes and nothing else takes it, so a message
+     * that carries the role is built as a subject or is not built at all.
+     */
+    @Test
+    void everyCodeIsReportedByAMessage() throws IOException {
+        Set<DiagnosticCode> reported = new java.util.HashSet<>();
+        for (Class<? extends Message> message : messages()) {
+            if (souther.compiler.diag.msg.Reported.class.isAssignableFrom(message)
+                    && built().contains(message.getEnclosingClass().getSimpleName() + "."
+                            + message.getSimpleName())) {
+                reported.add(MessageCodes.of(
+                        message.asSubclass(souther.compiler.diag.msg.Reported.class)));
+            }
+        }
+        List<String> unreported = new ArrayList<>();
+        for (DiagnosticCode code : DiagnosticCode.values()) {
+            if (!reported.contains(code)) {
+                unreported.add(code.name());
+            }
+        }
+        unreported.sort(String::compareTo);
+        assertEquals(List.of(), unreported,
+                "a code names a rule a reader looks up, and nothing raises these");
+    }
+
+    /** Every {@code Area.Record} a main source builds. */
+    private static Set<String> built() throws IOException {
+        Set<String> found = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = BUILT.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                found.add(m.group(1) + "." + m.group(2));
+            }
+        }
+        return found;
     }
 
     private static Set<String> ownedByAMessage() {

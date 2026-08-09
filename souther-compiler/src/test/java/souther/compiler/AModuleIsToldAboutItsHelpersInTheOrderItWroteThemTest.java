@@ -62,7 +62,7 @@ class AModuleIsToldAboutItsHelpersInTheOrderItWroteThemTest {
 
     /** What each report quotes, so a failure message says which helper was named. */
     private static List<List<Object>> quoted(List<Diagnostic> found) {
-        return found.stream().map(d -> List.of(d.args())).toList();
+        return found.stream().map(d -> List.copyOf(d.values().values())).toList();
     }
 
     private static boolean names(List<Diagnostic> found, String helper) {

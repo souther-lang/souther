@@ -1,5 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.diag.msg.ArithmeticMessage;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
@@ -7,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -65,92 +69,92 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
     @Test
     void twoDifferentNewtypesDoNotCombine() {
         Diagnostic d = refusalOf("(a: Amount, q: Quantity) : Amount", "a + q");
-        assertEquals("check.arith.newtype.incompatible", d.messageKey());
+        assertInstanceOf(ArithmeticMessage.TwoDifferentNewtypes.class, d.said());
         assertEquals(2, d.secondary().size(), "each operand is named with the newtype it is");
     }
 
     @Test
     void aProductOfTwoNewtypesChangesDimension() {
         Diagnostic same = refusalOf("(a: Amount, b: Amount) : Amount", "a * b");
-        assertEquals("check.arith.newtype.product", same.messageKey());
+        assertInstanceOf(ArithmeticMessage.AProductChangesDimension.class, same.said());
         assertEquals(2, same.secondary().size(), "each operand is named with the newtype it is");
 
         Diagnostic mixed = refusalOf("(a: Amount, q: Quantity) : Amount", "a * q");
-        assertEquals("check.arith.newtype.product", mixed.messageKey(),
+        assertInstanceOf(ArithmeticMessage.AProductChangesDimension.class, mixed.said(),
                 "the rule is the same whether or not the two newtypes agree");
     }
 
     @Test
     void aQuotientOfTwoNewtypesIsAValueInNeitherOfThem() {
         Diagnostic alike = refusalOf("(a: Amount, b: Amount) : Amount", "a / b");
-        assertEquals("check.arith.newtype.quotient", alike.messageKey(),
+        assertInstanceOf(ArithmeticMessage.AQuotientChangesDimension.class, alike.said(),
                 "a quotient leaves the dimension the way a product does, but not for the same reason");
         assertEquals(2, alike.secondary().size(), "each operand is named with the newtype it is");
 
         Diagnostic unlike = refusalOf("(a: Amount, q: Quantity) : Amount", "a / q");
-        assertEquals("check.arith.newtype.quotient", unlike.messageKey(),
+        assertInstanceOf(ArithmeticMessage.AQuotientChangesDimension.class, unlike.said(),
                 "unlike newtypes divide into a dimension of their own, which is refused the same way");
     }
 
     @Test
     void aScalarDividedByANewtypeIsAnInverse() {
         Diagnostic d = refusalOf("(n: Int, a: Amount) : Amount", "n / a");
-        assertEquals("check.arith.newtype.reciprocal", d.messageKey());
+        assertInstanceOf(ArithmeticMessage.AReciprocalChangesDimension.class, d.said());
         assertEquals(2, d.secondary().size(), "each operand is named with the newtype it is");
     }
 
     @Test
     void aNewtypeOverANewtypeHasNoArithmetic() {
         Diagnostic d = refusalOf("(o: Outer, p: Outer) : Outer", "o + p");
-        assertEquals("check.arith.newtype.nested", d.messageKey());
+        assertInstanceOf(ArithmeticMessage.ANewtypeWithNoDirectNumericBase.class, d.said());
     }
 
     @Test
     void onlyALiteralIsReadAsTheNewtypeBesideIt() {
         Diagnostic onTheRight = refusalOf("(a: Amount, n: Int) : Amount", "a + n");
-        assertEquals("check.arith.newtype.scalar", onTheRight.messageKey());
+        assertInstanceOf(ArithmeticMessage.OnlyALiteralIsReadAsTheNewtype.class, onTheRight.said());
 
         Diagnostic onTheLeft = refusalOf("(a: Amount, n: Int) : Amount", "n - a");
-        assertEquals("check.arith.newtype.scalar", onTheLeft.messageKey(),
+        assertInstanceOf(ArithmeticMessage.OnlyALiteralIsReadAsTheNewtype.class, onTheLeft.said(),
                 "which side the bare value stands on does not change the rule it breaks");
     }
 
     @Test
     void aValueOfAnotherBaseIsRefusedByTheBaseAndNotByTheOperator() {
         Diagnostic scaled = refusalOf("(r: Rate, n: Int) : Rate", "r * n");
-        assertEquals("check.arith.newtype.base", scaled.messageKey());
+        assertInstanceOf(ArithmeticMessage.AValueOfAnotherBase.class, scaled.said());
 
         Diagnostic added = refusalOf("(a: Amount, d: Decimal) : Amount", "a + d");
-        assertEquals("check.arith.newtype.base", added.messageKey(),
+        assertInstanceOf(ArithmeticMessage.AValueOfAnotherBase.class, added.said(),
                 "reading its own base is one rule, and `+` is not a scale to be refused as one");
 
         // The base is read on either side, and this side is the one `/` will not scale from once
         // the base agrees — so the fix beside this refusal has to say which way `/` goes.
         Diagnostic divided = refusalOf("(d: Decimal, a: Amount) : Amount", "d / a");
-        assertEquals("check.arith.newtype.base", divided.messageKey());
-        assertEquals("check.arith.newtype.reciprocal",
-                refusalOf("(n: Int, a: Amount) : Amount", "n / a").messageKey(),
+        assertInstanceOf(ArithmeticMessage.AValueOfAnotherBase.class, divided.said());
+        assertInstanceOf(ArithmeticMessage.AReciprocalChangesDimension.class,
+                refusalOf("(n: Int, a: Amount) : Amount", "n / a").said(),
                 "which is where an author who only agreed the base would arrive");
     }
 
     @Test
     void eitherOperandCanBeTheOneThatIsNotANumber() {
         Diagnostic onTheLeft = refusalOf("(s: String, n: Int) : Int", "s * n");
-        assertEquals("check.arith.operand", onTheLeft.messageKey(),
+        assertInstanceOf(ArithmeticMessage.AnOperandIsNotANumber.class, onTheLeft.said(),
                 "the newtype rules must not absorb the operand rule they were carved out of");
-        assertEquals(List.of("String"), List.of(onTheLeft.args()));
+        assertEquals(List.of("String"), List.copyOf(onTheLeft.values().values()));
 
         Diagnostic onTheRight = refusalOf("(n: Int, s: String) : Int", "n * s");
-        assertEquals("check.arith.operand", onTheRight.messageKey(),
+        assertInstanceOf(ArithmeticMessage.AnOperandIsNotANumber.class, onTheRight.said(),
                 "which side it stands on does not make a String an arithmetic operand");
-        assertEquals(List.of("String"), List.of(onTheRight.args()),
+        assertEquals(List.of("String"), List.copyOf(onTheRight.values().values()),
                 "the operand named is the one that is not a number");
     }
 
     @Test
     void twoNumbersOfUnlikeBasesAreThePlainMismatchTheyAlwaysWere() {
         Diagnostic d = refusalOf("(n: Int, d: Decimal) : Int", "n * d");
-        assertEquals("check.type.mismatch.msg", d.messageKey(),
+        assertInstanceOf(TypeMessage.ItDoesNotHaveTheTypeItNeedsHere.class, d.said(),
                 "Int beside Decimal is said by a found-versus-expected block, not by a sentence");
     }
 
@@ -166,7 +170,7 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
                 refusalOf("(o: Outer, p: Outer) : Outer", "o + p"));
         for (Diagnostic d : refusals) {
             assertFalse(d.notes().isEmpty(),
-                    d.messageKey() + " refuses a newtype without saying what to write instead");
+                    MessageKeys.of(d.said()) + " refuses a newtype without saying what to write instead");
         }
     }
 
@@ -187,7 +191,7 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
                 import two
                 let mix (a: Amount, b: two.Amount) : Amount = a + b
                 """)));
-        assertEquals(List.of("one.Amount", "two.Amount"), List.of(e.diagnostic().args()),
+        assertEquals(List.of("one.Amount", "two.Amount"), List.copyOf(e.diagnostic().values().values()),
                 "`Amount and Amount are different newtypes` names nothing the author can act on");
     }
 }

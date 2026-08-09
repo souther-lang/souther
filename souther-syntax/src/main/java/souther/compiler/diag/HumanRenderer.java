@@ -47,9 +47,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
             }
             snippet(out, other.region(), src, CYAN);
             if (other.labelled()) {
-                out.append(color(DIM, other.said() != null ? Messages.render(other.said(), locale)
-                        : Messages.get(other.labelKey(), locale, other.labelArgs())))
-                        .append('\n');
+                out.append(color(DIM, Messages.render(other.said(), locale))).append('\n');
             }
         }
         out.append('\n').append(DiagnosticRenderer.body(d, locale)).append('\n');
@@ -66,8 +64,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
         }
         for (Note note : d.notes()) {
             out.append(hintLabel(locale))
-                    .append(note.said() != null ? Messages.render(note.said(), locale)
-                            : Messages.get(note.messageKey(), locale, note.args())).append('\n');
+                    .append(Messages.render(note.said(), locale)).append('\n');
         }
         return out.toString();
     }

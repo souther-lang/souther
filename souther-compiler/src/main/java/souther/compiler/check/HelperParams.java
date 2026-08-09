@@ -181,7 +181,7 @@ final class HelperParams {
             //
             // Caught at the call rather than inside the reading, because the check reads this same
             // body through `determine` and needs the signal to reach it. There, a parameter left
-            // open is `check.helper.infer` — annotate it — and a parameter this body never named
+            // open is a parameter to annotate, and a parameter this body never named
             // because the name beside it denotes nothing is that one mistake seen from another
             // angle, not a type the author has to supply.
             return null;

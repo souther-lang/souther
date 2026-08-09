@@ -1,5 +1,6 @@
 package souther.compiler.diag;
 
+import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class AskingForAMessageWithoutALanguageIsRefusedTest {
 
-    private static final String KEY = "check.example.unreachable";
+    private static final String KEY = "example.the-row-reached-an-unreachable-point";
 
     @Test
     void aMessageLookupWithNoLanguageIsRefused() {
@@ -32,7 +33,8 @@ class AskingForAMessageWithoutALanguageIsRefusedTest {
 
     @Test
     void renderingABodyWithNoLanguageIsRefused() {
-        Diagnostic d = Diagnostic.of(DiagnosticCode.E1911, KEY).args("why").build();
+        Diagnostic d = Diagnostic.say(
+                new ExampleMessage.TheRowReachedAnUnreachablePoint("why")).build();
 
         assertThrows(NullPointerException.class, () -> DiagnosticRenderer.body(d, null));
     }

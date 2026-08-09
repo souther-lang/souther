@@ -167,7 +167,7 @@ class CompilePathAgreementTest {
     void bothPathsReportTheSameDiagnostic(String name, String source) {
         CompileException alone = compileError(() -> Compiler.compile(source));
         CompileException linked = compileError(() -> Compiler.compileModules(List.of(source)));
-        assertEquals(alone.diagnostic().messageKey(), linked.diagnostic().messageKey(),
+        assertEquals(alone.diagnostic().said(), linked.diagnostic().said(),
                 "the two paths disagree on what is wrong with " + name);
         assertEquals(alone.diagnostic().pos(), linked.diagnostic().pos(),
                 "the two paths disagree on where " + name + " is wrong");

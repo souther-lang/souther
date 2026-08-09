@@ -1,11 +1,13 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.NameMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -161,7 +163,7 @@ class CompileQualifiedCalleeTest {
                 let go (i) = Out { m = unknown.member(i.n) }
                 """);
 
-        assertEquals("check.unknown.name.msg", e.diagnostic().messageKey());
+        assertInstanceOf(NameMessage.NoValueOfThatNameInScope.class, e.diagnostic().said());
         assertTrue(e.getMessage().contains("`unknown`"), e.getMessage());
         assertEquals("unknown".length(),
                 e.diagnostic().region().end().column() - e.diagnostic().region().start().column());
@@ -186,7 +188,7 @@ class CompileQualifiedCalleeTest {
                 }
                 """);
 
-        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertInstanceOf(NameMessage.ItIsNotAFunctionHere.class, e.diagnostic().said());
         assertTrue(e.getMessage().contains("`d.count`"), e.getMessage());
         assertEquals("d.count".length(),
                 e.diagnostic().region().end().column() - e.diagnostic().region().start().column(),

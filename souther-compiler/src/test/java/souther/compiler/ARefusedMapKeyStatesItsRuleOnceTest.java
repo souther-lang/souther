@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Note;
@@ -64,7 +65,7 @@ class ARefusedMapKeyStatesItsRuleOnceTest {
     private static String hintKey(CompileException e) {
         List<Note> notes = e.diagnostic().notes();
         assertEquals(1, notes.size(), e.getMessage());
-        return notes.get(0).messageKey();
+        return MessageKeys.of(notes.get(0).said());
     }
 
     /** One rule, one place it is written down. Three hint keys were three chances to say it

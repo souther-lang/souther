@@ -4,6 +4,11 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
+import souther.compiler.diag.msg.InvariantMessage;
+import souther.compiler.diag.msg.NameMessage;
+import souther.compiler.diag.msg.BehaviorMessage;
+import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.CodecMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
@@ -84,8 +89,8 @@ public final class DataChecker {
         for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
             String name = clause.name().orElse(null);
             if (name != null && !seen.add(name)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1103, "check.invariant.duplicate")
-                                .at(clause.pos()).args(name, data.name()).build());
+                throw CompileException.of(Diagnostic
+                                .at(clause.pos()).say(new InvariantMessage.TwoClausesShareOneName(name, data.name())).build());
             }
         }
     }
@@ -350,16 +355,16 @@ public final class DataChecker {
         // (ADR-0057, the declared-sum counterpart of E1606).
         for (Ast.Name c : sum.cases()) {
             if (symbols.isForeign(c.denotes())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1606, "check.sum.foreigncase")
+                throw CompileException.of(Diagnostic
                                 .at(c.name().region())
-                                .args(c.written(), sum.name(), c.denotes().module())
-                                .hint("check.sum.foreigncase.hint").build());
+                                
+                                .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), c.denotes().module())).build());
             }
         }
         List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
         if (cycle != null) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1021, "check.sum.cycle")
-                            .at(sum.pos()).args(sum.name(), String.join(" | ", cycle)).build());
+            throw CompileException.of(Diagnostic
+                            .at(sum.pos()).say(new BehaviorMessage.ASumContainsItself(sum.name(), String.join(" | ", cycle))).build());
         }
         sum.decoder().ifPresent(disc -> {
             // a derived codec dispatches over the leaves, so a nested sum's cases count too (8.3, 10.3)
@@ -390,9 +395,9 @@ public final class DataChecker {
             TypeName carrying = TypeOps.memberCarryingField(
                     Type.ref(symbols.own(sum.name())), enc.key(), symbols);
             if (carrying != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1010, "check.case.discriminatorfield")
-                                .at(sum.pos()).args(carrying.name(), enc.key(), sum.name())
-                                .hint("check.case.discriminatorfield.hint", enc.key()).build());
+                throw CompileException.of(Diagnostic
+                                .at(sum.pos())
+                                .hint(new DataMessage.TheTagAndTheFieldWantOneKey(enc.key())).say(new DataMessage.ACaseDeclaresTheDiscriminatorField(carrying.name(), enc.key(), sum.name())).build());
             }
             Set<TypeName> covered = new HashSet<>();
             Set<TypeName> encodable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
@@ -473,10 +478,10 @@ public final class DataChecker {
         // used, written there as `f: X?`. Read on the resolved type, so a data the author happens
         // to have named `Option` is an ordinary named data here.
         if (ctx.data().newtype() && fields.get("value") instanceof Type.OptionOf o) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1009, "check.newtype.optional")
+            throw CompileException.of(Diagnostic
                             .at(fieldRegion(ctx.data(), "value"))
-                            .args(ctx.data().name(), Type.show(o.element()))
-                            .hint("check.newtype.optional.hint", ctx.data().name()).build());
+                            
+                            .hint(new DataMessage.WrapTheValueAndWriteTheQuestionMarkOnTheField(ctx.data().name())).say(new DataMessage.ANewtypeMayNotWrapAnOptional(ctx.data().name(), Type.show(o.element()))).build());
         }
 
         for (Map.Entry<String, Type> e : fields.entrySet()) {
@@ -485,23 +490,23 @@ public final class DataChecker {
             // emit a second `toString()` and the class would not load, and the rest cannot be a record
             // component either. Reported here rather than left to codegen, as a duplicate name is.
             if (OBJECT_METHOD_NAMES.contains(e.getKey())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E2106, "check.field.objectname")
+                throw CompileException.of(Diagnostic
                                 .at(fieldRegion(ctx.data(), e.getKey()))
-                                .args(ctx.data().name(), e.getKey()).build());
+                                .say(new DataMessage.AFieldTakesAMethodOfObject(ctx.data().name(), e.getKey())).build());
             }
             if (TypeOps.withoutExternalForm(e.getValue(), ctx.symbols()) instanceof Type.TupleOf) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1311, "check.field.tuple")
+                throw CompileException.of(Diagnostic
                                 .at(fieldRegion(ctx.data(), e.getKey()))
-                                .args(ctx.data().name(), e.getKey()).build());
+                                .say(new DataMessage.ATupleCannotBeAField(ctx.data().name(), e.getKey())).build());
             }
             // A field is written to and read from the outside, so a map it holds is a JSON object and
             // its keys are strings. Inside a body the same map may be keyed by anything (ADR-0040).
             Type badKey = TypeOps.nonBoundaryMapKey(e.getValue(), ctx.symbols());
             if (badKey != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1314, "check.map.key.field")
+                throw CompileException.of(Diagnostic
                                 .at(fieldRegion(ctx.data(), e.getKey()))
-                                .args(ctx.data().name() + "." + e.getKey(), Type.show(badKey))
-                                .hint("check.map.key.hint").build());
+                                
+                                .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(ctx.data().name() + "." + e.getKey(), Type.show(badKey))).build());
             }
         }
 
@@ -516,8 +521,8 @@ public final class DataChecker {
             // being reached from somewhere is not a permission a representation gave.
             Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx.inAnotherRepresentation());
             if (t != Type.BOOL) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1101, "e1101.msg").at(clause.expr().pos())
-                                .args(Type.show(t)).build());
+                throw CompileException.of(Diagnostic.at(clause.expr().pos())
+                                .say(new DeclarationMessage.AnInvariantExpressionIsBool(Type.show(t))).build());
             }
         }
         checkClauseNames(ctx.data(), ctx.symbols());
@@ -636,10 +641,10 @@ public final class DataChecker {
             elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
             Type vt = value.type();
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1317, "check.field.type")
+                throw CompileException.of(Diagnostic
                                 .at(init.written().region())
-                                .args(init.name(), Type.show(ft), Type.show(vt))
-                                .diff(Type.show(vt, ft), Type.show(ft, vt)).build());
+                                
+                                .diff(Type.show(vt, ft), Type.show(ft, vt)).say(new DataMessage.AFieldExpectsAnotherType(init.name(), Type.show(ft), Type.show(vt))).build());
             }
         }
         Map<String, Type> provided = new HashMap<>();
