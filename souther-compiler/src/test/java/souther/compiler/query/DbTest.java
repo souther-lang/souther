@@ -79,11 +79,9 @@ class DbTest {
 
         @Override
         public Answer<String> compute(Db db) {
-            return Answer.absent(Report.raised(
-                    Diagnostic.at(new souther.compiler.diag.SourcePos(3, 5))
+            return Answer.absent(Report.raised(Diagnostic.at(new souther.compiler.diag.SourcePos(3, 5))
                             .say(new souther.compiler.diag.msg.DataMessage.NotAFieldOf(field, data))
-                            .build(),
-                    "not a field"));
+                            .build()));
         }
     }
 

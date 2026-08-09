@@ -75,10 +75,22 @@ public final class JsonRenderer implements DiagnosticRenderer {
             obj.put("actualType", d.diff().actualType());
             obj.put("expectedType", d.diff().expectedType());
         }
-        List<String> hints = new ArrayList<>();
+        // A hint is a message like the line above it and carries values of its own — the sum a
+        // missing field is not in is named by the hint and by nothing else — so it is written the
+        // same way rather than flattened into the sentence a tool would then have to read.
+        List<Object> hints = new ArrayList<>();
         for (Note note : d.notes()) {
-            hints.add(note.said() != null ? Messages.render(note.said(), locale)
-                            : Messages.get(note.messageKey(), locale, note.args()));
+            Map<String, Object> hint = new LinkedHashMap<>();
+            if (note.said() != null) {
+                hint.put("message", Messages.render(note.said(), locale));
+                Map<String, Object> values = new LinkedHashMap<>();
+                MessageValues.of(note.said()).forEach((name, value) ->
+                        values.put(name, String.valueOf(value)));
+                hint.put("values", values);
+            } else {
+                hint.put("message", Messages.get(note.messageKey(), locale, note.args()));
+            }
+            hints.add(hint);
         }
         if (!hints.isEmpty()) {
             obj.put("hints", hints);

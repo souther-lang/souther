@@ -558,6 +558,31 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
         return keys;
     }
 
+    /**
+     * One entry belongs to one message.
+     *
+     * <p>The key is derived, which is what keeps a site from choosing one — it is not what keeps two
+     * messages from arriving at the same one. The derivation lowercases and drops a suffix, so it is
+     * not injective, and where two messages did collide every check below would read one entry twice
+     * and say nothing: the map they are gathered into would keep the last. Injectivity is held here
+     * rather than assumed of the function, which also survives the naming rule being changed.
+     */
+    @Test
+    void oneEntryBelongsToOneMessage() {
+        Map<String, List<String>> owners = new TreeMap<>();
+        for (Class<? extends Message> message : messages()) {
+            owners.computeIfAbsent(MessageKeys.of(message), _ -> new ArrayList<>())
+                    .add(message.getName());
+        }
+        List<String> shared = new ArrayList<>();
+        owners.forEach((key, byThese) -> {
+            if (byThese.size() > 1) {
+                shared.add(key + " is owned by " + String.join(" and ", byThese));
+            }
+        });
+        assertEquals(List.of(), shared, "two messages cannot render through one entry");
+    }
+
     /** Every message renders through an entry, in every catalog that ships. */
     @Test
     void everyMessageHasAnEntryInEveryCatalog() throws IOException {

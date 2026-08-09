@@ -90,7 +90,7 @@ is not one carries no components, so every rule under it is silent about it. Rul
 through the same parser the renderer reads it through — written twice, the two disagree about
 `{held_by}` and about a brace nothing closes, which is the drift this whole area exists to remove.
 
-Rule 2 is the new one and the reason for the rest. A value a diagnostic holds is a value a reader
+Rule 3 is the new one and the reason for the rest. A value a diagnostic holds is a value a reader
 sees, and the alternative — carrying it and not showing it — is not expressible. Rules 1, 3 and part
 of 4 restate what the catalog test already checks; they move into it rather than beside it.
 
@@ -138,11 +138,22 @@ already written in the language the sites are written in.
 
 ## Consequences
 
-Three hundred and ten declarations and 257 sites move at once, and the old constructors go with
-them; there is no state in which a site may still write an untyped diagnostic. A migration this
-wide is not reviewable as a Java diff, so what is reviewed is the rendered output: every diagnostic
-the test corpus emits is captured before the change, in both locales and both formats, and must
-come back byte-identical except where the wording was deliberately fixed.
+### Migration
+
+Three hundred and ten declarations and 257 sites have to move, and the old constructors go when the
+last of them does — until then `of(DiagnosticCode, String)` and `args(Object...)` stand beside the
+new form and the rules bind only what has moved. Rule 6 cannot be turned on before the last area.
+
+A migration this wide is not reviewable as a Java diff, so what is reviewed is the rendered output:
+every diagnostic the test corpus emits is captured before a change, in both locales and both
+formats, and has to come back byte-identical except where the wording was deliberately fixed.
+
+The areas move by rule rather than by file — an area is what a key's first segment names, and one
+file raises diagnostics of several. The parse area goes last: two of its sites take the code and the
+key as arguments and one reads both off a parse exception, so what they say is chosen while the
+compiler runs rather than where it is written.
+
+### Once it has moved
 
 Adding a diagnostic gains a step — declare the record — and loses two: choosing a key and writing
 the English sentence twice.
@@ -154,7 +165,7 @@ than separately.
 A message whose wording turns on a value becomes two records and two catalog entries. The catalog
 grows; the sentences become readable in the source.
 
-Rule 4 will find catalog keys no record names. Each is either a message that stopped being raised —
+Rule 5 will find catalog keys no record names. Each is either a message that stopped being raised —
 delete — or one whose site was never migrated — declare. The count is not known until the rules run.
 
 ## References

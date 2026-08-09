@@ -293,13 +293,9 @@ public final class Bodies {
          * that is one becomes a field here too — so the two cannot both be reached.
          */
         private Report collision(String bare, String earlier, Ast.Import imp) {
-            return Report.raised(
-                    Diagnostic.of(DiagnosticCode.E1508, "check.import.behaviordup")
+            return Report.raised(Diagnostic.of(DiagnosticCode.E1508, "check.import.behaviordup")
                             .at(imp.pos()).args(bare, earlier, imp.module())
-                            .hint("check.import.behaviordup.hint", bare).build(),
-                    "behavior `" + bare + "` is named from both `" + earlier + "` and `"
-                            + imp.module() + "`; one behavior name is one injected field, so this"
-                            + " module cannot take both");
+                            .hint("check.import.behaviordup.hint", bare).build());
         }
     }
 

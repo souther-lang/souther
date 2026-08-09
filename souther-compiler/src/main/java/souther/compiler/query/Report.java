@@ -90,7 +90,7 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
      * throw and into a query, where the message a caller reads should not change because the check
      * moved.
      */
-    public static Report raised(Diagnostic diagnostic, String body) {
+    public static Report raised(Diagnostic diagnostic) {
         return new Report(diagnostic, CompileException.of(diagnostic).getMessage(),
                 Delivery.BY_KEY);
     }
