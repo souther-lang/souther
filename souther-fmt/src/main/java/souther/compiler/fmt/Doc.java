@@ -30,7 +30,12 @@ sealed interface Doc {
     record Line(String flat) implements Doc {}
     record Hard() implements Doc {}
     record Concat(List<Doc> parts) implements Doc {}
-    record Nest(int indent, Doc doc) implements Doc {}
+    record Nest(NestRef ref, int indent, Doc doc) implements Doc {}
+
+    /** Which nesting a nesting is. Two written the same way are two of them, and what the
+     * indentation rule answers about is a pair of consecutive ones rather than a pair of amounts. */
+    final class NestRef {
+    }
     record Group(GroupRef ref, Doc doc) implements Doc {}
 
     /** What is written at one place of the canonical form. The document says which place; the
@@ -72,7 +77,7 @@ sealed interface Doc {
     }
 
     static Doc nest(int indent, Doc doc) {
-        return new Nest(indent, doc);
+        return new Nest(new NestRef(), indent, doc);
     }
 
     static Doc at(Place place, Doc doc) {
@@ -111,6 +116,7 @@ sealed interface Doc {
      */
     default Layout layout(int width) {
         List<GroupDecision> decisions = new ArrayList<>();
+        List<Newline> breaks = new ArrayList<>();
         java.util.Map<Place, Span> spans = new java.util.LinkedHashMap<>();
         java.util.Map<Place, Integer> opened = new java.util.IdentityHashMap<>();
         StringBuilder sb = new StringBuilder();
@@ -132,16 +138,17 @@ sealed interface Doc {
                 case Concat c -> {
                     List<Doc> parts = c.parts();
                     for (int i = parts.size() - 1; i >= 0; i--) {
-                        todo.push(new Item(it.indent, it.mode, parts.get(i)));
+                        todo.push(new Item(it.indent, it.mode, parts.get(i), null, it.under));
                     }
                 }
-                case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc()));
+                case Nest n -> todo.push(new Item(it.indent + n.indent(), it.mode, n.doc(), null,
+                        new Nesting(n.ref(), it.under)));
                 case At a -> {
                     // The close is pushed first so that it is popped after everything written at
                     // the place, which is what makes the span the interval the place occupies.
                     opened.put(a.place(), sb.length());
-                    todo.push(new Item(it.indent, it.mode, Doc.NIL, a.place()));
-                    todo.push(new Item(it.indent, it.mode, a.doc()));
+                    todo.push(new Item(it.indent, it.mode, Doc.NIL, a.place(), it.under));
+                    todo.push(new Item(it.indent, it.mode, a.doc(), null, it.under));
                 }
                 case Group g -> {
                     Fit fit = fits(width - col, new Item(it.indent, Mode.FLAT, g.doc()), todo);
@@ -151,19 +158,19 @@ sealed interface Doc {
                         case REFUSED -> new Outcome.BrokenByForcedLayout();
                     }));
                     todo.push(new Item(it.indent,
-                            fit == Fit.FITS ? Mode.FLAT : Mode.BREAK, g.doc()));
+                            fit == Fit.FITS ? Mode.FLAT : Mode.BREAK, g.doc(), null, it.under));
                 }
                 case Line l -> {
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
                         col += l.flat().length();
                     } else {
-                        sb.append('\n').append(" ".repeat(it.indent));
+                        breaks.add(newline(sb, it));
                         col = it.indent;
                     }
                 }
                 case Hard _ -> {
-                    sb.append('\n').append(" ".repeat(it.indent));
+                    breaks.add(newline(sb, it));
                     col = it.indent;
                 }
                 case Trailing t -> {
@@ -173,7 +180,15 @@ sealed interface Doc {
                 case MustBreak _ -> { }
             }
         }
-        return new Layout(sb.toString(), decisions, spans);
+        return new Layout(sb.toString(), decisions, spans, breaks);
+    }
+
+    /** Writes a break and says what it wrote. */
+    private static Newline newline(StringBuilder sb, Item it) {
+        int offset = sb.length();
+        sb.append('\n').append(" ".repeat(it.indent()));
+        return new Newline(offset, it.indent(),
+                it.under() == null ? List.of() : it.under().outermostFirst());
     }
 
     /** What a flat layout of a group came to. Refused and too wide are not one answer: the first is
@@ -246,11 +261,29 @@ sealed interface Doc {
     enum Mode { FLAT, BREAK }
 
     /** {@code closes} is the place this item ends, and is set only on the marker pushed to run
-     * after everything written at that place. */
-    record Item(int indent, Mode mode, Doc doc, Place closes) {
+     * after everything written at that place. {@code under} is the nestings it is written inside,
+     * innermost first. */
+    record Item(int indent, Mode mode, Doc doc, Place closes, Nesting under) {
 
         Item(int indent, Mode mode, Doc doc) {
-            this(indent, mode, doc, null);
+            this(indent, mode, doc, null, null);
+        }
+
+        Item(int indent, Mode mode, Doc doc, Place closes) {
+            this(indent, mode, doc, closes, null);
+        }
+    }
+
+    /** The nestings something is written inside, innermost first. */
+    record Nesting(NestRef ref, Nesting outer) {
+
+        /** Outermost first, which is the order the levels are read in. */
+        List<NestRef> outermostFirst() {
+            List<NestRef> out = new ArrayList<>();
+            for (Nesting n = this; n != null; n = n.outer()) {
+                out.add(0, n.ref());
+            }
+            return out;
         }
     }
 }
