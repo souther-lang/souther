@@ -72,8 +72,27 @@ public final class Compiler {
 
     private static Map<String, byte[]> compile(String source, String defaultModuleName,
                                                List<Located> warningsOut) {
+        return compiling(source, defaultModuleName, warningsOut);
+    }
+
+    /**
+     * Drives one compilation with the recovery every entry point here answers by.
+     *
+     * <p>Around the three places a compilation is driven, rather than around the entry points that
+     * reach them. It was written on the entry points that answer with classes, and the ones that
+     * answer with a {@link Compilation} — which is what the command line and the editor ask for —
+     * had nothing, so the same source was a diagnostic through one door and a stack trace through
+     * another. What decides the answer is the compiler, not which signature a caller reached for.
+     *
+     * <p>Around what an entry point does with the compilation as well as around the driving of it.
+     * Taking the classes off a driven compilation reads a key the driver already asked, so it walks
+     * nothing today — but that is a fact about the order two lines happen to be in, and a region
+     * that holds only while they stay in it is not a boundary. Nesting is why it can be said twice:
+     * the inner one answers first, and the outer one covers what is left.
+     */
+    static <T> T driven(java.util.function.Supplier<T> compilation) {
         try {
-            return compiling(source, defaultModuleName, warningsOut);
+            return compilation.get();
         } catch (StackOverflowError _) {
             throw tooDeep();
         }
@@ -83,8 +102,8 @@ public final class Compiler {
      * A source whose expressions nest deeper than the compiler can walk. Every phase descends an
      * expression by recursion — parsing, inlining, checking, emitting — so past some depth the stack
      * runs out. That is not a {@code CompileException}, so left alone it passes through the recovery
-     * boundary and reaches the author as a stack trace, and takes the language server's dispatch
-     * loop with it. It is reported like any other thing the compiler cannot accept.
+     * boundary and reaches the author as a stack trace. It is reported like any other thing the
+     * compiler cannot accept.
      *
      * <p>The depth is not a written limit, so no position is claimed: the failure belongs to the
      * source as a whole, and the author's move is the same wherever it landed — name the parts.
@@ -103,7 +122,7 @@ public final class Compiler {
      */
     private static Map<String, byte[]> compiling(String source, String defaultModuleName,
                                                  List<Located> warningsOut) {
-        return classesOf(compiled(source, defaultModuleName, warningsOut));
+        return driven(() -> classesOf(compiled(source, defaultModuleName, warningsOut)));
     }
 
     /**
@@ -161,6 +180,14 @@ public final class Compiler {
                                         List<Located> warningsOut, Adequacy.Asked measure,
                                         java.time.Duration exampleBudget, Deadline deadline,
                                         EvaluationPolicy policy) {
+        return driven(() -> compilingSource(source, defaultModuleName, warningsOut, measure,
+                exampleBudget, deadline, policy));
+    }
+
+    private static Compilation compilingSource(String source, String defaultModuleName,
+                                               List<Located> warningsOut, Adequacy.Asked measure,
+                                               java.time.Duration exampleBudget, Deadline deadline,
+                                               EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
@@ -245,13 +272,20 @@ public final class Compiler {
      * the raising entry points: they reach the collection only by getting past every error, so a
      * compilation with one reports no warnings at all. Nothing about a warning depends on the errors
      * beside it.
+     *
+     * <p>Running out of stack is the one thing this raises. An error is an answer — it is in the
+     * reports, and the compilation around it stands — but a walk that ran out returned nothing to
+     * put there, and the questions below it have no answers either. There is no partial reading to
+     * hand back, so this says what it is instead of handing back a compilation that looks clean.
      */
     private static Compilation answered(Compilation compilation, List<Located> warningsOut,
                                         Adequacy.Asked measure) {
-        compilation.measure(measure);
-        compilation.answerEverything();
-        warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
-        return compilation;
+        return driven(() -> {
+            compilation.measure(measure);
+            compilation.answerEverything();
+            warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
+            return compilation;
+        });
     }
 
     private static Map<String, byte[]> classesOf(Compilation compilation) {
@@ -288,11 +322,7 @@ public final class Compiler {
 
     private static Map<String, byte[]> compileModules(List<String> sources, ModulePath path,
                                                       List<Located> warningsOut) {
-        try {
-            return linking(sources, path, warningsOut);
-        } catch (StackOverflowError _) {
-            throw tooDeep();
-        }
+        return linking(sources, path, warningsOut);
     }
 
     /**
@@ -323,8 +353,8 @@ public final class Compiler {
 
     private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
-        return new LinkedHashMap<>(
-                linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes());
+        return driven(() -> new LinkedHashMap<>(
+                linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes()));
     }
 
     /** As {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}, on a budget of its own
@@ -359,6 +389,14 @@ public final class Compiler {
                                       List<Located> warningsOut, Adequacy.Asked measure,
                                       java.time.Duration exampleBudget, Deadline deadline,
                                       EvaluationPolicy policy) {
+        return driven(() -> linkingSources(sources, path, warningsOut, measure, exampleBudget,
+                deadline, policy));
+    }
+
+    private static Compilation linkingSources(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure,
+                                              java.time.Duration exampleBudget, Deadline deadline,
+                                              EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(sources, path);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
