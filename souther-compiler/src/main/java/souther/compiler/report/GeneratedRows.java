@@ -217,6 +217,9 @@ public final class GeneratedRows {
     private static String why(Generator.UnresolvedCombination.Reason reason) {
         return switch (reason) {
             case NO_REPRESENTATIVE -> "no value can be written there";
+            case NOTHING_COMPOSES_ONE ->
+                    "nothing here composes a value at that edge, which does not make the edge"
+                            + " unwritable";
             case ALL_CANDIDATES_REJECTED ->
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";

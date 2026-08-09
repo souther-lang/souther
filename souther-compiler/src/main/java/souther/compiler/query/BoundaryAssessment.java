@@ -190,7 +190,7 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
      * generator writes these same words on the row it offers, so a row and a note about the boundary
      * it stands for name it the same way. */
     public String label() {
-        return obligation.axis().path() + " = " + value();
+        return obligation.axis().term() + " = " + value();
     }
 
     /** The value as an author would write it, not as a record prints itself. */

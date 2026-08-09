@@ -1,0 +1,88 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
+
+import java.math.BigDecimal;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+
+/**
+ * A term with no number for a value says which of the two happened.
+ *
+ * <p>They license different sentences and are not shades of one another. An observation the run
+ * could not read leaves a measure undecided: the row that was cut short may be the row at the value,
+ * and calling it absent would report a gap that nothing established. A value that was read and is
+ * not a number of this term is neither — it is a value this term does not hold, and calling that
+ * unreadable would report a term that does not fit its position as a row nobody could read.
+ *
+ * <p>Fixed here rather than at each reader. A class asks this question and so does a boundary, and
+ * folding the two answers into a number-or-null is how the second of them came to say "undecided"
+ * to both.
+ */
+class ATermSaysWhyItHasNoNumberTest {
+
+    private static final NumericTerm VALUE = new NumericTerm.ValueOf(TermPath.of("x"));
+    private static final NumericTerm LENGTH = new NumericTerm.SizeOf(
+            ValueName.Stdlib.operation("String", "length"), TermPath.of("x"));
+    private static final TypeName WRAPPER = new TypeName("example", "Wrapped");
+
+    @Test
+    void anObservationThatDidNotArriveIsMissing() {
+        assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
+                ((NumericTerm.Reading.Missing) VALUE.read(new ObservedValue.Truncated())).code());
+        assertInstanceOf(NumericTerm.Reading.Missing.class,
+                LENGTH.read(new ObservedValue.Truncated()));
+        assertInstanceOf(NumericTerm.Reading.Missing.class,
+                VALUE.read(new ObservedValue.Unknown("gone")));
+    }
+
+    /** One layer in, which is where a newtype puts it. The construction reads perfectly well and the
+     * number is what is missing, so a walk that only looked at the outside would call this a value
+     * the term does not hold. */
+    @Test
+    void anObservationCutShortInsideANewtypeIsMissingToo() {
+        ObservedValue wrapped = new ObservedValue.Constructed(WRAPPER,
+                Map.of("value", new ObservedValue.Truncated()));
+        assertInstanceOf(NumericTerm.Reading.Missing.class, VALUE.read(wrapped));
+        assertInstanceOf(NumericTerm.Reading.Missing.class, LENGTH.read(wrapped));
+    }
+
+    /** A value that was read, and that this term is not a number of. Not the same answer. */
+    @Test
+    void aValueThatWasReadAndIsNotThisTermsNumberIsNotMissing() {
+        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
+                VALUE.read(new ObservedValue.Text("abc")));
+        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
+                LENGTH.read(new ObservedValue.Integer(3)));
+        assertInstanceOf(NumericTerm.Reading.NotNumber.class,
+                LENGTH.read(new ObservedValue.Bool(true)));
+    }
+
+    /** And what each term does read, so that none of the above passes by reading nothing at all. */
+    @Test
+    void eachTermReadsItsOwnNumber() {
+        assertEquals(BigDecimal.valueOf(3),
+                ((NumericTerm.Reading.Number) VALUE.read(new ObservedValue.Integer(3))).value());
+        assertEquals(BigDecimal.valueOf(3),
+                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("abc"))).value());
+        assertEquals(BigDecimal.valueOf(3),
+                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Constructed(
+                        WRAPPER, Map.of("value", new ObservedValue.Text("abc"))))).value());
+    }
+
+    /** A string counts in code points, as `Strings.length` does. Counted in UTF-16 units this is 2,
+     * and a boundary at 1 would be a row the rule that drew it never asked for. */
+    @Test
+    void aStringIsCountedTheWayTheLanguageCountsIt() {
+        assertEquals(BigDecimal.ONE,
+                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("😀")))
+                        .value());
+    }
+}

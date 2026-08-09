@@ -28,7 +28,7 @@ class OneReasonPerKindPerPositionTest {
 
     private static Classification could(Incompleteness.Code code, AxisId axis) {
         return new Classification.Unclassified(
-                Incompleteness.atPosition(code, axis.behavior(), axis.path()));
+                Incompleteness.atPosition(code, axis.behavior(), axis.term()));
     }
 
     @SafeVarargs

@@ -60,7 +60,7 @@ public final class RowClasses {
         int at = parameters.indexOf(axis.path().head());
         if (at < 0 || at >= row.inputs().size()) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
-                    axis.id().behavior(), axis.id().path());
+                    axis.id().behavior(), axis.id().term());
         }
         ObservedValue value = walk(row.inputs().get(at), axis.path().fields());
         // Kept rather than returned on, and not acted on either. A class may read less of a value
@@ -93,7 +93,7 @@ public final class RowClasses {
         }
         if (incomplete != null) {
             return Classification.unreadable(incomplete,
-                    axis.id().behavior(), axis.id().path());
+                    axis.id().behavior(), axis.id().term());
         }
         // Every class read the value and none holds it, which `Axis` says cannot happen: its classes
         // are exhaustive over the position's values. So this is that contract broken rather than

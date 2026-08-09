@@ -117,7 +117,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     private static Incompleteness.Code why(Read read, RowOutcome row) {
         Map<AxisId, Classification> classes = RowClasses.of(row, read.parameters(), read.axes());
         Classification where = classes.entrySet().stream()
-                .filter(e -> e.getKey().path().equals(POSITION))
+                .filter(e -> e.getKey().term().equals(POSITION))
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + POSITION));
         return assertInstanceOf(Classification.Unclassified.class, where).reason().code();

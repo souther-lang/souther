@@ -6,6 +6,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.InvariantBound;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.numeric.Endpoint;
@@ -14,6 +15,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -62,8 +64,8 @@ public final class Partitions {
      *                nothing can classify into the denominator
      */
     public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
-                               Map<String, NumericDomain.Bounds> domains,
-                               java.util.Set<String> uncertain) {
+                               Map<NumericTerm, NumericDomain.Bounds> domains,
+                               java.util.Set<NumericTerm> uncertain) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
@@ -71,14 +73,14 @@ public final class Partitions {
             uncertain = java.util.Set.copyOf(uncertain);
         }
 
-        /** Whether an edge of this position is a value some row could carry.
+        /** Whether an edge of this term is a value some row could carry.
          *
-         * <p>False where a rule reaching the value this position sits in was not read in full. Every
+         * <p>False where a rule reaching the value the term is taken of was not read in full. Every
          * edge here is then where the rules this could read stop, and a rule it could not read can
          * refuse that value as easily as the one beyond it — so the edge is not known to be writable
          * and asking for a row at it is asking for work nobody may be able to do. */
-        public boolean edgeIsKnownWritable(String path) {
-            return !uncertain.contains(path);
+        public boolean edgeIsKnownWritable(NumericTerm term) {
+            return !uncertain.contains(term);
         }
 
         /** Only the positions the model actually divides. */
@@ -92,8 +94,8 @@ public final class Partitions {
     public static Partitioning of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
                                   Exclusions excluded) {
         List<Axis> found = new ArrayList<>();
-        Map<String, NumericDomain.Bounds> domains = new LinkedHashMap<>();
-        java.util.Set<String> uncertain = new java.util.LinkedHashSet<>();
+        Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
+        java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             // One reading per parameter, not one per record met on the way down. A clause on the
             // outer record relates positions at any depth it can name, and rebuilding the reading at
@@ -138,16 +140,29 @@ public final class Partitions {
                                               Symbols symbols) {
         List<Axis> out = new ArrayList<>();
         for (Axis axis : base.axes()) {
+            NumericTerm declared = axis.term();
+            NumericTerm term = declared;
             List<Threshold> here = thresholds.stream()
-                    .filter(t -> t.path().toString().equals(axis.path().toString())).toList();
+                    .filter(t -> t.term().equals(declared)).toList();
             if (here.isEmpty()) {
-                out.add(axis);
-                continue;
+                // A position no rule divides, whose body measures some other number of it: a bare
+                // `List<String>` nothing bounds, under a `guard List.length(t.names) > 0`. The line
+                // is on that number, so the axis becomes one about it — there was nothing else here
+                // for it to be about, and dropping the threshold would lose a line the body draws.
+                NumericTerm drawn = axis.measurable() ? null : soleTermAt(thresholds, axis.path());
+                if (drawn == null) {
+                    out.add(axis);
+                    continue;
+                }
+                term = drawn;
+                here = thresholds.stream().filter(t -> t.term().equals(drawn)).toList();
+                axis = new Axis(new AxisId(axis.id().behavior(), drawn.toString()), drawn,
+                        axis.type(), axis.classes(), axis.cuts(), axis.excluded());
             }
-            // What this position can hold, which is the type's bound already narrowed by whatever
+            // What this term's values can be, which is the type's bound already narrowed by whatever
             // the record it sits in says about it. Reading the type again here would put a threshold
             // back inside a range the record has no values in.
-            NumericDomain.Bounds domain = base.domains().get(axis.path().toString());
+            NumericDomain.Bounds domain = domainOf(base, term);
             // Filtered once, and both answers read the filtered list. A line outside what the
             // position holds divides nothing, and it is not a boundary either: leaving it in the
             // cuts while the intervals dropped it asks for a row at a value the record refuses,
@@ -159,19 +174,60 @@ public final class Partitions {
             List<PartitionClass> classes = Intervals.classesOf(
                     Intervals.of(reachable, domain == null ? null : domain.min(),
                             domain == null ? null : domain.max()),
-                    axis.path(), axis.type(), symbols);
-            // What the position is, not what an invariant said about it. There is a bound to read
-            // only where the type is a newtype carrying one, and a plain `Decimal` has none — read
-            // off the bound, every such position would be called an integer and a threshold of
-            // `0.5m` would be asked for its exact `long`.
-            boolean decimal = TypeOps.base(axis.type(), symbols) == Type.DECIMAL;
+                    term, axis.type(), symbols);
+            // What the term is, not what an invariant said about it. There is a bound to read only
+            // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
+            // bound, every such position would be called an integer and a threshold of `0.5m` would
+            // be asked for its exact `long`. A size is a whole number whatever it is a size of.
+            boolean decimal = term.decimal(axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
-            out.add(new Axis(axis.id(), axis.path(), axis.type(),
+            out.add(new Axis(axis.id(), term, axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
                     merged(axis.cuts(), reachable, decimal)).excluding(axis.excluded()));
         }
-        return new Partitioning(out, base.omitted(), base.domains(), base.uncertain());
+        return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain());
+    }
+
+    /**
+     * The one term a body draws lines on at {@code path}, or null where it draws none or draws them
+     * on more than one.
+     *
+     * <p>More than one is left alone rather than picked between. A position carrying two axes is a
+     * shape this can hold and nothing yet produces, and choosing one of them here would silently
+     * drop the other's lines.
+     */
+    private static NumericTerm soleTermAt(List<Threshold> thresholds, TermPath path) {
+        NumericTerm found = null;
+        for (Threshold each : thresholds) {
+            if (!each.term().path().equals(path)) {
+                continue;
+            }
+            if (found != null && !found.equals(each.term())) {
+                return null;
+            }
+            found = each.term();
+        }
+        return found;
+    }
+
+    private static NumericDomain.Bounds domainOf(Partitioning base, NumericTerm term) {
+        NumericDomain.Bounds read = base.domains().get(term);
+        return read != null ? read : term.ownBounds();
+    }
+
+    /** The domains, with an entry for a term an axis only took on here. What a term guarantees about
+     * its own values is what bounds it where no rule was written about it. */
+    private static Map<NumericTerm, NumericDomain.Bounds> domainsOf(Partitioning base,
+                                                                    List<Axis> axes) {
+        Map<NumericTerm, NumericDomain.Bounds> out = new LinkedHashMap<>(base.domains());
+        for (Axis axis : axes) {
+            NumericDomain.Bounds own = axis.term().ownBounds();
+            if (own != null) {
+                out.putIfAbsent(axis.term(), own);
+            }
+        }
+        return out;
     }
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
@@ -211,8 +267,7 @@ public final class Partitions {
      */
     public static List<BoundaryObligation> obligationsOf(Axis axis, Symbols symbols,
                                                          NumericDomain.Bounds within) {
-        boolean decimal = TypeOps.base(axis.type(), symbols) == Type.DECIMAL;
-        BoundaryDomain domain = decimal ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
+        BoundaryDomain domain = axis.term().intervals(axis.type(), symbols);
         List<BoundaryObligation> out = new ArrayList<>();
         for (Cut cut : axis.cuts()) {
             // A line the position does not reach. The rule that drew it did so about the type, and
@@ -268,21 +323,30 @@ public final class Partitions {
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
                              List<Axis> out, Placed placed,
-                             Map<String, NumericDomain.Bounds> domains,
-                             java.util.Set<String> uncertain) {
-        AxisId id = AxisId.of(behavior, path);
+                             Map<NumericTerm, NumericDomain.Bounds> domains,
+                             java.util.Set<NumericTerm> uncertain) {
         List<PartitionClass> classes = classesOf(type, symbols);
-        Bounds own = boundsOf(type, symbols);
+        // Which number this position is measured at, and what its rules leave that number. Asked
+        // together because they are one reading: whether a rule bounds the length of a string is how
+        // it is known that the length is the number being measured.
+        Measured measured = measure(path, type, symbols);
+        NumericTerm term = measured.term();
+        AxisId id = AxisId.of(behavior, term);
+        Bounds own = measured.bounds();
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed != null && placed.domains().infeasible();
-        NumericDomain.Bounds projected = placed == null ? null : placed.at(path);
-        // Two questions of one pair of readings, and they do not have one answer. What the position
-        // can hold is every rule about it intersected; where it is divided is only where its own type
-        // draws a line, because a clause relating two fields is not a partition of one of them.
-        NumericDomain.Bounds admissible = nothingExists ? null : admissibleBounds(own, projected);
+        // A record's rule relates the numbers its fields hold, so it reaches the term that is one of
+        // them and no other: a cap on a field says nothing about how long the string beside it is.
+        NumericDomain.Bounds projected = placed == null || !(term instanceof NumericTerm.ValueOf)
+                ? null : placed.at(path);
+        // Two questions of one pair of readings, and they do not have one answer. What the term's
+        // values can be is every rule about it intersected; where it is divided is only where its own
+        // type draws a line, because a clause relating two fields is not a partition of one of them.
+        NumericDomain.Bounds admissible = nothingExists ? null
+                : admissibleBounds(own, projected, term);
         if (admissible != null && !admissible.isEmpty()) {
-            domains.put(path.toString(), admissible);
+            domains.put(term, admissible);
         }
         Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
@@ -291,10 +355,10 @@ public final class Partitions {
         // sits in, so it is answered once for the parameter. A rule this could not read is a way that
         // value can be refused, wherever in it the rule is written.
         if (!cuts.isEmpty() && placed != null && !placed.domains().allRulesRead()) {
-            uncertain.add(path.toString());
+            uncertain.add(term);
         }
         if (!classes.isEmpty() || !cuts.isEmpty()) {
-            out.add(new Axis(id, path, type, classes, cuts));
+            out.add(new Axis(id, term, type, classes, cuts));
             return;
         }
         Map<String, Type> fields = productFields(type, symbols);
@@ -305,7 +369,32 @@ public final class Partitions {
             }
             return;
         }
-        out.add(Axis.notDerivable(id, path, type));
+        out.add(Axis.notDerivable(id, term, type));
+    }
+
+    /** A position's number and what its own rules leave it. */
+    private record Measured(NumericTerm term, Bounds bounds) {}
+
+    /**
+     * Which number a position is measured at.
+     *
+     * <p>What it holds, where that is a number. Otherwise what its rules take of it — and only where
+     * they take something: a string nobody wrote a rule about is a position the model draws no line
+     * through, and naming its length there would put a term in the report that nobody wrote.
+     */
+    private static Measured measure(TermPath path, Type type, Symbols symbols) {
+        Type carried = TypeOps.numericBase(type, symbols);
+        if (carried != null) {
+            return new Measured(new NumericTerm.ValueOf(path), boundsOf(type, symbols, carried, null));
+        }
+        ValueName.Stdlib of = NumericMeasures.takenOf(type, symbols);
+        if (of != null) {
+            Bounds sized = boundsOf(type, symbols, Type.INT, of);
+            if (sized != null && !sized.isEmpty()) {
+                return new Measured(new NumericTerm.SizeOf(of, path), sized);
+            }
+        }
+        return new Measured(new NumericTerm.ValueOf(path), null);
     }
 
     /** The value a position is inside: what it is called, and what its rules leave each position of
@@ -368,14 +457,31 @@ public final class Partitions {
      * position on its own.
      */
     private static NumericDomain.Bounds admissibleBounds(Bounds own, NumericDomain.Bounds projected) {
+        return admissibleBounds(own, projected, null);
+    }
+
+    /**
+     * The same, with what the term itself guarantees taken in.
+     *
+     * <p>A size is never negative and nothing has to write that down (spec
+     * §invariant-discharge-terms). Kept here with the rules rather than at the boundary that reads
+     * them, so that a guard at zero is refused its neighbour below by the same intersection that
+     * refuses one outside an invariant.
+     */
+    private static NumericDomain.Bounds admissibleBounds(Bounds own, NumericDomain.Bounds projected,
+                                                         NumericTerm term) {
+        NumericDomain.Bounds intrinsic = term == null ? null : term.ownBounds();
         if (own == null) {
-            return null;   // not a number, so nothing bounds it either way
+            return intrinsic;   // not a number of its own, so only what the term guarantees
         }
         Endpoint min = own.min() == null ? null : own.min().at();
         Endpoint max = own.max() == null ? null : own.max().at();
-        return projected == null ? new NumericDomain.Bounds(min, max)
+        NumericDomain.Bounds read = projected == null ? new NumericDomain.Bounds(min, max)
                 : new NumericDomain.Bounds(Endpoint.lower(min, projected.min()),
                         Endpoint.upper(max, projected.max()));
+        return intrinsic == null ? read
+                : new NumericDomain.Bounds(Endpoint.lower(read.min(), intrinsic.min()),
+                        Endpoint.upper(read.max(), intrinsic.max()));
     }
 
     /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
@@ -506,8 +612,18 @@ public final class Partitions {
 
     }
 
+    /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
+     * the value and not about anything taken of it. */
     private static Bounds boundsOf(Type type, Symbols symbols) {
-        Type base = TypeOps.numericBase(type, symbols);
+        return boundsOf(type, symbols, TypeOps.numericBase(type, symbols), null);
+    }
+
+    /**
+     * @param base    the kind of number the clauses are read as
+     * @param measure the operation the number is taken by, or null where the number is the value
+     *                itself
+     */
+    private static Bounds boundsOf(Type type, Symbols symbols, Type base, ValueName measure) {
         if (base == null) {
             return null;
         }
@@ -521,7 +637,8 @@ public final class Partitions {
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                    InvariantBound read = InvariantBound.of(each, base).orElse(null);
+                    InvariantBound read = (measure == null ? InvariantBound.of(each, base)
+                            : InvariantBound.ofSize(each, measure)).orElse(null);
                     if (read == null) {
                         continue;
                     }

@@ -208,7 +208,7 @@ class ThresholdNormalizationTest {
         List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, Symbols.none(),
                 read.partitioning().domains().get("request.cost"));
         List<String> described = obligations.stream()
-                .map(o -> o.side() + " " + Intervals.numberOf(o.value())).toList();
+                .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
 
         assertTrue(described.contains("AT 100000"), described.toString());
         assertTrue(described.contains("ABOVE 100001"), described.toString());
@@ -244,7 +244,7 @@ class ThresholdNormalizationTest {
 
         List<String> described = Partitions.obligationsOf(amount, Symbols.none(),
                 read.partitioning().domains().get(amount.path().toString())).stream()
-                .map(o -> o.side() + " " + Intervals.numberOf(o.value())).toList();
+                .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
         assertTrue(described.contains("AT 3000"), described.toString());
         assertTrue(described.contains("BELOW 2999"), described.toString());
     }

@@ -46,9 +46,12 @@ final class DischargeRules {
      * container or a string. Each becomes an atom keyed by the call written over its argument's path
      * — {@code List.length(b.items)} — so an invariant clause and a guard naming the same container
      * name the same atom, and the guard discharges the clause. The argument must be a nameable path:
-     * {@code List.length(List.map(f, xs))} is not this atom, and nothing relates the two. */
-    private static final Set<ValueName> SIZE_CALLS = Set.of(
-            op("List", "length"), op("String", "length"), op("Set", "size"), op("Map", "size"));
+     * {@code List.length(List.map(f, xs))} is not this atom, and nothing relates the two.
+     *
+     * <p>Shared with the partition, which draws a boundary on the same calls ({@link
+     * NumericMeasures}). Two lists would let a rule be discharged here and reported as one the model
+     * does not state there. */
+    private static final Set<ValueName> SIZE_CALLS = NumericMeasures.calls();
 
     /**
      * What a construction of a container keeps of the elements of the container it was built from.

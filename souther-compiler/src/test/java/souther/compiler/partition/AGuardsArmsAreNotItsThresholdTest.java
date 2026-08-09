@@ -146,11 +146,13 @@ class AGuardsArmsAreNotItsThresholdTest {
             new CoverageSites.GuardRef("pick", 0, 1, null);
 
     private static GuardEdge above(long value, boolean inclusive) {
-        return GuardEdge.above(ONE_GUARD, 0, TermPath.of("n"), BigDecimal.valueOf(value), inclusive);
+        return GuardEdge.above(ONE_GUARD, 0, new NumericTerm.ValueOf(TermPath.of("n")),
+                BigDecimal.valueOf(value), inclusive);
     }
 
     private static GuardEdge below(long value, boolean inclusive) {
-        return GuardEdge.below(ONE_GUARD, 1, TermPath.of("n"), BigDecimal.valueOf(value), inclusive);
+        return GuardEdge.below(ONE_GUARD, 1, new NumericTerm.ValueOf(TermPath.of("n")),
+                BigDecimal.valueOf(value), inclusive);
     }
 
     private static NumericDomain.Bounds holds(Long min, Long max) {
@@ -216,7 +218,8 @@ class AGuardsArmsAreNotItsThresholdTest {
     @Test
     void reachabilityNamesTheArmsItProvesAndNoOthers() {
         List<GuardEdge> edges = List.of(above(50, true), below(50, false));
-        GuardReachability reach = GuardReachability.of(edges, Map.of("n", holds(0L, 10L)));
+        GuardReachability reach = GuardReachability.of(edges,
+                Map.of(new NumericTerm.ValueOf(TermPath.of("n")), holds(0L, 10L)));
 
         assertTrue(reach.provenUnreachable(0), "the arm above 50 is unreachable");
         assertFalse(reach.provenUnreachable(1), "the arm below it is the whole of the range");

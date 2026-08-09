@@ -8,6 +8,7 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.GuardEdge;
 import souther.compiler.partition.GuardReachability;
+import souther.compiler.partition.NumericTerm;
 import souther.compiler.partition.TermPath;
 import souther.compiler.query.Adequacy;
 
@@ -246,10 +247,11 @@ class AnArmNothingReachesIsNotOwedARowTest {
     /** A reachability that proves arm 0 unreachable: nothing at or above 50 is a value of [0, 10]. */
     private static GuardReachability proving() {
         GuardEdge edge = GuardEdge.above(new CoverageSites.GuardRef("classify", 0, 1, null),
-                0, TermPath.of("pair"), BigDecimal.valueOf(50), true);
+                0, new NumericTerm.ValueOf(TermPath.of("pair")), BigDecimal.valueOf(50), true);
         return GuardReachability.of(List.of(edge),
-                Map.of("pair", new NumericDomain.Bounds(Endpoint.inclusive(BigDecimal.ZERO),
-                        Endpoint.inclusive(BigDecimal.TEN))));
+                Map.of(new NumericTerm.ValueOf(TermPath.of("pair")),
+                        new NumericDomain.Bounds(Endpoint.inclusive(BigDecimal.ZERO),
+                                Endpoint.inclusive(BigDecimal.TEN))));
     }
 
     @Test

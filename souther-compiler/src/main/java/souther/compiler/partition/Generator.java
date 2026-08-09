@@ -93,6 +93,16 @@ public final class Generator {
         public enum Reason {
             /** One of the classes has no value that can be written for it. */
             NO_REPRESENTATIVE,
+            /**
+             * Nothing here knows how to compose a value of the shape asked for.
+             *
+             * <p>Apart from {@code NO_REPRESENTATIVE}, which says the position has no values. This
+             * says the search has no way to write one — a string of a given length is the case
+             * (#528) — and that is a fact about this compiler rather than about the model. Told
+             * apart because the first licenses "no value can be written there" and this one does
+             * not: the edge may be the easiest row in the file to write by hand.
+             */
+            NOTHING_COMPOSES_ONE,
             /** Every value tried was refused at construction. */
             ALL_CANDIDATES_REJECTED,
             /** The search stopped before it got here. */
@@ -279,7 +289,16 @@ public final class Generator {
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(),
                     UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
-        String label = axis.path() + " = " + written(obligation.value());
+        String label = axis.term() + " = " + written(obligation.value());
+        // A line on something taken of the value is not met by writing that number at the position:
+        // a length of five is a string of five characters, and nothing here composes one (#528).
+        // Said as having no value to offer rather than by handing the decoder an integer where a
+        // string goes — which it refuses, and "every value tried was refused" would then report an
+        // opinion the decoder never had about a boundary a row could easily meet.
+        if (!(axis.term() instanceof NumericTerm.ValueOf)) {
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+        }
         FixtureTemplate at = valueOf(obligation.value(), axis.type(), subject.symbols());
         if (at == null) {
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),

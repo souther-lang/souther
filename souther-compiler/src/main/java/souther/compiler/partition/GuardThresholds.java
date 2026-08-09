@@ -2,11 +2,13 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Location;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.SourceRef;
+import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -81,15 +83,15 @@ public final class GuardThresholds {
             return;
         }
         Ast.BinOp op = comparison.op();
-        TermPath path = pathOf(comparison.left(), parameters, symbols);
+        NumericTerm term = termOf(comparison.left(), parameters, symbols);
         BigDecimal value = constantOf(comparison.right());
-        if (path == null || value == null) {
+        if (term == null || value == null) {
             // `100000 >= cost` says what `cost <= 100000` says; read the position-bearing side first.
-            path = pathOf(comparison.right(), parameters, symbols);
+            term = termOf(comparison.right(), parameters, symbols);
             value = constantOf(comparison.left());
             op = mirrored(op);
         }
-        if (path == null || value == null) {
+        if (term == null || value == null) {
             return;
         }
         Boolean below = switch (op) {
@@ -104,7 +106,7 @@ public final class GuardThresholds {
         if (guard == null) {
             return;   // no site for this `if`: nothing could answer for it
         }
-        out.add(new Threshold(path, value, below,
+        out.add(new Threshold(term, value, below,
                 new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
                         below)));
         // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
@@ -114,20 +116,20 @@ public final class GuardThresholds {
         int otherwise = guard.siteIndexElse();
         switch (op) {
             case LE -> {
-                edge(edges, guard, then, path, value, true, true);
-                edge(edges, guard, otherwise, path, value, false, false);
+                edge(edges, guard, then, term, value, true, true);
+                edge(edges, guard, otherwise, term, value, false, false);
             }
             case GT -> {
-                edge(edges, guard, then, path, value, false, false);
-                edge(edges, guard, otherwise, path, value, true, true);
+                edge(edges, guard, then, term, value, false, false);
+                edge(edges, guard, otherwise, term, value, true, true);
             }
             case LT -> {
-                edge(edges, guard, then, path, value, true, false);
-                edge(edges, guard, otherwise, path, value, false, true);
+                edge(edges, guard, then, term, value, true, false);
+                edge(edges, guard, otherwise, term, value, false, true);
             }
             case GE -> {
-                edge(edges, guard, then, path, value, false, true);
-                edge(edges, guard, otherwise, path, value, true, false);
+                edge(edges, guard, then, term, value, false, true);
+                edge(edges, guard, otherwise, term, value, true, false);
             }
             default -> { }
         }
@@ -136,12 +138,12 @@ public final class GuardThresholds {
     /** One arm's edge, where that arm has a probe. An arm answering nothing has none, and it is owed
      * no row whether anything reaches it or not. */
     private static void edge(List<GuardEdge> edges, CoverageSites.GuardRef guard, int site,
-                             TermPath path, BigDecimal value, boolean below, boolean inclusive) {
+                             NumericTerm term, BigDecimal value, boolean below, boolean inclusive) {
         if (site == CoverageSites.NO_SITE) {
             return;
         }
-        edges.add(below ? GuardEdge.below(guard, site, path, value, inclusive)
-                : GuardEdge.above(guard, site, path, value, inclusive));
+        edges.add(below ? GuardEdge.below(guard, site, term, value, inclusive)
+                : GuardEdge.above(guard, site, term, value, inclusive));
     }
 
     private static CoverageSites.GuardRef guardOf(CoverageSites.Plan plan, Core.If iff) {
@@ -169,6 +171,25 @@ public final class GuardThresholds {
      * declared parameter is not a binding — a behavior with no implementation has axes all the same —
      * so this path is rooted at the parameter and {@link Location} at the binding a body gave it.
      */
+    /**
+     * The number a comparison names, which is a location's content or something taken of it.
+     *
+     * <p>Which of the standard library's calls count is asked of {@link NumericMeasures} rather than
+     * decided here, and asked of the operation the call resolved to rather than of its spelling. The
+     * argument has to be a location: {@code List.length(List.map(f, xs))} counts something no path
+     * names, and a boundary on it could not be looked for in a row.
+     */
+    static NumericTerm termOf(Core e, List<String> parameters, Symbols symbols) {
+        if (e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
+                && reached.name() instanceof ReachName.OfLibrary library
+                && NumericMeasures.isMeasure(library.target()) && call.args().size() == 1) {
+            TermPath of = pathOf(call.args().get(0), parameters, symbols);
+            return of == null ? null : new NumericTerm.SizeOf(library.target(), of);
+        }
+        TermPath path = pathOf(e, parameters, symbols);
+        return path == null ? null : new NumericTerm.ValueOf(path);
+    }
+
     static TermPath pathOf(Core e, List<String> parameters, Symbols symbols) {
         return switch (e) {
             case Core.Read r -> parameters.contains(r.name()) ? TermPath.of(r.name()) : null;
