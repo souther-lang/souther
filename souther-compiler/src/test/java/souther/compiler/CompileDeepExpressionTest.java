@@ -2,8 +2,14 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Located;
+import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -12,11 +18,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An expression nested deeper than the walks can recurse must be reported, not thrown. Every phase
- * here descends an expression by recursion, so a deep enough one exhausts the stack — and a
- * {@code StackOverflowError} is not a {@code CompileException}, so it passes straight through the
- * recovery boundary: the command line prints a stack trace, and the language server, which catches
- * {@code RuntimeException} to stay alive, does not catch this and exits.
+ * A compilation that runs out of stack must be reported, not thrown. Every phase here descends by
+ * recursion, so a deep enough one exhausts the stack — and a {@code StackOverflowError} is not a
+ * {@code CompileException}, so left alone it passes straight through the recovery boundary and the
+ * command line prints a stack trace.
+ *
+ * <p>Asked at every entry point, because the answer is the compiler's rather than the signature's.
+ * The recovery was written on the two that answer with classes, and the ones that answer with a
+ * {@code Compilation} — which is what the command line and the editor ask for — did not have it, so
+ * the same source came back a diagnostic through one door and an {@code Error} through another.
  *
  * <p>Each case runs on a thread with a small, fixed stack. What counts as "too deep" otherwise
  * depends on the stack the test happens to run with, which makes the same source compile on one run
@@ -39,18 +49,87 @@ class CompileDeepExpressionTest {
                 """.formatted(expr);
     }
 
+    /**
+     * A source the parser accepts and the walks after it cannot finish: a chain of values, each
+     * naming the one before, which substitution splices into one tree as long as the chain.
+     *
+     * <p>Written nesting will not do here. The parser bounds that and refuses it with a position
+     * (issue #524), so a source deep enough to overflow never reaches the walks — what a written
+     * nest tests is the parser's limit, not this boundary.
+     */
+    private static String aCompilationThatRunsOutOfStack() {
+        StringBuilder sb = new StringBuilder("module m exposing (f)\n\nlet v0 = 1\n");
+        for (int i = 1; i <= 1000; i++) {
+            sb.append("let v").append(i).append(" = v").append(i - 1).append(" + 1\n");
+        }
+        return sb.append("\nbehavior f : (x: Int) -> Int\nlet f (x) = x + v1000\n").toString();
+    }
+
+    /** Every entry point that drives a compilation, by the name a reader would call it. */
+    private static Map<String, Runnable> everyEntryPoint(String source) {
+        List<String> sources = List.of(source);
+        Map<String, Runnable> doors = new LinkedHashMap<>();
+        doors.put("compile(source)", () -> Compiler.compile(source));
+        doors.put("compile(source, name)", () -> Compiler.compile(source, "m"));
+        doors.put("compileWithWarnings(source)", () -> Compiler.compileWithWarnings(source));
+        doors.put("compileWithWarnings(source, name)",
+                () -> Compiler.compileWithWarnings(source, "m"));
+        doors.put("compiled(source, name)", () -> Compiler.compiled(source, "m"));
+        doors.put("analyzed(source, name, ...)",
+                () -> Compiler.analyzed(source, "m", new ArrayList<Located>(), Adequacy.Asked.NOTHING));
+        doors.put("compileModules(sources)", () -> Compiler.compileModules(sources));
+        doors.put("compileModules(sources, path)",
+                () -> Compiler.compileModules(sources, ModulePath.EMPTY));
+        doors.put("compileModulesWithWarnings(sources)",
+                () -> Compiler.compileModulesWithWarnings(sources));
+        doors.put("compileModulesWithWarnings(sources, path)",
+                () -> Compiler.compileModulesWithWarnings(sources, ModulePath.EMPTY));
+        doors.put("compiledModules(sources, path, ...)",
+                () -> Compiler.compiledModules(sources, ModulePath.EMPTY, new ArrayList<Located>()));
+        doors.put("analyzedModules(sources, path, ...)",
+                () -> Compiler.analyzedModules(sources, ModulePath.EMPTY, new ArrayList<Located>(),
+                        Adequacy.Asked.NOTHING));
+        return doors;
+    }
+
+    /**
+     * Every door, and every door's answer said together. Stopping at the first one that is wrong
+     * says one name where the question is which of them agree, and the door that had the recovery
+     * already is among the first — so a run that stopped there would report the one door that was
+     * never in doubt.
+     */
+    @Test
+    void everyEntryPointAnswersAnExhaustedStackWithADiagnostic() throws InterruptedException {
+        String source = aCompilationThatRunsOutOfStack();
+        List<String> wrong = new ArrayList<>();
+
+        for (Map.Entry<String, Runnable> door : everyEntryPoint(source).entrySet()) {
+            Throwable thrown = run(door.getValue(), STACK_BYTES);
+            String said = thrown == null ? "compiled"
+                    : thrown instanceof CompileException && thrown.getMessage().contains("deep")
+                            ? null
+                            : thrown.getClass().getName();
+            if (said != null) {
+                wrong.add(door.getKey() + " -> " + said);
+            }
+        }
+
+        assertTrue(wrong.isEmpty(), "these entry points did not answer with a depth diagnostic:\n  "
+                + String.join("\n  ", wrong));
+    }
+
     @Test
     void deeplyNestedParenthesesAreReported() throws InterruptedException {
         String expr = "(".repeat(5000) + "1" + ")".repeat(5000);
 
-        assertReportsDepth(() -> Compiler.compile(moduleWith(expr)));
+        assertReportsDepth("compile(source)", () -> Compiler.compile(moduleWith(expr)));
     }
 
     @Test
     void aVeryLongOperatorChainIsReported() throws InterruptedException {
         String expr = "1 + ".repeat(20000) + "1";
 
-        assertReportsDepth(() -> Compiler.compile(moduleWith(expr)));
+        assertReportsDepth("compile(source)", () -> Compiler.compile(moduleWith(expr)));
     }
 
     /** A module set goes through the same walks, so it needs the same answer. */
@@ -58,7 +137,8 @@ class CompileDeepExpressionTest {
     void theSameHoldsForAModuleSet() throws InterruptedException {
         String expr = "(".repeat(5000) + "1" + ")".repeat(5000);
 
-        assertReportsDepth(() -> Compiler.compileModules(List.of(moduleWith(expr))));
+        assertReportsDepth("compileModules(sources)",
+                () -> Compiler.compileModules(List.of(moduleWith(expr))));
     }
 
     /**
@@ -81,14 +161,14 @@ class CompileDeepExpressionTest {
 
     /** Runs {@code work} on a thread with {@link #STACK_BYTES} of stack and asserts it came back
      *  with a depth diagnostic rather than an {@code Error}. */
-    private static void assertReportsDepth(Runnable work) throws InterruptedException {
+    private static void assertReportsDepth(String door, Runnable work) throws InterruptedException {
         Throwable thrown = run(work, STACK_BYTES);
-        assertNotNull(thrown, "a source this deep should not compile on a " + STACK_BYTES
+        assertNotNull(thrown, door + ": a source this deep should not compile on a " + STACK_BYTES
                 + "-byte stack; the test no longer exercises the depth boundary");
         assertInstanceOf(CompileException.class, thrown,
-                "expected a diagnostic, got " + thrown.getClass().getName());
+                door + ": expected a diagnostic, got " + thrown.getClass().getName());
         assertTrue(thrown.getMessage().contains("deep"),
-                "expected a depth diagnostic, got: " + thrown.getMessage());
+                door + ": expected a depth diagnostic, got: " + thrown.getMessage());
     }
 
     /**

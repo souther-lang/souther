@@ -72,8 +72,22 @@ public final class Compiler {
 
     private static Map<String, byte[]> compile(String source, String defaultModuleName,
                                                List<Located> warningsOut) {
+        return compiling(source, defaultModuleName, warningsOut);
+    }
+
+    /**
+     * Drives one compilation with the recovery every entry point here answers by.
+     *
+     * <p>Around the three places a compilation is driven, rather than around the entry points that
+     * reach them. There are eleven of those and they had it twice: the two that answer with classes
+     * caught the overflow, and the ones that answer with a {@link Compilation} — which is what the
+     * command line and the editor ask for — did not, so the same source was a diagnostic through one
+     * door and a stack trace through another. What decides the answer is the compiler, not which
+     * signature a caller reached for.
+     */
+    private static <T> T driven(java.util.function.Supplier<T> compilation) {
         try {
-            return compiling(source, defaultModuleName, warningsOut);
+            return compilation.get();
         } catch (StackOverflowError _) {
             throw tooDeep();
         }
@@ -161,6 +175,14 @@ public final class Compiler {
                                         List<Located> warningsOut, Adequacy.Asked measure,
                                         java.time.Duration exampleBudget, Deadline deadline,
                                         EvaluationPolicy policy) {
+        return driven(() -> compilingSource(source, defaultModuleName, warningsOut, measure,
+                exampleBudget, deadline, policy));
+    }
+
+    private static Compilation compilingSource(String source, String defaultModuleName,
+                                               List<Located> warningsOut, Adequacy.Asked measure,
+                                               java.time.Duration exampleBudget, Deadline deadline,
+                                               EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
@@ -245,13 +267,20 @@ public final class Compiler {
      * the raising entry points: they reach the collection only by getting past every error, so a
      * compilation with one reports no warnings at all. Nothing about a warning depends on the errors
      * beside it.
+     *
+     * <p>Running out of stack is the one thing this raises. An error is an answer — it is in the
+     * reports, and the compilation around it stands — but a walk that ran out returned nothing to
+     * put there, and the questions below it have no answers either. There is no partial reading to
+     * hand back, so this says what it is instead of handing back a compilation that looks clean.
      */
     private static Compilation answered(Compilation compilation, List<Located> warningsOut,
                                         Adequacy.Asked measure) {
-        compilation.measure(measure);
-        compilation.answerEverything();
-        warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
-        return compilation;
+        return driven(() -> {
+            compilation.measure(measure);
+            compilation.answerEverything();
+            warningsOut.addAll(compilation.warnings(compilation.db().allReports()));
+            return compilation;
+        });
     }
 
     private static Map<String, byte[]> classesOf(Compilation compilation) {
@@ -288,11 +317,7 @@ public final class Compiler {
 
     private static Map<String, byte[]> compileModules(List<String> sources, ModulePath path,
                                                       List<Located> warningsOut) {
-        try {
-            return linking(sources, path, warningsOut);
-        } catch (StackOverflowError _) {
-            throw tooDeep();
-        }
+        return linking(sources, path, warningsOut);
     }
 
     /**
@@ -359,6 +384,14 @@ public final class Compiler {
                                       List<Located> warningsOut, Adequacy.Asked measure,
                                       java.time.Duration exampleBudget, Deadline deadline,
                                       EvaluationPolicy policy) {
+        return driven(() -> linkingSources(sources, path, warningsOut, measure, exampleBudget,
+                deadline, policy));
+    }
+
+    private static Compilation linkingSources(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure,
+                                              java.time.Duration exampleBudget, Deadline deadline,
+                                              EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(sources, path);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
