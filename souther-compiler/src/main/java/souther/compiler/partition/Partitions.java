@@ -720,7 +720,19 @@ public final class Partitions {
      */
     static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
                                                    NumericDomain.Bounds within) {
-        if (type == null) {
+        return representativesOf(type, symbols, within, 0);
+    }
+
+    /**
+     * The same, {@code depth} values inside the one a position was asked for.
+     *
+     * <p>Counted because what stands for a collection is built from what stands for its element, which
+     * is this question again. A type written in terms of itself would ask it forever, and a value below
+     * the bound is given up on rather than invented.
+     */
+    static List<FixtureTemplate> representativesOf(Type type, Symbols symbols,
+                                                   NumericDomain.Bounds within, int depth) {
+        if (type == null || depth > Witnesses.MAX_DEPTH) {
             return List.of();
         }
         if (type == Type.INT || type == Type.DECIMAL) {
@@ -744,9 +756,10 @@ public final class Partitions {
         if (type == Type.DATETIME) {
             return List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
         }
-        // The empty one, for every collection. It is the value that always builds — a rule about a
-        // collection bounds its size or its elements, and neither can refuse having none — and a row
-        // whose collection is not what it is about should say so by carrying nothing.
+        // The empty one, for every collection nothing has said otherwise about. A row whose collection
+        // is not what it is about should say so by carrying nothing, and where no rule counts what the
+        // position holds there is nothing else to go on. What a rule does say is read a layer out, at
+        // the newtype the rule is written on.
         if (type instanceof Type.ListOf || type instanceof Type.SetOf || type instanceof Type.MapOf) {
             return List.of(FixtureTemplate.emptyCollection());
         }
@@ -760,10 +773,35 @@ public final class Partitions {
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
                 && data.newtype()) {
-            return insideTheNewtype(ref.name(), symbols, within).stream()
+            return insideTheNewtype(ref.name(), symbols, within, depth).stream()
                     .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
+    }
+
+    /**
+     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
+     * require none.
+     *
+     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
+     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
+     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
+     * and a size chained after the mapping that drops duplicates would count the wrong things — and
+     * that absence is a fact about the decoder rather than about what the rule says.
+     */
+    static int leastHeld(Type type, Symbols symbols) {
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        if (counts == null) {
+            return 0;
+        }
+        Bounds sized = boundsOf(type, symbols, Type.INT, counts);
+        if (sized == null || sized.min() == null) {
+            return 0;
+        }
+        // A count is a whole number, so the end a size bound leaves is one the rule admits.
+        BigDecimal least = sized.min().value();
+        return least.signum() <= 0 || least.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0
+                ? 0 : least.intValueExact();
     }
 
     /**
@@ -855,11 +893,11 @@ public final class Partitions {
      * other.
      */
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
-        return insideTheNewtype(newtype, symbols, null);
+        return insideTheNewtype(newtype, symbols, null, 0);
     }
 
     private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols,
-                                                          NumericDomain.Bounds within) {
+                                                          NumericDomain.Bounds within, int depth) {
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
@@ -881,7 +919,16 @@ public final class Partitions {
                 }
             }
         }
-        candidates.addAll(representativesOf(base, symbols));
+        // What the rules say the value holds, before the value that would hold nothing. A format and a
+        // minimum are two proposals and not a choice between them: each is what one rule asks for, and
+        // which of them the whole of the rules admits is the decoder's answer rather than an order
+        // settled here.
+        FixtureTemplate enough = Witnesses.holding(base, leastHeld(new Type.Ref(newtype), symbols),
+                symbols, depth);
+        if (enough != null) {
+            candidates.add(enough);
+        }
+        candidates.addAll(representativesOf(base, symbols, null, depth + 1));
 
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
         for (FixtureTemplate each : candidates) {
