@@ -5494,7 +5494,7 @@ Field `ticket` is written with an anonymous union; a field has the one type it h
 `data` over the cases and give the field that name.
 ----
 
-Reported where a `+|+` follows the type of a data field, a type argument or a tuple's member (<<a-narrow-type-position-takes-one-type>>). The three take one type each and none of them builds a union, so this is recognized at the `+|+` rather than left to the delimiter the reading stopped at — the author reached for a choice, and a report about a missing `+}+` is not about what they wrote. A parameter reaches <<e1312>> instead, its union being built and refused by the boundary.
+Reported where a `+|+` follows the type of a data field, a type argument or a tuple's member (<<a-narrow-type-position-takes-one-type>>). The three take one type each and none of them builds a union, so this is recognized at the `+|+` rather than left to the delimiter the reading stopped at — the author reached for a choice, and a report about a missing `+}+` is not about what they wrote. A behavior's parameter reaches <<e1312>> instead, its union being built and refused by the boundary; a helper's parameter reads a whole type and takes one (<<a-type-is-written-in-a-type-position>>).
 
 [#e2308]
 === An optional is written inside another type
