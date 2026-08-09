@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -870,23 +871,32 @@ public final class TypeOps {
     /** Effective field name → type (included data flattened first, then own fields). */
     public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
         Map<String, Type> types = new LinkedHashMap<>();
+        // Which spread put each field here, so a collision names the group that supplied the earlier
+        // one. Reporting it against the taking data names a declaration that, where both fields came
+        // through spreads, holds no such field at all.
+        Map<String, String> suppliedBy = new LinkedHashMap<>();
         for (Ast.Name inc : data.includes()) {
             TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1015, "check.spread.notproduct")
-                                .at(inc.name().region()).args(inc.written()).build());
+                throw CompileException.of(Diagnostic.at(inc.name().region())
+                        .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
+                        .build());
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
                 if (types.put(e.getKey(), e.getValue()) != null) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1004, "e1004.msg").at(data.pos())
-                                    .args(e.getKey(), inc.written(), data.name()).build());
+                    throw CompileException.of(Diagnostic.at(inc.name().region())
+                            .say(new DataMessage.SpreadFieldCollision(
+                                    e.getKey(), inc.written(), suppliedBy.get(e.getKey())))
+                            .build());
                 }
+                suppliedBy.put(e.getKey(), "..." + inc.written());
             }
         }
         for (Ast.Field f : data.fields()) {
             if (types.put(f.name(), fieldType(f)) != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.declaredfield").at(f.pos())
-                                .args(f.name(), data.name()).build());
+                throw CompileException.of(Diagnostic.at(f.pos())
+                        .say(new DataMessage.FieldIsDeclaredMoreThanOnceIn(f.name(), data.name()))
+                        .build());
             }
         }
         return types;

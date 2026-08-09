@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -273,8 +274,9 @@ public final class DataChecker {
     }
 
     private static CompileException duplicate(String written, String where, SourcePos pos) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.name")
-                        .at(pos).args(written, where).build());
+        return CompileException.of(Diagnostic.at(pos)
+                .say(new DataMessage.NameIsListedMoreThanOnce(written, where))
+                .build());
     }
 
     /**
@@ -428,8 +430,9 @@ public final class DataChecker {
             if (def instanceof Ast.Data data
                     && mandatoryReaches(symbols.own(data.name()), symbols.own(data.name()),
                             symbols, new HashSet<>())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1013, "check.construct.self")
-                                .at(data.pos()).args(data.name()).build());
+                throw CompileException.of(Diagnostic.at(data.pos())
+                        .say(new DataMessage.DataCannotBeConstructed(data.name()))
+                        .build());
             }
         }
     }
@@ -603,13 +606,15 @@ public final class DataChecker {
         List<Core.FieldInit> elaborated = new ArrayList<>();
         for (Ast.FieldInit init : inits) {
             if (byName.put(init.name(), init) != null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1011, "check.dup.field")
-                                .at(init.pos()).args(init.name()).build());
+                throw CompileException.of(Diagnostic.at(init.pos())
+                        .say(new DataMessage.FieldIsDefinedMoreThanOnce(init.name()))
+                        .build());
             }
             Type ft = fields.get(init.name());
             if (ft == null) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1014, "check.construct.nofield")
-                                .at(init.written().region()).args(init.name(), typeName).build());
+                throw CompileException.of(Diagnostic.at(init.written().region())
+                        .say(new DataMessage.NotAFieldOf(init.name(), typeName))
+                        .build());
             }
             // push the field's declared type into the value expression, so a field initialised from a
             // fold over an empty-collection seed has its result pinned by the field type (issue #70).
@@ -644,9 +649,10 @@ public final class DataChecker {
                     && ctx.symbols().get(ref.name()) instanceof Ast.Data sd) {
                 provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
             } else {
-                Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1015, "check.spread.notdata").at(pos).args(sp);
+                Diagnostic.Builder d = Diagnostic.at(pos)
+                        .say(new DataMessage.SpreadIsNotADataValue(sp));
                 if (bound instanceof Type.Union) {
-                    d = d.hint("check.spread.union.hint", sp);
+                    d = d.hint(new DataMessage.NameTheUnionWithADeclaration(sp));
                 }
                 throw CompileException.of(d.build());
             }
@@ -657,29 +663,30 @@ public final class DataChecker {
             }
             Type pv = provided.get(f.getKey());
             if (pv == null) {
-                Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1005, "e1005.msg").at(pos)
-                        .args(typeName, f.getKey());
+                Diagnostic.Builder d = Diagnostic.at(pos)
+                        .say(new DataMessage.ConstructionIsMissingAField(typeName, f.getKey()));
                 // one rule broken in one of several ways, and the hint is where the way is said. What
                 // was written decides it: `fromSums` counts the sums spread, which says nothing about
                 // whether anything was spread at all, so a construction with no spread is asked about
                 // separately rather than read off an empty count.
                 if (spreads.isEmpty()) {
-                    d = d.hint("e1005.hint.written");
+                    d = d.hint(new DataMessage.GiveTheFieldAValue(f.getKey()));
                 } else {
                     d = switch (fromSums.size()) {
-                        case 0 -> d.hint("e1005.hint.spread");
-                        case 1 -> d.hint("e1005.hint.sum", typeName, f.getKey(),
-                                fromSums.iterator().next());
-                        default -> d.hint("e1005.hint.sums", typeName, f.getKey(),
-                                String.join(", ", fromSums));
+                        case 0 -> d.hint(new DataMessage.SupplyTheFieldExplicitly(f.getKey()));
+                        case 1 -> d.hint(new DataMessage.TheFieldIsNotInWhatTheSumShares(
+                                f.getKey(), fromSums.iterator().next()));
+                        default -> d.hint(new DataMessage.TheFieldIsInTheSharedPartOfNoneOfThese(
+                                f.getKey(), String.join(", ", fromSums)));
                     };
                 }
                 throw CompileException.of(d.build());
             }
             if (!TypeOps.assignable(pv, f.getValue(), ctx.symbols())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1016, "check.spread.provides")
-                                .at(pos).args(f.getKey(), Type.show(pv), typeName, Type.show(f.getValue()))
-                                .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build());
+                throw CompileException.of(Diagnostic.at(pos)
+                        .say(new DataMessage.SpreadSuppliesTheWrongType(f.getKey(), Type.show(pv),
+                                typeName, Type.show(f.getValue())))
+                        .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build());
             }
         }
         return elaborated;
@@ -695,8 +702,9 @@ public final class DataChecker {
                                                  SourcePos pos, CheckContext ctx) {
         Map<String, Type> shared = TypeOps.commonSpreadFields(sum, ctx.symbols());
         if (shared.isEmpty()) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1015, "check.spread.sum.unshared")
-                            .at(pos).args(name, Type.show(bound)).build());
+            throw CompileException.of(Diagnostic.at(pos)
+                    .say(new DataMessage.SpreadOfASumWhoseCasesShareNothing(name, Type.show(bound)))
+                    .build());
         }
         return shared;
     }
