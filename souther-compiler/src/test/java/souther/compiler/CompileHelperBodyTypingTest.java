@@ -225,7 +225,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(choose(true, x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
         assertTrue(e.getMessage().contains("choose") && e.getMessage().contains("v"), e.getMessage());
     }
 
@@ -241,7 +241,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(List.length(ignored(x, [ 1, 2 ])))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
         assertTrue(e.getMessage().contains("ignored") && e.getMessage().contains("v"), e.getMessage());
     }
 
@@ -257,7 +257,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(id(x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
         assertTrue(e.getMessage().contains("id") && e.getMessage().contains("v"), e.getMessage());
     }
 
@@ -276,9 +276,9 @@ class CompileHelperBodyTypingTest {
                 let f (l) = X(total(l))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer.field", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-only-read-through-a-field", e.diagnostic().messageKey(), e.getMessage());
         assertFalse(e.diagnostic().secondary().isEmpty(), "the open use is labelled");
-        assertEquals("check.helper.infer.field.use", e.diagnostic().secondary().get(0).labelKey());
+        assertEquals("helper.a-field-is-read-off-it-and-that-names-no-type", e.diagnostic().secondary().get(0).labelKey());
         assertEquals(5, e.diagnostic().secondary().get(0).region().start().line(),
                 "the label sits on `line.qty`, the use that names no type");
     }
@@ -295,7 +295,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(apply((n) -> n * 2, x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.fnparam", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-function-typed-parameter-needs-its-type", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -310,7 +310,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.fnparam", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-function-typed-parameter-needs-its-type", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -358,7 +358,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -504,7 +504,7 @@ class CompileHelperBodyTypingTest {
                 }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -582,7 +582,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -597,7 +597,7 @@ class CompileHelperBodyTypingTest {
                 let f (n) = N(count(n.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.annotate", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-needs-its-type", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -612,7 +612,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = x
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.return", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.the-body-is-not-what-the-helper-declares", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
@@ -760,7 +760,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(id(x.value))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("helper.a-parameter-is-not-determined-by-the-body", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test

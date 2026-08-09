@@ -281,7 +281,7 @@ class CompileFunctionBindingTest {
 
         for (String src : List.of(lambda, libraryName)) {
             CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-            assertEquals("check.fn.noinfer", e.diagnostic().messageKey(), e.getMessage());
+            assertEquals("helper.the-functions-type-cannot-be-read", e.diagnostic().messageKey(), e.getMessage());
         }
     }
 }

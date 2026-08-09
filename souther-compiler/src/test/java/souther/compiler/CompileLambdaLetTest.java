@@ -73,6 +73,6 @@ class CompileLambdaLetTest {
         // It is refused for what is actually missing: nothing here says what the function takes.
         // Applied in this scope its parameter types would be read off the application; carried out
         // of it, only a written type can say.
-        assertEquals("check.fn.noinfer", ex.diagnostic().messageKey(), ex.getMessage());
+        assertEquals("helper.the-functions-type-cannot-be-read", ex.diagnostic().messageKey(), ex.getMessage());
     }
 }

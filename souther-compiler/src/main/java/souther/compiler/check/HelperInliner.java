@@ -11,6 +11,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 
@@ -742,15 +743,19 @@ public final class HelperInliner {
             }
             String param = params.get(i).name();
             if (fnParam < 0) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1804, "check.fn.argnotfn")
-                                .at(lambda.pos()).args(call.written(), i + 1, param).build());
+                throw CompileException.of(Diagnostic.at(lambda.pos())
+                        .say(new HelperMessage.ThisArgumentTakesNoFunction(call.written(),
+                                String.valueOf(i + 1), param))
+                        .build());
             }
             String shape = params.stream().map(Ast.FnParam::name)
                     .collect(java.util.stream.Collectors.joining(", "));
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1804, "check.fn.argorder")
-                            .at(lambda.pos())
-                            .args(call.written(), i + 1, param, fnParam + 1, params.get(fnParam).name(), shape)
-                            .hint("check.fn.argorder.hint").build());
+            throw CompileException.of(Diagnostic.at(lambda.pos())
+                    .say(new HelperMessage.TheFunctionGoesToAnotherArgument(call.written(),
+                            String.valueOf(i + 1), param, String.valueOf(fnParam + 1),
+                            params.get(fnParam).name()))
+                    .hint(new HelperMessage.WriteTheCallThisWay(call.written(), shape))
+                    .build());
         }
     }
 
@@ -1092,14 +1097,16 @@ public final class HelperInliner {
                 ? writing.scopedLambdas().get(local.id()) : null;
         LambdaOrigin origin = applied == null ? null : applied.origin();
         if (origin != null) {
-            return CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockparam.arity")
-                            .at(origin.pos())
-                            .args(origin.param(), origin.owner(), given,
-                                    helper.params().size()).build());
+            return CompileException.of(Diagnostic.at(origin.pos())
+                    .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(origin.param(),
+                            origin.owner(), String.valueOf(given),
+                            String.valueOf(helper.params().size())))
+                    .build());
         }
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.helper.arity")
-                        .at(call.name().region())
-                        .args(helper.name(), helper.params().size(), given).build());
+        return CompileException.of(Diagnostic.at(call.name().region())
+                .say(new HelperMessage.CalledWithAnotherNumberOfArguments(helper.name(),
+                        String.valueOf(helper.params().size()), String.valueOf(given)))
+                .build());
     }
 
     /**
@@ -1209,10 +1216,11 @@ public final class HelperInliner {
         String shape = written == null ? null : written.stream()
                 .map(Ast.FnParam::name)
                 .collect(java.util.stream.Collectors.joining(", "));
-        Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1804, "check.fn.argnotvalue").at(arg.pos())
-                .args(rawCall.written(), index + 1, p.name(), shape);
+        Diagnostic.Builder d = Diagnostic.at(arg.pos())
+                .say(new HelperMessage.ThisArgumentTakesAFunction(rawCall.written(),
+                        String.valueOf(index + 1), p.name()));
         if (shape != null) {
-            d.hint("check.fn.argnotvalue.hint");
+            d.hint(new HelperMessage.WriteTheCallThisWay(rawCall.written(), shape));
         }
         return CompileException.of(d.build());
     }

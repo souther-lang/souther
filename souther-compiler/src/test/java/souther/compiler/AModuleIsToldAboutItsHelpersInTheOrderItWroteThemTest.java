@@ -66,7 +66,7 @@ class AModuleIsToldAboutItsHelpersInTheOrderItWroteThemTest {
     }
 
     private static boolean names(List<Diagnostic> found, String helper) {
-        return found.stream().anyMatch(d -> List.of(d.args()).contains(helper));
+        return found.stream().anyMatch(d -> d.values().containsValue(helper));
     }
 
     @Test

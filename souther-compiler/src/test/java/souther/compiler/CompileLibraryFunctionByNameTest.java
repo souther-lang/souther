@@ -127,7 +127,7 @@ class CompileLibraryFunctionByNameTest {
                 let go (i) = Out { ns = List.map(Decimal.toInt, i.ds) }
                 """));
 
-        assertEquals("check.fn.blockparam.arity", e.diagnostic().messageKey());
+        assertEquals("helper.the-block-takes-another-number-of-arguments", e.diagnostic().messageKey());
     }
 
     /** An empty collection is a declaration with no parameter list, so it is already the value it

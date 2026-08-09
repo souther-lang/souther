@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
@@ -72,8 +73,9 @@ public final class HelperTyping {
                     if (recursive) {
                         // a recursive helper is lowered to a method, not inlined, so no call site
                         // expands it — its parameter types cannot be inferred and must be declared.
-                        throw CompileException.of(Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
-                                        .at(p.written().region()).args(h.name(), p.name()).build());
+                        throw CompileException.of(Diagnostic.at(p.written().region())
+                                .say(new HelperMessage.AParameterNeedsItsType(h.name(), p.name()))
+                                .build());
                     }
                     // a parameter with no type beside it takes one from the body (spec 13.1).
                     inferred.add(i);
@@ -159,8 +161,9 @@ public final class HelperTyping {
             if (declaredReturn != null) {
                 Type declared = declaredReturn;
                 if (!TypeOps.assignable(bodyType, declared, symbols)) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1812, "check.helper.return")
-                                    .at(h.pos()).args(h.name(), Type.show(declared), Type.show(bodyType))
+                    throw CompileException.of(Diagnostic.at(h.pos())
+                            .say(new HelperMessage.TheBodyIsNotWhatTheHelperDeclares(h.name(),
+                                    Type.show(declared), Type.show(bodyType)))
                                     .build());
                 }
             }
@@ -267,8 +270,10 @@ public final class HelperTyping {
         for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
             if (HelperParams.isApplied(body, p.binder())) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1811, "check.helper.fnparam")
-                                .at(p.written().region()).args(h.name(), p.name()).build());
+                throw CompileException.of(Diagnostic.at(p.written().region())
+                        .say(new HelperMessage.AFunctionTypedParameterNeedsItsType(h.name(),
+                                p.name()))
+                        .build());
             }
         }
         Map<Integer, HelperParams.OpenUse> openUses = new HashMap<>();
@@ -292,12 +297,15 @@ public final class HelperTyping {
             // not ask — where a body that says nothing at all might have said something.
             HelperParams.OpenUse left = openUses.get(idx);
             boolean field = left != null && left.readAField();
-            String key = field ? "check.helper.infer.field" : "check.helper.infer";
-            Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1811, key)
-                    .at(p.written().region()).args(h.name(), p.name());
+            Diagnostic.Builder d = Diagnostic.at(p.written().region())
+                    .say(field
+                            ? new HelperMessage.AParameterIsOnlyReadThroughAField(h.name(), p.name())
+                            : new HelperMessage.AParameterIsNotDeterminedByTheBody(h.name(),
+                                    p.name()));
             if (left != null) {
                 d.secondary(Region.ofWidth(left.use().pos(), Elaborator.width(left.use())),
-                        field ? "check.helper.infer.field.use" : "check.helper.infer.use");
+                        field ? "helper.a-field-is-read-off-it-and-that-names-no-type"
+                                : "helper.this-use-names-no-type");
             }
             throw CompileException.of(d.build());
         }
@@ -330,8 +338,9 @@ public final class HelperTyping {
             List<Type> params = new ArrayList<>();
             for (Ast.FnParam p : h.params()) {
                 if (p.type() == null) {
-                    throw CompileException.of(Diagnostic.of(DiagnosticCode.E1811, "check.helper.annotate")
-                                    .at(p.written().region()).args(name, p.name()).build());
+                    throw CompileException.of(Diagnostic.at(p.written().region())
+                            .say(new HelperMessage.AParameterNeedsItsType(name, p.name()))
+                            .build());
                 }
                 // a recursive helper is a static method taking its parameters as values; a function
                 // parameter is passed as a first-class Fn (a closure), applied inside the method.
@@ -534,8 +543,10 @@ public final class HelperTyping {
      * (`'b?` / `String`), not in the checker's own spelling. */
     private static CompileException blockReturnMismatch(Ast.FnDef h, String paramName, Type want,
                                                         Type got, SourcePos pos) {
-        return CompileException.of(Diagnostic.of(DiagnosticCode.E1805, "check.fn.blockparam.return")
-                        .at(pos).args(paramName, h.name(), Type.show(want), Type.show(got)).build());
+        return CompileException.of(Diagnostic.at(pos)
+                .say(new HelperMessage.TheBlockAnswersAnotherType(paramName, h.name(),
+                        Type.show(want), Type.show(got)))
+                .build());
     }
 
     /** Whether a type still holds a type variable, so nothing concrete can be checked against it yet.
@@ -551,9 +562,11 @@ public final class HelperTyping {
                                          Map<String, Type> bind) {
         if (arg instanceof Ast.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
-                throw CompileException.of(Diagnostic.of(DiagnosticCode.E1802, "check.fn.blockparam.arity")
-                                .at(arg.pos()).args(paramName, h.name(), want.params().size(),
-                                        lambda.params().size()).build());
+                throw CompileException.of(Diagnostic.at(arg.pos())
+                        .say(new HelperMessage.TheBlockTakesAnotherNumberOfArguments(paramName,
+                                h.name(), String.valueOf(want.params().size()),
+                                String.valueOf(lambda.params().size())))
+                        .build());
             }
             Scope lenv = env;
             for (int j = 0; j < lambda.params().size(); j++) {
@@ -586,8 +599,10 @@ public final class HelperTyping {
             }
         } else if (arg instanceof Ast.Var v
                 && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
-            throw CompileException.of(Diagnostic.of(DiagnosticCode.E1803, "check.fn.notfunction")
-                            .at(arg.pos()).args(paramName, h.name(), v.name()).build());
+            throw CompileException.of(Diagnostic.at(arg.pos())
+                    .say(new HelperMessage.AValueWhereAFunctionIsTaken(paramName, h.name(),
+                            v.name()))
+                    .build());
         }
     }
 

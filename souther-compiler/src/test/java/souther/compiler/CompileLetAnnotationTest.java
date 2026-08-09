@@ -143,7 +143,7 @@ class CompileLetAnnotationTest {
                     Out { v = f(i.v) }
                 }
                 """);
-        assertEquals("check.fn.lambdaarity", d.messageKey());
+        assertEquals("helper.the-lambda-is-applied-with-another-number-of-arguments", d.messageKey());
     }
 
     // The annotated type is the binding's type for everything downstream: the value reaches a helper
@@ -186,8 +186,8 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.fn.title", d.titleKey());
-        assertEquals("check.fn.annotation", d.messageKey());
-        assertEquals("f", d.args()[0]);
+        assertEquals("helper.a-function-type-is-written-outside-a-helper-parameter", d.messageKey());
+        assertEquals("f", d.values().get("binding"));
     }
 
     // The other shape a function binding takes — one an `if` chooses, which stays a first-class Fn
@@ -205,7 +205,7 @@ class CompileLetAnnotationTest {
                 }
                 """);
         assertEquals("check.fn.title", d.titleKey());
-        assertEquals("check.fn.annotation", d.messageKey());
+        assertEquals("helper.a-function-type-is-written-outside-a-helper-parameter", d.messageKey());
     }
 
     // A sum annotation widens a case value to its sum, so the body's `match` sees both arms.
