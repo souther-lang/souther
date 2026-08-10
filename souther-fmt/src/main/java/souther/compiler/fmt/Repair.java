@@ -1,14 +1,11 @@
 package souther.compiler.fmt;
 
-import souther.compiler.cst.CstParser;
-import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -42,14 +39,28 @@ final class Repair {
      */
     static String repair(String source, Formatter.CanonicalForm canonical,
             List<Witness> witnesses) {
+        return apply(source,
+                edits(source, canonical, new Witnesses.Pairing(source, canonical), witnesses));
+    }
+
+    /**
+     * The stretches the expectations of {@code witnesses} come to, composed and in the order they
+     * are written.
+     *
+     * <p>Separate from writing them so that a caller can say where the text it is now looking at
+     * came from. The report asks the rules again after a repair — a rule that reads another's
+     * result has nothing to say until that one is answered — and a deviation found in the second
+     * text is about a place in the first.
+     */
+    static List<Edit> edits(String source, Formatter.CanonicalForm canonical,
+            Witnesses.Pairing pairing, List<Witness> witnesses) {
         List<Edit> edits = new ArrayList<>();
         for (Witness w : witnesses) {
-            edits.addAll(of(source, canonical, w));
+            edits.addAll(of(source, canonical, pairing, w));
         }
         edits.sort(Comparator.comparingInt(Edit::from)
                 .thenComparing(Comparator.comparingInt(Edit::to).reversed()));
-        StringBuilder out = new StringBuilder();
-        int at = 0;
+        List<Edit> out = new ArrayList<>();
         Edit last = null;
         for (Edit e : edits) {
             if (e.equals(last)) {
@@ -69,17 +80,49 @@ final class Repair {
                                 + ", and they do not agree: [" + last.text() + "] against ["
                                 + e.text() + "]");
             }
-            last = e;
-            if (e.from() < at) {
+            if (last != null && e.from() < last.to()) {
                 throw new IllegalStateException(
                         "two expectations over one stretch of the source, at " + e.from()
                                 + "; the rules answer about their own units, and this is two of them"
                                 + " answering about the same characters");
             }
+            last = e;
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** {@code source} with {@code edits} written into it. */
+    static String apply(String source, List<Edit> edits) {
+        StringBuilder out = new StringBuilder();
+        int at = 0;
+        for (Edit e : edits) {
             out.append(source, at, e.from()).append(e.text());
             at = e.to();
         }
         return out.append(source.substring(at)).toString();
+    }
+
+    /**
+     * Where an offset of a repaired text stood in the text it was repaired from.
+     *
+     * <p>An offset inside a stretch a rule wrote over comes back as the start of that stretch: what
+     * is there now was written by the repair, and where it came from is the whole of what it
+     * replaced.
+     */
+    static int before(List<Edit> edits, int at) {
+        int delta = 0;
+        for (Edit e : edits) {
+            int from = e.from() + delta;
+            if (at < from) {
+                break;
+            }
+            if (at < from + e.text().length()) {
+                return e.from();
+            }
+            delta += e.text().length() - (e.to() - e.from());
+        }
+        return at - delta;
     }
 
     /**
@@ -89,26 +132,46 @@ final class Repair {
      * have to say before anything can be written there.
      */
     static List<Edit> of(String source, Formatter.CanonicalForm canonical, Witness w) {
+        return of(source, canonical, new Witnesses.Pairing(source, canonical), w);
+    }
+
+    /**
+     * The same, for a caller that has already read the two texts' tokens.
+     *
+     * <p>Read once for a whole repair rather than once per witness. What a witness is about is
+     * found by pairing the two token streams, and a source with three hundred of them was parsed a
+     * thousand times to write one text.
+     */
+    static List<Edit> of(String source, Formatter.CanonicalForm canonical,
+            Witnesses.Pairing pairing, Witness w) {
         return switch (w) {
-            case Witness.BetweenTwoTokens b -> List.of(spacing(source, b));
+            case Witness.BetweenTwoTokens b -> List.of(spacing(pairing, b));
             case Witness.Separation s -> List.of(separation(source, canonical, s));
-            case Witness.Indentation i -> indentation(source, canonical, i);
+            case Witness.Indentation i -> indentation(source, canonical, pairing, i);
             case Witness.Forced f -> switch (f.unit().adjacency()) {
-                case -1 -> List.of(ending(source, canonical));
-                case -2 -> List.of(aboveTheLastComment(source, canonical));
-                default -> gaps(source, canonical, List.of(f.unit().adjacency()));
+                case -1 -> List.of(ending(source, canonical, pairing));
+                case -2 -> List.of(aboveTheLastComment(source, canonical, pairing));
+                default -> gaps(source, canonical, pairing, List.of(f.unit().adjacency()));
             };
-            case Witness.Conditional c -> gaps(source, canonical, opportunitiesOf(canonical, c));
+            case Witness.Conditional c ->
+                    gaps(source, canonical, pairing, opportunitiesOf(canonical, pairing, c));
+            case Witness.Settled s ->
+                    gaps(source, canonical, pairing, List.of(s.unit().adjacency()));
+            case Witness.AtTheEndOfALine e -> List.of(new Edit(e.unit().at(),
+                    e.unit().at() + e.source().length(), e.canonical()));
+            case Witness.ACodeToken t -> List.of(new Edit(t.unit().at(),
+                    t.unit().at() + t.source().length(), t.canonical()));
             case Witness.TrailingComment t -> List.of(new Edit(
                     t.unit().at() - t.source().length(), t.unit().at(), t.canonical()));
             case Witness.CommentAbove a -> List.of(under(source, a));
-            case Witness.CommentCarrier c -> moved(source, canonical, c);
+            case Witness.CommentCarrier c -> moved(source, canonical, pairing, c);
         };
     }
 
     /** Where in the source a witness lands, or -1 where nothing of it is written there. */
-    static int where(String source, Formatter.CanonicalForm canonical, Witness w) {
-        List<Edit> edits = of(source, canonical, w);
+    static int where(String source, Formatter.CanonicalForm canonical, Witnesses.Pairing pairing,
+            Witness w) {
+        List<Edit> edits = of(source, canonical, pairing, w);
         return edits.isEmpty() ? -1 : edits.get(0).from();
     }
 
@@ -125,21 +188,20 @@ final class Repair {
      * their step is right and it is the column underneath that changed.
      */
     private static List<Edit> indentation(String source, Formatter.CanonicalForm canonical,
-            Witness.Indentation witness) {
-        Map<Newline, Integer> lines = Witnesses.sourceLines(source, canonical);
+            Witnesses.Pairing pairing, Witness.Indentation witness) {
         List<Edit> out = new ArrayList<>();
         Set<Integer> at = new LinkedHashSet<>();
-        for (Map.Entry<Newline, Integer> e : lines.entrySet()) {
-            List<Doc.NestRef> under = e.getKey().under();
-            if (!under.contains(witness.unit().inner()) || !at.add(e.getValue())) {
+        for (Witnesses.CanonicalLine line : Witnesses.lines(source, canonical, pairing)) {
+            if (line.sourceStart() == null || !line.under().contains(witness.unit().inner())
+                    || !at.add(line.sourceStart())) {
                 continue;
             }
-            int lineStart = e.getValue();
+            int lineStart = line.sourceStart();
             int indent = lineStart;
             while (indent < source.length() && source.charAt(indent) == ' ') {
                 indent++;
             }
-            out.add(new Edit(lineStart, indent, " ".repeat(e.getKey().indent())));
+            out.add(new Edit(lineStart, indent, " ".repeat(line.indent())));
         }
         return out;
     }
@@ -155,10 +217,10 @@ final class Repair {
      * write the comment twice or lose it.
      */
     private static List<Edit> gaps(String source, Formatter.CanonicalForm canonical,
-            List<Integer> adjacencies) {
+            Witnesses.Pairing pairing, List<Integer> adjacencies) {
         String text = canonical.layout().text();
-        List<SyntaxToken> had = Witnesses.code(CstParser.parse(source).root());
-        List<SyntaxToken> writes = Witnesses.code(CstParser.parse(text).root());
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
         List<Edit> out = new ArrayList<>();
         for (int i : adjacencies) {
             if (i < 0 || i + 1 >= writes.size()) {
@@ -176,9 +238,8 @@ final class Repair {
 
     /** Which adjacencies of the canonical form the opportunities a group settles stand at. */
     private static List<Integer> opportunitiesOf(Formatter.CanonicalForm canonical,
-            Witness.Conditional witness) {
-        List<SyntaxToken> writes =
-                Witnesses.code(CstParser.parse(canonical.layout().text()).root());
+            Witnesses.Pairing pairing, Witness.Conditional witness) {
+        List<SyntaxToken> writes = pairing.writesCode();
         List<Integer> out = new ArrayList<>();
         for (Opportunity o : canonical.layout().opportunities()) {
             if (o.settledBy() != witness.unit().group()) {
@@ -220,10 +281,11 @@ final class Repair {
      * with the two tokens it stands between, this one has no pair and was written nowhere — so the
      * rule was a value, the witness was made, and neither the report nor the repair had it.
      */
-    private static Edit ending(String source, Formatter.CanonicalForm canonical) {
+    private static Edit ending(String source, Formatter.CanonicalForm canonical,
+            Witnesses.Pairing pairing) {
         String text = canonical.layout().text();
-        int from = lastWritten(source);
-        int wrote = lastWritten(text);
+        int from = lastWritten(pairing.hadCode(), pairing.hadComments());
+        int wrote = lastWritten(pairing.writesCode(), pairing.writesComments());
         if (from < 0 || wrote < 0) {
             return new Edit(source.length(), source.length(), "");
         }
@@ -231,11 +293,12 @@ final class Repair {
     }
 
     /** What the canonical form writes between its last code token and the comment after it. */
-    private static Edit aboveTheLastComment(String source, Formatter.CanonicalForm canonical) {
+    private static Edit aboveTheLastComment(String source, Formatter.CanonicalForm canonical,
+            Witnesses.Pairing pairing) {
         String text = canonical.layout().text();
         String has = Witnesses.aboveTheLastComment(source);
         String wrote = Witnesses.aboveTheLastComment(text);
-        List<SyntaxToken> code = Witnesses.code(CstParser.parse(source).root());
+        List<SyntaxToken> code = pairing.hadCode();
         int from = code.isEmpty() ? 0 : code.get(code.size() - 1).end();
         return new Edit(from, from + has.length(), wrote);
     }
@@ -248,10 +311,7 @@ final class Repair {
      * either write over it or be left alone for holding one — and the file's own break would again
      * be a rule with a witness and nothing written for it.
      */
-    private static int lastWritten(String text) {
-        SyntaxNode root = CstParser.parse(text).root();
-        List<SyntaxToken> code = Witnesses.code(root);
-        List<SyntaxToken> comments = Witnesses.comments(root);
+    private static int lastWritten(List<SyntaxToken> code, List<SyntaxToken> comments) {
         int at = -1;
         if (!code.isEmpty()) {
             at = code.get(code.size() - 1).end();
@@ -272,10 +332,10 @@ final class Repair {
      * they hold, and the comment is part of what they hold.
      */
     private static List<Edit> moved(String source, Formatter.CanonicalForm canonical,
-            Witness.CommentCarrier witness) {
+            Witnesses.Pairing pairing, Witness.CommentCarrier witness) {
         String text = canonical.layout().text();
-        List<SyntaxToken> had = Witnesses.code(CstParser.parse(source).root());
-        List<SyntaxToken> writes = Witnesses.code(CstParser.parse(text).root());
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
         List<Edit> out = new ArrayList<>();
         for (int i : new int[] {witness.canonical(), witness.source()}) {
             if (i < 0 || i + 1 >= writes.size()) {
@@ -289,8 +349,8 @@ final class Repair {
     }
 
     /** What the canonical form writes between the two tokens of a boundary. */
-    private static Edit spacing(String source, Witness.BetweenTwoTokens witness) {
-        List<SyntaxToken> had = Witnesses.code(CstParser.parse(source).root());
+    private static Edit spacing(Witnesses.Pairing pairing, Witness.BetweenTwoTokens witness) {
+        List<SyntaxToken> had = pairing.hadCode();
         int i = witness.unit().adjacency();
         return new Edit(had.get(i).end(), had.get(i + 1).start(), witness.canonical());
     }

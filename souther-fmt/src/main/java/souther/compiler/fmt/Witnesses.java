@@ -21,8 +21,13 @@ import java.util.Set;
  * own unit — so this attributes the differences to the units they came from and hands back one
  * witness per unit, which is what an author can act on.
  *
- * <p>One family at a time. The indentation rule is here; the others are added as each one's unit and
- * expectation become values.
+ * <p>One family per rule, and each of them answers about its own unit: a boundary for spacing, a pair
+ * of items for separation, a pair of levels for indentation, a group for conditional layout, a
+ * comment for the rules about comments, a site of the source for the rules about which code tokens
+ * are written.
+ *
+ * <p>A family reads the results of the rules it depends on rather than competing with them, and
+ * where what it depends on is not settled yet it says nothing: the rules are asked again once it is.
  */
 final class Witnesses {
 
@@ -49,6 +54,28 @@ final class Witnesses {
     }
 
     /**
+     * What the rules about which code tokens are written have against {@code source}.
+     *
+     * <p>Read from the source alone. Where the two texts' tokens differ, no rule that pairs them
+     * can be asked at all, so this one is asked first and of the source's own tree: the sites are
+     * the ones the grammar admits, and what the canonical form writes at each of them is the rule.
+     */
+    static List<Witness> tokens(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
+        return tokens(source, canonical);
+    }
+
+    /** What the rules about which code tokens are written have against {@code source}. */
+    static List<Witness> tokens(String source, Formatter.CanonicalForm canonical) {
+        List<Witness> out = new ArrayList<>();
+        for (Rewrites.Site site : Rewrites.sitesOf(CstParser.parse(source).root())) {
+            out.add(new Witness.ACodeToken(new Witness.TokenSite(site.kind(), site.from()),
+                    site.canonical(), site.source()));
+        }
+        return out;
+    }
+
+    /**
      * What the indentation rule has against {@code source}.
      *
      * <p>A level's column on each side. The canonical form's is what the layout wrote; the source's
@@ -61,35 +88,37 @@ final class Witnesses {
      * line nobody wrote.
      */
     static List<Witness> indentation(String source, Formatter.CanonicalForm canonical) {
-        Layout layout = canonical.layout();
+        return indentation(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> indentation(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
         Map<Doc.NestRef, Integer> written = new IdentityHashMap<>();
         Map<Doc.NestRef, Set<Integer>> had = new IdentityHashMap<>();
-        Map<Integer, Place> opened = placesByStart(layout);
 
-        for (Newline n : layout.breaks()) {
-            if (n.under().isEmpty() || !n.indents()) {
-                continue;   // a line the file holds under no nesting, or one with nothing on it:
-                            // neither is a line written at a level's column
-            }
-            Doc.NestRef innermost = n.under().get(n.under().size() - 1);
-            Integer already = written.put(innermost, n.indent());
-            if (already != null && already != n.indent()) {
+        List<CanonicalLine> lines = lines(source, canonical, pairing);
+        for (CanonicalLine line : lines) {
+            Doc.NestRef innermost = line.under().get(line.under().size() - 1);
+            Integer already = written.put(innermost, line.indent());
+            if (already != null && already != line.indent()) {
                 throw new IllegalStateException(
                         "one level of nesting, written at column " + already + " and at column "
-                                + n.indent() + "; a level has one column and the layout wrote two");
+                                + line.indent() + "; a level has one column and the layout wrote"
+                                + " two");
             }
-            Integer column = columnFor(source, canonical, opened, n);
-            if (column != null) {
-                had.computeIfAbsent(innermost, _ -> new LinkedHashSet<>()).add(column);
+            if (line.sourceStart() != null) {
+                had.computeIfAbsent(innermost, _ -> new LinkedHashSet<>())
+                        .add(indentAt(source, line.sourceStart()));
             }
         }
 
         List<Witness> out = new ArrayList<>();
         Set<Witness.Levels> seen = new LinkedHashSet<>();
-        for (Newline n : layout.breaks()) {
-            for (int i = 0; i < n.under().size(); i++) {
-                Doc.NestRef inner = n.under().get(i);
-                Doc.NestRef outer = i == 0 ? null : n.under().get(i - 1);
+        for (CanonicalLine line : lines) {
+            for (int i = 0; i < line.under().size(); i++) {
+                Doc.NestRef inner = line.under().get(i);
+                Doc.NestRef outer = i == 0 ? null : line.under().get(i - 1);
                 Witness.Levels unit = new Witness.Levels(outer, inner);
                 if (!seen.add(unit)) {
                     continue;
@@ -105,57 +134,115 @@ final class Witnesses {
     }
 
     /**
-     * Where the source begins the line each break of the canonical form opens, for the breaks whose
-     * line the source opened too.
+     * A line the canonical form writes: how far in it begins, the levels it is written under, and
+     * where the source begins the same line.
      *
-     * <p>The offset that line starts at, so that what stands in front of the first thing on it is
-     * the indent a repair writes over. A break the source has no line for is not here: the source
-     * broke somewhere else, and moving an indent would be answering a question about a line nobody
-     * wrote.
+     * <p>{@code sourceStart} is the offset that line starts at in the source, so that what stands in
+     * front of the first thing on it is the indent a repair writes over, and null where the source
+     * opened no line there — it broke somewhere else, and moving an indent would be answering a
+     * question about a line nobody wrote.
      */
-    static Map<Newline, Integer> sourceLines(String source, Formatter.CanonicalForm canonical) {
+    record CanonicalLine(int indent, List<Doc.NestRef> under, Integer sourceStart) {
+
+        CanonicalLine {
+            under = List.copyOf(under);
+        }
+    }
+
+    /**
+     * The lines the canonical form writes, in the order it writes them.
+     *
+     * <p>One per break, and the one the file opens with: nothing breaks in front of the first line,
+     * and left out of this the column it begins at is a column no rule was ever asked about.
+     *
+     * <p>A break leaving a blank line is not one of these. Its line has nothing on it, so it is at
+     * no level's column and a reader taking its zero for one would have the level it stands under
+     * written at two columns.
+     */
+    static List<CanonicalLine> lines(String source, Formatter.CanonicalForm canonical) {
+        return lines(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<CanonicalLine> lines(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
         Layout layout = canonical.layout();
         Map<Integer, Place> opened = placesByStart(layout);
-        Map<Newline, Integer> out = new LinkedHashMap<>();
+        List<CanonicalLine> out = new ArrayList<>();
+        List<Doc.NestRef> file = fileLevel(layout);
+        if (!file.isEmpty()) {
+            out.add(new CanonicalLine(indentAt(layout.text(), 0), file, 0));
+        }
         for (Newline n : layout.breaks()) {
-            if (!n.indents()) {
-                continue;   // its line has nothing on it, so there is no indent to repair
+            if (n.under().isEmpty() || !n.indents()) {
+                continue;
             }
-            Integer start = lineStartFor(source, canonical, opened, n);
-            if (start != null) {
-                out.put(n, start);
-            }
+            out.add(new CanonicalLine(n.indent(), n.under(),
+                    lineStartFor(source, canonical, opened, pairing, n)));
         }
         return out;
     }
 
     /**
-     * How far in the source wrote the line the canonical form opens with {@code n}, or null where
-     * it opened no line there.
+     * The two texts' tokens, read once for a whole run of questions about their lines.
      *
-     * <p>Two ways of finding that line, because not every line the canonical form opens is a
-     * place's. A closing bracket takes a line of its own and is written by the construct rather
-     * than at a place, so a break in front of one is found through the token the two texts have in
-     * common instead.
+     * <p>The comments are here as well as the code. A line the canonical form opens for a comment is
+     * one no place is written at, and asked through the code alone it comes back as the line of the
+     * next token — a line the comment is not on. That is what left a comment written anywhere at all
+     * with no rule to answer for its column.
      */
-    private static Integer columnFor(String source, Formatter.CanonicalForm canonical,
-            Map<Integer, Place> opened, Newline n) {
-        Integer start = lineStartFor(source, canonical, opened, n);
-        if (start == null) {
-            return null;
+    record Pairing(List<SyntaxToken> hadCode, List<SyntaxToken> writesCode,
+            List<SyntaxToken> hadComments, List<SyntaxToken> writesComments) {
+
+        Pairing(String source, Formatter.CanonicalForm canonical) {
+            this(source, canonical.layout().text());
         }
+
+        Pairing(String source, String text) {
+            this(code(CstParser.parse(source).root()), code(CstParser.parse(text).root()),
+                    comments(CstParser.parse(source).root()),
+                    comments(CstParser.parse(text).root()));
+        }
+    }
+
+    /**
+     * The levels the file's own first line is written under: the outermost one alone.
+     *
+     * <p>Read from a break rather than named, because which nesting the file is is the document's
+     * to say. Every break is written inside it, so the first of any break's levels is it.
+     */
+    private static List<Doc.NestRef> fileLevel(Layout layout) {
+        for (Newline n : layout.breaks()) {
+            if (!n.under().isEmpty()) {
+                return List.of(n.under().get(0));
+            }
+        }
+        return List.of();
+    }
+
+    /** How far in the line beginning at {@code start} is written. */
+    private static int indentAt(String text, int start) {
         int indent = 0;
-        while (start + indent < source.length() && source.charAt(start + indent) == ' ') {
+        while (start + indent < text.length() && text.charAt(start + indent) == ' ') {
             indent++;
         }
         return indent;
     }
 
-    /** Where the source begins the line, by the same two ways. */
+    /**
+     * Where the source begins the line the canonical form opens with {@code n}, or null where it
+     * opened no line there.
+     *
+     * <p>Three ways of finding that line, because not every line the canonical form opens is a
+     * place's. A comment is written by the carrier that holds it, and a closing bracket is written
+     * by the construct; both are asked through what the two texts have in common — the comments in
+     * the order they are written, and the code tokens.
+     */
     private static Integer lineStartFor(String source, Formatter.CanonicalForm canonical,
-            Map<Integer, Place> opened, Newline n) {
+            Map<Integer, Place> opened, Pairing pairing, Newline n) {
         Layout layout = canonical.layout();
-        Place place = opened.get(n.offset() + 1 + n.indent());
+        int begins = n.offset() + 1 + n.indent();
+        Place place = opened.get(begins);
         if (sourceColumn(source, canonical, place, lineAfter(layout.text(), n)) != null) {
             int start = canonical.construction().places().sourcesOf(place).get(0).start();
             return source.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
@@ -163,8 +250,12 @@ final class Witnesses {
         if (place != null) {
             return null;   // a place is written there and the source did not open a line for it
         }
-        List<SyntaxToken> had = code(CstParser.parse(source).root());
-        List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
+        Integer comment = commentLineFor(source, pairing, begins);
+        if (comment != null) {
+            return comment;
+        }
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
         if (had.size() != writes.size()) {
             return null;
         }
@@ -173,6 +264,44 @@ final class Witnesses {
                 continue;
             }
             int at = had.get(i + 1).start();
+            int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
+            return source.substring(lineStart, at).isBlank() ? lineStart : null;
+        }
+        return null;
+    }
+
+    /**
+     * Where the source begins the line it wrote the comment the canonical form opens a line with at
+     * {@code begins}, or null where the canonical form opens no comment line there or the source
+     * did not write that comment on a line of its own.
+     *
+     * <p>The comments pair up in the order they are written, which is what {@link #comments} rests
+     * on too: the formatter writes every comment of a source exactly once.
+     *
+     * <p>A source that wrote the comment at the end of a line of code has not put it at a column —
+     * where it stands is what the rules about comments answer, and this rule would be moving a
+     * comment rather than a line.
+     *
+     * <p>Nor is a comment the canonical form carries somewhere else. That decision is another
+     * rule's and this one reads its result: the line the source has for such a comment is one the
+     * repair is about to take away, and an indent written onto it would be an expectation about a
+     * line that will not be there. The composition finds this rather than the two rules quietly
+     * writing over each other, which is how it was found.
+     */
+    private static Integer commentLineFor(String source, Pairing pairing, int begins) {
+        if (pairing.hadComments().size() != pairing.writesComments().size()
+                || pairing.hadCode().size() != pairing.writesCode().size()) {
+            return null;
+        }
+        for (int i = 0; i < pairing.writesComments().size(); i++) {
+            if (pairing.writesComments().get(i).start() != begins) {
+                continue;
+            }
+            int at = pairing.hadComments().get(i).start();
+            if (follows(pairing.writesCode(), pairing.writesComments().get(i).start())
+                    != follows(pairing.hadCode(), at)) {
+                return null;   // carried somewhere else, so this is not the line it is written on
+            }
             int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
             return source.substring(lineStart, at).isBlank() ? lineStart : null;
         }
@@ -198,9 +327,15 @@ final class Witnesses {
      * not one it should guess.
      */
     static List<Witness> spacing(String source, Formatter.CanonicalForm canonical) {
+        return spacing(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> spacing(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
         String text = canonical.layout().text();
-        List<SyntaxToken> had = code(CstParser.parse(source).root());
-        List<SyntaxToken> writes = code(CstParser.parse(text).root());
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
         if (had.size() != writes.size()) {
             throw new NoCorrespondence(
                     "the source has " + had.size() + " tokens and its canonical form "
@@ -244,16 +379,22 @@ final class Witnesses {
      * is not one this can answer about.
      */
     static List<Witness> comments(String source, Formatter.CanonicalForm canonical) {
+        return comments(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> comments(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
         String text = canonical.layout().text();
-        List<SyntaxToken> had = comments(CstParser.parse(source).root());
-        List<SyntaxToken> writes = comments(CstParser.parse(text).root());
+        List<SyntaxToken> had = pairing.hadComments();
+        List<SyntaxToken> writes = pairing.writesComments();
         if (had.size() != writes.size()) {
             throw new NoCorrespondence(
                     "the source holds " + had.size() + " comments and its canonical form "
                             + writes.size() + "; the two cannot be held side by side");
         }
-        List<SyntaxToken> hadCode = code(CstParser.parse(source).root());
-        List<SyntaxToken> writesCode = code(CstParser.parse(text).root());
+        List<SyntaxToken> hadCode = pairing.hadCode();
+        List<SyntaxToken> writesCode = pairing.writesCode();
         boolean aligned = hadCode.size() == writesCode.size();
         List<Witness> out = new ArrayList<>();
         for (int i = 0; i < had.size(); i++) {
@@ -269,11 +410,11 @@ final class Witnesses {
             }
             String hadBefore = before(source, had.get(i));
             String writesBefore = before(text, writes.get(i));
-            if (writesBefore.indexOf('\n') < 0 && hadBefore.indexOf('\n') < 0
+            if (!opensItsLine(text, writes.get(i)) && !opensItsLine(source, had.get(i))
                     && !hadBefore.equals(writesBefore)) {
                 out.add(new Witness.TrailingComment(unit, writesBefore, hadBefore));
             }
-            if (writesBefore.indexOf('\n') >= 0 && !endsTheFile(text, writes.get(i))) {
+            if (opensItsLine(text, writes.get(i)) && !endsTheFile(text, writes.get(i))) {
                 int wrote = newlines(after(text, writes.get(i)));
                 int has = newlines(after(source, had.get(i)));
                 if (wrote != has) {
@@ -304,6 +445,19 @@ final class Witnesses {
      */
     private static boolean endsTheFile(String text, SyntaxToken comment) {
         return text.substring(comment.end()).isBlank();
+    }
+
+    /**
+     * Whether nothing but whitespace stands in front of a comment on its line.
+     *
+     * <p>Read from the line rather than from the stretch back to the code before it. At the top of
+     * a file there is no code in front of a comment, so that stretch is empty and every source's
+     * first comment came back as one at the end of a line — which is a rule that answers about the
+     * space in front of it and not about the lines around it.
+     */
+    private static boolean opensItsLine(String text, SyntaxToken comment) {
+        int lineStart = text.lastIndexOf('\n', Math.max(0, comment.start() - 1)) + 1;
+        return text.substring(lineStart, comment.start()).isBlank();
     }
 
     /** What stands between a comment and the code before it, back to the line it starts on. */
@@ -355,6 +509,12 @@ final class Witnesses {
      * by the second, so what stands between the first and that comment is the separation, and blank
      * lines anywhere in the gap are lines the canonical form does not write.
      */
+    static List<Witness> separation(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
+        return separation(source, canonical);   // it reads the places, not the tokens
+    }
+
+    /** What the separation rule has against {@code source}. */
     static List<Witness> separation(String source, Formatter.CanonicalForm canonical) {
         List<Place> items = topLevel(canonical);
         List<Witness> out = new ArrayList<>();
@@ -392,9 +552,15 @@ final class Witnesses {
      * is the answer that would tell an author to close up a line a comment holds open.
      */
     static List<Witness> conditional(String source, Formatter.CanonicalForm canonical) {
+        return conditional(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> conditional(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
         Layout layout = canonical.layout();
-        List<SyntaxToken> had = code(CstParser.parse(source).root());
-        List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
         if (had.size() != writes.size()) {
             throw new NoCorrespondence(
                     "the source has " + had.size() + " tokens and its canonical form "
@@ -434,6 +600,110 @@ final class Witnesses {
     }
 
     /**
+     * What the rule about the end of a line has against {@code source}: the lines it wrote
+     * something at the end of.
+     *
+     * <p>Asked of the source's lines directly. The expectation is nothing, and that is what the
+     * canonical form writes at the end of every line it has, so there is no unit of the canonical
+     * form to find the source's answer at — which also makes this the one rule that can answer
+     * about a source whose tokens the canonical form rewrites.
+     *
+     * <p>The last line of a source is one of these only where nothing but whitespace is written on
+     * it. Anywhere else what stands after the last newline is what the file's own rule is about —
+     * how a file ends — and its repair writes the whole of that stretch, so answering here as well
+     * would be two rules over the same characters.
+     */
+    static List<Witness> lineEnds(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
+        return lineEnds(source, canonical);   // it reads the source's lines, not the tokens
+    }
+
+    /** What the rule about the end of a line has against {@code source}. */
+    static List<Witness> lineEnds(String source, Formatter.CanonicalForm canonical) {
+        List<Witness> out = new ArrayList<>();
+        int from = 0;
+        while (true) {
+            int newline = source.indexOf('\n', from);
+            int ends = newline < 0 ? source.length() : newline;
+            int at = ends;
+            while (at > from && (source.charAt(at - 1) == ' ' || source.charAt(at - 1) == '\t')) {
+                at--;
+            }
+            if (at < ends && (newline >= 0 || (from > 0 && at == from))) {
+                out.add(new Witness.AtTheEndOfALine(new Witness.LineEnd(at), "",
+                        source.substring(at, ends)));
+            }
+            if (newline < 0) {
+                return out;
+            }
+            from = newline + 1;
+        }
+    }
+
+    /**
+     * What the rule about a group's breaks has against {@code source}: the places it settled by
+     * breaking, where the source ended a different number of lines.
+     *
+     * <p>One line ends at each of them. A blank line inside a construct is written where the author
+     * wrote a paragraph break between two members, and that is a forced break with an obligation of
+     * its own — so a source that left a blank line at a place a group settles has departed from
+     * something, and until this rule was a value it was the one departure nothing could name: the
+     * group did break there, so the conditional rule agrees, and no obligation stands there for the
+     * forced rules to count lines at.
+     *
+     * <p>Only where the source ended a line there. One that ran the boundary together departed from
+     * the group's decision, which {@link #conditional} answers for, and saying it here as well
+     * would say one thing twice.
+     *
+     * <p>And not where an obligation breaks the same boundary. Two rules would count the same
+     * newlines from their own units and one of them would be wrong about how many belong there.
+     */
+    static List<Witness> settled(String source, Formatter.CanonicalForm canonical) {
+        return settled(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> settled(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
+        Layout layout = canonical.layout();
+        String text = layout.text();
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
+        if (had.size() != writes.size()) {
+            throw new NoCorrespondence(
+                    "the source has " + had.size() + " tokens and its canonical form "
+                            + writes.size() + "; the two cannot be held side by side");
+        }
+        Set<Integer> obliged = new LinkedHashSet<>();
+        for (Newline n : layout.breaks()) {
+            if (n.cause() instanceof Newline.Cause.Forced) {
+                obliged.add(adjacencyAt(writes, n.offset()));
+            }
+        }
+        List<Witness> out = new ArrayList<>();
+        Set<Integer> seen = new LinkedHashSet<>();
+        for (Opportunity o : layout.opportunities()) {
+            if (!o.broke()) {
+                continue;
+            }
+            int i = adjacencyAt(writes, o.at());
+            if (i < 0 || obliged.contains(i) || !seen.add(i)) {
+                continue;
+            }
+            String has = source.substring(had.get(i).end(), had.get(i + 1).start());
+            String wrote = text.substring(writes.get(i).end(), writes.get(i + 1).start());
+            if (has.contains("//") || wrote.contains("//")) {
+                continue;   // what is written around a comment is the comment rules'
+            }
+            if (newlines(has) > 0 && newlines(has) != newlines(wrote)) {
+                out.add(new Witness.Settled(new Witness.BrokenBoundary(i), newlines(wrote),
+                        newlines(has)));
+            }
+        }
+        return out;
+    }
+
+    /**
      * What the forced-layout rules have against {@code source}: the boundaries the canonical form
      * breaks whatever the width and the source wrote on a line.
      *
@@ -454,10 +724,16 @@ final class Witnesses {
      * its own unit, and a gap holding a comment to the rules about comments.
      */
     static List<Witness> forced(String source, Formatter.CanonicalForm canonical) {
+        return forced(source, canonical, new Pairing(source, canonical));
+    }
+
+    /** The same, for a caller that has already read the two texts' tokens. */
+    static List<Witness> forced(String source, Formatter.CanonicalForm canonical,
+            Pairing pairing) {
         Layout layout = canonical.layout();
         String text = layout.text();
-        List<SyntaxToken> had = code(CstParser.parse(source).root());
-        List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
+        List<SyntaxToken> had = pairing.hadCode();
+        List<SyntaxToken> writes = pairing.writesCode();
         if (had.size() != writes.size()) {
             throw new NoCorrespondence(
                     "the source has " + had.size() + " tokens and its canonical form "

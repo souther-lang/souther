@@ -667,7 +667,13 @@ public final class Formatter {
         // the next belongs to a construct like any other. Left unnamed, the one adjacency a reader
         // can close up by hand — writing two top-level items on a line — is the one no rule is
         // recorded against.
-        return TokenDoc.node(file.kind(), concat(parts));
+        //
+        // And it is a level, written at column zero. The indentation rule answers about a pair of
+        // levels, so without the file among them the outermost pair has one member and the column
+        // its lines begin at is decided by nothing: a source that indented every definition it has
+        // departed from a canonical form no rule could name. Nesting by nothing writes what it
+        // wrote before.
+        return TokenDoc.nest(0, TokenDoc.node(file.kind(), concat(parts)));
     }
 
     /**
@@ -1308,7 +1314,7 @@ public final class Formatter {
 
     /** The lambda a parameter-less definition was written as, or null when its body is an ordinary
      * expression and the definition is a value. */
-    private static SyntaxNode liftedLambda(SyntaxNode n) {
+    static SyntaxNode liftedLambda(SyntaxNode n) {
         if (n.child(SyntaxKind.BLOCK_EXPR).isPresent() || n.child(SyntaxKind.INTRINSIC_BODY).isPresent()) {
             return null;
         }
