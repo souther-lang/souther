@@ -563,7 +563,19 @@ public final class Main {
                     // What is printed is the decisions and not the diff. A diff says which lines
                     // are not the canonical form's; a reader who wants to write the canonical form
                     // by hand needs to know which rule each of them answers to.
-                    Deviations.Report report = Deviations.of(source);
+                    Deviations.Report report;
+                    try {
+                        report = Deviations.of(source);
+                    } catch (RuntimeException e) {
+                        // A rule that could not answer says so and is left out of the report. This
+                        // is anything else: a defect, and one this file is told about rather than
+                        // being judged as though the rules had been asked.
+                        System.err.println(file + ": " + internalFailure(e));
+                        System.out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
+                                source, formatted));
+                        failed = true;
+                        continue;
+                    }
                     for (Deviations.Deviation d : report.deviations()) {
                         System.out.println(file + ":" + d.line() + ":" + d.column() + ": "
                                 + d.rule());

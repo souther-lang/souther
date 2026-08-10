@@ -92,7 +92,9 @@ final class Repair {
             case Witness.BetweenTwoTokens b -> List.of(spacing(source, b));
             case Witness.Separation s -> List.of(separation(source, canonical, s));
             case Witness.Indentation i -> indentation(source, canonical, i);
-            case Witness.Forced f -> gaps(source, canonical, List.of(f.unit().adjacency()));
+            case Witness.Forced f -> f.unit().adjacency() < 0
+                    ? List.of(ending(source, canonical))
+                    : gaps(source, canonical, List.of(f.unit().adjacency()));
             case Witness.Conditional c -> gaps(source, canonical, opportunitiesOf(canonical, c));
             case Witness.TrailingComment t -> List.of(new Edit(
                     t.unit().at() - t.source().length(), t.unit().at(), t.canonical()));
@@ -205,6 +207,29 @@ final class Repair {
             to--;
         }
         return new Edit(from, to, "\n".repeat(witness.canonical()));
+    }
+
+    /**
+     * What the canonical form writes after its last code token: the one newline a file ends with.
+     *
+     * <p>The file's own break stands after everything, so there is no token on the far side of it
+     * and the stretch runs to the end of the text. Left to {@link #gaps}, which pairs a boundary
+     * with the two tokens it stands between, this one has no pair and was written nowhere — so the
+     * rule was a value, the witness was made, and neither the report nor the repair had it.
+     */
+    private static Edit ending(String source, Formatter.CanonicalForm canonical) {
+        String text = canonical.layout().text();
+        List<SyntaxToken> had = Witnesses.code(CstParser.parse(source).root());
+        List<SyntaxToken> writes = Witnesses.code(CstParser.parse(text).root());
+        if (had.isEmpty() || writes.isEmpty()) {
+            return new Edit(source.length(), source.length(), "");
+        }
+        int from = had.get(had.size() - 1).end();
+        int wrote = writes.get(writes.size() - 1).end();
+        if (source.substring(from).contains("//") || text.substring(wrote).contains("//")) {
+            return new Edit(from, from, "");   // a comment ends the file, and it is not this rule's
+        }
+        return new Edit(from, source.length(), text.substring(wrote));
     }
 
     /**

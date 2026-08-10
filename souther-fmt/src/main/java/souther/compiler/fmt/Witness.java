@@ -157,7 +157,14 @@ sealed interface Witness {
      */
     record ForcedBoundary(int adjacency, Obligation obligation) {}
 
-    /** A forced-layout rule at one boundary: the canonical form breaks it and the source did
-     *  not. */
-    record Forced(ForcedBoundary unit) implements Witness {}
+    /**
+     * A forced-layout rule at one boundary: how many lines the canonical form ends there, and how
+     * many the source ends.
+     *
+     * <p>A count and not whether a line ends. A construct writes its members one to a line, so a
+     * source that left a blank line between two of them has as much departed from that as one that
+     * ran them together — and a witness that said only that the source does not end a line there
+     * would be saying something untrue of the first.
+     */
+    record Forced(ForcedBoundary unit, int canonical, int source) implements Witness {}
 }

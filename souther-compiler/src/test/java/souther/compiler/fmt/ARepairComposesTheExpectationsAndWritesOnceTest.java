@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -128,4 +129,28 @@ class ARepairComposesTheExpectationsAndWritesOnceTest {
         return String.join("\n", out);
     }
 
+    /**
+     * A family that cannot answer says so with a kind of its own, and a broken invariant does not.
+     *
+     * <p>{@link Deviations} leaves a family out of its report where it cannot answer. Told by the
+     * same exception a broken invariant throws, it would leave that out too and say the report is
+     * merely not whole — a defect reported as this source being unusual.
+     */
+    @Test
+    void afamilyThatCannotAnswerSaysSoWithAKindOfItsOwn() {
+        String lifted = """
+                module fmtprobe exposing ( f )
+
+                let f = (x) -> x
+                """;
+        Formatter.CanonicalForm canonical =
+                Formatter.canonicalize(CstParser.parse(lifted).root());
+
+        assertThrows(Witnesses.NoCorrespondence.class,
+                () -> Witnesses.spacing(lifted, canonical),
+                "the canonical form writes tokens this source has not");
+        assertTrue(!IllegalStateException.class.isAssignableFrom(Witnesses.NoCorrespondence.class),
+                "and it is not the kind a broken invariant throws, which is what lets a caller"
+                        + " leave one out of a report and let the other be seen");
+    }
 }

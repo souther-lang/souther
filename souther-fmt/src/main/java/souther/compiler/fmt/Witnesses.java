@@ -30,6 +30,25 @@ final class Witnesses {
     }
 
     /**
+     * A source and its canonical form that cannot be held against each other, so a rule that asks
+     * what the source has at a unit of the canonical form has no question to ask.
+     *
+     * <p>A kind of its own, and not the exception a broken invariant throws. What a family says by
+     * throwing this is that it cannot answer about this source — which is a fact about the source
+     * and one a report can carry — and what it says by throwing anything else is that something
+     * here is wrong. A caller that treated the two alike would take a defect for an incompleteness
+     * and say the report is merely not whole.
+     */
+    static final class NoCorrespondence extends RuntimeException {
+
+        private static final long serialVersionUID = 1L;
+
+        NoCorrespondence(String said) {
+            super(said);
+        }
+    }
+
+    /**
      * What the indentation rule has against {@code source}.
      *
      * <p>A level's column on each side. The canonical form's is what the layout wrote; the source's
@@ -179,7 +198,7 @@ final class Witnesses {
         List<SyntaxToken> had = code(CstParser.parse(source).root());
         List<SyntaxToken> writes = code(CstParser.parse(text).root());
         if (had.size() != writes.size()) {
-            throw new IllegalStateException(
+            throw new NoCorrespondence(
                     "the source has " + had.size() + " tokens and its canonical form "
                             + writes.size() + "; the two cannot be held side by side and this rule"
                             + " asks what the source has between the same two");
@@ -225,7 +244,7 @@ final class Witnesses {
         List<SyntaxToken> had = comments(CstParser.parse(source).root());
         List<SyntaxToken> writes = comments(CstParser.parse(text).root());
         if (had.size() != writes.size()) {
-            throw new IllegalStateException(
+            throw new NoCorrespondence(
                     "the source holds " + had.size() + " comments and its canonical form "
                             + writes.size() + "; the two cannot be held side by side");
         }
@@ -362,7 +381,7 @@ final class Witnesses {
         List<SyntaxToken> had = code(CstParser.parse(source).root());
         List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
         if (had.size() != writes.size()) {
-            throw new IllegalStateException(
+            throw new NoCorrespondence(
                     "the source has " + had.size() + " tokens and its canonical form "
                             + writes.size() + "; the two cannot be held side by side");
         }
@@ -424,7 +443,7 @@ final class Witnesses {
         List<SyntaxToken> had = code(CstParser.parse(source).root());
         List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
         if (had.size() != writes.size()) {
-            throw new IllegalStateException(
+            throw new NoCorrespondence(
                     "the source has " + had.size() + " tokens and its canonical form "
                             + writes.size() + "; the two cannot be held side by side");
         }
@@ -440,8 +459,10 @@ final class Witnesses {
             if (writes.isEmpty() || n.offset() >= writes.get(writes.size() - 1).end()) {
                 // past the last token: the break that ends the file, and what the source has for it
                 // is whether it ends with a newline and with one
-                if (!source.endsWith("\n") || source.endsWith("\n\n")) {
-                    out.add(new Witness.Forced(new Witness.ForcedBoundary(-1, f.obligation())));
+                int ends = trailingNewlines(source);
+                if (ends != 1) {
+                    out.add(new Witness.Forced(new Witness.ForcedBoundary(-1, f.obligation()),
+                            1, ends));
                 }
                 continue;
             }
@@ -462,10 +483,22 @@ final class Witnesses {
                 continue;   // what is written around a comment is the comment rules'
             }
             if (newlines(has) != newlines(wrote)) {
-                out.add(new Witness.Forced(new Witness.ForcedBoundary(i, e.getValue().get(0))));
+                out.add(new Witness.Forced(new Witness.ForcedBoundary(i, e.getValue().get(0)),
+                        newlines(wrote), newlines(has)));
             }
         }
         return out;
+    }
+
+    /** How many lines a text ends with, counted from its last code. */
+    private static int trailingNewlines(String text) {
+        int n = 0;
+        for (int i = text.length() - 1; i >= 0 && Character.isWhitespace(text.charAt(i)); i--) {
+            if (text.charAt(i) == '\n') {
+                n++;
+            }
+        }
+        return n;
     }
 
     private static int newlines(String text) {

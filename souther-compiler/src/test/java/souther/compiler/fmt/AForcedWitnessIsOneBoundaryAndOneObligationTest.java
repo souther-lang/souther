@@ -59,18 +59,72 @@ class AForcedWitnessIsOneBoundaryAndOneObligationTest {
                 "and the closing brace shares one with the last of them: " + found);
     }
 
-    /** A file with no final newline is one witness, and it is the file's own obligation. */
+    /**
+     * A file with no final newline is one witness, it is the file's own obligation, and repairing
+     * it writes the canonical form.
+     *
+     * <p>The file's break stands after everything and has no token on its far side, so a witness
+     * for it is one nothing else in this pipeline pairs with a stretch of text. Held here because
+     * a rule that is a value and a witness that is made and then reaches neither the report nor the
+     * repair is the thing this issue is about.
+     */
     @Test
-    void aFileWithNoFinalNewlineIsAWitness() {
+    void aFileWithNoFinalNewlineIsAWitnessAndIsRepaired() {
         String canonical = Formatter.format("""
                 module fmtprobe exposing ( Alpha )
 
                 data Alpha = Int
                 """);
+        String source = canonical.stripTrailing();
 
         assertEquals(List.of(), obligations(canonical));
-        assertEquals(List.of(Obligation.A_FILE_ENDS_WITH_ONE_NEWLINE),
-                obligations(canonical.stripTrailing()));
+        assertEquals(List.of(Obligation.A_FILE_ENDS_WITH_ONE_NEWLINE), obligations(source));
+
+        Formatter.CanonicalForm form = Formatter.canonicalize(CstParser.parse(source).root());
+        assertEquals(canonical, Repair.repair(source, form, witnesses(source)));
+    }
+
+    /** And a file that ends with a blank line is the same witness, answered the other way. */
+    @Test
+    void aFileThatEndsWithABlankLineIsTheSameWitness() {
+        String canonical = Formatter.format("""
+                module fmtprobe exposing ( Alpha )
+
+                data Alpha = Int
+                """);
+        String source = canonical + "\n";
+
+        List<Witness> found = witnesses(source);
+        assertEquals(1, found.size(), found.toString());
+        Witness.Forced only = (Witness.Forced) found.get(0);
+        assertEquals(1, only.canonical());
+        assertEquals(2, only.source());
+    }
+
+    /**
+     * The two answers, and not whether a line ends. A source with a blank line between two members
+     * does end a line there — it ends two — so a witness saying it does not would be untrue of it.
+     */
+    @Test
+    void theWitnessCountsTheLinesThatEndThere() {
+        List<Witness> found = witnesses("""
+                module fmtprobe exposing ( f )
+
+                let f (x: Int): Int =
+                    {
+                        let a = x
+
+                        a
+                    }
+                """);
+
+        Witness.Forced only = (Witness.Forced) found.stream()
+                .filter(w -> ((Witness.Forced) w).unit().obligation()
+                        == Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN)
+                .findFirst().orElseThrow();
+        assertEquals(1, only.canonical());
+        assertEquals(2, only.source(), "the source ends two lines there, and it is that that is"
+                + " wrong rather than ending none");
     }
 
     /**

@@ -61,11 +61,14 @@ public final class Deviations {
     /**
      * Every family's answer about one source.
      *
-     * <p>A family that cannot answer is left out rather than allowed to end the report. Three of
+     * <p>A family that cannot answer is left out rather than allowed to end the report. Four of
      * them hold the two token streams side by side, which the canonicalization that rewrites a
      * definition's lambda makes impossible — and a source that writes one is an ordinary source,
      * not a broken one. What the rest of them can say is still worth saying, and
      * {@link Report#whole} is what tells a reader that it is not all of it.
+     *
+     * <p>Only that. A family throwing anything else is a defect in the formatter or in the rule,
+     * and swallowing it here would report it as this source being unusual.
      */
     private static List<Witness> all(String source, Formatter.CanonicalForm canonical) {
         List<Witness> out = new ArrayList<>();
@@ -75,8 +78,9 @@ public final class Deviations {
         for (Family family : families) {
             try {
                 out.addAll(family.of(source, canonical));
-            } catch (IllegalStateException _) {
-                // this family cannot say anything about this source
+            } catch (Witnesses.NoCorrespondence _) {
+                // this family has no question to ask about this source. Anything else it throws is
+                // a defect and is left to be seen as one.
             }
         }
         return out;
@@ -104,8 +108,8 @@ public final class Deviations {
             String next;
             try {
                 next = Repair.repair(text, form, witnesses);
-            } catch (RuntimeException _) {
-                return false;   // two expectations over one stretch, or one that cannot be written
+            } catch (Witnesses.NoCorrespondence _) {
+                return false;   // a family that could not answer, so this is not all of it
             }
             if (next.equals(text)) {
                 break;
@@ -136,7 +140,7 @@ public final class Deviations {
             case Witness.BetweenTwoTokens b -> quoted(b.canonical());
             case Witness.Separation s -> lines(s.canonical());
             case Witness.Indentation i -> i.canonical() + " columns";
-            case Witness.Forced _ -> "a line ends here";
+            case Witness.Forced f -> ends(f.canonical());
             case Witness.Conditional c -> c.canonicalIsWhole() ? "on one line" : "down the page";
             case Witness.TrailingComment t -> quoted(t.canonical());
             case Witness.CommentAbove a -> lineBreaks(a.canonical());
@@ -150,11 +154,21 @@ public final class Deviations {
             case Witness.Separation s -> lines(s.source());
             case Witness.Indentation i -> i.source().size() == 1
                     ? i.source().get(0) + " columns" : i.source() + " columns";
-            case Witness.Forced _ -> "it does not";
+            case Witness.Forced f -> ends(f.source());
             case Witness.Conditional c -> c.sourceIsWhole() ? "on one line" : "down the page";
             case Witness.TrailingComment t -> quoted(t.source());
             case Witness.CommentAbove a -> lineBreaks(a.source());
             case Witness.CommentCarrier _ -> "here";
+        };
+    }
+
+    /** How many lines end at a boundary, said as a reader would say it. */
+    private static String ends(int lines) {
+        return switch (lines) {
+            case 0 -> "no line ends here";
+            case 1 -> "one line ends here";
+            case 2 -> "two do";
+            default -> lines + " do";
         };
     }
 
