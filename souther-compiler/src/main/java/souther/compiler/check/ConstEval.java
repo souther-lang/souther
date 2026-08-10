@@ -71,6 +71,14 @@ public final class ConstEval {
 
     private static Optional<Object> binary(Ast.Binary bin) {
         Optional<Object> l = eval(bin.left());
+        // `&&` and `||` settle on their left operand, and what settles them is the answer whatever
+        // the right operand is. Read eagerly, a right operand this cannot fold would take a settled
+        // condition down with it — so a construction the language calls constant would be checked
+        // where it was written one way and not the other.
+        if (l.orElse(null) instanceof Boolean settled
+                && (bin.op() == Ast.BinOp.AND && !settled || bin.op() == Ast.BinOp.OR && settled)) {
+            return Optional.of(settled);
+        }
         Optional<Object> r = eval(bin.right());
         if (l.isEmpty() || r.isEmpty()) {
             return Optional.empty();
