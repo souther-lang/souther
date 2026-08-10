@@ -627,6 +627,8 @@ An external representation may contain null, but internal data forbids null. nul
 
 [[an-operator-takes-the-types-it-is-defined-for]]An operator MUST be given the types it is defined for: `+++++` joins two lists or two strings, unary minus takes an `+Int+` or a `+Decimal+`, a comparison takes two ordered values of one type, and `+==+` takes values that have something to compare — a function does not (<<equality>>).
 
+[[a-condition-stops-when-its-answer-is-settled]]`+&&+` and `+||+` evaluate their operands left to right and stop as soon as the answer is settled: a false left operand is the answer of a `+&&+` and a true one is the answer of a `+||+`, and in neither case is the right operand evaluated. Which operands run is part of what the operators mean and not a choice a backend makes — `+/+` aborts on a zero divisor and `+Int+` overflows (<<stdlib-int>>), so `+x /= 0 && 100 / x > 1+` is how a condition narrows what its right side may compute, and evaluated eagerly it would abort at the value it exists to exclude.
+
 [[a-tuple-pattern-matches-its-tuple]]A tuple pattern MUST be written on a tuple, and MUST bind as many names as the tuple has elements.
 
 [[a-field-read-is-declared-by-the-value]]A field read MUST be a field the value has. A sum has no fields of its own — its cases do — and it exposes one only where every case spreads the data declaring it (<<sum-data>>); which case a value is is not known until it is opened.
