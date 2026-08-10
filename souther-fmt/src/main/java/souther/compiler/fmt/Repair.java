@@ -94,6 +94,9 @@ final class Repair {
             case Witness.Indentation i -> indentation(source, canonical, i);
             case Witness.Forced f -> gaps(source, canonical, List.of(f.unit().adjacency()));
             case Witness.Conditional c -> gaps(source, canonical, opportunitiesOf(canonical, c));
+            case Witness.TrailingComment t -> List.of(new Edit(
+                    t.unit().at() - t.source().length(), t.unit().at(), t.canonical()));
+            case Witness.CommentAbove a -> List.of(under(source, a));
         };
     }
 
@@ -183,6 +186,24 @@ final class Repair {
             }
         }
         return out;
+    }
+
+    /**
+     * The lines the canonical form ends between a comment and what it is written above.
+     *
+     * <p>To the start of the line the next thing is on, so that how far in that line begins is left
+     * where it is: that is the indentation rule's and this one has nothing to say about it.
+     */
+    private static Edit under(String source, Witness.CommentAbove witness) {
+        int from = source.indexOf('\n', witness.unit().at());
+        int to = from;
+        while (to < source.length() && Character.isWhitespace(source.charAt(to))) {
+            to++;
+        }
+        while (to > from && source.charAt(to - 1) != '\n') {
+            to--;
+        }
+        return new Edit(from, to, "\n".repeat(witness.canonical()));
     }
 
     /** What the canonical form writes between the two tokens of a boundary. */

@@ -105,6 +105,34 @@ sealed interface Witness {
             implements Witness {}
 
     /**
+     * The comment rules' unit: one comment, named by where the source wrote it.
+     *
+     * <p>The comment and not the line it is on. Where a run of them stands above a definition, each
+     * is one the formatter placed, and what stands between two of them is as much a decision as
+     * what stands between the last and what they are about.
+     */
+    record Comment(int at) {}
+
+    /**
+     * A comment written at the end of a line of code: what the canonical form puts between the code
+     * and it, and what the source put there.
+     *
+     * <p>Only where both write it on that line. A source that put the comment somewhere else has
+     * not spaced it wrongly — which construct carries a comment is another question, and one this
+     * rule reads the answer to rather than asking.
+     */
+    record TrailingComment(Comment unit, String canonical, String source) implements Witness {}
+
+    /**
+     * A comment written on a line of its own: how many lines end between it and what it is written
+     * above, and how many the source left there.
+     *
+     * <p>A count and not the text. How far in the next line begins is the indentation rule's, and a
+     * comment rule that answered with the whole stretch would be answering for it too.
+     */
+    record CommentAbove(Comment unit, int canonical, int source) implements Witness {}
+
+    /**
      * A forced-layout rule's unit: one boundary the canonical form breaks whatever the width, and
      * the obligation it breaks it for.
      *

@@ -65,6 +65,7 @@ public final class Deviations {
         out.addAll(Witnesses.indentation(source, canonical));
         out.addAll(Witnesses.forced(source, canonical));
         out.addAll(Witnesses.conditional(source, canonical));
+        out.addAll(Witnesses.comments(source, canonical));
         return out;
     }
 
@@ -98,6 +99,10 @@ public final class Deviations {
             case Witness.Indentation _ -> "one level deeper is one indent further in";
             case Witness.Forced f -> f.unit().obligation().said();
             case Witness.Conditional _ -> "a construct whose line would exceed the width breaks";
+            case Witness.TrailingComment _ ->
+                    "a comment at the end of a line is written one space after the code";
+            case Witness.CommentAbove _ ->
+                    "a comment on a line of its own is written above the line it owns";
         };
     }
 
@@ -108,6 +113,8 @@ public final class Deviations {
             case Witness.Indentation i -> i.canonical() + " columns";
             case Witness.Forced _ -> "a line ends here";
             case Witness.Conditional c -> c.canonicalIsWhole() ? "on one line" : "down the page";
+            case Witness.TrailingComment t -> quoted(t.canonical());
+            case Witness.CommentAbove a -> lineBreaks(a.canonical());
         };
     }
 
@@ -119,7 +126,13 @@ public final class Deviations {
                     ? i.source().get(0) + " columns" : i.source() + " columns";
             case Witness.Forced _ -> "it does not";
             case Witness.Conditional c -> c.sourceIsWhole() ? "on one line" : "down the page";
+            case Witness.TrailingComment t -> quoted(t.source());
+            case Witness.CommentAbove a -> lineBreaks(a.source());
         };
+    }
+
+    private static String lineBreaks(int lines) {
+        return lines == 1 ? "the next line" : lines - 1 + " blank lines before the next";
     }
 
     private static String lines(int blank) {

@@ -99,14 +99,20 @@ class AFormatCheckSaysWhichRuleEachDifferenceAnswersToTest {
     }
 
     /**
-     * And a difference no rule accounts for is said and shown. The rules about comments are not
-     * written down yet, so a source that leaves a blank line under one differs in a way none of
-     * them names — and a reader told only what is named would take the file for fixed.
+     * And a difference no rule accounts for is said and shown. Which construct carries a comment is
+     * a decision no rule here has been written for, so a source that put one above a field the
+     * canonical form writes on another line differs in a way none of them names — and a reader told
+     * only what is named would take the file for fixed.
      */
     @Test
     void aDifferenceNoRuleAccountsForIsSaidAndShown() throws Exception {
-        Path file = source("m.sou",
-                "module billing exposing ( Note )\n\n// what a note is\n\ndata Note = String\n");
+        Path file = source("m.sou", """
+                module billing exposing ( Note )
+
+                data Note = {
+                    // what the body holds
+                    body: String, size: Int }
+                """);
 
         Said said = run("fmt", file.toString(), "--check");
 

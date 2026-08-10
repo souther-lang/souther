@@ -192,8 +192,9 @@ final class Witnesses {
                 continue;   // the canonical form breaks here, so it writes no spacing
             }
             String has = source.substring(had.get(i).end(), had.get(i + 1).start());
-            if (has.equals(wrote)) {
-                continue;
+            if (has.equals(wrote) || has.contains("//")) {
+                continue;   // what is written around a comment is the comment rules' to say, and
+                            // an answer here would be over the characters the comment is made of
             }
             Gaps.Boundary b = boundaries.get(i);
             if (has.indexOf('\n') >= 0 && b.policy() != TokenDoc.Break.NEVER) {
@@ -206,6 +207,84 @@ final class Witnesses {
                     wrote, has));
         }
         return out;
+    }
+
+    /**
+     * What the rules about comments have against {@code source}.
+     *
+     * <p>Two of them. A comment at the end of a line of code has one space in front of it; a comment
+     * on a line of its own has the thing it is written above on the next line and no blank between.
+     *
+     * <p>The comments of the two texts are held side by side, in the order they are written. The
+     * formatter writes every comment of a source exactly once — a canonicalization that dropped one
+     * is refused before it is laid out — so the two runs pair up, and a source whose count differs
+     * is not one this can answer about.
+     */
+    static List<Witness> comments(String source, Formatter.CanonicalForm canonical) {
+        String text = canonical.layout().text();
+        List<SyntaxToken> had = comments(CstParser.parse(source).root());
+        List<SyntaxToken> writes = comments(CstParser.parse(text).root());
+        if (had.size() != writes.size()) {
+            throw new IllegalStateException(
+                    "the source holds " + had.size() + " comments and its canonical form "
+                            + writes.size() + "; the two cannot be held side by side");
+        }
+        List<Witness> out = new ArrayList<>();
+        for (int i = 0; i < had.size(); i++) {
+            Witness.Comment unit = new Witness.Comment(had.get(i).start());
+            String hadBefore = before(source, had.get(i));
+            String writesBefore = before(text, writes.get(i));
+            if (writesBefore.indexOf('\n') < 0 && hadBefore.indexOf('\n') < 0
+                    && !hadBefore.equals(writesBefore)) {
+                out.add(new Witness.TrailingComment(unit, writesBefore, hadBefore));
+            }
+            if (writesBefore.indexOf('\n') >= 0) {
+                int wrote = newlines(after(text, writes.get(i)));
+                int has = newlines(after(source, had.get(i)));
+                if (wrote != has) {
+                    out.add(new Witness.CommentAbove(unit, wrote, has));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** What stands between a comment and the code before it, back to the line it starts on. */
+    private static String before(String text, SyntaxToken comment) {
+        int from = comment.start();
+        while (from > 0 && Character.isWhitespace(text.charAt(from - 1))) {
+            from--;
+        }
+        return text.substring(from, comment.start());
+    }
+
+    /** What stands between a comment and whatever is written after it. */
+    private static String after(String text, SyntaxToken comment) {
+        int to = comment.end();
+        while (to < text.length() && Character.isWhitespace(text.charAt(to))) {
+            to++;
+        }
+        return text.substring(comment.end(), to);
+    }
+
+    /** The file's comments, in the order they are written. */
+    static List<SyntaxToken> comments(SyntaxNode node) {
+        List<SyntaxToken> out = new ArrayList<>();
+        gather(node, out);
+        return out;
+    }
+
+    private static void gather(SyntaxNode node, List<SyntaxToken> out) {
+        for (SyntaxElement e : node.children()) {
+            switch (e) {
+                case SyntaxNode n -> gather(n, out);
+                case SyntaxToken t -> {
+                    if (t.kind() == SyntaxKind.LINE_COMMENT) {
+                        out.add(t);
+                    }
+                }
+            }
+        }
     }
 
     /**
