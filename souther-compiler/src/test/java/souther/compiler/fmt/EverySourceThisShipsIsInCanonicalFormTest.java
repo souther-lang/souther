@@ -4,10 +4,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.Reserved;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,21 +57,13 @@ class EverySourceThisShipsIsInCanonicalFormTest {
                 "only " + Reserved.MODULES.size() + " modules were swept");
     }
 
-    /**
-     * One bundled source, read from where the compiler keeps it.
-     *
-     * <p>Named by path rather than looked up on the class path. The formatter depends on the syntax
-     * and not on the compiler, so what the compiler bundles is not on this module's class path.
-     */
     private static String read(String resource) {
-        Path source = Path.of("..", "souther-compiler", "src", "main", "resources")
-                .resolve(resource.substring(1));
-        try {
-            if (!Files.isRegularFile(source)) {
-                throw new IllegalStateException(
-                        "the prelude source " + source.toAbsolutePath() + " is missing");
+        try (InputStream in = EverySourceThisShipsIsInCanonicalFormTest.class
+                .getResourceAsStream(resource)) {
+            if (in == null) {
+                throw new IllegalStateException("the prelude resource " + resource + " is missing");
             }
-            return Files.readString(source, StandardCharsets.UTF_8);
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
