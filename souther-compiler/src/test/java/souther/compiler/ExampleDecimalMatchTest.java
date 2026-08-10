@@ -61,7 +61,7 @@ class ExampleDecimalMatchTest {
                     (Req { rate = 1m }) -> Out { label = "one" }
             """;
 
-    /** A fake's rows are matched by value equality (spec 22), which is the same equality everywhere
+    /** A fake's rows are matched by value equality (spec §example-fakes), which is the same equality everywhere
      *  else: an amount written at one scale is the amount a call arrives with at another. */
     @Test
     void aFakeRowMatchesTheSameAmountAtAnotherScale() {

@@ -45,10 +45,10 @@ import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
 
 /**
- * The ClassFile-API backend (spec sections 19, 20). Emits JVM bytecode directly for each
+ * The ClassFile-API backend (spec §jvm-output, §compiler-pipeline). Emits JVM bytecode directly for each
  * {@code data}: the value class (package-private ctor + invariant-checking
  * {@code __construct}) and nested {@code $Dec}/{@code $Enc} classes. Fields may reference
- * other data types; object decoders accumulate every field error (spec sections 15, 27.7).
+ * other data types; object decoders accumulate every field error (spec §case-propagation).
  */
 public final class Backend {
 
@@ -104,16 +104,16 @@ public final class Backend {
     }
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
-     * {@code typePackage} maps an imported type or behavior name to its declaring module (spec 4);
-     * {@code importedSigs} carries imported behaviors' signatures so a composition can name one as
-     * a stage (spec 14); {@code importedInjected} are imported injection-target behaviors, which a
-     * composition here inherits as requirements to inject and bind (spec 13.2, 14.3);
-     * {@code requirements} says what each behavior takes injected and in what order — the answer the
-     * example verifier reads too, so a fake reaches the parameter this constructor binds it to;
-     * {@code checked} carries the type checker's elaborated bodies, which is what the emitter reads
-     * instead of inferring types again (issue #81); {@code dischargeInvariants} carries this module's
-     * invariant clauses in the representation the language's own operations survive in, which is what a
-     * derived decoder's constraint mapping reads (spec §decoder-error). */
+     * {@code typePackage} maps an imported type or behavior name to its declaring module (spec §modules);
+     * {@code importedSigs} carries imported behaviors' signatures so a composition can name one as a stage
+     * (spec §composition); {@code importedInjected} are imported injection-target behaviors, which a
+     * composition here inherits as requirements to inject and bind (spec §injected-behavior,
+     * §composition-with-requirements); {@code requirements} says what each behavior takes injected and in
+     * what order — the answer the example verifier reads too, so a fake reaches the parameter this
+     * constructor binds it to; {@code checked} carries the type checker's elaborated bodies, which is what
+     * the emitter reads instead of inferring types again (issue #81); {@code dischargeInvariants} carries
+     * this module's invariant clauses in the representation the language's own operations survive in, which
+     * is what a derived decoder's constraint mapping reads (spec §decoder-error). */
     public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> sigs,
@@ -181,9 +181,9 @@ public final class Backend {
             }
         }
         // The checker has already run and rejects any dotted `A.decoder`/`.encoder` member
-        // (exposing is type-granular, spec 19.4), so every entry that reaches codegen is a bare name.
+        // (exposing is type-granular, spec §jvm-codec), so every entry that reaches codegen is a bare name.
         Set<String> exposed = new HashSet<>(module.exposing());
-        // After the Lower stage the only non-behavior fns left are recursive helpers (spec 13.1);
+        // After the Lower stage the only non-behavior fns left are recursive helpers (spec §fn-declaration);
         // each is lowered to a static method on the module's `$Fns` class rather than inlined.
         Set<String> behaviorNames = new HashSet<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {
@@ -206,7 +206,7 @@ public final class Backend {
         // Before anything is written: a declaration wide enough that its generated method cannot hold
         // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.
         JvmLimits.checkParameterSlots(module, ctx, recHelpers, sigs, requirements);
-        // A behavior's class capitalizes its first letter (spec 19.5). Data names are already
+        // A behavior's class capitalizes its first letter (spec §jvm-behavior). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
         // `Quote`. Reject the collision here rather than let one silently overwrite the other.
         Set<String> localTypes = new HashSet<>();
@@ -227,7 +227,7 @@ public final class Backend {
             }
         }
         // A behavior whose output is an anonymous union gets a generated sealed interface
-        // <behavior名>Result that its cases implement (spec 19.8). Register those case->interface links
+        // <behavior名>Result that its cases implement (spec §jvm-anonymous-union). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
         Map<String, List<TypeName>> behaviorResults = b.behaviorResultInterfaces(module, sigs);
@@ -285,10 +285,10 @@ public final class Backend {
         for (Ast.FnDef fn : emitted(module)) {
             fns.put(fn.name(), fn);
         }
-        // Injection targets (spec 13.2): a SpecBehavior with no matching fn. Each becomes an
+        // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Each becomes an
         // abstract base class a Java implementation extends (13.3). Imported injection targets
         // (their base lives in the declaring module) are requirements too, so a composition here
-        // injects and binds them (spec 14.3) — but no base is generated for them here.
+        // injects and binds them (spec §composition-with-requirements) — but no base is generated for them here.
         Set<String> requiredNames = Requirements.injectedNames(module, importedInjected);
         Map<String, Type> requiredSuccess = new HashMap<>();
         Map<String, List<Type>> requiredParam = new HashMap<>();
@@ -303,7 +303,7 @@ public final class Backend {
                 // Unit output cases get a no-arg factory (a unit has nothing to validate, so it is
                 // built directly). A field-bearing constructed type gets a typed factory, but only
                 // when the behavior declares it in `constructs` — that declaration is the authority
-                // to build it (spec 2.7), and unlike a unit it cannot be told apart from a decoded
+                // to build it (spec §asymmetric-interop), and unlike a unit it cannot be told apart from a decoded
                 // pass-through output (会員) by shape alone.
                 List<String> unitCases = new ArrayList<>();
                 for (Ast.TypeTerm term : spec.ret().cases()) {
@@ -398,7 +398,7 @@ public final class Backend {
                         Ast.FnDef fn = fns.get(spec.name());
                         if (fn != null) {
                             // a fn-implemented behavior: the $Impl holds the logic, the public interface
-                            // (behaviorClass) is what Java code declares (spec 19.8).
+                            // (behaviorClass) is what Java code declares (spec §jvm-anonymous-union).
                             out.put(module.name() + "." + CodegenContext.behaviorImplClass(spec.name()),
                                     b.generateSpecFn(spec, fn, requiredNames, requiredSuccess, requiredParam));
                             List<Type> pts = new ArrayList<>();
@@ -409,7 +409,7 @@ public final class Backend {
                                     b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
                                             requiredBy(spec)));
                         }
-                        // else: injection target — its abstract base was generated above (spec 13.3)
+                        // else: injection target — its abstract base was generated above (spec §java-base-class)
                     }
                     case Ast.PipeBehavior pipe -> {
                         out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
@@ -534,7 +534,7 @@ public final class Backend {
 
     /**
      * Emits the module's recursive helpers as {@code static} methods on a package-private {@code $Fns}
-     * class (spec 13.1). Each helper's declared parameter and return types are boxed as {@code Object}
+     * class (spec §fn-declaration). Each helper's declared parameter and return types are boxed as {@code Object}
      * across the method boundary, unboxed on entry and boxed on return, so a self- or mutual call is a
      * plain {@code invokestatic} — the recursion the inliner cannot express. The body is emitted through
      * the same {@code emitBodyTail} path a behavior uses; a helper is pure, so it has no injected fields.
@@ -652,7 +652,7 @@ public final class Backend {
 
     /**
      * Emits the static factory a Java caller uses to build a fn/pipe behavior, on its public
-     * interface (spec 19.5). {@code of()} for a behavior with no {@code depends on}; {@code bind(<named
+     * interface (spec §jvm-behavior). {@code of()} for a behavior with no {@code depends on}; {@code bind(<named
      * required interfaces>)} for one that injects dependencies. Both return the interface type and
      * construct the {@code $Impl}, so the caller never names the implementation class.
      */
@@ -688,23 +688,23 @@ public final class Backend {
     }
 
     /**
-     * Generates the abstract base class for a required behavior (spec 13.3): an abstract
+     * Generates the abstract base class for a required behavior (spec §java-base-class): an abstract
      * {@code Behavior} that a Java implementation extends. The base exposes a {@code protected}
-     * factory for what the implementation may build (spec 2.1). The two kinds are sourced differently.
+     * factory for what the implementation may build (spec §closed-construction). The two kinds are sourced differently.
      * A unit output case gets a no-arg factory: a unit has no invariant to validate, so it is built
      * directly, and it is taken from the output cases (an injected behavior may leave {@code constructs}
      * implicit, and a unit is safe to hand out either way). A field-bearing type gets a typed factory
      * built through its {@code __construct} so the invariant is checked, but only when the behavior
-     * declares it in {@code constructs}: that declaration is the authority to build it (spec 2.7), and
+     * declares it in {@code constructs}: that declaration is the authority to build it (spec §asymmetric-interop), and
      * unlike a unit it cannot be told apart from a decoded pass-through output by shape alone. The typed
      * factory lets the implementation compose already-held values into its declared output without
      * round-tripping through the decoder. The data constructors stay non-public, so a subclass builds
      * exactly these and nothing else, from any package.
      *
-     * <p>When both the input and output map to a concrete reference type, the base carries a
-     * generic {@code Behavior<In, Out>} signature (spec 19.8, 24) — {@code Out} is the {@code <名>Result}
-     * interface for an anonymous union output — so a Java author writes the real return type rather
-     * than {@code Object}. If either side is a list/option/map (no single reference class), the
+     * <p>When both the input and output map to a concrete reference type, the base carries a generic {@code
+     * Behavior<In, Out>} signature (spec §jvm-anonymous-union, §jvm-behavior) — {@code Out} is the {@code
+     * <名>Result} interface for an anonymous union output — so a Java author writes the real return type
+     * rather than {@code Object}. If either side is a list/option/map (no single reference class), the
      * signature is omitted and the raw interface stands.
      */
     private byte[] generateRequiredBase(String name, List<String> unitCases, List<Ast.Data> dataConstructs,
@@ -750,7 +750,7 @@ public final class Backend {
     }
 
     /** A factory taking the data's fields (in declaration order) and building it through
-     * {@code __construct}, so the invariant is checked and a violation aborts (spec 7.3) — the same
+     * {@code __construct}, so the invariant is checked and a violation aborts (spec §algebraic-types) — the same
      * path an in-domain construction takes, not a decode of an external representation. */
     private void emitDataFactory(ClassBuilder cb, Ast.Data data) {
         ClassDesc cdType = cd(data.name());
@@ -775,7 +775,7 @@ public final class Backend {
     }
 
     /** A generic method {@code Signature} for a factory whose fields include a container
-     * (List/Set/Map/Option), else {@code null}. Mirrors the value-class accessor signature (spec 8.5)
+     * (List/Set/Map/Option), else {@code null}. Mirrors the value-class accessor signature (spec §field-visibility)
      * so a Java caller passes {@code List<Line>} rather than a raw {@code List}. A non-container field
      * keeps its plain descriptor; the signature erases to the method's descriptor either way. */
     private String factorySignature(Map<String, Type> fields, ClassDesc ret) {
@@ -827,7 +827,7 @@ public final class Backend {
     }
 
     /**
-     * The public interface a Java caller declares for a fn/pipe behavior (spec 19.8). It hides the
+     * The public interface a Java caller declares for a fn/pipe behavior (spec §jvm-anonymous-union). It hides the
      * generated {@code <名>Result} union: the caller writes the behavior name and switches over the
      * cases. A single-input behavior's interface {@code extends Behavior<In, Out>} — so it composes
      * with {@code >->} and its {@code apply} return type is typed by inheritance; a multi-input one is
@@ -883,21 +883,21 @@ public final class Backend {
     }
 
     /**
-     * Behavior-result interfaces to generate (spec 19.8): for each behavior whose output is an
+     * Behavior-result interfaces to generate (spec §jvm-anonymous-union): for each behavior whose output is an
      * anonymous union, maps {@code <behavior名>Result} to its leaf cases — the {@code permits} list and
      * the set of case classes that {@code implements} it. A named-sum output is already a sealed
      * interface (19.3) and a single-case output uses that case's own type, so neither gets one. Case
      * order is sorted for deterministic bytecode.
      */
     /**
-     * A bridge case takes a class name in this module (spec 19.8), so it is subject to the same rule
+     * A bridge case takes a class name in this module (spec §jvm-anonymous-union), so it is subject to the same rule
      * as every other name this module emits: no two of them may be one class. {@code YenCase} is a
      * name a model may well have declared, and {@code IntCase} / {@code DateCase} the same, so this
      * is reported rather than reserved — the collision is decided by what the module holds, and a
      * name nothing collides with stays available.
      *
      * <p>Three ways to collide: with a data this module declares, with the class a behavior
-     * capitalizes into (spec 19.5), and with another bridge case. The last is two members of one
+     * capitalizes into (spec §jvm-behavior), and with another bridge case. The last is two members of one
      * spelling from two modules — refused within a union by the member-name rule, and reaching here
      * when they are members of two different unions of this module.
      */
@@ -986,7 +986,7 @@ public final class Backend {
     }
 
     /**
-     * Generates the sealed interface for a behavior's anonymous union output (spec 19.8). A member
+     * Generates the sealed interface for a behavior's anonymous union output (spec §jvm-anonymous-union). A member
      * this module declared is permitted as itself; any other is permitted as its bridge case. The
      * interface carries the union's {@code encoder()}: a Java consumer that switches reads a case
      * and uses that case's own codec, and one that wants the answer as it crosses a boundary asks
@@ -1014,14 +1014,14 @@ public final class Backend {
         return ctx.cd(typeName);
     }
 
-    /** The class a behavior is emitted under (spec 19.5). Anything that has to name that class from
+    /** The class a behavior is emitted under (spec §jvm-behavior). Anything that has to name that class from
      * outside codegen — publishing a module's declarations onto it, say — asks here rather than
      * repeating the rule, so the name a reader is sent to is the name that was emitted. */
     public static String behaviorClass(String name) {
         return CodegenContext.behaviorClass(name);
     }
 
-    /** The class a behavior's anonymous union output is emitted under (spec 19.8), for the same
+    /** The class a behavior's anonymous union output is emitted under (spec §jvm-anonymous-union), for the same
      * reason {@link #behaviorClass} is public: the name is decided here. */
     public static String behaviorResultClass(String name) {
         return CodegenContext.behaviorResultClass(name);
@@ -1137,7 +1137,7 @@ public final class Backend {
     // --- behaviors ---
 
     /**
-     * Generates a behavior implemented by a {@code fn} (spec 13.1). The behavior's inputs are the
+     * Generates a behavior implemented by a {@code fn} (spec §fn-declaration). The behavior's inputs are the
      * {@code apply} arguments; its {@code depends on} are injected fields (12.6). The {@code fn}'s
      * leading parameters name the inputs (their types come from the behavior); the trailing ones
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
@@ -1218,13 +1218,14 @@ public final class Backend {
                                 Map<String, Sig> sigs, Map<String, List<String>> behaviorDeps,
                                 Map<String, List<Ast.Var>> pipeStages) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
-        // Flatten nested pipeline stages so the routing is over leaf behaviors (spec 14.2): a named
+        // Flatten nested pipeline stages so the routing is over leaf behaviors (spec §type-routing): a named
         // intermediate `half = split >-> work` inlines to `split, work`, which keeps a retired case
         // retired across the composition, making `>->` associative.
         List<Ast.Var> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
-        // the pipeline's injected fields are the union of its stages' requirements (spec 14.3)
+        // the pipeline's injected fields are the union of its stages' requirements (spec
+        // §composition-with-requirements)
         List<String> reqStages = behaviorDeps.getOrDefault(pipe.name(), List.of());
-        // the pipeline takes whatever its first stage takes (spec 14.1)
+        // the pipeline takes whatever its first stage takes (spec §sequential-composition)
         int arity = PipelineSigs.stageSig(flat.get(0), sigs, symbols, pipe.pos()).inputTypes().size();
         ClassDesc[] applyParams = new ClassDesc[arity];
         java.util.Arrays.fill(applyParams, CD_Object);
@@ -1250,7 +1251,7 @@ public final class Backend {
                     if (TypeOps.isDataLike(mainline)) {
                         // Apply g only when the running value is one of the main-line cases it
                         // accepts. Anything else has left the main line: jump to the end rather
-                        // than offering it to the stages after this one (spec 14.2). Branching to
+                        // than offering it to the stages after this one (spec §type-routing). Branching to
                         // the end is what makes a retired case unreachable without tagging it — the
                         // same case type may legitimately reappear on the main line downstream.
                         List<TypeName> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
@@ -1285,7 +1286,7 @@ public final class Backend {
     /**
      * Applies the first stage to the pipeline's own arguments, leaving the result in slot 1.
      *
-     * <p>Only this stage may take other than one input (spec 14.1). Such a behavior does not
+     * <p>Only this stage may take other than one input (spec §sequential-composition). Such a behavior does not
      * implement {@code Behavior} — that interface takes one value — so it is called on its own
      * class rather than through the interface. An injected one is that class: the pipeline holds it
      * in the field it was bound to, and its {@code apply} is typed rather than erased (issue #57),
@@ -1326,10 +1327,10 @@ public final class Backend {
     }
 
     /** Applies one pipeline stage to the running value in slot 1, storing the result back. A stage
-     * is a behavior, or a {@code Type.decoder}/{@code Type.encoder} boundary codec (spec 14.1). */
+     * is a behavior, or a {@code Type.decoder}/{@code Type.encoder} boundary codec (spec §sequential-composition). */
     private void applyStage(CodeBuilder code, ClassDesc cdP, String stage, Set<String> requiredNames,
                             Map<String, List<String>> behaviorDeps, Type stageOut, int slot) {
-        // decode/encode are boundary edges, not pipeline stages (spec 14.1): `>->` composes
+        // decode/encode are boundary edges, not pipeline stages (spec §sequential-composition): `>->` composes
         // behaviors only.
         pushStage(code, cdP, stage, requiredNames, behaviorDeps);
         code.aload(1);
@@ -1339,13 +1340,14 @@ public final class Backend {
     }
 
     /** A stage answered with a member of its own result union; the running value the next stage sees
-     * is a Souther value again (spec 19.8). The same conversion a body does after a call. */
+     * is a Souther value again (spec §jvm-anonymous-union). The same conversion a body does after a call. */
     private void projectStage(CodeBuilder code, String stage, Type stageOut, int slot) {
         ResultBoundary.project(code, ctx, stage, ctx.bridgedMembersOf(stage, stageOut), slot);
     }
 
     /** Pushes the behavior object for a pipeline stage: an injected required field, or a fresh
-     * body-behavior instance constructed with the required dependencies it declares (spec 14.3). */
+     * body-behavior instance constructed with the required dependencies it declares (spec
+     * §composition-with-requirements). */
     private void pushStage(CodeBuilder code, ClassDesc cdP, String stage, Set<String> requiredNames,
                            Map<String, List<String>> behaviorDeps) {
         if (requiredNames.contains(stage)) {
@@ -1371,7 +1373,7 @@ public final class Backend {
 
     // --- value class members ---
 
-    // --- source compatibility: which extra source decoders a type's shape supports (spec 10.6) ---
+    // --- source compatibility: which extra source decoders a type's shape supports (spec §codec-generation) ---
 
     // --- $Dec class ---
 

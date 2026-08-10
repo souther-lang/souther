@@ -8,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An anonymous union appears only in a behavior's output; a parameter type is always a single
- * named type, a named sum included (spec 8.6, 12.2). Writing {@code (x: A | B)} in a parameter is
- * rejected — declare {@code data AB = A | B} and take {@code (x: AB)}, opening it with {@code match}.
+ * An anonymous union appears only in a behavior's output; a parameter type is always a single named type, a
+ * named sum included (spec §union-intersection, §unmarked-output). Writing {@code (x: A | B)} in a parameter
+ * is rejected — declare {@code data AB = A | B} and take {@code (x: AB)}, opening it with {@code match}.
  */
 class CompileUnionParamRejectTest {
 

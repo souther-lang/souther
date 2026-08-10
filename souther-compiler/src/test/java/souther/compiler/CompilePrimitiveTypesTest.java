@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The primitive types beyond Int/String — Bool, Decimal, Date, DateTime (spec section 7.1) —
+ * The primitive types beyond Int/String — Bool, Decimal, Date, DateTime (spec §primitives) —
  * must be usable as data fields and round-trip through the derived decoder/encoder.
  */
 class CompilePrimitiveTypesTest {

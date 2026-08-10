@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 /**
- * An {@code example}/{@code fake} fixture may name {@code None} for an optional ({@code T?}) field,
- * mirroring how a {@code let} body writes an empty optional (spec 6.2). {@code None} decodes to the
- * absent optional, the same as omitting the field (spec 8, absent key -> None). A present value is
- * written directly (wrapped in {@code Some}); omission and a present value already worked, so those
+ * An {@code example}/{@code fake} fixture may name {@code None} for an optional ({@code T?}) field, mirroring
+ * how a {@code let} body writes an empty optional (spec §optional). {@code None} decodes to the absent
+ * optional, the same as omitting the field (spec §absence-is-written-as-null, absent key -> None). A present
+ * value is written directly (wrapped in {@code Some}); omission and a present value already worked, so those
  * are regression guards.
  */
 class CompileOptionalFixtureTest {

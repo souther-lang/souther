@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code ==} is value equality (spec 7.1), and the generated equals/hashCode agree with it.
+ * {@code ==} is value equality (spec §equality), and the generated equals/hashCode agree with it.
  *
  * <p>For {@code Decimal} that means ignoring scale: {@code BigDecimal.equals} calls 1.0 and 1.00
  * different, but the same amount arrives with a different scale depending on whether it was read

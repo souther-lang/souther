@@ -8,10 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A case of a sum and a member of an output union both travel under the discriminator {@code "type"}
- * (spec 11.2, 19.8), which is written beside the fields the case lays flatly. A case declaring a
- * field of that name would have its own value written over by the tag, so it is refused where it is
- * declared rather than lost where it is encoded.
+ * A case of a sum and a member of an output union both travel under the discriminator {@code "type"} (spec
+ * §encoder-derivation, §jvm-anonymous-union), which is written beside the fields the case lays flatly. A case
+ * declaring a field of that name would have its own value written over by the tag, so it is refused where it
+ * is declared rather than lost where it is encoded.
  */
 class CompileDiscriminatorFieldTest {
 

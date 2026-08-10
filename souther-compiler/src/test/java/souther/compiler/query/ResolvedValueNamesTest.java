@@ -215,7 +215,7 @@ class ResolvedValueNamesTest {
                 let f (n, rate) = rate(n)
                 """;
 
-        // the trailing `depends on` parameter binds the name in the body (spec 12.6)
+        // the trailing `depends on` parameter binds the name in the body (spec §depends-on)
         assertInstanceOf(ValueName.Local.class, denotationOf(source, "rate"));
     }
 

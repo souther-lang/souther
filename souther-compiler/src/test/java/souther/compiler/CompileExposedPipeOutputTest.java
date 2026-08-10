@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * An exposed {@code >->} composition must declare its output in the {@code exposing} list
- * ({@code exposing ( name : A | B )}, spec 14.5, ADR-0024), and the declaration must match the
+ * ({@code exposing ( name : A | B )}, spec §declared-composition-output, ADR-0024), and the declaration must match the
  * inferred output exactly. This is the module boundary where a far-away case addition would
  * otherwise reach separately-compiled consumers unannounced. The requirement is boundary-only:
  * an unexposed composition keeps inference, and a signature on a non-composition is rejected.

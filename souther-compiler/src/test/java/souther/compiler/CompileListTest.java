@@ -13,7 +13,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** End-to-end test for {@code List<T>} fields, list decoders, and the {@code size} builtin (spec 7.2, 18.4). */
+/** End-to-end test for {@code List<T>} fields, list decoders, and the {@code size} builtin (spec
+ *  §collections, §stdlib-list). */
 class CompileListTest {
 
     private static final String MODULE = """

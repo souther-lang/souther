@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The signatures of the behaviors a module injects (spec 13.2): a {@code behavior} declared with no
+ * The signatures of the behaviors a module injects (spec §injected-behavior): a {@code behavior} declared with no
  * matching {@code let} here, plus the ones an imported module declared and this one names (spec
  * 14.3). A call to any of them is typed from its declaration, so both the settling of helper
  * parameter types (before the module is lowered) and the type check itself read the same map.

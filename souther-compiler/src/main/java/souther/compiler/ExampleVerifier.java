@@ -741,7 +741,7 @@ public final class ExampleVerifier {
 
     /**
      * The Souther value behind a behavior's answer. A member this module declared is the answer
-     * itself; a primitive or an imported type reached the union through a bridge case (spec 19.8),
+     * itself; a primitive or an imported type reached the union through a bridge case (spec §jvm-anonymous-union),
      * and a row writes the value, not the bridge case — which is a name this source does not have.
      * The same projection a Souther caller does, done on the loaded classes.
      */
@@ -1057,7 +1057,7 @@ public final class ExampleVerifier {
 
     private Object invokeNow(ExampleTarget target, Object[] args, Object[] fakes) {
         // The public name is now an interface; the fields, constructor and erased apply live on its
-        // $Impl (spec 19.8). Instantiate and call apply on the $Impl.
+        // $Impl (spec §jvm-anonymous-union). Instantiate and call apply on the $Impl.
         String className = module.name() + "." + behaviorClass(target.name()) + "$Impl";
         try {
             Class<?> c = loader.loadClass(className);

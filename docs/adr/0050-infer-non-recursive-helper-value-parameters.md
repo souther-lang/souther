@@ -6,7 +6,7 @@ Status: Superseded by ADR-0066
 
 A helper (`let` with no same-named behavior) stated all of its argument types. A behavior takes its type from the specification, but a helper has no specification to draw from, so the types were written by hand. This is redundant where the type is already fixed by how the helper is called: `let double (n) = n * 2` called only with an `Int` leaves nothing for the annotation to add.
 
-A non-recursive helper is inline-expanded at each call site (spec 12.5). At the point of expansion the arguments have concrete types, so a value parameter's type is already determined by its uses. A recursive helper is different: it is lowered to a method rather than inlined, so there is no call-site expansion to read a type from — its return type already has to be declared for the same reason (the cycle cannot be inferred through).
+A non-recursive helper is inline-expanded at each call site (spec §blocks). At the point of expansion the arguments have concrete types, so a value parameter's type is already determined by its uses. A recursive helper is different: it is lowered to a method rather than inlined, so there is no call-site expansion to read a type from — its return type already has to be declared for the same reason (the cycle cannot be inferred through).
 
 ## Decision
 

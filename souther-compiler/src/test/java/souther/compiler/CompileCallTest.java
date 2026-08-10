@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * End-to-end test for calling an (injected) required behavior from a behavior body with a
- * {@code let}; the required behavior's apply returns its output value directly (spec 12, 13.5).
+ * {@code let}; the required behavior's apply returns its output value directly (spec §behavior, §calling-a-behavior).
  */
 class CompileCallTest {
 

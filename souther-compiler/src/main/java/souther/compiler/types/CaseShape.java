@@ -1,7 +1,7 @@
 package souther.compiler.types;
 
 /**
- * What membership in a sum adds to a case's own representation (spec 11.2). A derived codec is the
+ * What membership in a sum adds to a case's own representation (spec §encoder-derivation). A derived codec is the
  * standalone representation of a type; where that type stands as a case, the sum's encoding puts the
  * discriminator on it, and this is the shape of that operation.
  *

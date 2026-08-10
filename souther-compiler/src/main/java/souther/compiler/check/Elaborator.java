@@ -41,7 +41,7 @@ public final class Elaborator {
 
     // --- expression typing (shared with the backend) ---
 
-    /** No required behaviors are in scope (decoders, encoders, invariants — spec 9.3, 17). */
+    /** No required behaviors are in scope (decoders, encoders, invariants — spec §invariant-expressions, §purity). */
     static final Map<String, ReqSig> NO_REQS = Map.of();
 
 
@@ -190,7 +190,7 @@ public final class Elaborator {
             case Ast.Expansion ex -> expansion(ex, env, ctx, expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
-            // would need a runtime closure (spec 12.5)
+            // would need a runtime closure (spec §blocks)
             // a lambda where a function is expected is that function: the context said what it takes,
             // so nothing has to be read off its applications
             case Ast.Block block when expected instanceof Type.FnOf want ->
@@ -198,7 +198,7 @@ public final class Elaborator {
             case Ast.Block block -> throw CompileException.of(Diagnostic
                             .at(block.pos()).say(new NameMessage.ABlockIsNotAValue()).build());
             // What the name is was answered when the module's names were resolved; what is left here
-            // is its type. A binding is looked up, a unit data is its own value (spec 8.4), and
+            // is its type. A binding is looked up, a unit data is its own value (spec §unit-data), and
             // anything else is not a value — reported below under the name that was written.
             case Ast.Var v -> switch (v.denotes()) {
                 case null -> throw new IllegalStateException(
@@ -210,7 +210,7 @@ public final class Elaborator {
                 case ValueName.OfType named
                         when ctx.symbols().get(named.type()) instanceof Ast.UnitData ->
                         new Core.UnitValue(named.type(), Type.ref(named.type()), v.pos());
-                // `None` where a `?` field is being given a value: the empty optional (spec 7.3).
+                // `None` where a `?` field is being given a value: the empty optional (spec §algebraic-types).
                 // What puts it here is the field, which the context says (ADR-0011) — not the expected
                 // type, since a model may name `Option<T>` where it reads one and an expectation would
                 // then license making one anywhere the name is written (issue #202).
@@ -267,7 +267,7 @@ public final class Elaborator {
             case Ast.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
                 // Each branch is lifted before the join, so a field taking `T?` can be given a value
-                // on one side and `None` on the other and still have one type (spec 7.3).
+                // on one side and `None` on the other and still have one type (spec §algebraic-types).
                 Core then = liftIntoOption(elaborate(iff.then(), env, ctx, expected), expected,
                         ctx.symbols());
                 Core els = liftIntoOption(elaborate(iff.els(), env, ctx, expected), expected,
@@ -421,11 +421,11 @@ public final class Elaborator {
     }
 
     /**
-     * Types a block argument, binding its parameters to {@code paramTypes} (spec 12.5).
+     * Types a block argument, binding its parameters to {@code paramTypes} (spec §blocks).
      *
      * <p>The parameters are visible only inside the block's body, and its requirement set is
      * whatever it calls — which flows outward into the enclosing behavior's, so nothing about
-     * requirements has to be written down (spec 29).
+     * requirements has to be written down (spec §requirement-propagation).
      */
     /**
      * Resolves the accumulator type for one function argument (a fold's step) of a helper call,
@@ -577,7 +577,7 @@ public final class Elaborator {
     }
 
     /**
-     * A local binding's written type must be the type of its value (spec 16.1). A declared type that
+     * A local binding's written type must be the type of its value (spec §let). A declared type that
      * the value does not have is an error rather than a comment the checker ignores — the same rule a
      * helper's declared return type follows.
      */
@@ -593,7 +593,7 @@ public final class Elaborator {
 
     /**
      * The type to bind an un-annotated binding at. A binding carrying an inlined helper's declared
-     * parameter type keeps that type when it is a sum: a case argument widens to its sum (spec 8.3),
+     * parameter type keeps that type when it is a sum: a case argument widens to its sum (spec §sum-data),
      * so a {@code match} in the body still sees the sum rather than the argument's specific case.
      * Other declared types (a type variable in a generic prelude helper, a record, a list) are left to
      * the argument's own type, which monomorphisation and the call-site check already handle.
@@ -1269,7 +1269,7 @@ public final class Elaborator {
      * subtree. */
     static void requireType(Ast.Expr e, Type actual, Type expected,
                                     Symbols symbols, String what) {
-        if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
+        if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec §sum-data)
             throw CompileException.of(Diagnostic
                             .at(region(e))
                             
@@ -1281,7 +1281,7 @@ public final class Elaborator {
 
     /**
      * Wraps a value being given to a {@code ?} field, so {@code Out { note = n }} puts {@code n}
-     * where an optional is asked for (spec 7.3). Construction is the one place this happens: an
+     * where an optional is asked for (spec §algebraic-types). Construction is the one place this happens: an
      * expected optional only ever arrives from a field's own type, because nowhere else in a model
      * can {@code T?} be written (ADR-0011) — a lambda handed to a stdlib combinator is typed with no
      * expected type at all ({@code HelperTyping}), so a step for {@code List.filterMap} still has to
@@ -1333,7 +1333,7 @@ public final class Elaborator {
     /**
      * Rejects {@code Some} / {@code None} written where no {@code ?} field is being given a value
      * (E1303). Giving a field its value is the one place an optional is made — the wrap is implicit
-     * and {@code None} is the empty one (spec 7.3) — and everywhere else an optional is read and
+     * and {@code None} is the empty one (spec §algebraic-types) — and everywhere else an optional is read and
      * passed on. Neither an unknown-name report nor an arbitrary-call report says that, and the
      * latter sent the reader off to write a Java binding, which makes no optional either (issue
      * #166). Patterns do not come through here: {@code | Some v} is matched, not evaluated.

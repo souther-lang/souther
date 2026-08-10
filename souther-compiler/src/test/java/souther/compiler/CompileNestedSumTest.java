@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A sum may have a sum as a case — spec 8.3's model of who bears a cost, where the company's own
+ * A sum may have a sum as a case — spec §sum-data's model of who bears a cost, where the company's own
  * share is itself one of three ways of paying. The derived codecs used to reject that: a case had to
  * be a product or a unit, so the spec's own model would not compile.
  */
@@ -53,7 +53,7 @@ class CompileNestedSumTest {
 
         Object back = Codecs.decoded(loader, "demo.CostBearer",
                 Codecs.encode(loader, "demo.CostBearer", advance));
-        assertInstanceOf(loader.loadClass("demo.Advance"), back, "decode(encode(v)) == v (spec 11.3)");
+        assertInstanceOf(loader.loadClass("demo.Advance"), back, "decode(encode(v)) == v (spec §round-trip)");
     }
 
     @Test

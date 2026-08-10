@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** End-to-end test for multi-success output {@code -> A | B} chosen by a branch (spec 12.2). */
+/** End-to-end test for multi-success output {@code -> A | B} chosen by a branch (spec §unmarked-output). */
 class CompileMultiSuccessTest {
 
     private static final String MODULE = """

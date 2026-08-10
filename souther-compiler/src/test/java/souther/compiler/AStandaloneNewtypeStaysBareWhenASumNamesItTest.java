@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * The {@code "value"} envelope is what membership in a sum adds, not part of a newtype's own
- * representation (spec 10.3): a standalone newtype stays bare. So a declaration elsewhere that names
+ * representation (spec §sum-discrimination): a standalone newtype stays bare. So a declaration elsewhere that names
  * the type cannot change what the type writes, or reads, where it stands on its own.
  */
 class AStandaloneNewtypeStaysBareWhenASumNamesItTest {

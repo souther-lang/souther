@@ -37,9 +37,9 @@ import static souther.compiler.codegen.JvmTypes.*;
 
 /**
  * Generates a data/sum/unit value class: its fields, package-private constructor, accessors, value
- * equality/hashCode, and the invariant-checking {@code __construct} (spec 7, 19). Each type's codecs
- * are emitted by the {@link CodecGen} it holds; body expressions through a {@link BodyGen} built per
- * method.
+ * equality/hashCode, and the invariant-checking {@code __construct} (spec §builtin-types, §jvm-output). Each
+ * type's codecs are emitted by the {@link CodecGen} it holds; body expressions through a {@link BodyGen}
+ * built per method.
  */
 final class ValueClassGen {
 
@@ -189,7 +189,7 @@ final class ValueClassGen {
         List<TypeName> cases = TypeOps.leafCases(sum, symbols);
         out.put(pkg + "." + sum.name(), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
-            // A sum may itself be a case of another sum (spec 8.3), and then it carries that sum's
+            // A sum may itself be a case of another sum (spec §sum-data), and then it carries that sum's
             // interface as a product or unit case does. Only the direct link is recorded, which is
             // all that is needed: interface inheritance carries it the rest of the way, so a leaf of
             // this sum is a value of the outer one without being named there.
@@ -299,7 +299,7 @@ final class ValueClassGen {
     /**
      * The bridge case a non-local union member reaches its result unions through: a record of one
      * component, {@code value}, holding the member as it is, implementing every result union of this
-     * module the member belongs to (spec 19.8). A member this module declared carries those
+     * module the member belongs to (spec §jvm-anonymous-union). A member this module declared carries those
      * interfaces on itself; a primitive is the JDK's class and an imported type is a class another
      * module already emitted, so neither can be given one from here.
      *
@@ -337,7 +337,7 @@ final class ValueClassGen {
         out.put(pkg + "." + unit.name(), build(cdU, cb -> {
             cb.withFlags(pub(unit.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             // a unit is a field-less data, so it is a record with no components: `case 承認済み()`
-            // deconstructs it in a Java switch as its sibling product cases do (spec 19.2)
+            // deconstructs it in a Java switch as its sibling product cases do (spec §jvm-product)
             cb.withSuperclass(CD_Record);
             cb.with(recordComponents(Map.of()));
             ClassDesc[] ifaces = caseInterfaces(unit.name());
@@ -373,7 +373,7 @@ final class ValueClassGen {
      * Emits {@code equals} / {@code hashCode} comparing every field.
      *
      * <p>A data is an immutable value, so two of them are the same when their fields are — which
-     * is what {@code ==} means on a data (spec 16.2) and what Java callers expect of a value
+     * is what {@code ==} means on a data (spec §equality) and what Java callers expect of a value
      * class. A unit data has no fields, so all of its values are equal.
      */
     private void emitValueEquality(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
@@ -403,7 +403,7 @@ final class ValueClassGen {
                             } else if (t == Type.BOOL) {
                                 code.if_icmpne(differs);
                             } else {
-                                // What a field's sameness means is the runtime's to say (spec 7.1):
+                                // What a field's sameness means is the runtime's to say (spec §equality):
                                 // an amount ignores its scale wherever it sits, including inside a
                                 // collection this field holds.
                                 emitValueEquals(code, t == Type.DECIMAL);
@@ -542,11 +542,11 @@ final class ValueClassGen {
     }
 
     /**
-     * Emits the public record-style read accessor {@code <field>()} for each component (spec 8.5,
+     * Emits the public record-style read accessor {@code <field>()} for each component (spec §field-visibility,
      * 19.2). Every data has them, not only an exposed one: a component of the {@code Record} attribute
      * is read through its accessor, the generated code of this module reads a field the same way, and
      * a class the module keeps to itself is out of a Java caller's reach anyway. Reading never enables
-     * construction — the constructor stays non-public (spec 2.7).
+     * construction — the constructor stays non-public (spec §asymmetric-interop).
      *
      * <p>The return type carries {@code @NonNull} because Kotlin types a component from the record and
      * does not apply the class's {@code @NullMarked} there; without it every read is a platform type
@@ -584,7 +584,7 @@ final class ValueClassGen {
      * The {@code Record} attribute naming each field as a component, in constructor order, so the
      * class is a record to everything that reads class files: javac deconstructs it in a record
      * pattern, Kotlin reads each component as a property, and {@code Class.getRecordComponents}
-     * answers (spec 19.2). Each component repeats what its accessor states — a container's generic
+     * answers (spec §jvm-product). Each component repeats what its accessor states — a container's generic
      * {@code Signature}, and {@code @NonNull} — because reflection reads the component, not the
      * accessor.
      */
@@ -621,7 +621,7 @@ final class ValueClassGen {
     /**
      * Emits the canonical constructor: the components in declaration order, package-private, so a
      * value is built inside the module or through the invariant-checking {@code __construct} and not
-     * by a Java caller writing {@code new} (spec 8.5).
+     * by a Java caller writing {@code new} (spec §field-visibility).
      */
     private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
         emitCtor(cb, cdName, fields, 0);

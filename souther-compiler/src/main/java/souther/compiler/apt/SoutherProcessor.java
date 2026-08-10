@@ -34,11 +34,11 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * A javac annotation processor that compiles Souther {@code .sou} sources to {@code .class} as a
- * side effect of an ordinary {@code javac} run (spec 4, 20). Point it at a directory (or a single
- * {@code .sou} file) with {@code -Asouther.source=<path>}; each module found is compiled and its
- * classes are emitted through the {@link Filer}, so hand-written Java in the same compilation can
- * reference the generated types directly.
+ * A javac annotation processor that compiles Souther {@code .sou} sources to {@code .class} as a side effect
+ * of an ordinary {@code javac} run (spec §modules, §compiler-pipeline). Point it at a directory (or a single
+ * {@code .sou} file) with {@code -Asouther.source=<path>}; each module found is compiled and its classes are
+ * emitted through the {@link Filer}, so hand-written Java in the same compilation can reference the generated
+ * types directly.
  *
  * <p>This needs no build-tool plugin: it is discovered the standard way (Maven
  * {@code annotationProcessorPaths}, Gradle {@code annotationProcessor}, or plain

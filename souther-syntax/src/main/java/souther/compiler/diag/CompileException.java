@@ -4,7 +4,7 @@ import java.util.List;
 
 /**
  * A compile error with a source position. Carries an error code (e.g. {@code E1101})
- * when one applies (spec section 22), otherwise a bare message for lex/parse errors.
+ * when one applies (spec §compile-errors), otherwise a bare message for lex/parse errors.
  *
  * <p>The exception now wraps a structured {@link Diagnostic}. {@link #getMessage()} still returns the
  * one-line {@code line:col code: message} form (so existing callers and tests are unchanged), while a

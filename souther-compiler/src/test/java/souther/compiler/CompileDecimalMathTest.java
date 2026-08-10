@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Decimal arithmetic (spec 18.3): add/subtract/multiply/compare as total operations. */
+/** Decimal arithmetic (spec §stdlib-decimal): add/subtract/multiply/compare as total operations. */
 class CompileDecimalMathTest {
 
     @Test

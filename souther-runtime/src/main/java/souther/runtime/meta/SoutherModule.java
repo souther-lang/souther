@@ -48,7 +48,7 @@ public @interface SoutherModule {
 
     /** This module's behaviors, by the name each was declared under. The class carrying a behavior's
      * {@link SoutherBehavior} is the one that name is emitted under, which is not always the name
-     * itself (spec 19.5). */
+     * itself (spec §jvm-behavior). */
     String[] behaviors() default {};
 
     /** The helper {@code let}s an invariant of this module calls, verbatim. An invariant is part of

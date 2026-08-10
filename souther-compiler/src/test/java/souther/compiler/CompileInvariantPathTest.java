@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * When a nested value breaks its own invariant during decoding, the reported issue must point at
  * that value's path — not collapse to the document root. Two sibling fields that both violate an
  * invariant used to be indistinguishable because the decoder minted every invariant failure at
- * {@code Path.ROOT}; each now carries the path it was decoded at (spec 9.4, 15).
+ * {@code Path.ROOT}; each now carries the path it was decoded at (spec §violation-destination, §case-propagation).
  */
 class CompileInvariantPathTest {
 

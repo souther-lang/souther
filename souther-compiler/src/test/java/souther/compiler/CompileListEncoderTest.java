@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A {@code List<T>} of a non-String/Int primitive (Decimal, Bool, Date, DateTime) must round-trip:
  * the encoder was only derived for String and Int elements, so such a field failed to compile even
- * though its decoder was fine (spec 7.2).
+ * though its decoder was fine (spec §collections).
  */
 class CompileListEncoderTest {
 

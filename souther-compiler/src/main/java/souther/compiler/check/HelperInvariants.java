@@ -88,7 +88,7 @@ public final class HelperInvariants {
     /**
      * Inlines helper calls inside every data's {@code invariant}, so a rule named with a {@code let}
      * (e.g. {@code invariant 正の数(value)}) expands to its body before the invariant is type-checked
-     * or emitted — the same lowering a behavior body gets (spec 12.5, §invariant-expressions).
+     * or emitted — the same lowering a behavior body gets (spec §blocks, §invariant-expressions).
      */
     private static Ast.Module withInlinedInvariants(HelperInliner inliner, Ast.Module m) {
         List<Ast.Def> defs = new ArrayList<>();

@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
- * Per-source decoder generation (spec 10.6): each data whose shape supports it gets a
+ * Per-source decoder generation (spec §codec-generation): each data whose shape supports it gets a
  * {@code jsonDecoder()} (reads a Jackson {@code JsonNode}) and a {@code recordDecoder()}
  * (reads a jOOQ {@code Record}) beside the neutral {@code decoder()}. This exercises the
  * JSON source end-to-end; the jOOQ {@code $DecRecord} is loaded to verify its bytecode.

@@ -36,7 +36,7 @@ final class CodegenContext {
     final boolean exposeAll;
     /** Base names the module exposes (only these are public when {@link #exposeAll} is false). */
     final Set<String> exposed;
-    /** The module's recursive helpers, lowered to static methods on {@code $Fns} (spec 13.1), keyed
+    /** The module's recursive helpers, lowered to static methods on {@code $Fns} (spec §fn-declaration), keyed
      * by helper name. A call to one is an {@code invokestatic}, not an inlined body. */
     final Map<String, Ast.FnDef> emittedHelpers;
 
@@ -173,7 +173,7 @@ final class CodegenContext {
         return missing;
     }
 
-    /** The module being generated. Module is package (spec 4), so this is also {@link #pkg}. */
+    /** The module being generated. Module is package (spec §modules), so this is also {@link #pkg}. */
     String module() {
         return pkg;
     }
@@ -348,7 +348,7 @@ final class CodegenContext {
      * a type another module emitted cannot be given that interface, so this module emits a record
      * holding the value and implementing the union in its stead. One per member per module: it
      * carries every result union of this module the member belongs to, which is the rule a local case
-     * class already follows (spec 19.8).
+     * class already follows (spec §jvm-anonymous-union).
      */
     ClassDesc bridgeCaseClass(TypeName member) {
         return ClassDesc.of(pkg + "." + bridgeCaseName(member));
@@ -411,7 +411,7 @@ final class CodegenContext {
 
     /**
      * The generated class simple-name for a behavior: its name with the first letter capitalized
-     * (spec 19.5). A Japanese leading character has no upper-case form, so a Japanese-named behavior
+     * (spec §jvm-behavior). A Japanese leading character has no upper-case form, so a Japanese-named behavior
      * is emitted unchanged. The behavior's name stays lower-case wherever it is an identity — an
      * injected field name, a requirement-set entry, a signature-map key — and only the emitted class
      * name is capitalized.
@@ -437,16 +437,16 @@ final class CodegenContext {
     }
 
     /** The generated result-union simple-name for a behavior with an anonymous-union output
-     * (spec 19.8): {@code <名>Result}. Only the union case gets one; a named-sum or single-case
+     * (spec §jvm-anonymous-union): {@code <名>Result}. Only the union case gets one; a named-sum or single-case
      * output uses that type directly. */
     static String behaviorResultClass(String name) {
         return behaviorClass(name) + "Result";
     }
 
     /** The JVM class of an output case. The built-in {@code DivisionByZero}/{@code NotANumber} need
-     * no special case: their {@link TypeName} names {@code souther.runtime}, which is where they are.
-     * An invariant violation is no longer a case — it aborts (spec 7.3, 9.4) — so there is no
-     * 制約違反 case here. */
+     * no special case: their {@link TypeName} names {@code souther.runtime}, which is where they are. An
+     * invariant violation is no longer a case — it aborts (spec §algebraic-types, §violation-destination) —
+     * so there is no 制約違反 case here. */
     ClassDesc caseClass(TypeName typeName) {
         return cd(typeName);
     }
@@ -503,7 +503,7 @@ final class CodegenContext {
         return TypeOps.successType(ret, symbols);
     }
 
-    /** Whether {@code name} is an imported type or behavior (declared in another module, spec 4). */
+    /** Whether {@code name} is an imported type or behavior (declared in another module, spec §modules). */
     boolean isImported(String name) {
         return typePackage.containsKey(name);
     }

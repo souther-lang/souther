@@ -70,7 +70,7 @@ public record HelperGraph(Map<String, Set<String>> callsOf, SequencedSet<String>
     }
 
     /** Whether {@code name} is on a call cycle, so a call of it is left standing rather than
-     * expanded (spec 13.1). */
+     * expanded (spec §fn-declaration). */
     public boolean recurses(String name) {
         return recursive.contains(name);
     }

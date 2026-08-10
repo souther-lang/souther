@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 
 /**
- * The {@code /} operator on Decimal (spec 18.1). A zero divisor aborts, like the other arithmetic
+ * The {@code /} operator on Decimal (spec §stdlib-decimal). A zero divisor aborts, like the other arithmetic
  * operators — code that wants it as a case uses the {@code Decimal.divide} function, which returns
  * {@code Decimal | DivisionByZero}.
  *

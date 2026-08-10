@@ -107,9 +107,9 @@ class CompileInjectedMultiArgTest {
 
     @Test
     void aTwoArgInjectedBehaviorStartsAPipelineAndRuns() throws Exception {
-        // `>->` hands a single value along, so a multi-input behavior cannot follow an arrow — but the
-        // first stage receives the pipeline's own arguments, so any number is fine there, injected or
-        // implemented (spec 14.1). The stage is read from the pipeline's injected field and called on
+        // `>->` hands a single value along, so a multi-input behavior cannot follow an arrow — but the first
+        // stage receives the pipeline's own arguments, so any number is fine there, injected or implemented
+        // (spec §sequential-composition). The stage is read from the pipeline's injected field and called on
         // its base class with the typed apply (issue #96).
         String src = """
                 module demo
@@ -164,7 +164,7 @@ class CompileInjectedMultiArgTest {
 
     @Test
     void aZeroArgInjectedBehaviorStartsAPipelineAndRuns() throws Exception {
-        // only a first stage can take other than one input (spec 14.1); a producer is called on its
+        // only a first stage can take other than one input (spec §sequential-composition); a producer is called on its
         // own base class, with nothing handed to it
         String src = """
                 module demo

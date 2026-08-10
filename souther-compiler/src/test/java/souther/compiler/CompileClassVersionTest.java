@@ -7,7 +7,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Generated classes target Java 25 (spec 19.1).
+ * Generated classes target Java 25 (spec §target-jdk).
  *
  * <p>Without this the version follows whatever JDK runs the compiler, which is silent and
  * environment-dependent: building on a newer JDK produces classes the target runtime cannot

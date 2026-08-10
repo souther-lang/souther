@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A unit data is constructed by writing its name bare — the functional-language idiom for a
- * nullary constructor (spec 8.4). It still needs {@code constructs} (spec 2.1, 12.3).
+ * nullary constructor (spec §unit-data). It still needs {@code constructs} (spec §closed-construction, §constructs).
  */
 class CompileUnitValueTest {
 

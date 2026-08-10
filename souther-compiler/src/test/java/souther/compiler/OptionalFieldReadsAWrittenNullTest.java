@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A {@code T?} field is {@code None} when the key is absent <em>and</em> when a value is written for
- * it that says there is none (spec 10.6): a JSON {@code null}, a map entry holding a null, a record
+ * it that says there is none (spec §codec-generation): a JSON {@code null}, a map entry holding a null, a record
  * whose column is NULL. Only a value of some other shape is a failure.
  *
  * <p>A decoder is generated once per source, so a rule about reading holds or fails per source, and

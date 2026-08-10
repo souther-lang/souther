@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The String standard library beyond length/trim/lowercase (spec 18.1). */
+/** The String standard library beyond length/trim/lowercase (spec §stdlib-string). */
 class CompileStringLibTest {
 
     @Test
@@ -94,7 +94,8 @@ class CompileStringLibTest {
 
     @Test
     void appendingAStringToAListIsRejected() {
-        // `++` is Elm's appendable: two lists or two strings, never a mix (spec 18.1).
+        // `++` is Elm's appendable: two lists or two strings, never a mix (spec
+        // §an-operator-takes-the-types-it-is-defined-for).
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
 
@@ -270,7 +271,7 @@ class CompileStringLibTest {
     }
 
     /** A count or width no JVM string could hold aborts rather than quietly producing something
-     *  shorter than was asked for — the treatment an Int overflow gets (spec 18.2). */
+     *  shorter than was asked for — the treatment an Int overflow gets (spec §stdlib-int). */
     @Test
     void aRepeatCountOrPadWidthOutOfRangeAborts() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""

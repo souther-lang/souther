@@ -129,7 +129,7 @@ public final class Symbols {
         };
     }
 
-    /** Whether {@code name} is declared in another module (spec 4). */
+    /** Whether {@code name} is declared in another module (spec §modules). */
     public boolean isForeign(TypeName name) {
         return !name.module().equals(module);
     }

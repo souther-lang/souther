@@ -28,7 +28,7 @@ import java.util.Set;
  * the parameters that were left unwritten from the helper's own body, and working out what the
  * recursive ones construct.
  *
- * <p>A helper is typed by its body and never by its callers (spec 13.1, issue #176), so what a
+ * <p>A helper is typed by its body and never by its callers (spec §fn-declaration, issue #176), so what a
  * helper means is settled by reading the helper. A non-recursive helper is inlined into its caller,
  * so most of its checking happens there; what is here is what only makes sense about the helper on
  * its own.
@@ -38,7 +38,7 @@ public final class HelperTyping {
     private HelperTyping() {}
 
     /**
-     * Type-checks every helper fn standalone against its own declared parameter types (spec 13.1).
+     * Type-checks every helper fn standalone against its own declared parameter types (spec §fn-declaration).
      * Calls to other helpers in the body are expanded first, so what is left is builtins and
      * injected behaviors, which {@code reqSigs} resolves. The construction-permission and
      * {@code depends on} checks are the caller's (the helper is inlined there), so they are not
@@ -79,7 +79,7 @@ public final class HelperTyping {
                                 .say(new HelperMessage.AParameterNeedsItsType(h.name(), p.name()))
                                 .build());
                     }
-                    // a parameter with no type beside it takes one from the body (spec 13.1).
+                    // a parameter with no type beside it takes one from the body (spec §fn-declaration).
                     inferred.add(i);
                     continue;
                 }
@@ -119,7 +119,7 @@ public final class HelperTyping {
             }
             // A recursive helper is lowered to a method, so a self- or mutual call is left standing
             // rather than expanded; its signature is what a call to it is typed against, so it goes
-            // into the environment before anything reads the body (spec 13.1). Every reader of the
+            // into the environment before anything reads the body (spec §fn-declaration). Every reader of the
             // body needs it, not just the elaboration below: a call to a method-lowered helper can sit
             // in a lambda handed to a combinator, and the check of that lambda reads the environment
             // it is given. A parameter of the same name wins: a binding in force wins over the
@@ -253,7 +253,7 @@ public final class HelperTyping {
 
     /**
      * Completes {@code env} with the type each un-annotated parameter takes from the helper's own
-     * body (spec 13.1). A parameter whose type the body leaves open is annotated: Souther has no user
+     * body (spec §fn-declaration). A parameter whose type the body leaves open is annotated: Souther has no user
      * generics, so there is nothing to generalise an open parameter into, and the annotation is what
      * states the type instead.
      *
@@ -266,7 +266,7 @@ public final class HelperTyping {
             Map<String, Type> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
         // combinator determines its type; the inliner also needs the annotation to tell a function
-        // parameter from a value one when it expands the call (spec 13.1). The expanded body is what
+        // parameter from a value one when it expands the call (spec §fn-declaration). The expanded body is what
         // is read, so a parameter handed to `List.map` — applied inside the expansion rather than
         // where it is written — is reported as the function it is.
         for (int idx : open) {
@@ -327,7 +327,7 @@ public final class HelperTyping {
      * Signatures of the module's recursive helpers, each a {@link Type.FnOf} from its declared
      * parameter types to its declared return type. A recursive helper must declare its return type:
      * the type can't be inferred through the cycle. Registered in a body's environment so a self- or
-     * mutual call type-checks (spec 13.1).
+     * mutual call type-checks (spec §fn-declaration).
      */
     static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
         Map<String, Type> sigs = new HashMap<>();
@@ -446,7 +446,7 @@ public final class HelperTyping {
         TypeChecker.forEachChild(e, c -> rejectUnreachableInInvariant(c, data, clause));
     }
 
-    /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
+    /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec §fn-declaration). */
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
         if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
             throw CompileException.of(Diagnostic
@@ -487,7 +487,7 @@ public final class HelperTyping {
         List<Type> declared = new ArrayList<>();
         boolean hasFn = false;
         for (Ast.FnParam p : h.params()) {
-            // an unannotated parameter takes its type from the helper's body (spec 13.1); it is never a
+            // an unannotated parameter takes its type from the helper's body (spec §fn-declaration); it is never a
             // function parameter, so leave its slot null and treat it as a non-function argument here.
             Type pt = p.type() == null ? null : TypeOps.resolveParamType(p.type(), symbols);
             declared.add(pt);
@@ -612,7 +612,7 @@ public final class HelperTyping {
     /**
      * The data each recursive helper constructs, transitively. A recursive helper is lowered to a
      * method rather than inlined, so its constructions do not appear in a caller's body; this map lets
-     * {@link #collectConstructs} attribute them to the behavior that calls the helper (spec 12.5). The
+     * {@link #collectConstructs} attribute them to the behavior that calls the helper (spec §blocks). The
      * closure follows recursive-helper calls: a helper's set includes what the recursive helpers it
      * calls construct. Non-recursive helper calls are already inlined into the bodies here.
      */

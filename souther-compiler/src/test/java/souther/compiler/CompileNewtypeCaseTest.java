@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A newtype case of a sum uses adjacent tagging: its inner value sits under {@code "value"} next to
- * the {@code "type"} discriminator (spec 10.3, A.10) — {@code {"type": "管理職", "value": 3}} —
+ * the {@code "type"} discriminator (spec §sum-discrimination) — {@code {"type": "管理職", "value": 3}} —
  * while a unit case is just its tag and a product case stays flat.
  */
 class CompileNewtypeCaseTest {

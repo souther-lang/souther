@@ -8,7 +8,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Spec 8.5 / 19.2: a behavior can read a field of an imported data. Module = package, so the
+ * Spec §field-visibility, §jvm-product: a behavior can read a field of an imported data. Module = package, so the
  * field itself is private across the boundary; the read must go through the public accessor the
  * exposed data generates (19.2), not a raw {@code getfield}, which would fail JVM access checks.
  */

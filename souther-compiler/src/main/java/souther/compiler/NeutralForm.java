@@ -77,7 +77,7 @@ final class NeutralForm {
         }
         String name = simpleName(live);
         // An optional field holds an `Option`: `None` is the absent value a fixture writes by leaving
-        // the field out, and `Some` holds what the position's own type reads (spec 8).
+        // the field out, and `Some` holds what the position's own type reads (spec §absence-is-written-as-null).
         if (name.equals("Option$None")) {
             return null;
         }
@@ -134,7 +134,7 @@ final class NeutralForm {
 
     /**
      * A newtype case read through its sum decodes from the adjacent form that sum's decoder reads —
-     * the inner value under {@code value}, next to the discriminator (spec 10.3) — while a fixture
+     * the inner value under {@code value}, next to the discriminator (spec §sum-discrimination) — while a fixture
      * names the case the way the domain constructs it,
      * {@code アクティベート済み(メールアドレス("a@example.com"))}. Wrap it here, as a product case's
      * field map and a unit case's name are wrapped; a newtype no sum lists is its bare inner value,
@@ -237,7 +237,7 @@ final class NeutralForm {
      * only where the position reads it through a sum that lists it.
      *
      * <p>The {@code "value"} envelope is not part of a newtype's representation — it is what
-     * membership adds, which is why a standalone newtype is bare (spec 10.3). So the position decides
+     * membership adds, which is why a standalone newtype is bare (spec §sum-discrimination). So the position decides
      * it, the way it decides whether a unit case travels as a bare name, and what some other
      * declaration does with the type does not reach a fixture written at the type itself.
      */

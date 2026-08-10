@@ -7,7 +7,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** {@code get} on a List returns Option<T>: Some(element) in range, None otherwise (spec 18.4). */
+/** {@code get} on a List returns Option<T>: Some(element) in range, None otherwise (spec §stdlib-list). */
 class CompileListGetTest {
 
     private static final String MODULE = """

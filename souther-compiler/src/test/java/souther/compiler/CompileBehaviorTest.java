@@ -9,7 +9,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** End-to-end test for pure single-input behaviors and the constructs checks (spec 12, 22.2, 22.3). */
+/** End-to-end test for pure single-input behaviors and the constructs checks (spec §behavior, §e1002, §e1006). */
 class CompileBehaviorTest {
 
     private static final String MODULE = """
@@ -76,7 +76,8 @@ class CompileBehaviorTest {
 
     @Test
     void constructingInvariantDataNeedsNoViolationCase() {
-        // A violation aborts (spec 7.3, 9.4), so the output needs no 制約違反 case — this compiles.
+        // A violation aborts (spec §algebraic-types, §violation-destination), so the output needs no 制約違反
+        // case — this compiles.
         String src = """
                 module demo
                 data Positive = { value: Int } invariant value > 0

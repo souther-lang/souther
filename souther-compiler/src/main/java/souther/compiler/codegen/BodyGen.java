@@ -171,7 +171,7 @@ final class BodyGen {
             this.injectMembers = ctx.bridgedMembers(out);
         }
 
-        /** Makes injected required behaviors callable inline from this body (spec 12.2, 13). */
+        /** Makes injected required behaviors callable inline from this body (spec §unmarked-output, §fn). */
         void requireds(Set<String> names, Map<String, Type> success, Map<String, List<Type>> params) {
             this.reqNames = names;
             this.reqSuccess = success;
@@ -236,7 +236,7 @@ final class BodyGen {
          * Reads a field onto the stack through the data's accessor. A data is a record, so its backing
          * field is private and the accessor is the read — for a data of this module as much as for an
          * imported one, whose field is out of reach across the module = package boundary anyway
-         * (spec 8.5, 19.2).
+         * (spec §field-visibility, §jvm-product).
          */
         private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
             MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
@@ -366,8 +366,8 @@ final class BodyGen {
          * <p>Constructing an invariant-bearing data goes through {@code __construct}, which checks the
          * invariant and returns a {@code Result}; {@code ConstraintViolation.orThrow} turns that into
          * either the value (returned) or a thrown {@code ConstraintViolation} — an invariant violation
-         * aborts rather than riding an output case (spec 7.3, 9.4).
-         * Because a desugared {@code guard} (spec 16.4) is an {@code if} whose branches are tail,
+         * aborts rather than riding an output case (spec §algebraic-types, §violation-destination).
+         * Because a desugared {@code guard} (spec §guard) is an {@code if} whose branches are tail,
          * this is reached for constructions on both sides of a guard — there is no second, unchecked
          * construction path.
          */
@@ -588,7 +588,7 @@ final class BodyGen {
         }
 
         /** Binds the bytecode that follows to {@code e}'s source line, for the {@code LineNumberTable}
-         * (spec 19.1). Every {@code Core} node keeps its {@code SourcePos}, so a runtime stack trace
+         * (spec §target-jdk). Every {@code Core} node keeps its {@code SourcePos}, so a runtime stack trace
          * — an invariant abort above all — points back to the {@code .sou} line. Consecutive nodes on
          * the same line (a subexpression tree, or a tail node re-lined by {@code genExpr}) collapse to
          * one entry. */
@@ -1238,7 +1238,7 @@ final class BodyGen {
             }
         }
 
-        /** Calls a recursive helper as a static method on {@code $Fns} (spec 13.1): each argument is
+        /** Calls a recursive helper as a static method on {@code $Fns} (spec §fn-declaration): each argument is
          * evaluated and boxed, the {@code invokestatic} returns {@code Object}, and the result is cast
          * back to the helper's declared return type. A self- or mutual call reaches here the same way.
          * A function parameter is passed as a first-class {@code Fn} value (a closure): the argument
@@ -1312,7 +1312,7 @@ final class BodyGen {
          * A fold as the loop it is: the seed in a local, the list walked by its iterator, and the
          * step's own body as the loop body reading the accumulator and the element from locals.
          * Answers whether it was emitted that way — a walk that starts past the head, or whose step
-         * is one that never runs, is left to the {@code foldFrom} method (spec 13.1).
+         * is one that never runs, is left to the {@code foldFrom} method (spec §fn-declaration).
          *
          * <p>This is what makes a fold cost what a loop costs, and {@code fold} is the one loop the
          * language has, so it is the whole of what a program's loops cost. Handed to a method instead,
@@ -1461,7 +1461,7 @@ final class BodyGen {
         }
 
         /** {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
-         * otherwise the quotient/remainder is boxed (spec 18.2). */
+         * otherwise the quotient/remainder is boxed (spec §stdlib-int). */
         private void intDivide(Core.Call call, boolean divide) {
             genExpr(call.args().get(0));
             int aSlot = slot(Type.INT);
@@ -1490,7 +1490,7 @@ final class BodyGen {
         }
 
         /** {@code divide(a, b, scale, mode)} on Decimal: a zero divisor takes the DivisionByZero
-         * case, otherwise {@code a.divide(b, scale, toJava(mode))} (spec 18.3). */
+         * case, otherwise {@code a.divide(b, scale, toJava(mode))} (spec §stdlib-decimal). */
         private void decimalDivide(Core.Call call) {
             genExpr(call.args().get(0));
             int aSlot = slot(Type.DECIMAL);
@@ -1517,7 +1517,7 @@ final class BodyGen {
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on
-         * the stack cast to the success type (spec 12.2, 13). */
+         * the stack cast to the success type (spec §unmarked-output, §fn). */
         /**
          * Calls a behavior that depends on nothing (spec {@code [#calling-a-behavior]}). It is built
          * here rather than read out of a field: with an empty requirement set there is nothing to
@@ -1621,10 +1621,10 @@ final class BodyGen {
                     genExpr(bin.right());
                     code.ior();
                 }
-                // `+ - * /` work on two Int or two Decimal operands (spec 18.1). Int aborts on
-                // overflow, and `/` aborts on a zero divisor; Decimal does not overflow, and its `/`
-                // rounds by the default scale/mode. Case handling for a zero divisor is the
-                // divide/remainder functions, not the operator.
+                // `+ - * /` work on two Int or two Decimal operands (spec
+                // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/` aborts on
+                // a zero divisor; Decimal does not overflow, and its `/` rounds by the default scale/mode.
+                // Case handling for a zero divisor is the divide/remainder functions, not the operator.
                 case ADD, SUB, MUL, DIV -> {
                     // Newtype arithmetic (closed `+`/`-`, or scalar `*`/`/` by a plain number) opens
                     // each operand to its base, computes on the base, then re-wraps the result into the
@@ -1703,7 +1703,7 @@ final class BodyGen {
                         // String, Decimal, Date, DateTime all carry as Comparable — String,
                         // BigDecimal, LocalDate, LocalDateTime — so one compareTo reduces the order
                         // to its sign against 0. BigDecimal.compareTo ignores scale, which matches
-                        // Decimal equality (spec 7.1); the others order lexicographically / in time.
+                        // Decimal equality (spec §equality); the others order lexicographically / in time.
                         code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                         code.iconst_0();
                         comparisonMaterialize(bin.op(), false);
@@ -1721,7 +1721,7 @@ final class BodyGen {
                     if (isReference(lt)) {
                         // What sameness is, is the runtime's to say: a data compares by its fields,
                         // an amount ignores its scale, a collection asks that of what it holds
-                        // (spec 7.1). A pair of Decimals takes the overload for them.
+                        // (spec §equality). A pair of Decimals takes the overload for them.
                         emitValueEquals(code, lt == Type.DECIMAL);
                         if (bin.op() == Ast.BinOp.NE) {
                             code.iconst_1();
@@ -1798,7 +1798,7 @@ final class BodyGen {
         /** {@link #bound} plus the recursive helpers' signatures, so re-typing an expression that
          * calls one (a nested {@code foldFrom} in a fold's seed) resolves it as a function. Only a
          * recursive helper's signature can be read here, and a recursive helper declares its return
-         * type (spec 13.1); an example-applied helper is emitted beside them without declaring one, and
+         * type (spec §fn-declaration); an example-applied helper is emitted beside them without declaring one, and
          * no standing call names it — it is expanded wherever a body calls it. */
         private Scope scope() {
             Scope held = bound();

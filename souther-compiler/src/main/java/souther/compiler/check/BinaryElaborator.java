@@ -78,9 +78,10 @@ public final class BinaryElaborator {
                 yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
-                // `+ - * /` work on two Int or two Decimal operands (spec 18.1). Int aborts on
-                // overflow and `/` aborts on a zero divisor; Decimal `/` rounds by the default
-                // scale/mode. Case handling for a zero divisor is the `divide`/`remainder` functions.
+                // `+ - * /` work on two Int or two Decimal operands (spec
+                // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow and `/` aborts on a
+                // zero divisor; Decimal `/` rounds by the default scale/mode. Case handling for a zero
+                // divisor is the `divide`/`remainder` functions.
                 Type lt = left.type();
                 Type rt = right.type();
                 // The rules live in ArithmeticCheck, which answers with the type the operator gives
@@ -101,8 +102,9 @@ public final class BinaryElaborator {
                 };
             }
             case CONCAT -> {
-                // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to
-                // a list (spec 18.1). Strings are checked first, before the empty-list absorption below.
+                // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to a list
+                // (spec §an-operator-takes-the-types-it-is-defined-for). Strings are checked first, before
+                // the empty-list absorption below.
                 Type lraw = left.type();
                 Type rraw = right.type();
                 if (lraw == Type.STRING && rraw == Type.STRING) {
@@ -128,7 +130,7 @@ public final class BinaryElaborator {
             case EQ, NE -> {
                 Type lt = left.type();
                 Type rt = right.type();
-                // two values of the same data compare by their fields (spec 16.2); across different
+                // two values of the same data compare by their fields (spec §equality); across different
                 // types there is nothing to compare. An operand may be the scalar empty-collection
                 // bottom (`Nothing`) when it reads an accumulator a `[]` seed grows — the `e` in
                 // `if any(e -> e == x, acc) …` over a `fold(…, [], xs)` is bound to the not-yet-fixed
@@ -186,7 +188,7 @@ public final class BinaryElaborator {
         Type lb = TypeOps.base(lt, symbols);
         if (!TypeOps.isOrdered(lb) || !lb.equals(TypeOps.base(rt, symbols))) {
             // An enumeration is ordered by its declaration, and a case value is a value of its sum
-            // (spec 8.3), so `stage < Won` compares in the sum both sides belong to (issue #161).
+            // (spec §sum-data), so `stage < Won` compares in the sum both sides belong to (issue #161).
             return TypeOps.comparisonEnumeration(lt, rt, symbols) != null;
         }
         if (lt.equals(rt)) {

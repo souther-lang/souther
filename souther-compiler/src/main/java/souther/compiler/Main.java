@@ -913,7 +913,7 @@ public final class Main {
 
     /**
      * Compiles the given source files together — a single file, or several linked through their
-     * imports (spec 4) — and writes each generated class under {@code outDir}. Returns the paths
+     * imports (spec §modules) — and writes each generated class under {@code outDir}. Returns the paths
      * written, in order.
      *
      * <p>This is the {@code compile} subcommand's own wiring, not a way to embed the compiler: it

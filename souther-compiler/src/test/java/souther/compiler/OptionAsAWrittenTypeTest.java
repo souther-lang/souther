@@ -51,7 +51,7 @@ class OptionAsAWrittenTypeTest {
 
     @Test
     void aRecursiveHelperMayDeclareAnOptionalReturn() {
-        // A recursive helper must declare its return type (spec 13.1), so naming the type is the only
+        // A recursive helper must declare its return type (spec §fn-declaration), so naming the type is the only
         // way to write this one at all. It answers the absence it read — the binding that holds it —
         // rather than making one.
         assertDoesNotThrow(() -> Compiler.compile(HEAD + """
@@ -101,7 +101,7 @@ class OptionAsAWrittenTypeTest {
 
     @Test
     void aFunctionTypeMayNameTheTypeItsResultIs() {
-        // A function-typed parameter must be annotated (spec 13.1), so a combinator taking a step that
+        // A function-typed parameter must be annotated (spec §fn-declaration), so a combinator taking a step that
         // answers an optional needs the name too.
         assertDoesNotThrow(() -> Compiler.compile(HEAD + """
                 behavior bill : (a: Amount) -> Receipt

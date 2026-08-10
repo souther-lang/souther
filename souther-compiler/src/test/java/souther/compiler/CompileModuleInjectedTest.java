@@ -13,10 +13,10 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Spec 4 / 13.2 / 14.3: a module can import an injected behavior (one another module declares
- * without a fn) and compose it with {@code >->}. The composition's inferred requirement is the
- * imported behavior, so its generated {@code bind(...)} injects the Java implementation of the
- * declaring module's abstract base.
+ * Spec §modules, §injected-behavior, §composition-with-requirements: a module can import an injected behavior
+ * (one another module declares without a fn) and compose it with {@code >->}. The composition's inferred
+ * requirement is the imported behavior, so its generated {@code bind(...)} injects the Java implementation of
+ * the declaring module's abstract base.
  */
 class CompileModuleInjectedTest {
 

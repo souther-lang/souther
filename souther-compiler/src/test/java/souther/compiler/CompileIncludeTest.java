@@ -18,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** End-to-end test for the {@code ...} spread (flattened fields + inherited invariants) and value spread {@code ...src} (spec 8.2, 12.4). */
+/** End-to-end test for the {@code ...} spread (flattened fields + inherited invariants) and value spread
+ *  {@code ...src} (spec §field-spread, §record-literal). */
 class CompileIncludeTest {
 
     /**

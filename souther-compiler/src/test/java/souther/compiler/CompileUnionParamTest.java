@@ -7,9 +7,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A behavior takes a named-sum parameter and consumes it by matching each case (spec 12.2, 16.3):
+ * A behavior takes a named-sum parameter and consumes it by matching each case (spec §unmarked-output, §match):
  * {@code data SubPre = Sub | Pre} taken as {@code (app: SubPre) -> ...} with a `match app`. An
- * anonymous union may not sit in a parameter (spec 8.6) — see {@link CompileUnionParamRejectTest}.
+ * anonymous union may not sit in a parameter (spec §union-intersection) — see {@link CompileUnionParamRejectTest}.
  */
 class CompileUnionParamTest {
 
@@ -31,8 +31,9 @@ class CompileUnionParamTest {
 
     private long finish(String caseType, long n) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
-        // SubPre is a named sum; its cases are adjacently tagged ({type, value}), so the input to
-        // finish is decoded through the sum decoder rather than a bare case value (spec 10.3, 12.2).
+        // SubPre is a named sum; its cases are adjacently tagged ({type, value}), so the input to finish is
+        // decoded through the sum decoder rather than a bare case value (spec §sum-discrimination,
+        // §unmarked-output).
         Object arg = Codecs.decoded(loader, "demo.SubPre", Map.of("type", caseType, "value", n));
         Object done = Codecs.apply(loader.loadClass("demo.Finish" + "$Impl")
                 .getConstructor().newInstance(), arg);

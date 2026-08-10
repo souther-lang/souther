@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Two joined positions ({@code if} branches, {@code match} arms) widen under a covariant
  * constructor, not only at the top: a list of one case and a list of another join to a list of
- * their union, as {@code ++} already does (spec 12.2, 16.2). Before this, the merge only knew
+ * their union, as {@code ++} already does (spec §unmarked-output, §if). Before this, the merge only knew
  * three answers — the two types are equal, one is an empty-collection bottom, or both are data-like
  * — so a {@code List} on each side fell through to a disagreement.
  */

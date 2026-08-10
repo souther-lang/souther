@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * An attempted construction — {@code guard X(v) as n else C}, and the {@code if X(v) as n then A
  * else B} it desugars to. The construction's invariant decides the branch: it holds, the value is
  * built and bound to {@code n}; it does not, the else value is taken and no value is built. A plain
- * {@code X(v)} still aborts (spec 7.3), so this is the one form that answers a rule the writer
+ * {@code X(v)} still aborts (spec §algebraic-types), so this is the one form that answers a rule the writer
  * cannot restate — an invariant naming a helper {@code let} is not reachable from an importing
  * module at all.
  */

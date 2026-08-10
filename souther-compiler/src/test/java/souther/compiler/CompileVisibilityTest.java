@@ -12,9 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * With an {@code exposing} clause, only listed types are public; the rest are package-private,
- * so the module boundary is enforced at the JVM level (spec 4, 8.5, 19.6). A module without an
- * {@code exposing} clause keeps everything public.
+ * With an {@code exposing} clause, only listed types are public; the rest are package-private, so the module
+ * boundary is enforced at the JVM level (spec §modules, §field-visibility, §jvm-construction-privacy). A
+ * module without an {@code exposing} clause keeps everything public.
  */
 class CompileVisibilityTest {
 

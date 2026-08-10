@@ -8,7 +8,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The empty-list literal {@code []} (ADR-0028, relaxing spec §list). It has no element type of its
+ * The empty-list literal {@code []} (ADR-0028, relaxing spec §collections). It has no element type of its
  * own; the type is fixed by context — the other operand of {@code ++}, the sibling case of an
  * {@code if}, the accumulator a {@code fold} seed grows into, or the {@code List<T>} a field expects.
  * An empty list is polymorphic and element-agnostic at runtime, so this is always sound.

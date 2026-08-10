@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * End-to-end test for multi-field product data: an {@code Object} decoder that
- * accumulates every field error (spec section 27.7) and an {@code Object} encoder.
+ * accumulates every field error (spec §case-propagation) and an {@code Object} encoder.
  */
 class CompileObjectTest {
 

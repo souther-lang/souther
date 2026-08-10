@@ -12,7 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A pipeline stage may be a body behavior that has its own required dependency (spec 14.3):
+ * A pipeline stage may be a body behavior that has its own required dependency (spec §composition-with-requirements):
  * the pipeline collects the union of every stage's requirements and injects them via bind().
  * Here {@code handle = fetch >-> enrich}, where {@code fetch} is required and {@code enrich}
  * internally calls the required {@code tag}.
@@ -40,7 +40,7 @@ class CompilePipeDepsTest {
             """;
 
     private static String impl(String cls, String param, String inType, String midValue) {
-        // the generated behavior base class capitalizes its first letter (spec 19.5)
+        // the generated behavior base class capitalizes its first letter (spec §jvm-behavior)
         String base = Character.toUpperCase(param.charAt(0)) + param.substring(1);
         return """
                 package demo;

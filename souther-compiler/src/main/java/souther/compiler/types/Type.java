@@ -164,7 +164,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
      * equality (ADR-0009). Its external representation is a JSON array, deduplicated on decode. */
     record SetOf(Type element) implements Compound {}
 
-    /** An optional value {@code Option<element>} — the desugaring of a {@code T?} field (spec 7.4). */
+    /** An optional value {@code Option<element>} — the desugaring of a {@code T?} field (spec §optional). */
     record OptionOf(Type element) implements Compound {}
 
     /** An anonymous union of data types (a behavior's multi-success output). */
@@ -190,8 +190,8 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     Type DATE = Prim.DATE;
     Type DATETIME = Prim.DATETIME;
     /** The external (encoded) representation type: an encoder's raw output at a railway's edge,
-     * unioned with propagated error cases as the case {@code "Raw"} (spec 24). Reserved — no stage
-     * produces it yet; {@code >->} composes behaviors, not codecs (spec 14.1). */
+     * unioned with propagated error cases as the case {@code "Raw"} (spec §case-propagation). Reserved — no stage
+     * produces it yet; {@code >->} composes behaviors, not codecs (spec §sequential-composition). */
     Type RAW = Prim.RAW;
     /** The bottom element type of the empty-list literal (see {@link Nothing}). */
     Type NOTHING = new Nothing();

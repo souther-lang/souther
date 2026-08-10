@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A list guaranteed to hold at least one element (spec section 7.3). A runtime auxiliary type;
+ * A list guaranteed to hold at least one element (spec §algebraic-types). A runtime auxiliary type;
  * not writable as a field type in the DSL. Decode-error accumulation now lives in Raoh, so this
  * type carries no decode role — it remains available as a general non-empty list.
  *

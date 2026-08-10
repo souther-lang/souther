@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An arm that answers {@code unreachable} where the model has no value to give: the combination it
- * covers cannot arise for a reason the callee cannot see, and reaching it aborts (spec 16.3).
+ * covers cannot arise for a reason the callee cannot see, and reaching it aborts (spec §match).
  */
 class CompileUnreachableTest {
 

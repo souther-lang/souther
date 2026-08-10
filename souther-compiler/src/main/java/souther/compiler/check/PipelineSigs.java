@@ -19,7 +19,7 @@ import java.util.Set;
 
 /**
  * Behavior signatures and pipeline composition: what each behavior takes and yields, and how
- * {@code >->} routes a stage's output cases into the next stage (spec 14).
+ * {@code >->} routes a stage's output cases into the next stage (spec §composition).
  *
  * <p>The routing walk here is the one the backend replays when it emits a pipeline, so
  * {@link #stageOut} and {@link #mainlineCases} are public: the two must agree on which cases a
@@ -37,7 +37,7 @@ public final class PipelineSigs {
     /**
      * Builds the input/output signature of every behavior, checking pipeline composition. The
      * {@code imported} map seeds the resolvable behaviors with those imported from other modules
-     * (spec 4, 14), so a stage naming an imported behavior resolves through {@link #stageSig}.
+     * (spec §modules, §composition), so a stage naming an imported behavior resolves through {@link #stageSig}.
      */
     public static Map<String, Sig> signatures(Ast.Module module, Symbols symbols,
                                               Map<String, Sig> imported) {
@@ -45,7 +45,7 @@ public final class PipelineSigs {
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec) {
                 // A behavior's signature is what it declares, whether a `let` implements it here or the
-                // Java side is injected (spec 13.2): both are named the same way from a `>->` or a
+                // Java side is injected (spec §injected-behavior): both are named the same way from a `>->` or a
                 // `depends on`, and both need the output union's generated interface. Where the arity
                 // rules out a use — every stage after the first takes one input (14.1) — the composition
                 // says so; leaving the name out of this map instead reports it as one that was never
@@ -77,7 +77,7 @@ public final class PipelineSigs {
         return sigs;
     }
 
-    /** Maps each pipeline behavior's name to its declared stages (for flattening, spec 14.2). */
+    /** Maps each pipeline behavior's name to its declared stages (for flattening, spec §type-routing). */
     public static Map<String, List<Ast.Var>> pipelineStages(Ast.Module module) {
         Map<String, List<Ast.Var>> stages = new HashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
@@ -90,7 +90,7 @@ public final class PipelineSigs {
 
     /**
      * Flattens a pipeline's stage list, splicing any stage that is itself a pipeline into its own
-     * (recursively flattened) stages (spec 14.2). This is what makes {@code >->} associative:
+     * (recursively flattened) stages (spec §type-routing). This is what makes {@code >->} associative:
      * {@code half >-> finish} with {@code half = split >-> work} routes over {@code split, work,
      * finish}, exactly as the flat form would, so a retired case stays retired across a named
      * intermediate. A pipeline viewed on its own still has the merged output its own stages produce.
@@ -145,17 +145,18 @@ public final class PipelineSigs {
 
     private static Sig pipeSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
                                Map<String, List<Ast.Var>> pipeStages) {
-        // flatten nested pipeline stages so `>->` is associative (spec 14.2)
+        // flatten nested pipeline stages so `>->` is associative (spec §type-routing)
         List<Ast.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
         Type mainline = first.outputType();
         Set<TypeName> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
             Sig g = stageSig(stages.get(i), sigs, symbols, pipe.pos());
-            // Every stage after the first takes exactly one input (spec 14.1). `checkStagesAreSingleInput`
-            // says so too and is the diagnostic the author usually sees, but signatures are built before
-            // it runs and are also built for an imported module that was never checked here — so the
-            // arity is confirmed rather than assumed, or `route` would index an empty input list.
+            // Every stage after the first takes exactly one input (spec §sequential-composition).
+            // `checkStagesAreSingleInput` says so too and is the diagnostic the author usually sees, but
+            // signatures are built before it runs and are also built for an imported module that was never
+            // checked here — so the arity is confirmed rather than assumed, or `route` would index an empty
+            // input list.
             if (g.ins().size() != 1) {
                 throw CompileException.of(Diagnostic
                                 .at(pipe.pos()).say(new BehaviorMessage.AStageAfterTheFirstTakesOneInput(stages.get(i).name(), String.valueOf(g.ins().size()), pipe.name())).build());
@@ -163,8 +164,9 @@ public final class PipelineSigs {
             mainline = route(mainline, g, retired, symbols, pipe.pos());
         }
         Type out = withRetired(mainline, retired);
-        // an optional declared output must match the inferred one exactly (spec 14.5): neither a
-        // missing case (too narrow) nor an extra one (too wide) is accepted.
+        // an optional declared output must match the inferred one exactly (spec
+        // §declared-composition-output): neither a missing case (too narrow) nor an extra one (too wide) is
+        // accepted.
         if (pipe.declaredOut() != null) {
             Set<TypeName> inferred = TypeOps.leafCases(out, symbols);
             Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut(), symbols), symbols);
@@ -175,7 +177,7 @@ public final class PipelineSigs {
                                 .say(new DeclarationMessage.TheDeclaredOutputIsNotWhatThePipelineProduces(pipe.name(), caseList(declared), caseList(inferred))).build());
             }
         }
-        // The pipeline takes whatever its first stage takes (spec 14.1), which arrived admitted with
+        // The pipeline takes whatever its first stage takes (spec §sequential-composition), which arrived admitted with
         // that stage's own signature and is not asked again. What it answers is a type nobody wrote
         // — the last stage's answer, merged with the cases that left the main line — so that is
         // where the boundary is asked, once, about a composition.
@@ -205,7 +207,7 @@ public final class PipelineSigs {
         return TypeOps.caseSetType(all);
     }
 
-    /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec 14.2). */
+    /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec §type-routing). */
     public static List<TypeName> mainlineCases(Type mainline, Sig g, Symbols symbols) {
         List<TypeName> accepted = new ArrayList<>();
         for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
@@ -222,7 +224,7 @@ public final class PipelineSigs {
     }
 
     /**
-     * One step of type-routed composition (spec 14.2). Returns the new main line — what {@code g}
+     * One step of type-routed composition (spec §type-routing). Returns the new main line — what {@code g}
      * yields — and adds the cases {@code g} did not accept to {@code retired}.
      *
      * <p>A case that leaves the main line does not come back: later stages are only offered the
@@ -230,7 +232,7 @@ public final class PipelineSigs {
      * would let a stage pick up something an earlier stage had already dropped, which changes the
      * meaning of a pipeline depending on where it is split.
      *
-     * <p>Naming an intermediate does not lose the split (spec 14.2): a pipeline stage is flattened
+     * <p>Naming an intermediate does not lose the split (spec §type-routing): a pipeline stage is flattened
      * into its own stages before routing ({@link #flattenStages}), so `fg >-> h` with
      * `fg = f >-> g` routes over `f, g, h` — a retired case stays retired, exactly as in the flat
      * `f >-> g >-> h`. That flattening is what makes `>->` associative; a value never carries a mark
@@ -244,7 +246,7 @@ public final class PipelineSigs {
             Set<TypeName> consumed = new LinkedHashSet<>();
             Set<TypeName> passed = new LinkedHashSet<>();
             // route over the leaf cases: a named sum output splits into its members, so a stage that
-            // accepts one of them consumes it while the rest retire (spec 8.3, 14.2)
+            // accepts one of them consumes it while the rest retire (spec §sum-data, §type-routing)
             for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
                 if (TypeOps.assignable(Type.ref(caseName), in, symbols)) {
                     consumed.add(caseName);

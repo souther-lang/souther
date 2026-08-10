@@ -147,7 +147,7 @@ public final class DataChecker {
      * The data types {@code e} constructs.
      *
      * <p>{@code bound} carries the names in scope, because a bare identifier is a unit data's
-     * construction only when nothing has bound it — a local of the same name wins (spec 8.4).
+     * construction only when nothing has bound it — a local of the same name wins (spec §unit-data).
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
     static void collectConstructs(Ast.Expr e, Map<TypeName, String> out, Symbols symbols,
@@ -241,9 +241,9 @@ public final class DataChecker {
                 collectConstructs(comp.element(), out, symbols, recConstructs);
                 comp.guards().forEach(g -> collectConstructs(g, out, symbols, recConstructs));
             }
-            // a block builds under the enclosing behavior's permission (spec 12.5)
+            // a block builds under the enclosing behavior's permission (spec §blocks)
             case Ast.Block block -> collectConstructs(block.body(), out, symbols, recConstructs);
-            // a bare name that denotes a unit data is that unit's construction (spec 8.4). Read off
+            // a bare name that denotes a unit data is that unit's construction (spec §unit-data). Read off
             // what the name denotes rather than resolved again from its spelling: a reader with a
             // unit data spelled like the one another module's published body builds was recording
             // its own type as the one built. Carried or not is asked of the name for the same reason
@@ -377,7 +377,7 @@ public final class DataChecker {
                             .build());
                 }
                 // a unit-data case has an implicit (field-less) decoder generated on its class;
-                // a case may itself be a sum (spec 8.3's nested `自社負担 | 先方負担`)
+                // a case may itself be a sum (spec §sum-data's nested `自社負担 | 先方負担`)
                 boolean caseDecodes = caseDef instanceof Ast.UnitData
                         || (caseDef instanceof Ast.Data d && d.decoder().isPresent())
                         || (caseDef instanceof Ast.SumData s && s.decoder().isPresent());
@@ -486,7 +486,7 @@ public final class DataChecker {
 
         for (Map.Entry<String, Type> e : fields.entrySet()) {
             // A field is read through an accessor of the same name, and a data is a record over its
-            // fields (spec 19.2). A no-argument method of Object is therefore taken: `toString` would
+            // fields (spec §jvm-product). A no-argument method of Object is therefore taken: `toString` would
             // emit a second `toString()` and the class would not load, and the rest cannot be a record
             // component either. Reported here rather than left to codegen, as a duplicate name is.
             if (OBJECT_METHOD_NAMES.contains(e.getKey())) {
@@ -640,7 +640,8 @@ public final class DataChecker {
                     Elaborator.elaborate(init.value(), env, making, ft), ft, ctx.symbols());
             elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
             Type vt = value.type();
-            if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)
+            // a case value widens to its sum-typed field (spec §sum-data)
+            if (!TypeOps.assignable(vt, ft, ctx.symbols())) {
                 throw CompileException.of(Diagnostic
                                 .at(init.written().region())
                                 
@@ -811,7 +812,7 @@ public final class DataChecker {
                 }
             }
             case Ast.DataEnc d -> {
-                // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec 11.2)
+                // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec §encoder-derivation)
                 Ast.Def def = symbols.get(d.typeName().denotes());
                 boolean hasEncoder = (def instanceof Ast.Data dd && dd.encoder().isPresent())
                         || (def instanceof Ast.SumData sd && sd.encoder().isPresent());

@@ -10,7 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** End-to-end test for {@code >->} composition and required-behavior injection : (spec 14, 13, 19.5). */
+/** End-to-end test for {@code >->} composition and required-behavior injection : (spec §composition, §fn,
+ *  §jvm-behavior). */
 class CompilePipeTest {
 
     private static final String MODULE = """
@@ -80,7 +81,7 @@ class CompilePipeTest {
     }
 
     /**
-     * Only stages after the first take one input (spec 14.1): {@code >->} hands one value along.
+     * Only stages after the first take one input (spec §sequential-composition): {@code >->} hands one value along.
      */
     @Test
     void aMultiInputBehaviorCannotFollowAnArrow() {

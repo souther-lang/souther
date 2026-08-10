@@ -86,7 +86,7 @@ class CompileExposedSurfaceTest {
     @Test
     void anInjectionTargetIsReachedEvenWhereItIsNotExposed() {
         // Its abstract base is public whatever `exposing` says, and the Java implementation writes
-        // the input type where it overrides `apply` (spec 13.3).
+        // the input type where it overrides `apply` (spec §java-base-class).
         CompileException e = refused("""
                 module demo exposing ( Member )
 

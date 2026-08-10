@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code Int.floorMod(n, divisor)} — Elm-style floored modulo (spec 18.2). It is declared in
+ * {@code Int.floorMod(n, divisor)} — Elm-style floored modulo (spec §stdlib-int). It is declared in
  * {@code souther.int} and backed by the {@code IntMath.modBy} kernel: the divisor comes first, the
  * result takes the sign of the divisor (floored, unlike the truncating {@code Int.truncatingRemainder}), and a
  * zero divisor aborts with {@link ConstraintViolation} — so the result is a plain {@code Int} that

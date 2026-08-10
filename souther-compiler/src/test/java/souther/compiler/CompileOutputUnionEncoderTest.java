@@ -8,10 +8,10 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A behavior's output union carries a derived encoder that dispatches its cases by the discriminator
- * {@code "type"}, the way a named sum over the same leaves does (spec 19.8, 11.2). Without it the
- * same value would travel two ways depending on where it sat — a sum answered bare would lose the
- * discriminator its own field-borne form writes.
+ * A behavior's output union carries a derived encoder that dispatches its cases by the discriminator {@code
+ * "type"}, the way a named sum over the same leaves does (spec §jvm-anonymous-union, §encoder-derivation).
+ * Without it the same value would travel two ways depending on where it sat — a sum answered bare would lose
+ * the discriminator its own field-borne form writes.
  */
 class CompileOutputUnionEncoderTest {
 

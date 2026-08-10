@@ -2,7 +2,7 @@ package souther.compiler.diag;
 
 /**
  * A place in a source: a 1-based line and column, and the source they were read from. Every AST node
- * and token carries one so that compile errors can point at the source (spec section 28).
+ * and token carries one so that compile errors can point at the source (spec §non-functional).
  *
  * <p>A line and a column are enough while one file is being read and not enough afterwards. A
  * module's {@code example} rows, fake tables and values are written in the module's own source and

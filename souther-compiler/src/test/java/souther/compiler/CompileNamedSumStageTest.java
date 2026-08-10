@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * When a pipeline stage outputs a named sum, {@code >->} routes over that sum's leaf cases, not the
- * sum as one opaque case (spec 8.3, 14.2). A downstream stage that accepts one case consumes it and
+ * sum as one opaque case (spec §sum-data, §type-routing). A downstream stage that accepts one case consumes it and
  * the rest retire; before, the whole sum failed to match and the composition was wrongly E1701.
  */
 class CompileNamedSumStageTest {

@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A behavior can consume an optional field by matching {@code Some}/{@code None} (spec 16.3):
+ * A behavior can consume an optional field by matching {@code Some}/{@code None} (spec §match):
  * {@code Some v} binds the unwrapped element positionally (F#/Elm form); {@code None} has no binding.
  */
 class CompileOptionMatchTest {

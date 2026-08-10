@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Multi-module compilation with explicit imports and cyclic-import detection (spec 4, 22.11). */
+/** Multi-module compilation with explicit imports and cyclic-import detection (spec §modules, §e1501). */
 class CompileModuleTest {
 
     private static final String EMPLOYEE = """

@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** End-to-end test for {@code if cond then a else b} expressions (spec 16.2). */
+/** End-to-end test for {@code if cond then a else b} expressions (spec §if). */
 class CompileIfTest {
 
     private static final String MODULE = """
