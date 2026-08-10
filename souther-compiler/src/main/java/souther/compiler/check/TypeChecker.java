@@ -337,10 +337,10 @@ public final class TypeChecker {
         Set<String> injectionTargets = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
-                // `depends on` names what an implementation calls (12.6), and an injection target has
-                // no implementation here — the Java side provides it (13.2). Declaring `depends on` on
+                // `depends on` names what an implementation calls (§depends-on), and an injection target has
+                // no implementation here — the Java side provides it (§injected-behavior). Declaring `depends on` on
                 // one is meaningless: nothing calls those behaviors, and nothing injects them. The
-                // behavior that composes or calls this one carries the requirement instead (13.2).
+                // behavior that composes or calls this one carries the requirement instead (§injected-behavior).
                 if (!spec.dependsOn().isEmpty()) {
                     throw CompileException.of(Diagnostic
                                     .at(spec.pos()).say(new DeclarationMessage.AnInjectionTargetCannotDependOnAnything(spec.name())).build());

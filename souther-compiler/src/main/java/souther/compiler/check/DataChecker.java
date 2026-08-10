@@ -367,7 +367,8 @@ public final class DataChecker {
                             .at(sum.pos()).say(new BehaviorMessage.ASumContainsItself(sum.name(), String.join(" | ", cycle))).build());
         }
         sum.decoder().ifPresent(disc -> {
-            // a derived codec dispatches over the leaves, so a nested sum's cases count too (8.3, 10.3)
+            // a derived codec dispatches over the leaves, so a nested sum's cases count too (§sum-data,
+            // §sum-discrimination)
             Set<TypeName> dispatchable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
             for (Ast.Variant v : disc.variants()) {
                 Ast.Def caseDef = symbols.get(v.caseType().denotes());

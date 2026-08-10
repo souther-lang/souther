@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Spec §block-expression: a block {@code { ... }} is an expression, usable anywhere an expression can go — such
  * as an {@code if} branch. A bare {@code &#123;} is unambiguously a block; a record literal is
- * prefixed by a type name (12.4).
+ * prefixed by a type name (§record-literal).
  */
 class CompileBlockExprTest {
 

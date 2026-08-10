@@ -351,11 +351,11 @@ public interface Ast {
 
     /**
      * {@code behavior name = (p1: T1, ...) -> R constructs A, B depends on C, D} — a signature with
-     * no body (spec §behavior-io). A same-named {@link FnDef} is its implementation (13.1); with none, and
-     * not a pipeline, it is a Java-injected behavior (13.2).
+     * no body (spec §behavior-io). A same-named {@link FnDef} is its implementation (§fn-declaration); with none, and
+     * not a pipeline, it is a Java-injected behavior (§injected-behavior).
      *
      * <p>{@code dependsOn} lists the implementation-less behaviors the {@code fn} calls; they become
-     * the {@code fn}'s trailing arguments and the injected fields of the generated class (12.6).
+     * the {@code fn}'s trailing arguments and the injected fields of the generated class (§depends-on).
      */
     record SpecBehavior(WrittenName written,
                         List<Param> params,
@@ -392,8 +392,9 @@ public interface Ast {
 
     /**
      * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition).
-     * {@code declaredOut} is the optional trailing output declaration (14.5): null when absent (output is
-     * inferred), else the declared cases, which must match the inferred output exactly (E1604).
+     * {@code declaredOut} is the optional trailing output declaration (§declared-composition-output): null
+     * when absent (output is inferred), else the declared cases, which must match the inferred output exactly
+     * (E1604).
      */
     record PipeBehavior(WrittenName written, List<Var> stages, RetType declaredOut, SourcePos pos)
             implements BehaviorDef {

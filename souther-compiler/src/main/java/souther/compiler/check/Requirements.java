@@ -20,7 +20,7 @@ import java.util.Set;
  * <p>A behavior with a body requires what it declares it depends on (spec §depends-on, §requirement-propagation). A
  * composition requires the union of its stages', transitively: a stage with a body is constructed by
  * the composition and handed the fields it needs, so what has to be injected are the injected
- * behaviors the stages reach (14.3). A stage that is itself injected is one of those.
+ * behaviors the stages reach (§composition-with-requirements). A stage that is itself injected is one of those.
  *
  * <p>The order is first appearance, walking the stages left to right. That order is the injecting
  * constructor's parameter order, so it is the order fakes are passed in at an example as well —

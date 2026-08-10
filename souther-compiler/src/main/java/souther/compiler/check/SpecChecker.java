@@ -222,7 +222,7 @@ public final class SpecChecker {
     /**
      * Checks a behavior's {@code fn} implementation against the behavior's declared signature
      * (spec §fn-declaration). The {@code fn}'s parameters are the behavior's inputs followed by its
-     * {@code depends on} (12.6); the trailing ones name the injection targets in declared order and
+     * {@code depends on} (§depends-on); the trailing ones name the injection targets in declared order and
      * do not bind values — they resolve as inline calls to those behaviors.
      */
     static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
@@ -289,7 +289,7 @@ public final class SpecChecker {
         HelperTyping.checkFunctionArgs(fn.writtenBody(), tenv, symbols, reqSigs, inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
-        // behavior's permission and dependencies — exactly as if the code had been written inline (12.5).
+        // behavior's permission and dependencies — exactly as if the code had been written inline (§blocks).
         Ast.Expr body = inlinedBody;
 
         // push the declared output type into the body so a body that is directly an empty collection

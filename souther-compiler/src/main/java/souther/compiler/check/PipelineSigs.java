@@ -44,16 +44,14 @@ public final class PipelineSigs {
         Map<String, Sig> sigs = new HashMap<>(imported);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec) {
-                // A behavior's signature is what it declares, whether a `let` implements it here or the
-                // Java side is injected (spec §injected-behavior): both are named the same way from a `>->` or a
-                // `depends on`, and both need the output union's generated interface. Where the arity
-                // rules out a use — every stage after the first takes one input (14.1) — the composition
-                // says so; leaving the name out of this map instead reports it as one that was never
-                // declared.
-                // What the declaration says is admitted here, in the making of the signature, and
-                // there is no other way to make one. A behavior resting on a name that denotes
-                // nothing has no signature to build and is left out: the name was reported where it
-                // was written.
+                // A behavior's signature is what it declares, whether a `let` implements it here or the Java
+                // side is injected (spec §injected-behavior): both are named the same way from a `>->` or a
+                // `depends on`, and both need the output union's generated interface. Where the arity rules
+                // out a use — every stage after the first takes one input (§sequential-composition) — the
+                // composition says so; leaving the name out of this map instead reports it as one that was
+                // never declared. What the declaration says is admitted here, in the making of the signature,
+                // and there is no other way to make one. A behavior resting on a name that denotes nothing
+                // has no signature to build and is left out: the name was reported where it was written.
                 try {
                     sigs.put(spec.name(), SignatureBoundary.of(spec, symbols));
                 } catch (Unanswerable _) {
@@ -228,7 +226,7 @@ public final class PipelineSigs {
      * yields — and adds the cases {@code g} did not accept to {@code retired}.
      *
      * <p>A case that leaves the main line does not come back: later stages are only offered the
-     * main line. That is what makes this Railway (14.2). Feeding the retired cases onward instead
+     * main line. That is what makes this Railway (§type-routing). Feeding the retired cases onward instead
      * would let a stage pick up something an earlier stage had already dropped, which changes the
      * meaning of a pipeline depending on where it is split.
      *
@@ -236,7 +234,7 @@ public final class PipelineSigs {
      * into its own stages before routing ({@link #flattenStages}), so `fg >-> h` with
      * `fg = f >-> g` routes over `f, g, h` — a retired case stays retired, exactly as in the flat
      * `f >-> g >-> h`. That flattening is what makes `>->` associative; a value never carries a mark
-     * saying it once left a main line (2.6), the plumbing is structural. Viewed on its own, `fg`
+     * saying it once left a main line (§unmarked-sum), the plumbing is structural. Viewed on its own, `fg`
      * still has the merged sum `f`+`g` produce as its output.
      */
     private static Type route(Type mainline, Sig g, Set<TypeName> retired, Symbols symbols,

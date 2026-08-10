@@ -286,7 +286,7 @@ public final class Backend {
             fns.put(fn.name(), fn);
         }
         // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Each becomes an
-        // abstract base class a Java implementation extends (13.3). Imported injection targets
+        // abstract base class a Java implementation extends (§java-base-class). Imported injection targets
         // (their base lives in the declaring module) are requirements too, so a composition here
         // injects and binds them (spec §composition-with-requirements) — but no base is generated for them here.
         Set<String> requiredNames = Requirements.injectedNames(module, importedInjected);
@@ -886,7 +886,7 @@ public final class Backend {
      * Behavior-result interfaces to generate (spec §jvm-anonymous-union): for each behavior whose output is an
      * anonymous union, maps {@code <behavior名>Result} to its leaf cases — the {@code permits} list and
      * the set of case classes that {@code implements} it. A named-sum output is already a sealed
-     * interface (19.3) and a single-case output uses that case's own type, so neither gets one. Case
+     * interface (§jvm-sum) and a single-case output uses that case's own type, so neither gets one. Case
      * order is sorted for deterministic bytecode.
      */
     /**
@@ -1138,7 +1138,7 @@ public final class Backend {
 
     /**
      * Generates a behavior implemented by a {@code fn} (spec §fn-declaration). The behavior's inputs are the
-     * {@code apply} arguments; its {@code depends on} are injected fields (12.6). The {@code fn}'s
+     * {@code apply} arguments; its {@code depends on} are injected fields (§depends-on). The {@code fn}'s
      * leading parameters name the inputs (their types come from the behavior); the trailing ones
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
      */
