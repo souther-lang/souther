@@ -1,9 +1,9 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
@@ -33,34 +33,26 @@ public record InvariantBound(boolean lower, Endpoint end) {
     private static final BigDecimal LONG_MIN = BigDecimal.valueOf(Long.MIN_VALUE);
     private static final BigDecimal LONG_MAX = BigDecimal.valueOf(Long.MAX_VALUE);
 
-    /** What {@code clause} says about a value carried as {@code base}, or empty where it says
-     * nothing a range can hold. */
-    public static Optional<InvariantBound> of(Ast.Expr clause, Type base) {
-        if (base != Type.INT && base != Type.DECIMAL) {
-            return Optional.empty();
-        }
-        return of(clause, base == Type.INT ? Granularity.DISCRETE : Granularity.DENSE,
-                base == Type.INT ? InvariantBound::wholeLiteral : InvariantBound::literalOf);
-    }
-
     /**
-     * The same, told how to read the value this clause bounds and how its values are spaced.
+     * What {@code clause} says about a value on {@code carrier}, or empty where it says nothing a
+     * range can hold.
      *
-     * <p>Which values a literal may name is a fact about what carries them and not about this
-     * reading, so it is handed in. A caller that draws lines on a date passes the reader that knows
-     * one; the shape of the clause, which side of it the value is on, and where a strict comparison
-     * leaves the end are the same questions whatever the values are, and were being answered twice
-     * because the reader was welded to the numbers.
+     * <p>The one reading of an ordered rule. Which literals a rule may be bounded by and how its
+     * values are spaced are facts about what carries the value, so both come from the carrier; the
+     * shape of the clause, which side of it the value is on, and where a strict comparison leaves the
+     * end are the same questions whatever the values are.
      *
-     * @param spacing   whether the values have a smallest step, which decides where a strict bound
-     *                  leaves an end
-     * @param literalOf the number a bound is written as, or null where the expression names none
+     * <p>A second reader used to answer this for the sites that generate code, keyed on a list of
+     * types that did not include the temporal ones. So a bound a report read perfectly was a rule
+     * another reader called unreadable, and every boundary of the value it sat in — its siblings'
+     * included — was downgraded to one nothing promises is writable.
      */
-    public static Optional<InvariantBound> of(Ast.Expr clause, Granularity spacing,
-                                              Function<Ast.Expr, BigDecimal> literalOf) {
-        if (!(clause instanceof Ast.Binary bin)) {
+    public static Optional<InvariantBound> of(Ast.Expr clause, Carrier carrier) {
+        if (carrier == null || !(clause instanceof Ast.Binary bin)) {
             return Optional.empty();
         }
+        Granularity spacing = carrier.spacing();
+        Function<Ast.Expr, Count> literalOf = carrier::literalOf;
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
         Ast.Expr left = bin.left();
         Ast.Expr right = bin.right();
@@ -74,7 +66,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!isValue(left)) {
             return Optional.empty();
         }
-        BigDecimal bound = literalOf.apply(right);
+        Count bound = literalOf.apply(right);
         if (bound == null) {
             return Optional.empty();
         }
@@ -105,7 +97,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!takesSizeOfValue(left, measure)) {
             return Optional.empty();
         }
-        BigDecimal bound = wholeLiteral(right);
+        Count bound = Count.of(wholeLiteral(right));
         if (bound == null) {
             return Optional.empty();
         }
@@ -147,13 +139,13 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /** One end, from the comparison and whether the values step. */
-    private static Optional<InvariantBound> ordered(Ast.BinOp op, BigDecimal bound, boolean whole) {
+    private static Optional<InvariantBound> ordered(Ast.BinOp op, Count bound, boolean whole) {
         return switch (op) {
             case GE -> Optional.of(new InvariantBound(true, Endpoint.inclusive(bound)));
             case LE -> Optional.of(new InvariantBound(false, Endpoint.inclusive(bound)));
-            case GT -> whole ? stepped(true, bound.add(BigDecimal.ONE))
+            case GT -> whole ? stepped(true, bound.plus(1))
                     : Optional.of(new InvariantBound(true, Endpoint.exclusive(bound)));
-            case LT -> whole ? stepped(false, bound.subtract(BigDecimal.ONE))
+            case LT -> whole ? stepped(false, bound.minus(1))
                     : Optional.of(new InvariantBound(false, Endpoint.exclusive(bound)));
             default -> Optional.empty();
         };
@@ -173,8 +165,8 @@ public record InvariantBound(boolean lower, Endpoint end) {
 
     /** A whole number's strict bound moved onto the value beside it — where the type has one. At the
      * ends of what an {@code Int} holds there is nothing to move onto, and nothing is claimed. */
-    private static Optional<InvariantBound> stepped(boolean lower, BigDecimal onto) {
-        return onto.compareTo(LONG_MIN) < 0 || onto.compareTo(LONG_MAX) > 0
+    private static Optional<InvariantBound> stepped(boolean lower, Count onto) {
+        return onto.at().compareTo(LONG_MIN) < 0 || onto.at().compareTo(LONG_MAX) > 0
                 ? Optional.empty() : Optional.of(new InvariantBound(lower, Endpoint.inclusive(onto)));
     }
 

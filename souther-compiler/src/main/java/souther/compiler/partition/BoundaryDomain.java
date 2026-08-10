@@ -1,171 +1,89 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.observe.ObservedValue;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 
 /**
- * What a type can say about the values next to a boundary.
+ * What a carrier can say about the counts next to a boundary.
  *
- * <p>Asking for "the value just over the threshold" is asking the type, not the threshold. A whole
+ * <p>Asking for "the value just over the threshold" is asking the carrier, not the threshold. A whole
  * number has a next one; a decimal, in general, does not — {@code 100000.000…1} is not a value the
- * type names, and inventing an epsilon would test a rule the model never stated. Where a type cannot
- * answer, the boundary itself is still worth a row and the value beside it is reported as
- * not derivable rather than made up.
+ * type names, and inventing an epsilon would test a rule the model never stated. Where a carrier
+ * cannot answer, the boundary itself is still worth a row and the value beside it is reported as not
+ * derivable rather than made up.
+ *
+ * <p>Counts in and counts out. Each of these used to take an {@link ObservedValue} and check its
+ * shape before it could work — a step over an {@code Int} refused anything that was not an
+ * {@code ObservedValue.Integer} — which is a carrier's question asked of a value, and the answer to
+ * it was silence rather than a build failure. What decides the answer now is which carrier was asked,
+ * and turning the count back into a value is the carrier's own.
  */
 public interface BoundaryDomain {
 
-    Optional<ObservedValue> successor(ObservedValue value);
+    Optional<Count> successor(Count at);
 
-    Optional<ObservedValue> predecessor(ObservedValue value);
+    Optional<Count> predecessor(Count at);
 
-    Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high);
-
-    /** Souther's {@code Int}: a whole number, so both neighbours exist. */
-    BoundaryDomain INT = new BoundaryDomain() {
-        @Override
-        public Optional<ObservedValue> successor(ObservedValue value) {
-            return value instanceof ObservedValue.Integer i && i.value() != Long.MAX_VALUE
-                    ? Optional.of(new ObservedValue.Integer(i.value() + 1)) : Optional.empty();
-        }
-
-        @Override
-        public Optional<ObservedValue> predecessor(ObservedValue value) {
-            return value instanceof ObservedValue.Integer i && i.value() != Long.MIN_VALUE
-                    ? Optional.of(new ObservedValue.Integer(i.value() - 1)) : Optional.empty();
-        }
-
-        @Override
-        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
-            if (!(low instanceof ObservedValue.Integer l)
-                    || !(high instanceof ObservedValue.Integer h)) {
-                return Optional.empty();
-            }
-            long mid = l.value() + (h.value() - l.value()) / 2;
-            return Optional.of(new ObservedValue.Integer(mid));
-        }
-    };
+    Optional<Count> midpoint(Count low, Count high);
 
     /**
-     * Souther's {@code Decimal}. A neighbour needs a smallest step, and the type does not carry one,
-     * so there is none to give. A midpoint is an ordinary decimal and is given.
-     */
-    BoundaryDomain DECIMAL = new BoundaryDomain() {
-        @Override
-        public Optional<ObservedValue> successor(ObservedValue value) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<ObservedValue> predecessor(ObservedValue value) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
-            if (!(low instanceof ObservedValue.Decimal l)
-                    || !(high instanceof ObservedValue.Decimal h)) {
-                return Optional.empty();
-            }
-            return Optional.of(new ObservedValue.Decimal(
-                    l.value().add(h.value()).divide(BigDecimal.valueOf(2))));
-        }
-    };
-
-    /**
-     * Souther's {@code Date}: a whole number of days, so both neighbours exist.
+     * How the counts beside a boundary on {@code carrier} are found.
      *
-     * <p>The neighbour of a date is a date. What steps is the day it counts to, and what comes back
-     * is written the way a model writes one — a report and a row show the date, never the count.
+     * <p>Read off the spacing and nothing else. Whether a strict bound has a next count to step to is
+     * exactly what {@link Granularity} says, so a carrier added to the table gets its neighbours from
+     * what it already declared about itself rather than from an entry somebody remembered to add
+     * here.
      */
-    BoundaryDomain DATE = new BoundaryDomain() {
-        @Override
-        public Optional<ObservedValue> successor(ObservedValue value) {
-            return stepped(value, 1);
+    static BoundaryDomain on(Carrier carrier) {
+        if (carrier == null) {
+            return NONE;
         }
-
-        @Override
-        public Optional<ObservedValue> predecessor(ObservedValue value) {
-            return stepped(value, -1);
-        }
-
-        @Override
-        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
-            BigDecimal from = dayOf(low);
-            BigDecimal to = dayOf(high);
-            if (from == null || to == null) {
-                return Optional.empty();
+        Granularity spacing = carrier.spacing();
+        return new BoundaryDomain() {
+            @Override
+            public Optional<Count> successor(Count at) {
+                // A carrier with no smallest step has no next count: whether the value after a
+                // date-time is a second, a millisecond or a nanosecond later is a decision nobody has
+                // taken, and inventing an epsilon would test a rule the model never stated.
+                return spacing == Granularity.DISCRETE ? held(at.plus(1)) : Optional.empty();
             }
-            // Whole days, the way `INT` meets whole numbers. The count is what carries a date and it
-            // is not a decimal: two days apart by one have a midpoint and it is one of them, where
-            // dividing over a wider carrier would name half a day and no calendar has one.
-            BigDecimal between = from.add(to.subtract(from)
-                    .divide(BigDecimal.valueOf(2), 0, java.math.RoundingMode.DOWN));
-            return Optional.of(new ObservedValue.Temporal(Dates.written(between)));
-        }
 
-        private Optional<ObservedValue> stepped(ObservedValue value, int by) {
-            BigDecimal day = dayOf(value);
-            return day == null ? Optional.empty()
-                    : Optional.of(new ObservedValue.Temporal(
-                            Dates.written(day.add(BigDecimal.valueOf(by)))));
-        }
-
-        private BigDecimal dayOf(ObservedValue value) {
-            return value instanceof ObservedValue.Temporal t ? Dates.dayOf(t.iso()) : null;
-        }
-    };
-
-    /**
-     * Souther's {@code DateTime}. A neighbour needs a smallest step, and which one a date-time moves
-     * in — a second, a millisecond, a nanosecond — is not something the language says, so there is
-     * none to give. What lies between two of them is a different question and is answered.
-     *
-     * <p>The same shape a {@code Decimal} has, reached for the same reason: a boundary is still
-     * worth a row and the value beside it is reported as not derivable rather than invented.
-     */
-    BoundaryDomain MOMENT = new BoundaryDomain() {
-        @Override
-        public Optional<ObservedValue> successor(ObservedValue value) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<ObservedValue> predecessor(ObservedValue value) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
-            BigDecimal from = secondOf(low);
-            BigDecimal to = secondOf(high);
-            if (from == null || to == null) {
-                return Optional.empty();
+            @Override
+            public Optional<Count> predecessor(Count at) {
+                return spacing == Granularity.DISCRETE ? held(at.minus(1)) : Optional.empty();
             }
-            return Optional.of(new ObservedValue.Temporal(DateTimes.written(
-                    from.add(to).divide(BigDecimal.valueOf(2)))));
-        }
 
-        private BigDecimal secondOf(ObservedValue value) {
-            return value instanceof ObservedValue.Temporal t ? DateTimes.secondOf(t.iso()) : null;
-        }
-    };
+            @Override
+            public Optional<Count> midpoint(Count low, Count high) {
+                return held(low.halfwayTo(high, spacing));
+            }
 
-    /** Nothing has a neighbour here. */
+            /** Only where the carrier holds it. A step off the end of what a carrier counts is not a
+             * value beside anything, and it reaches here the same way from every caller that steps. */
+            private Optional<Count> held(Count at) {
+                return Optional.ofNullable(carrier.onTheGrid(at));
+            }
+        };
+    }
+
+    /** Nothing has a neighbour here: the position is on no carrier at all. */
     BoundaryDomain NONE = new BoundaryDomain() {
         @Override
-        public Optional<ObservedValue> successor(ObservedValue value) {
+        public Optional<Count> successor(Count at) {
             return Optional.empty();
         }
 
         @Override
-        public Optional<ObservedValue> predecessor(ObservedValue value) {
+        public Optional<Count> predecessor(Count at) {
             return Optional.empty();
         }
 
         @Override
-        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
+        public Optional<Count> midpoint(Count low, Count high) {
             return Optional.empty();
         }
     };

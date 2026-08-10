@@ -7,6 +7,8 @@ import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.observe.ObservedValue;
@@ -235,7 +237,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
                 new BoundaryObligation(new AxisId("weigh", "w.a"),
                         new OriginRef.InvariantOrigin(Optional.empty(),
                                 new TypeName("example.rate", "Amount"), "value <= 100"),
-                        BoundaryObligation.BoundarySide.AT, new ObservedValue.Integer(100)),
+                        BoundaryObligation.BoundarySide.AT, Carrier.WHOLE, Count.of(100)),
                 new BoundaryAssessment.Coverage.Hit(),
                 new BoundaryAssessment.Writability.WitnessedByRow(),
                 new BoundaryAssessment.Attempt.NotAttempted(

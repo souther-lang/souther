@@ -1,14 +1,16 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.numeric.Count;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
-import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -320,8 +322,8 @@ public final class Generator {
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(),
                     UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
-        String label = axis.term() + " = " + written(obligation.value());
-        Edge edge = edgeOf(axis, obligation.value(), subject.symbols());
+        String label = axis.term() + " = " + obligation.written();
+        Edge edge = edgeOf(axis, obligation.carrier(), obligation.at(), subject.symbols());
         if (edge.values().isEmpty()) {
             return new BoundaryAttempt.Unresolved(
                     new UnresolvedCombination(List.of(label), edge.reason()));
@@ -331,7 +333,7 @@ public final class Generator {
         // own type once another field of that record is fixed: the rule relating them says what
         // is left, and taking the bottom of the type's range instead is how a boundary that can
         // be written came back as one every value tried was refused at.
-        Map<String, BigDecimal> settled = edge.settledAt() == null ? Map.of()
+        Map<String, Count> settled = edge.settledAt() == null ? Map.of()
                 : Map.of(axis.path().toString(), edge.settledAt());
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             Map<String, List<FixtureTemplate>> here =
@@ -649,11 +651,11 @@ public final class Generator {
      * it, and that is the one the row will carry, so the rest of the record can be chosen beside it;
      * a position still holding several is not settled at all and nothing is claimed of it.
      */
-    private static Map<String, BigDecimal> settledIn(Map<String, List<FixtureTemplate>> decided) {
-        Map<String, BigDecimal> out = new LinkedHashMap<>();
+    private static Map<String, Count> settledIn(Map<String, List<FixtureTemplate>> decided) {
+        Map<String, Count> out = new LinkedHashMap<>();
         decided.forEach((path, candidates) -> {
             if (candidates.size() == 1) {
-                BigDecimal number = writtenNumber(candidates.get(0).value());
+                Count number = writtenNumber(candidates.get(0).value());
                 if (number != null) {
                     out.put(path, number);
                 }
@@ -662,13 +664,21 @@ public final class Generator {
         return out;
     }
 
-    /** The number a fixture is, reaching through the newtype it may be wrapped in. */
-    private static BigDecimal writtenNumber(Ast.Expr written) {
+    /**
+     * The count a fixture settles its position at, reaching through the newtype it may be wrapped in,
+     * or null where it settles none.
+     *
+     * <p>Only a written number. A temporal fixture carries its text and not its count, and it stays
+     * unsettled here rather than being read back: what a settled position is for is asking the
+     * record's rules what is left beside it, and those rules are read over the positions the
+     * projection holds — which the temporal ones are not yet.
+     */
+    private static Count writtenNumber(Ast.Expr written) {
         return switch (written) {
-            case Ast.IntLit i -> BigDecimal.valueOf(i.value());
-            case Ast.DecimalLit d -> d.value();
+            case Ast.IntLit i -> Count.of(i.value());
+            case Ast.DecimalLit d -> Count.of(d.value());
             case Ast.Neg n -> {
-                BigDecimal inner = writtenNumber(n.operand());
+                Count inner = writtenNumber(n.operand());
                 yield inner == null ? null : inner.negate();
             }
             case Ast.Apply a when a.args().size() == 1 -> writtenNumber(a.args().get(0));
@@ -679,7 +689,7 @@ public final class Generator {
     /** One parameter's value, with the positions the caller fixed already decided. */
     private static Outcome valueAt(Subject subject, int p,
                                    Map<String, List<FixtureTemplate>> decided,
-                                   Map<String, BigDecimal> settled,
+                                   Map<String, Count> settled,
                                    Map<String, souther.compiler.types.TypeName> shapes,
                                    CandidateCheck check) {
         Choices choices = choicesOf(subject.types().get(p),
@@ -753,7 +763,7 @@ public final class Generator {
      */
     private static Outcome conditioned(Subject subject, int p,
                                        Map<String, List<FixtureTemplate>> decided,
-                                       Map<String, BigDecimal> settled,
+                                       Map<String, Count> settled,
                                        Map<String, souther.compiler.types.TypeName> shapes,
                                        CandidateCheck check) {
         Type type = subject.types().get(p);
@@ -819,7 +829,7 @@ public final class Generator {
      */
     private static FixtureTemplate descend(Subject subject, int p, List<Position> positions, int index,
                                            Map<String, FixtureTemplate> chosen,
-                                           Map<String, BigDecimal> settled,
+                                           Map<String, Count> settled,
                                            Map<String, List<FixtureTemplate>> decided,
                                            Map<String, souther.compiler.types.TypeName> shapes,
                                            CandidateCheck check, Budget budget) {
@@ -834,7 +844,7 @@ public final class Generator {
         Position position = positions.get(index);
         for (FixtureTemplate candidate : candidatesAt(subject, p, position, settled, decided)) {
             chosen.put(position.path(), candidate);
-            BigDecimal number = writtenNumber(candidate.value());
+            Count number = writtenNumber(candidate.value());
             if (number != null) {
                 settled.put(position.path(), number);
             }
@@ -854,7 +864,7 @@ public final class Generator {
 
     /** What one position can take, given what the positions before it took. */
     private static List<FixtureTemplate> candidatesAt(Subject subject, int p, Position position,
-                                                      Map<String, BigDecimal> settled,
+                                                      Map<String, Count> settled,
                                                       Map<String, List<FixtureTemplate>> decided) {
         List<FixtureTemplate> fixed = decided.get(position.path());
         if (fixed != null) {
@@ -945,7 +955,7 @@ public final class Generator {
      */
     private static Choices choicesOf(Type type, TermPath at, Symbols symbols,
                                      Map<String, List<FixtureTemplate>> decided,
-                                     Map<String, BigDecimal> settled,
+                                     Map<String, Count> settled,
                                      Map<String, souther.compiler.types.TypeName> shapes) {
         List<String> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
@@ -965,11 +975,11 @@ public final class Generator {
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
      * them: from the value itself, with the parameter dropped. */
-    private static Map<String, BigDecimal> under(TermPath root, Map<String, BigDecimal> settled) {
+    private static Map<String, Count> under(TermPath root, Map<String, Count> settled) {
         if (settled.isEmpty()) {
             return Map.of();
         }
-        Map<String, BigDecimal> out = new LinkedHashMap<>();
+        Map<String, Count> out = new LinkedHashMap<>();
         String prefix = root + ".";
         settled.forEach((path, number) -> {
             if (path.startsWith(prefix)) {
@@ -1151,7 +1161,7 @@ public final class Generator {
      * the rest of the row that a string's length is the number the string holds.
      */
     private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
-                        BigDecimal settledAt, UnresolvedCombination.Reason heldBack) {
+                        Count settledAt, UnresolvedCombination.Reason heldBack) {
 
         Edge {
             values = List.copyOf(values);
@@ -1181,78 +1191,31 @@ public final class Generator {
      * carries a count is {@link Witnesses}'s to answer — asked rather than decided here, so that a
      * value it learns to build is a boundary this reaches without being told again.
      */
-    private static Edge edgeOf(Axis axis, ObservedValue value, Symbols symbols) {
+    private static Edge edgeOf(Axis axis, Carrier carrier, Count at, Symbols symbols) {
         if (!(axis.term() instanceof NumericTerm.SizeOf)) {
-            FixtureTemplate at = valueOf(value, axis.type(), symbols);
-            return at == null ? Edge.none(UnresolvedCombination.Reason.NO_REPRESENTATIVE)
-                    : new Edge(List.of(at), null, numberOf(value), null);
+            // Written by the carrier the line was drawn on. Read off the boundary's own shape
+            // instead, a count on one carrier could be written as a literal of another — which is
+            // how a date-time's second count reached a row as an `Int`, and the decoder refused it
+            // with the report saying only that every value tried had been refused.
+            TypeName wrapper = axis.type() instanceof Type.Ref ref
+                    && symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()
+                    ? ref.name() : null;
+            return new Edge(List.of(FixtureTemplate.on(carrier, at, wrapper)), null, at, null);
         }
-        int size = countOf(value);
+        int size = Counts.asSize(at);
         if (size < 0) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
-        Type carrier = TypeOps.base(axis.type(), symbols);
-        Witnesses.Sized built = Witnesses.ofSize(carrier, size, symbols, Set.of());
+        Type holder = TypeOps.base(axis.type(), symbols);
+        Witnesses.Sized built = Witnesses.ofSize(holder, size, symbols, Set.of());
         if (built.values().isEmpty()) {
-            return Edge.none(Witnesses.reasonForSize(carrier, size, symbols));
+            return Edge.none(Witnesses.reasonForSize(holder, size, symbols));
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built.values()) {
             out.add(Witnesses.wrapped(axis.type(), each, symbols));
         }
         return new Edge(out, null, null, built.heldBack());
-    }
-
-    /** {@code value} as a count of things, or -1 where it is not one. A count is whole and no larger
-     * than the values there are to count, so a number outside that is a size nothing carries. */
-    private static int countOf(ObservedValue value) {
-        BigDecimal number = numberOf(value);
-        if (number == null || number.stripTrailingZeros().scale() > 0
-                || number.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
-            return -1;
-        }
-        return number.intValue();
-    }
-
-    /** A boundary value written the way the position takes it: bare where the position is a number,
-     * wrapped where it is a newtype over one. */
-    private static FixtureTemplate valueOf(ObservedValue value, Type type, Symbols symbols) {
-        // A temporal is written as one, and a newtype over it wraps that. The count it is carried as
-        // inside the ranges is never what a row carries — and a temporal this cannot read is not a
-        // number either, so it is refused here rather than written as its count, which the decoder
-        // would turn down with nothing said about why.
-        if (value instanceof ObservedValue.Temporal at) {
-            if (Dates.dayOf(at.iso()) != null) {
-                return Witnesses.wrapped(type, FixtureTemplate.date(at.iso()), symbols);
-            }
-            return DateTimes.secondOf(at.iso()) == null ? null
-                    : Witnesses.wrapped(type, FixtureTemplate.dateTime(at.iso()), symbols);
-        }
-        BigDecimal number = numberOf(value);
-        if (number == null) {
-            return null;
-        }
-        Type base = TypeOps.base(type, symbols);
-        FixtureTemplate bare = base == Type.DECIMAL ? FixtureTemplate.decimal(number)
-                : number.stripTrailingZeros().scale() > 0 ? FixtureTemplate.decimal(number)
-                        : FixtureTemplate.integer(number.longValueExact());
-        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
-                && data.newtype()) {
-            return FixtureTemplate.newtype(ref.name(), bare);
-        }
-        return bare;
-    }
-
-    private static String written(ObservedValue value) {
-        if (value instanceof ObservedValue.Temporal date) {
-            return date.iso();
-        }
-        BigDecimal number = numberOf(value);
-        return number == null ? String.valueOf(value) : number.stripTrailingZeros().toPlainString();
-    }
-
-    private static BigDecimal numberOf(ObservedValue value) {
-        return NumericTerm.numberOf(value);
     }
 
     private Generator() {}

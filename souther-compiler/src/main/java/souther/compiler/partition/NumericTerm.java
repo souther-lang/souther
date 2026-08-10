@@ -1,15 +1,14 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeOps;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
-
-import java.math.BigDecimal;
 
 /**
  * The number a rule compares, and where that number is read from.
@@ -71,12 +70,28 @@ public sealed interface NumericTerm {
     TermPath path();
 
     /**
-     * The number at an observation of {@link #path()}, or why there is none.
+     * The carrier this term's counts are on, or null where it has none.
+     *
+     * <p>A size is a whole number whatever it is a size of, so the term answers this and not the
+     * position: a rule about the length of a string is counted as an {@code Int} at a position no
+     * line is drawn on.
+     */
+    default Carrier carrierAt(Type positionType, Symbols symbols) {
+        return this instanceof SizeOf ? Carrier.WHOLE : Carrier.ofValue(positionType, symbols);
+    }
+
+    /**
+     * The count at an observation of {@link #path()}, or why there is none.
      *
      * <p>The one reader. What a class asks of a row, what a boundary asks of it, and what a report
      * prints were three walks down a value that agreed only because they were written the same way.
+     *
+     * <p>The carrier is handed in rather than guessed at from the observation. A written temporal
+     * says nothing about whether the position counts days or seconds — the declared type says it —
+     * and a reader that sniffed the text for a {@code T} answered a question that was already
+     * answered, differently.
      */
-    default Reading read(ObservedValue at) {
+    default Reading read(ObservedValue at, Carrier carrier) {
         Membership.Incomplete unread = Membership.unread(at);
         if (unread != null) {
             return new Reading.Missing(unread.code());
@@ -87,18 +102,21 @@ public sealed interface NumericTerm {
         // the value should be, and a walk that only looked at the outside would call that a value
         // this term does not hold.
         if (at instanceof ObservedValue.Constructed c && c.field("value") != null) {
-            return read(c.field("value"));
+            return read(c.field("value"), carrier);
         }
-        return switch (this) {
-            case ValueOf _ -> number(at);
-            case SizeOf _ -> size(at);
-        };
+        if (this instanceof SizeOf) {
+            return size(at);
+        }
+        if (carrier == null) {
+            return new Reading.NotNumber();
+        }
+        Count read = carrier.countOf(at);
+        return read == null ? new Reading.NotNumber() : new Reading.Number(read);
     }
 
     /** How the values beside a boundary on this term are found. A size steps like an {@code Int}. */
     default BoundaryDomain intervals(Type positionType, Symbols symbols) {
-        Carrier carrier = Carrier.of(this, positionType, symbols);
-        return carrier == null ? BoundaryDomain.NONE : carrier.intervals();
+        return BoundaryDomain.on(carrierAt(positionType, symbols));
     }
 
     /**
@@ -112,13 +130,13 @@ public sealed interface NumericTerm {
      */
     default NumericDomain.Bounds ownBounds() {
         return this instanceof SizeOf
-                ? new NumericDomain.Bounds(Endpoint.inclusive(BigDecimal.ZERO), null) : null;
+                ? new NumericDomain.Bounds(Endpoint.inclusive(Count.ZERO), null) : null;
     }
 
-    /** The number at a value, keeping why there is none where there is none. */
+    /** The count at a value, keeping why there is none where there is none. */
     sealed interface Reading {
 
-        record Number(BigDecimal value) implements Reading {}
+        record Number(Count value) implements Reading {}
 
         /** There was no value to read, and this is what stopped there being one. */
         record Missing(Incompleteness.Code code) implements Reading {}
@@ -128,34 +146,6 @@ public sealed interface NumericTerm {
          * and calling it unreadable would report a partition that does not fit its position as a row
          * nobody could read. */
         record NotNumber() implements Reading {}
-    }
-
-    /**
-     * The number a value is, or null where it is not one.
-     *
-     * <p>For a value that is a number by construction — a boundary's own — rather than one read off
-     * a row, where why there is none is the question and {@link #read} is what asks it.
-     */
-    static BigDecimal numberOf(ObservedValue at) {
-        return switch (at) {
-            case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value();
-            // Which of the two counts a written temporal is on is decided by its own text, and the
-            // two do not overlap: a date-time carries its time and a date does not, so each reader
-            // declines the other's. What makes that safe is the declared type — a position holding
-            // dates never holds a date-time — so the count here and the count a line was drawn on
-            // are on one carrier without this having to be told which.
-            case ObservedValue.Temporal t -> t.iso() != null && t.iso().indexOf('T') >= 0
-                    ? DateTimes.secondOf(t.iso()) : Dates.dayOf(t.iso());
-            case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
-            case null, default -> null;
-        };
-    }
-
-    /** The number an observation already unwrapped is. */
-    private static Reading number(ObservedValue at) {
-        BigDecimal read = numberOf(at);
-        return read == null ? new Reading.NotNumber() : new Reading.Number(read);
     }
 
     /**
@@ -169,11 +159,9 @@ public sealed interface NumericTerm {
     private static Reading size(ObservedValue at) {
         return switch (at) {
             case ObservedValue.Text t -> new Reading.Number(
-                    BigDecimal.valueOf(t.value().codePointCount(0, t.value().length())));
-            case ObservedValue.Sequence s -> new Reading.Number(
-                    BigDecimal.valueOf(s.elements().size()));
-            case ObservedValue.Mapping m -> new Reading.Number(
-                    BigDecimal.valueOf(m.entries().size()));
+                    Count.of(t.value().codePointCount(0, t.value().length())));
+            case ObservedValue.Sequence s -> new Reading.Number(Count.of(s.elements().size()));
+            case ObservedValue.Mapping m -> new Reading.Number(Count.of(m.entries().size()));
             case null, default -> new Reading.NotNumber();
         };
     }

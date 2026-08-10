@@ -334,7 +334,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
         String dense = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "openOnBothSidesDense", true);
-        assertTrue(dense.contains("1.0 < x < 2.0"), dense);
+        assertTrue(dense.contains("1 < x < 2"), dense);
         assertFalse(dense.contains("no value this position can hold"),
                 "a decimal lies between two decimals a whole apart: " + dense);
 

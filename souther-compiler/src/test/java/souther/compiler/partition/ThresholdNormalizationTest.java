@@ -13,6 +13,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
+import souther.compiler.numeric.Count;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +96,7 @@ class ThresholdNormalizationTest {
         assertEquals(1, read.thresholds().size());
         Threshold threshold = read.thresholds().get(0);
         assertEquals("request.cost", threshold.path().toString());
-        assertEquals(new BigDecimal(100000), threshold.value());
+        assertEquals(Count.of(new BigDecimal(100000)), threshold.value());
         assertTrue(threshold.valueBelongsBelow(), "`<= c` puts c on the low side");
 
         Axis cost = axis(read.partitioning(), "request.cost");
@@ -217,7 +219,7 @@ class ThresholdNormalizationTest {
         List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, read.symbols(),
                 read.partitioning().domains().get("request.cost"));
         List<String> described = obligations.stream()
-                .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
+                .map(o -> o.side() + " " + o.written()).toList();
 
         assertTrue(described.contains("AT 100000"), described.toString());
         assertTrue(described.contains("ABOVE 100001"), described.toString());
@@ -253,7 +255,7 @@ class ThresholdNormalizationTest {
 
         List<String> described = Partitions.obligationsOf(amount, read.symbols(),
                 read.partitioning().domains().get(amount.path().toString())).stream()
-                .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
+                .map(o -> o.side() + " " + o.written()).toList();
         assertTrue(described.contains("AT 3000"), described.toString());
         assertTrue(described.contains("BELOW 2999"), described.toString());
     }

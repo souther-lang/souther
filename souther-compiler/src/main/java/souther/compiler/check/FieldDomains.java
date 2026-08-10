@@ -4,7 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeName;
 
-import java.math.BigDecimal;
+import souther.compiler.numeric.Count;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -75,7 +75,7 @@ public final class FieldDomains {
      * once the other end is fixed, which is 1440 and nothing else.
      */
     public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
-                                  Map<String, BigDecimal> settled) {
+                                  Map<String, Count> settled) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the same position it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both

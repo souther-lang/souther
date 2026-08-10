@@ -2,12 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 
-import java.math.BigDecimal;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,11 +37,11 @@ class ATermSaysWhyItHasNoNumberTest {
     @Test
     void anObservationThatDidNotArriveIsMissing() {
         assertEquals(Incompleteness.Code.VALUE_TRUNCATED,
-                ((NumericTerm.Reading.Missing) VALUE.read(new ObservedValue.Truncated())).code());
+                ((NumericTerm.Reading.Missing) VALUE.read(new ObservedValue.Truncated(), Carrier.WHOLE)).code());
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                LENGTH.read(new ObservedValue.Truncated()));
+                LENGTH.read(new ObservedValue.Truncated(), Carrier.WHOLE));
         assertInstanceOf(NumericTerm.Reading.Missing.class,
-                VALUE.read(new ObservedValue.Unknown("gone")));
+                VALUE.read(new ObservedValue.Unknown("gone"), Carrier.WHOLE));
     }
 
     /** One layer in, which is where a newtype puts it. The construction reads perfectly well and the
@@ -50,39 +51,39 @@ class ATermSaysWhyItHasNoNumberTest {
     void anObservationCutShortInsideANewtypeIsMissingToo() {
         ObservedValue wrapped = new ObservedValue.Constructed(WRAPPER,
                 Map.of("value", new ObservedValue.Truncated()));
-        assertInstanceOf(NumericTerm.Reading.Missing.class, VALUE.read(wrapped));
-        assertInstanceOf(NumericTerm.Reading.Missing.class, LENGTH.read(wrapped));
+        assertInstanceOf(NumericTerm.Reading.Missing.class, VALUE.read(wrapped, Carrier.WHOLE));
+        assertInstanceOf(NumericTerm.Reading.Missing.class, LENGTH.read(wrapped, Carrier.WHOLE));
     }
 
     /** A value that was read, and that this term is not a number of. Not the same answer. */
     @Test
     void aValueThatWasReadAndIsNotThisTermsNumberIsNotMissing() {
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                VALUE.read(new ObservedValue.Text("abc")));
+                VALUE.read(new ObservedValue.Text("abc"), Carrier.WHOLE));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                LENGTH.read(new ObservedValue.Integer(3)));
+                LENGTH.read(new ObservedValue.Integer(3), Carrier.WHOLE));
         assertInstanceOf(NumericTerm.Reading.NotNumber.class,
-                LENGTH.read(new ObservedValue.Bool(true)));
+                LENGTH.read(new ObservedValue.Bool(true), Carrier.WHOLE));
     }
 
     /** And what each term does read, so that none of the above passes by reading nothing at all. */
     @Test
     void eachTermReadsItsOwnNumber() {
-        assertEquals(BigDecimal.valueOf(3),
-                ((NumericTerm.Reading.Number) VALUE.read(new ObservedValue.Integer(3))).value());
-        assertEquals(BigDecimal.valueOf(3),
-                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("abc"))).value());
-        assertEquals(BigDecimal.valueOf(3),
+        assertEquals(Count.of(3),
+                ((NumericTerm.Reading.Number) VALUE.read(new ObservedValue.Integer(3), Carrier.WHOLE)).value());
+        assertEquals(Count.of(3),
+                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("abc"), Carrier.WHOLE)).value());
+        assertEquals(Count.of(3),
                 ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Constructed(
-                        WRAPPER, Map.of("value", new ObservedValue.Text("abc"))))).value());
+                        WRAPPER, Map.of("value", new ObservedValue.Text("abc"))), Carrier.WHOLE)).value());
     }
 
     /** A string counts in code points, as `Strings.length` does. Counted in UTF-16 units this is 2,
      * and a boundary at 1 would be a row the rule that drew it never asked for. */
     @Test
     void aStringIsCountedTheWayTheLanguageCountsIt() {
-        assertEquals(BigDecimal.ONE,
-                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("😀")))
+        assertEquals(Count.of(1),
+                ((NumericTerm.Reading.Number) LENGTH.read(new ObservedValue.Text("😀"), Carrier.WHOLE))
                         .value());
     }
 }

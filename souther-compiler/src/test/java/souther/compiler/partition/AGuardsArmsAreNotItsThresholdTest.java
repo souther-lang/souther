@@ -8,6 +8,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.query.Bodies;
@@ -148,18 +149,18 @@ class AGuardsArmsAreNotItsThresholdTest {
 
     private static GuardEdge above(long value, boolean inclusive) {
         return GuardEdge.above(ONE_GUARD, 0, new NumericTerm.ValueOf(TermPath.of("n")),
-                BigDecimal.valueOf(value), inclusive);
+                Count.of(value), inclusive);
     }
 
     private static GuardEdge below(long value, boolean inclusive) {
         return GuardEdge.below(ONE_GUARD, 1, new NumericTerm.ValueOf(TermPath.of("n")),
-                BigDecimal.valueOf(value), inclusive);
+                Count.of(value), inclusive);
     }
 
     private static NumericDomain.Bounds holds(Long min, Long max) {
         return new NumericDomain.Bounds(
-                min == null ? null : Endpoint.inclusive(BigDecimal.valueOf(min)),
-                max == null ? null : Endpoint.inclusive(BigDecimal.valueOf(max)));
+                min == null ? null : Endpoint.inclusive(Count.of(min)),
+                max == null ? null : Endpoint.inclusive(Count.of(max)));
     }
 
     @Test
@@ -197,9 +198,9 @@ class AGuardsArmsAreNotItsThresholdTest {
     @Test
     void anArmAtAnEndThePositionDoesNotReachIsProvenUnreachable() {
         NumericDomain.Bounds under = new NumericDomain.Bounds(
-                Endpoint.inclusive(BigDecimal.ZERO), Endpoint.exclusive(BigDecimal.TEN));
+                Endpoint.inclusive(Count.of(BigDecimal.ZERO)), Endpoint.exclusive(Count.of(BigDecimal.TEN)));
         NumericDomain.Bounds over = new NumericDomain.Bounds(
-                Endpoint.exclusive(BigDecimal.ZERO), Endpoint.inclusive(BigDecimal.TEN));
+                Endpoint.exclusive(Count.of(BigDecimal.ZERO)), Endpoint.inclusive(Count.of(BigDecimal.TEN)));
 
         assertTrue(above(10, true).provenDisjoint(under), "no value of [0, 10) is 10 or above");
         assertTrue(below(0, true).provenDisjoint(over), "and none of (0, 10] is 0 or below");

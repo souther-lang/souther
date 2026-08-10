@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.MeasurementStatus;
@@ -250,11 +251,11 @@ class AnArmNothingReachesIsNotOwedARowTest {
     private static GuardReachability proving() {
         GuardEdge edge = GuardEdge.above(
                 new CoverageSites.GuardRef("classify", CoverageOrigin.written("t", 0), 0, 1, null),
-                0, new NumericTerm.ValueOf(TermPath.of("pair")), BigDecimal.valueOf(50), true);
+                0, new NumericTerm.ValueOf(TermPath.of("pair")), Count.of(50), true);
         return GuardReachability.of(List.of(edge),
                 Map.of(new NumericTerm.ValueOf(TermPath.of("pair")),
-                        new NumericDomain.Bounds(Endpoint.inclusive(BigDecimal.ZERO),
-                                Endpoint.inclusive(BigDecimal.TEN))));
+                        new NumericDomain.Bounds(Endpoint.inclusive(Count.of(BigDecimal.ZERO)),
+                                Endpoint.inclusive(Count.of(BigDecimal.TEN)))));
     }
 
     @Test

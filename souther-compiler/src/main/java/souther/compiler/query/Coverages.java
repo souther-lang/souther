@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.numeric.Count;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Classification;
@@ -312,11 +313,11 @@ final class Coverages {
         java.util.SequencedMap<Line, BoundaryAssessment> out = new java.util.LinkedHashMap<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols, within)) {
             BoundaryAssessment.Coverage coverage =
-                    coverageOf(each, axis, parameters, observed, armsAsked);
+                    coverageOf(each, axis, parameters, symbols, observed, armsAsked);
             BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
             BoundaryAssessment made = new BoundaryAssessment(each, coverage,
                     writabilityOf(coverage, knownWritable, attempt), attempt);
-            out.merge(new Line(each.side(), each.value(), each.origin().line()), made,
+            out.merge(new Line(each.side(), each.at(), each.origin().line()), made,
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
@@ -324,8 +325,7 @@ final class Coverages {
 
     /** One line of one axis, told from another by what drew it and where — and not by which copy of
      * the body the reading came off. */
-    private record Line(BoundaryObligation.BoundarySide side, ObservedValue value,
-                        OriginRef.Line drawn) {}
+    private record Line(BoundaryObligation.BoundarySide side, Count at, OriginRef.Line drawn) {}
 
     /**
      * Which of two readings of one line the report keeps.
@@ -385,7 +385,7 @@ final class Coverages {
 
     /** Whether a row sits at one boundary, and whether that could be told. */
     private static BoundaryAssessment.Coverage coverageOf(
-            BoundaryObligation obligation, Axis axis, List<String> parameters,
+            BoundaryObligation obligation, Axis axis, List<String> parameters, Symbols symbols,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
         boolean guard = obligation.origin() instanceof OriginRef.GuardOrigin;
@@ -396,9 +396,9 @@ final class Coverages {
             return new BoundaryAssessment.Coverage.NotMeasured(absent);
         }
         Met met = guard
-                ? evaluatedAt(axis, parameters, rows, obligation.value(),
+                ? evaluatedAt(axis, parameters, rows, symbols, obligation.at(),
                         (OriginRef.GuardOrigin) obligation.origin())
-                : writtenAt(axis, parameters, rows, obligation.value());
+                : writtenAt(axis, parameters, rows, symbols, obligation.at());
         if (met == Met.YES) {
             return new BoundaryAssessment.Coverage.Hit();
         }
@@ -523,14 +523,15 @@ final class Coverages {
      * second kind and could not credit the first.
      */
     private static Met evaluatedAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                   ObservedValue boundary, OriginRef.GuardOrigin origin) {
+                                   Symbols symbols, Count boundary,
+                                   OriginRef.GuardOrigin origin) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            switch (readingFor(axis, parameters, row)) {
+            switch (readingFor(axis, parameters, symbols, row)) {
                 case NumericTerm.Reading.Missing _ -> unreadable = true;
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
-                    if (sameNumber(number.value(), boundary)
+                    if (number.value().sameAs(boundary)
                             && row.hits().contains(origin.site())) {
                         return Met.YES;
                     }
@@ -541,14 +542,14 @@ final class Coverages {
     }
 
     private static Met writtenAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                 ObservedValue boundary) {
+                                 Symbols symbols, Count boundary) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            switch (readingFor(axis, parameters, row)) {
+            switch (readingFor(axis, parameters, symbols, row)) {
                 case NumericTerm.Reading.Missing _ -> unreadable = true;
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
-                    if (sameNumber(number.value(), boundary)) {
+                    if (number.value().sameAs(boundary)) {
                         return Met.YES;
                     }
                 }
@@ -574,22 +575,9 @@ final class Coverages {
      * a class asked the same question, and it has to be the same answer.
      */
     private static NumericTerm.Reading readingFor(Axis axis, List<String> parameters,
-                                                  RowOutcome row) {
-        return axis.term().read(RowClasses.valueAt(row, parameters, axis.path()));
-    }
-
-    /** A newtype and the number it wraps are the same value at this position, which is how the row
-     * writes it and how the boundary was read. */
-    private static boolean sameNumber(java.math.BigDecimal left, ObservedValue b) {
-        java.math.BigDecimal right = numberOf(b);
-        return left != null && right != null && left.compareTo(right) == 0;
-    }
-
-    /** Asked of the term's own reader rather than spelled again here. A boundary's value and a row's
-     * are compared as numbers, and two spellings of what a number is are two chances to disagree —
-     * which is how a date read out of a row failed to match the same date read out of a line. */
-    private static java.math.BigDecimal numberOf(ObservedValue v) {
-        return souther.compiler.partition.NumericTerm.numberOf(v);
+                                                  Symbols symbols, RowOutcome row) {
+        return axis.term().read(RowClasses.valueAt(row, parameters, axis.path()),
+                axis.term().carrierAt(axis.type(), symbols));
     }
 
     private Coverages() {}

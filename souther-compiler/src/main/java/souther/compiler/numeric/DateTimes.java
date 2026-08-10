@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.numeric;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -28,7 +28,7 @@ import java.time.format.DateTimeParseException;
  * same answer a {@code Decimal} gets, and for the same reason. What is between two of them is a
  * different question and has an answer, which is what lets a class still offer a row.
  */
-final class DateTimes {
+public final class DateTimes {
 
     /** Seconds are spelled out even at zero, so the text a boundary is named by is the text a model
      * writes. {@code LocalDateTime.toString} drops them, and a line at midnight would then be
@@ -38,22 +38,23 @@ final class DateTimes {
 
     private static final BigDecimal NANOS = BigDecimal.valueOf(1_000_000_000L);
 
-    /** The second {@code iso} is, or null where it is not a date-time this reads. */
-    static BigDecimal secondOf(String iso) {
+    /** The second {@code iso} counts to, or null where it is not a date-time this reads. */
+    public static Count secondOf(String iso) {
         if (iso == null || iso.indexOf('T') < 0) {
             return null;   // a date, whose step is a day
         }
         try {
             LocalDateTime at = LocalDateTime.parse(iso);
-            return BigDecimal.valueOf(at.toEpochSecond(ZoneOffset.UTC))
-                    .add(BigDecimal.valueOf(at.getNano(), 9));
+            return Count.of(BigDecimal.valueOf(at.toEpochSecond(ZoneOffset.UTC))
+                    .add(BigDecimal.valueOf(at.getNano(), 9)));
         } catch (DateTimeParseException _) {
             return null;
         }
     }
 
-    /** The date-time {@code second} counts to, written the way a model writes one. */
-    static String written(BigDecimal second) {
+    /** The date-time {@code count} counts to, written the way a model writes one. */
+    public static String written(Count count) {
+        BigDecimal second = count.at();
         BigDecimal whole = second.setScale(0, RoundingMode.FLOOR);
         BigDecimal fraction = second.subtract(whole).multiply(NANOS)
                 .setScale(0, RoundingMode.HALF_UP);

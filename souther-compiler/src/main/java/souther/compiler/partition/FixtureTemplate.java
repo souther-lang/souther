@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.check.Carrier;
 import souther.compiler.diag.Region;
+import souther.compiler.numeric.Count;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
@@ -114,6 +116,28 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     }
 
     /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */
+    /**
+     * A count written as the value it stands for, wrapped where the position wears a name.
+     *
+     * <p>The one place a count becomes something a row carries. Which literal a count is written as
+     * is the carrier's answer and is taken from it — spelled out per caller instead, a date-time's
+     * second count reached a row as an {@code Int}, and the decoder turned it down with nothing said
+     * about why.
+     *
+     * @param wrapper the single-value newtype the position is declared as, or null for a bare value
+     */
+    public static FixtureTemplate on(Carrier carrier, Count at, TypeName wrapper) {
+        FixtureTemplate literal = switch (carrier) {
+            case WHOLE -> integer(at.at().longValueExact());
+            case DENSE -> decimal(at.at());
+            // Written by the carrier, so the text on a row and the text in a report are the same
+            // text. Spelled here as well, the two could differ at midnight and nowhere else.
+            case DATE -> date(carrier.written(at));
+            case MOMENT -> dateTime(carrier.written(at));
+        };
+        return wrapper == null ? literal : newtype(wrapper, literal);
+    }
+
     public static FixtureTemplate newtype(TypeName type, FixtureTemplate inner) {
         return new FixtureTemplate(type.name() + "(" + inner.text() + ")",
                 new Ast.Apply(type.name(), List.of(inner.value()), NOWHERE, NO_SOURCE));
