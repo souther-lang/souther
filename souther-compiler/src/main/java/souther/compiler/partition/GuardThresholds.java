@@ -44,9 +44,20 @@ public final class GuardThresholds {
      * say and cannot be made to say (see {@link GuardEdge}).
      */
     public record Guards(List<Threshold> thresholds, List<GuardEdge> edges,
-                         List<Unread> unread) {
+                         List<Unread> unread, List<Singled> singled) {
 
-        public static final Guards NONE = new Guards(List.of(), List.of(), List.of());
+        public static final Guards NONE =
+                new Guards(List.of(), List.of(), List.of(), List.of());
+
+        /**
+         * A value a body singles out rather than orders.
+         *
+         * <p>Apart from a {@link Threshold}, which says where one range ends and the next begins. An
+         * equality says nothing about ranges: what it distinguishes is the value from every other
+         * value, and reading it as a place to cut would put a distinction between the two sides into
+         * a partition the model never drew.
+         */
+        public record Singled(NumericTerm term, BigDecimal value, OriginRef.GuardOrigin origin) {}
 
         /** A position a comparison names that this did not turn into a line, and what stopped it. */
         public record Unread(TermPath at, UndividedPosition.Reason why) {}
@@ -55,6 +66,7 @@ public final class GuardThresholds {
             thresholds = List.copyOf(thresholds);
             edges = List.copyOf(edges);
             unread = List.copyOf(unread);
+            singled = List.copyOf(singled);
         }
     }
 
@@ -66,15 +78,18 @@ public final class GuardThresholds {
         List<Threshold> found = new ArrayList<>();
         List<GuardEdge> edges = new ArrayList<>();
         List<Guards.Unread> unread = new ArrayList<>();
-        walk(behavior, body, plan, parameters, symbols, found, edges, unread);
-        return new Guards(found, edges, unread);
+        List<Guards.Singled> singled = new ArrayList<>();
+        walk(behavior, body, plan, parameters, symbols, found, edges, unread, singled);
+        return new Guards(found, edges, unread, singled);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              List<String> parameters, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges, List<Guards.Unread> unread) {
+                             List<GuardEdge> edges, List<Guards.Unread> unread,
+                             List<Guards.Singled> singled) {
         if (e instanceof Core.If iff) {
-            List<TermPath> made = read(behavior, iff, plan, parameters, symbols, out, edges);
+            List<TermPath> made =
+                    read(behavior, iff, plan, parameters, symbols, out, edges, singled);
             // Every position this condition compares, less the one a line was drawn on. What is left
             // is a rule the model states here and this did not read, which is the one thing that
             // keeps a later reader from taking an empty list for a model that says nothing.
@@ -88,8 +103,8 @@ public final class GuardThresholds {
         // A match case's body and an attempted construction's departure are expression slots, so the
         // generic walk reaches them; only the arms themselves are not children, and this walk does not
         // number arms.
-        Core.forEachChild(e,
-                child -> walk(behavior, child, plan, parameters, symbols, out, edges, unread));
+        Core.forEachChild(e, child ->
+                walk(behavior, child, plan, parameters, symbols, out, edges, unread, singled));
     }
 
     /**
@@ -123,15 +138,14 @@ public final class GuardThresholds {
     /**
      * What would have to change before this comparison could be a line.
      *
-     * <p>Three different things, and a reader told one sentence for all of them cannot tell which
-     * limit is theirs to wait on. An equality is read perfectly well and asks for a class that is not
-     * a range; a comparison against something that is not a number this carries asks for a carrier;
-     * and what is left is a condition this does not take apart.
+     * <p>Two different things, and a reader told one sentence for both cannot tell which limit is
+     * theirs to wait on. A comparison against something that is not a number this carries asks for a
+     * carrier; what is left is a condition this does not take apart.
      */
     private static UndividedPosition.Reason why(Core.Binary comparison) {
-        if (comparison.op() == Ast.BinOp.EQ || comparison.op() == Ast.BinOp.NE) {
-            return UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
-        }
+        // The carrier first. An equality divides the values wherever it is written — the value and
+        // everything else — so what is missing at a position it did not divide is a number to draw
+        // the line at, whatever the operator was.
         return constantOf(comparison.left()) == null && constantOf(comparison.right()) == null
                 ? UndividedPosition.Reason.UNSUPPORTED_DOMAIN
                 : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
@@ -155,10 +169,12 @@ public final class GuardThresholds {
      */
     private static List<TermPath> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                        List<String> parameters, Symbols symbols,
-                                       List<Threshold> out, List<GuardEdge> edges) {
+                                       List<Threshold> out, List<GuardEdge> edges,
+                                       List<Guards.Singled> singled) {
         List<TermPath> made = new ArrayList<>();
         for (Placed each : comparisonsIn(iff.cond())) {
-            TermPath here = readOne(behavior, iff, each, plan, parameters, symbols, out, edges);
+            TermPath here =
+                    readOne(behavior, iff, each, plan, parameters, symbols, out, edges, singled);
             if (here != null) {
                 made.add(here);
             }
@@ -217,7 +233,8 @@ public final class GuardThresholds {
     /** The position a line was drawn on by one comparison, or null where none was. */
     private static TermPath readOne(String behavior, Core.If iff, Placed placed,
                                     CoverageSites.Plan plan, List<String> parameters,
-                                    Symbols symbols, List<Threshold> out, List<GuardEdge> edges) {
+                                    Symbols symbols, List<Threshold> out, List<GuardEdge> edges,
+                                    List<Guards.Singled> singled) {
         Core.Binary comparison = placed.comparison();
         Ast.BinOp op = comparison.op();
         NumericTerm term = termOf(comparison.left(), parameters, symbols);
@@ -234,14 +251,22 @@ public final class GuardThresholds {
         Boolean below = switch (op) {
             case LE, GT -> Boolean.TRUE;    // the value itself is on the low side
             case LT, GE -> Boolean.FALSE;   // and here it is on the high side
-            default -> null;                // EQ / NE do not order the values, so they draw no cut
+            default -> null;                // EQ / NE do not order the values, so they cut nothing
         };
-        if (below == null) {
-            return null;
-        }
         CoverageSites.GuardRef guard = guardOf(plan, iff);
         if (guard == null) {
             return null;   // no site for this `if`: nothing could answer for it
+        }
+        if (below == null) {
+            // An equality singles the value out instead. Recorded as that rather than as a place to
+            // cut, because the values either side of it are not a distinction the model has drawn.
+            if (op != Ast.BinOp.EQ && op != Ast.BinOp.NE) {
+                return null;
+            }
+            singled.add(new Guards.Singled(term, value,
+                    new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
+                            true, placed.witness(), op == Ast.BinOp.EQ, true)));
+            return term.path();
         }
         // True at the line's own value for the operators that include it, which is not the same
         // question as which class the value falls in: `x <= c` and `x > c` agree about the second.

@@ -119,29 +119,22 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         assertTrue(block.contains("the walk stopped before reaching what is under it"), block);
     }
 
-    /**
-     * An equality is not a form this cannot read — it is a partition this cannot hold.
-     *
-     * <p>`retries == 3` divides the values the behavior distinguishes into `{3}` and everything
-     * else, and the second of those is not an interval. Reported as the shape it is, because that
-     * says what would have to change: a class that is not convex, rather than a reader for a form of
-     * condition.
-     */
+    /** An equality divides the position, so it is not one nothing was established about. */
     @Test
-    void anEqualityIsSaidToBeAShapeRatherThanAForm() {
+    void anEqualityIsRead() {
         String block = blockOf("byEquality");
 
-        assertTrue(block.contains("not read: r.cost"), block);
-        assertTrue(block.contains("interval"), block);
+        assertFalse(block.contains("not read: r.cost"), block);
+        assertFalse(block.contains("not derivable: r.cost"), block);
     }
 
-    /** And a carrier no line can be drawn on is neither of those. */
+    /** A carrier no line can be drawn on is still said as that. */
     @Test
     void aCarrierNoLineIsDrawnOnSaysThat() {
         String block = blockOf("byDateTime");
 
         assertTrue(block.contains("not read: at"), block);
-        assertFalse(block.contains("interval"), block);
+        assertTrue(block.contains("no line can be drawn on"), block);
     }
 
     /** The one that is read is not named either way. */

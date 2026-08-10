@@ -55,8 +55,13 @@ public sealed interface OriginRef {
      *                          {@code x > c} agree about the class the value is in and disagree here
      */
     record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, SourceRef at,
-                       boolean valueBelongsBelow, Witness witness, boolean holdsAtTheValue)
-            implements OriginRef {
+                       boolean valueBelongsBelow, Witness witness, boolean holdsAtTheValue,
+                       boolean singles) implements OriginRef {
+
+        public GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, SourceRef at,
+                           boolean valueBelongsBelow, Witness witness, boolean holdsAtTheValue) {
+            this(guard, at, valueBelongsBelow, witness, holdsAtTheValue, false);
+        }
 
         /** Which arms prove the comparison ran. */
         public enum Witness {

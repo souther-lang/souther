@@ -54,7 +54,7 @@ final class Coverages {
         GuardThresholds.Guards guards =
                 GuardThresholds.of(behavior.name(), body, plan, parameters, symbols);
         return Partitions.withThresholds(partitioning, guards.thresholds(), symbols,
-                guards.unread());
+                guards.unread(), guards.singled());
     }
 
     /**

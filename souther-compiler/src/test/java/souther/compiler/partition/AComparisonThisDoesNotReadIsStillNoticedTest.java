@@ -95,10 +95,11 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      * the values into can be held at all is a separate question; that they are divided is this one.
      */
     @Test
-    void anEqualityIsNamedToo() {
-        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("n"),
-                        UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
-                read("n.value == 3").unread());
+    void anEqualityIsReadRatherThanNamed() {
+        GuardThresholds.Guards guards = read("n.value == 3");
+
+        assertEquals(List.of(), guards.unread());
+        assertEquals(1, guards.singled().size(), guards.singled().toString());
     }
 
     /**
@@ -118,6 +119,8 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     /** One position said once, however many comparisons in the body name it. */
     @Test
     void aPositionIsNamedOnceRatherThanPerComparison() {
-        assertEquals(1, read("n.value == 1 || n.value /= 3").unread().size());
+        assertEquals(1, read("at: DateTime",
+                "at < DateTime(\"2026-01-01T00:00:00\")"
+                        + " || at > DateTime(\"2020-01-01T00:00:00\")").unread().size());
     }
 }

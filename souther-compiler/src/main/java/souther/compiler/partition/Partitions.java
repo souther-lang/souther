@@ -176,13 +176,44 @@ public final class Partitions {
      * place that knows is the reader that gave up.
      */
     public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
-                                              Symbols symbols, List<GuardThresholds.Guards.Unread> unread) {
+                                              Symbols symbols,
+                                              List<GuardThresholds.Guards.Unread> unread) {
+        return withThresholds(base, thresholds, symbols, unread, List.of());
+    }
+
+    /**
+     * The same, with the values a body singles out as well.
+     *
+     * <p>An equality is not a place to cut. What it distinguishes is one value from every other,
+     * so where nothing else divides the position its classes are those two — and the second of them
+     * is not a range, which is a thing a class is allowed not to be. Where an ordering comparison
+     * divides the position as well, the model has drawn the further distinction itself and the value
+     * is one more line among the ranges.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols,
+                                              List<GuardThresholds.Guards.Unread> unread,
+                                              List<GuardThresholds.Guards.Singled> singled) {
         List<Axis> out = new ArrayList<>();
         for (Axis axis : base.axes()) {
             NumericTerm declared = axis.term();
             NumericTerm term = declared;
             List<Threshold> here = thresholds.stream()
                     .filter(t -> t.term().equals(declared)).toList();
+            List<GuardThresholds.Guards.Singled> points = singled.stream()
+                    .filter(one -> one.term().equals(declared)).toList();
+            if (here.isEmpty() && !points.isEmpty()) {
+                // Nothing orders this position, so its classes are the values singled out and
+                // everything else. Ranges here would ask the rows for a distinction between the two
+                // sides of a value the behavior treats alike.
+                NumericDomain.Bounds only = domainOf(base, term);
+                out.add(new Axis(axis.id(), term, axis.type(),
+                        singledClasses(points, term, axis.type(), only, symbols),
+                        mergedPoints(axis.cuts(), points,
+                                carrierOf(term, axis.type(), symbols)))
+                        .excluding(axis.excluded()));
+                continue;
+            }
             if (here.isEmpty()) {
                 // A position no rule divides, whose body measures some other number of it: a bare
                 // `List<String>` nothing bounds, under a `guard List.length(t.names) > 0`. The line
@@ -236,6 +267,97 @@ public final class Partitions {
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
                 undivided);
+    }
+
+    /**
+     * The classes a position divided only by equalities has: each value singled out, and the rest.
+     *
+     * <p>The last of those is not an interval and is not asked to be. What a class needs is a way to
+     * say whether a value is in it and a value that stands for it, and a complement has both — the
+     * shape a class has been limited to is what this is here to stop being the limit.
+     */
+    private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
+                                                       NumericTerm term, Type type,
+                                                       NumericDomain.Bounds within, Symbols symbols) {
+        Carrier carrier = carrierOf(term, type, symbols);
+        TypeName wrapper = type instanceof Type.Ref ref && TypeOps.isSingleValueNewtype(type, symbols)
+                ? ref.name() : null;
+        List<BigDecimal> values = new ArrayList<>();
+        for (GuardThresholds.Guards.Singled each : points) {
+            if (values.stream().noneMatch(had -> had.compareTo(each.value()) == 0)) {
+                values.add(each.value());
+            }
+        }
+        List<PartitionClass> classes = new ArrayList<>();
+        for (BigDecimal value : values) {
+            classes.add(PartitionClass.of(term + "/= " + written(value, carrier),
+                    "= " + written(value, carrier), holding(term, at -> at.compareTo(value) == 0),
+                    RepresentativeSource.of(standing(value, wrapper, carrier))));
+        }
+        BigDecimal other = otherThan(values, within);
+        String label = "/= " + String.join(", ",
+                values.stream().map(each -> written(each, carrier)).toList());
+        classes.add(other == null
+                ? PartitionClass.ungeneratable(term + "/" + label, label,
+                        holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
+                        "nothing here writes a value this position holds other than the ones singled"
+                                + " out")
+                : PartitionClass.of(term + "/" + label, label,
+                        holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
+                        RepresentativeSource.of(standing(other, wrapper, carrier))));
+        return List.copyOf(classes);
+    }
+
+    /** A classifier that reads the term's number out of a row and answers about it. */
+    private static Classifier holding(NumericTerm term,
+                                      java.util.function.Predicate<BigDecimal> holds) {
+        return value -> switch (term.read(value)) {
+            case NumericTerm.Reading.Number number -> Membership.of(holds.test(number.value()));
+            case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
+            case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
+        };
+    }
+
+    /** A number the position holds that is none of {@code values}, or null where it holds no other. */
+    private static BigDecimal otherThan(List<BigDecimal> values, NumericDomain.Bounds within) {
+        for (BigDecimal from : values) {
+            for (BigDecimal stepped : List.of(from.add(BigDecimal.ONE), from.subtract(BigDecimal.ONE))) {
+                if ((within == null || within.admits(stepped))
+                        && values.stream().noneMatch(v -> v.compareTo(stepped) == 0)) {
+                    return stepped;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String written(BigDecimal value, Carrier carrier) {
+        return carrier == Carrier.DATE ? Dates.written(value)
+                : value.stripTrailingZeros().toPlainString();
+    }
+
+    private static FixtureTemplate standing(BigDecimal value, TypeName wrapper, Carrier carrier) {
+        FixtureTemplate literal = switch (carrier) {
+            case DENSE -> FixtureTemplate.decimal(value);
+            case WHOLE -> FixtureTemplate.integer(value.longValueExact());
+            case DATE -> FixtureTemplate.date(Dates.written(value));
+        };
+        return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
+    }
+
+    /** The cuts a position has, with the values a body singled out added as lines of their own. */
+    private static List<Cut> mergedPoints(List<Cut> had, List<GuardThresholds.Guards.Singled> points,
+                                          Carrier carrier) {
+        Map<String, Cut> byValue = new LinkedHashMap<>();
+        for (Cut cut : had) {
+            byValue.put(same(cut.value()), cut);
+        }
+        for (GuardThresholds.Guards.Singled each : points) {
+            ObservedValue value = numeric(each.value(), carrier);
+            byValue.merge(same(value), Cut.at(value, each.origin()),
+                    (there, _) -> there.and(each.origin()));
+        }
+        return List.copyOf(byValue.values());
     }
 
     /**
@@ -330,7 +452,9 @@ public final class Partitions {
                             BoundaryObligation.BoundarySide.AT, cut.value(),
                             witnessed(origin, true)));
                 }
-                if (origin instanceof OriginRef.GuardOrigin guard) {
+                // A line that singles a value out has no neighbour to ask for: the values either
+                // side of it are one class, so a row over there is a row the class's own already is.
+                if (origin instanceof OriginRef.GuardOrigin guard && !guard.singles()) {
                     // The other class's edge is the neighbour on the side the cut value is not on —
                     // where that class has values. A guard at the end of what the position can hold
                     // has nothing on one side of it, and a step off the end is a row nobody can write:
