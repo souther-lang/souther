@@ -804,7 +804,9 @@ public interface Ast {
         }
     }
 
-    /** {@code name <- field("key", <decRef>)} inside an object decoder. */
+    /** One field an object decoder reads: the key it is found under, how the value there is read,
+     *  and the name the construction below refers to it by. Built by {@code Deriver}; no source
+     *  writes one. */
     record Bind(Binder binder, String key, DecRef ref, SourcePos pos) implements Ast {
 
         public String name() {

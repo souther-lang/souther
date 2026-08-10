@@ -44,20 +44,10 @@ class TheSyntaxInventoryCoversWhatTheCompilerReadsTest {
      *  {@code +} would end the passthrough it opened. */
     private static final Pattern WRITTEN = Pattern.compile("`([^`]+)`");
 
-    /**
-     * A token the lexer makes and no production reads, so it is not a form the language has and the
-     * inventory does not list it. Removing it from the lexer is #569; when that lands this stops
-     * being a token at all and the assertion below says so.
-     */
-    private static final String LEXED_BUT_UNREAD = "<-";
-
     @Test
     void everySymbolTheKindsSpellIsInTheInventory() {
-        Set<String> spelled = new TreeSet<>(symbolsTheKindsSpell());
-        assertTrue(spelled.remove(LEXED_BUT_UNREAD),
-                "`" + LEXED_BUT_UNREAD + "` is no longer a kind at all, so the inventory no longer"
-                        + " has to leave it out — drop this exception");
-        assertEquals(spelled, new TreeSet<>(symbolsTheInventoryLists()),
+        assertEquals(new TreeSet<>(symbolsTheKindsSpell()),
+                new TreeSet<>(symbolsTheInventoryLists()),
                 "the inventory and the kinds disagree about the symbols the language has");
     }
 
@@ -71,21 +61,16 @@ class TheSyntaxInventoryCoversWhatTheCompilerReadsTest {
      * Each punctuation and operator, as {@link SyntaxKind} spells it. The lexer is not run: what is
      * read is the kinds' own account of how each is written.
      *
-     * <p>A symbol is a spelling with no letter in it, which is what separates one from a keyword and
-     * from the kinds of the tree above the leaves — those spell themselves out of their own names,
-     * and a name is letters. One enum holds both the leaves and the nodes, so that is the only
-     * handle there is; a kind above the leaves that spelled itself with punctuation would be taken
-     * for a symbol, and what would fix that is the enum saying which of its constants are tokens.
+     * <p>A symbol is a fixed spelling that is not one of the words the lexer reserves. The kinds
+     * answer which of their constants spell themselves, so nothing here has to tell a leaf from a
+     * node by looking at the characters of a shown form — a reading that would take a node spelling
+     * itself with punctuation for a symbol, and would miss a symbol added with no shown form at all.
      */
     private static Set<String> symbolsTheKindsSpell() {
+        Set<String> words = Set.copyOf(CstLexer.keywords());
         Set<String> symbols = new LinkedHashSet<>();
         for (SyntaxKind kind : SyntaxKind.values()) {
-            if (kind.display() instanceof String spelled) {
-                String written = spelled.replace("`", "");
-                if (written.chars().noneMatch(Character::isLetter)) {
-                    symbols.add(written);
-                }
-            }
+            kind.fixedSpelling().filter(spelled -> !words.contains(spelled)).ifPresent(symbols::add);
         }
         return symbols;
     }

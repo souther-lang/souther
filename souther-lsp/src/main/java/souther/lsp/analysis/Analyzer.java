@@ -1721,13 +1721,13 @@ public final class Analyzer {
         }
     }
 
-    /** The token type index for a leaf, or {@code -1} to emit nothing (punctuation, whitespace). */
     private static boolean isPatternNode(SyntaxKind k) {
         return k == SyntaxKind.PATTERN_NAME || k == SyntaxKind.PATTERN_TUPLE
                 || k == SyntaxKind.PATTERN_CTOR || k == SyntaxKind.PATTERN_RECORD
                 || k == SyntaxKind.PATTERN_FIELD;
     }
 
+    /** The token type index for a leaf, or {@code -1} to emit nothing (punctuation, whitespace). */
     private int classify(SyntaxToken token, SyntaxKind parent, SyntaxKind enclosing,
                          boolean afterFirstIdent, boolean callee) {
         SyntaxKind k = token.kind();
@@ -1797,7 +1797,7 @@ public final class Analyzer {
 
     private static boolean isOperator(SyntaxKind k) {
         return switch (k) {
-            case EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH, PLUSPLUS, ARROW, LARROW,
+            case EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH, PLUSPLUS, ARROW,
                  PIPEFWD, VPIPE, PIPE -> true;
             default -> false;
         };
