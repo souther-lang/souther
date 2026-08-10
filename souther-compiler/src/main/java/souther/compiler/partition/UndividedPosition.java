@@ -40,6 +40,15 @@ public record UndividedPosition(TermPath at, Why why) {
         UNSUPPORTED_SYNTAX,
         /** The values the comparison is against are not ones a line can be drawn on here. */
         UNSUPPORTED_DOMAIN,
+        /**
+         * The comparison relates two positions rather than dividing one.
+         *
+         * <p>`+x < y+` says where one position stands against another, and a class here is a set of
+         * values of one position. Nothing is missing from the carrier — both sides are ordered and a
+         * line drawn on either against a number would be read — so saying the values cannot carry a
+         * line would send a reader after the wrong thing entirely.
+         */
+        UNSUPPORTED_PARTITION_SHAPE,
         /** The walk stopped before it reached the fields under this position. */
         DEPTH_LIMIT
     }

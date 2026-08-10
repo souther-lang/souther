@@ -235,8 +235,19 @@
         },
         "notRead": {
           "type": "array",
-          "description": "Positions a comparison in the body names that this reading did not turn into a line — a comparison inside `&&` or `||`, one drawn on a carrier no line can be drawn on, or a walk that stopped before reaching the position. Nothing is established about these either way, which is what separates them from `notDerivable`. Not in `required`: a document written before this field existed is still a document of this version.",
-          "items": { "type": "string" }
+          "description": "Positions something in the body names that this reading did not turn into a line, each with what stopped it. Nothing is established about these either way, which is what separates them from `notDerivable` — and which limit stopped each one is what says whose work it is to lift. Not in `required`: a document written before this field existed is still a document of this version.",
+          "items": {
+            "type": "object",
+            "required": ["position", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "position": { "type": "string" },
+              "reason": {
+                "description": "`unsupported_syntax` is an expression the terms do not name; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position.",
+                "enum": ["unsupported_syntax", "unsupported_domain", "unsupported_partition_shape", "depth_limit"]
+              }
+            }
+          }
         },
         "omitted": {
           "type": "array",

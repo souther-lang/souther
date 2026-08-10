@@ -41,6 +41,8 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                 data Count = Int
                     invariant range = value >= 0 && value <= 10
 
+                data Pair = { x: Int, y: Int }
+
                 data Low
                 data High
 
@@ -122,5 +124,38 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertEquals(1, read("at: DateTime",
                 "at < DateTime(\"2026-01-01T00:00:00\")"
                         + " || at > DateTime(\"2020-01-01T00:00:00\")").unread().size());
+    }
+
+    /**
+     * A position named inside an expression the reader does not model is still named.
+     *
+     * <p>Discovery and derivation are different questions and must not share a reader. What decides
+     * whether a line can be drawn is whether the number compared is one the terms name; what decides
+     * whether the model says anything here is whether a comparison mentions the position at all.
+     * Asked of the first, `+p.x + 1 < 10+` reports a position the model divides no way, two tokens
+     * from a comparison about it.
+     */
+    @Test
+    void aPositionNamedInsideAnExpressionIsStillNoticed() {
+        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
+                read("p: Pair", "p.x + 1 < 10").unread());
+    }
+
+    /**
+     * Two positions compared with each other, which is a relation and not a partition of either.
+     *
+     * <p>Nothing is wrong with the carrier — both are `+Int+`, ordered, and a line drawn on either
+     * against a number would be read. What is missing is a class that is about two positions at
+     * once, and saying "no line can be drawn on these values" would send a reader after a carrier.
+     */
+    @Test
+    void twoPositionsComparedWithEachOtherSayWhichLimitThatIs() {
+        assertEquals(List.of(
+                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("y"),
+                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
+                read("p: Pair", "p.x < p.y").unread());
     }
 }

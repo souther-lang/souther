@@ -1495,6 +1495,8 @@ public final class Adequacy {
                 case UNSUPPORTED_SYNTAX -> "a comparison here is written in a form this does not read";
                 case UNSUPPORTED_DOMAIN ->
                         "it is compared against values no line can be drawn on here";
+                case UNSUPPORTED_PARTITION_SHAPE ->
+                        "the comparison relates it to another position rather than dividing it";
                 case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
             };
         }

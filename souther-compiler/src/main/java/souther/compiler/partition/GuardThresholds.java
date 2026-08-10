@@ -22,16 +22,26 @@ import java.util.List;
  * thousand" is not in any type — it is the comparison the behavior makes — and it is the line the
  * rows have to be written on both sides of.
  *
- * <p><b>Only a condition that is itself a comparison is read.</b> Nothing recurses into {@code &&},
- * {@code ||} or {@code !}. The reason is short-circuiting: in
+ * <p><b>A comparison is read wherever in a condition it is written</b> (spec
+ * §a-boundary-is-drawn-on-a-term). Which position the model divides is not a question about the
+ * shape of the condition around the comparison, and it was answered as though it were: in
  *
  * <pre>if kind == Domestic &amp;&amp; cost &lt;= 100000</pre>
  *
- * an overseas request takes the else arm without {@code cost} ever being compared, so a row that
- * lands there is not a boundary test of {@code cost} and counting it as one would report a boundary
- * covered that nothing exercised. Reading compound conditions needs a probe on each comparison rather
- * than on each arm, which is a larger change than this one; until then the restriction is stated and
- * the thresholds inside a compound condition are simply not read.
+ * the line at a hundred thousand went unread, and the position came back as one the model divides
+ * no way — two tokens from the comparison that divides it.
+ *
+ * <p>What the condition does decide is which arm stands as evidence that a comparison was
+ * evaluated. Under {@code A && B} an overseas request takes the else arm without {@code cost}
+ * having been compared, so that arm proves nothing about the second operand; the arm where the
+ * whole condition held proves both. That is carried per comparison as a {@link OriginRef
+ * .GuardOrigin.Witness}, and an edge no arm can witness is reported as one nothing measured rather
+ * than dropped — the line is the model's either way.
+ *
+ * <p>Three readers are kept apart here and are easy to run together. Which comparisons exist is
+ * {@link #comparisonsIn}; which positions a comparison names at all is {@link #mentioned}; which
+ * number a line can be drawn on is {@link #termOf}. The last is the narrowest, and asking it the
+ * first two questions is how a position a body compares became a position nothing compares.
  */
 public final class GuardThresholds {
 
@@ -125,10 +135,13 @@ public final class GuardThresholds {
     private static void compared(Core e, List<String> parameters, Symbols symbols,
                                  List<Guards.Unread> out) {
         if (e instanceof Core.Binary binary && orders(binary.op())) {
-            for (Core side : List.of(binary.left(), binary.right())) {
-                NumericTerm named = termOf(side, parameters, symbols);
-                if (named != null && out.stream().noneMatch(had -> had.at().equals(named.path()))) {
-                    out.add(new Guards.Unread(named.path(), why(binary)));
+            List<TermPath> named = new ArrayList<>();
+            mentioned(binary.left(), parameters, symbols, named);
+            mentioned(binary.right(), parameters, symbols, named);
+            UndividedPosition.Reason why = why(binary, parameters, symbols);
+            for (TermPath each : named) {
+                if (out.stream().noneMatch(had -> had.at().equals(each))) {
+                    out.add(new Guards.Unread(each, why));
                 }
             }
         }
@@ -136,19 +149,51 @@ public final class GuardThresholds {
     }
 
     /**
+     * Every position an expression names, however it is written.
+     *
+     * <p>Weaker than {@link #termOf} on purpose, and asked instead of it. That one answers whether a
+     * line can be drawn — it wants a number the terms name — and this one answers whether the model
+     * says anything about a position at all. Sharing a reader between the two turns an expression
+     * the derivation does not model into a position nothing compares: {@code p.x + 1 < 10} named no
+     * position, and came back as one the model divides no way two tokens from a comparison about it.
+     */
+    private static void mentioned(Core e, List<String> parameters, Symbols symbols,
+                                  List<TermPath> out) {
+        if (!(e instanceof Core.PreservedCall)) {
+            TermPath here = pathOf(e, parameters, symbols);
+            if (here != null) {
+                if (!out.contains(here)) {
+                    out.add(here);
+                }
+                return;   // what is under it is the same position, named once
+            }
+        }
+        Core.forEachChild(e, child -> mentioned(child, parameters, symbols, out));
+    }
+
+    /**
      * What would have to change before this comparison could be a line.
      *
-     * <p>Two different things, and a reader told one sentence for both cannot tell which limit is
-     * theirs to wait on. A comparison against something that is not a number this carries asks for a
-     * carrier; what is left is a condition this does not take apart.
+     * <p>Three different things, and a reader told one sentence for all of them cannot tell which
+     * limit is theirs to wait on. A comparison between two positions asks for a class that is about
+     * both, which a partition of one position is not; one against a value this carries no line on
+     * asks for a carrier; what is left is an expression the terms do not name.
      */
-    private static UndividedPosition.Reason why(Core.Binary comparison) {
-        // The carrier first. An equality divides the values wherever it is written — the value and
-        // everything else — so what is missing at a position it did not divide is a number to draw
-        // the line at, whatever the operator was.
-        return constantOf(comparison.left()) == null && constantOf(comparison.right()) == null
-                ? UndividedPosition.Reason.UNSUPPORTED_DOMAIN
-                : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+    private static UndividedPosition.Reason why(Core.Binary comparison, List<String> parameters,
+                                                Symbols symbols) {
+        boolean leftIsATerm = termOf(comparison.left(), parameters, symbols) != null;
+        boolean rightIsATerm = termOf(comparison.right(), parameters, symbols) != null;
+        // Two positions against each other is a rule about both of them, and a class here is a set
+        // of values of one. Nothing is missing from the carrier — a line drawn on either against a
+        // number would be read — so naming the carrier would send a reader after the wrong thing.
+        if (leftIsATerm && rightIsATerm) {
+            return UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+        }
+        // One side the terms name, against something that is not a number this carries a line on.
+        if (leftIsATerm || rightIsATerm) {
+            return UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+        }
+        return UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
     }
 
     /** Whether an operator is one that compares two values rather than combining two conditions. */

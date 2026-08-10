@@ -928,9 +928,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         partition.notDerivable().forEach(each -> {
             if (each.isAbsent()) {
                 undivided.add(each.at().toString());
-            } else {
-                unread.add(each.at().toString());
+                return;
             }
+            // The position and what stopped it, kept as the product they are. Which limit a position
+            // is waiting on is the thing this list was added to say, and a document that named only
+            // the position would leave a consumer to guess it back.
+            ObjectNode said = unread.addObject();
+            said.put("position", each.at().toString());
+            said.put("reason", word(((souther.compiler.partition.UndividedPosition.Why.CannotDerive)
+                    each.why()).reason()));
         });
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
