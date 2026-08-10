@@ -174,7 +174,7 @@ public final class Main {
             case "doc" -> () -> DocCommand.run(rest, System.out, System.err);
             case "api" -> () -> ApiCommand.run(rest, System.out, System.err);
             case "japi" -> () -> JapiCommand.run(rest, System.out, System.err);
-            case "mcp" -> () -> McpServer.serve(System.in, System.out);
+            case "mcp" -> () -> mcpSubcommand(rest);
             default -> null;
         };
     }
@@ -384,6 +384,28 @@ public final class Main {
             System.err.println("io error: " + e.getMessage());
             return 1;
         }
+    }
+
+    /**
+     * {@code souther mcp}: serves doc, api and japi over MCP stdio, and is written on its own.
+     *
+     * <p>Said here rather than left to the check above the dispatch, because what the check lets
+     * through is a permission this command cannot honour. A token that reads as a short option
+     * another command owns is passed on as an operand — a file may be named {@code -d}, and the
+     * command that has no {@code -d} reads it as one — and that is sound wherever there is an
+     * operand for it to be. There is none here. This command was handed its arguments and read none
+     * of them, so {@code souther mcp -w} served as though nothing had been written, and so did
+     * {@code souther mcp model.sou}. What a command takes no arguments at all is a fact about its
+     * own grammar, which is where it is now stated.
+     */
+    private static int mcpSubcommand(String[] args) {
+        if (args.length > 0) {
+            System.err.println(Messages.get("cli.mcp.arguments",
+                    RenderOptions.asking(null).locale(), String.join(", ", args)));
+            System.err.println(USAGE);
+            return 2;
+        }
+        return McpServer.serve(System.in, System.out);
     }
 
     /** The level {@code --adequacy} names, or null where it names none. */

@@ -410,6 +410,38 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
         assertFalse(said.err().contains("unknown option"), said.err());
     }
 
+    /**
+     * And is not passed on to a command with nowhere to put it. Reading an unknown short token as an
+     * operand is what every other command does with it; {@code mcp} has no operand, read none of
+     * what it was handed, and served as though the line had been written on its own.
+     */
+    @Test
+    void aCommandWithNoOperandRefusesWhatItWouldNotRead() {
+        Said said = run("mcp", "-w");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`souther mcp`"), said.err());
+        assertTrue(said.err().contains("-w"), said.err());
+    }
+
+    /** A path is not an operand of it either. */
+    @Test
+    void aCommandWithNoOperandRefusesAPathToo() {
+        Said said = run("mcp", "model.sou");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("model.sou"), said.err());
+    }
+
+    /** And an option nobody has is still refused above it, as it was. */
+    @Test
+    void aCommandWithNoOperandStillRefusesAnUnknownOption() {
+        Said said = run("mcp", "--nope");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("unknown option `--nope`"), said.err());
+    }
+
     // --- the language the refusal is written in ----------------------------------------------------
 
     /**
