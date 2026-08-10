@@ -120,6 +120,10 @@ final class Witnesses {
      * report that skipped this said of twenty-one boundaries that a space should be another space
      * when what belongs there is a line break.
      *
+     * <p>A source that broke a boundary the canonical form writes on a line is this rule's only
+     * where no group settles it. Where one does, what the source departed from is that group's
+     * decision, and reporting the break here as well would say one thing twice.
+     *
      * <p>The two token streams are held side by side, which is sound while they are the same
      * stream. The canonicalization that rewrites a definition's lambda writes tokens the source has
      * not, and there this refuses rather than pairing the wrong two: an alignment it cannot make is
@@ -143,10 +147,14 @@ final class Witnesses {
                 continue;   // the canonical form breaks here, so it writes no spacing
             }
             String has = source.substring(had.get(i).end(), had.get(i + 1).start());
-            if (has.indexOf('\n') >= 0 || has.equals(wrote)) {
-                continue;   // the source broke here instead, or wrote the same
+            if (has.equals(wrote)) {
+                continue;
             }
             Gaps.Boundary b = boundaries.get(i);
+            if (has.indexOf('\n') >= 0 && b.policy() != TokenDoc.Break.NEVER) {
+                continue;   // a boundary a group settles, and the source broke it: the group's
+                            // decision is what it departed from, and the conditional rule says so
+            }
             out.add(new Witness.BetweenTwoTokens(
                     new Witness.Boundary(i, b.joining(), writes.get(i).kind(),
                             writes.get(i + 1).kind()),
@@ -192,6 +200,10 @@ final class Witnesses {
      * has still departed from the decision — so what is asked of each opportunity is whether the
      * source has a line ending at the same place.
      *
+     * <p>Every one of them, and not whether any broke. A group written down the page breaks at each
+     * opportunity it settles, so a source that broke some of them and ran the rest together has not
+     * laid it out that way: the decision is one and it is about all of them.
+     *
      * <p>A group written down the page because it holds a forced break is not this rule's. That
      * decision was taken before the width was asked, and reporting it here would tell an author to
      * close up a line that a comment or a member of its own keeps open.
@@ -211,11 +223,18 @@ final class Witnesses {
             outcomes.put(d.group(), d.outcome());
         }
         Map<Doc.GroupRef, Boolean> broken = new IdentityHashMap<>();
+        Map<Doc.GroupRef, Boolean> agrees = new IdentityHashMap<>();
         for (Opportunity o : layout.opportunities()) {
             where.merge(o.settledBy(), o.at(), Math::min);
+            boolean brokeThere = brokeInSource(source, had, writes, o.at());
             Boolean already = broken.get(o.settledBy());
-            broken.put(o.settledBy(),
-                    (already != null && already) || brokeInSource(source, had, writes, o.at()));
+            broken.put(o.settledBy(), (already != null && already) || brokeThere);
+            // A group written down the page breaks at every opportunity it settles, so a source
+            // that broke some of them and not the rest has not laid it out that way either. The
+            // decision is one and it is about all of them.
+            Boolean sofar = agrees.get(o.settledBy());
+            agrees.put(o.settledBy(),
+                    (sofar == null || sofar) && brokeThere == o.broke());
         }
 
         List<Witness> out = new ArrayList<>();
@@ -226,7 +245,7 @@ final class Witnesses {
             }
             boolean whole = outcome instanceof Outcome.Flat;
             boolean sourceWhole = !Boolean.TRUE.equals(broken.get(e.getKey()));
-            if (whole != sourceWhole) {
+            if (!Boolean.TRUE.equals(agrees.get(e.getKey()))) {
                 out.add(new Witness.Conditional(new Witness.Group(e.getKey(), e.getValue()),
                         whole, sourceWhole));
             }

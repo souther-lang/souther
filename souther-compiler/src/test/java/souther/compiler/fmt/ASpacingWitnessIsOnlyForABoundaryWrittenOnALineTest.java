@@ -78,7 +78,30 @@ class ASpacingWitnessIsOnlyForABoundaryWrittenOnALineTest {
                         + " form writes no spacing there");
     }
 
-    /** And a boundary the source broke is not this rule's either: it wrote no spacing there. */
+    /**
+     * A boundary no group settles is this rule's whatever the source wrote there, a line break
+     * included. The canonical form writes the two tokens on one line and there is no decision above
+     * this one that could have put them on two.
+     */
+    @Test
+    void aTightBoundaryTheSourceBrokeIsASpacingWitness() {
+        List<Witness> found = witnesses("""
+                module fmtprobe exposing ( Alpha
+                , Beta )
+
+                data Alpha = Int
+
+                data Beta = Int
+                """);
+
+        assertEquals(1, found.size(), found.toString());
+        Witness.BetweenTwoTokens only = (Witness.BetweenTwoTokens) found.get(0);
+        assertEquals("", only.canonical());
+        assertTrue(only.source().indexOf('\n') >= 0, "what the source wrote there is a line break");
+    }
+
+    /** But a boundary a group settles is that group's: reporting the break here as well would say
+     * one thing twice. */
     @Test
     void aBoundaryTheSourceBrokeIsNotASpacingWitness() {
         assertEquals(List.of(), witnesses("""

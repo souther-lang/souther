@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -21,6 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and ask again, and there is nothing left. That is what makes the distance to the canonical form a
  * number that has to fall as each family lands, rather than a check that cannot be run until the
  * last one is in.
+ *
+ * <p>That a family is composed at all is held by the compiler. {@link Repair} switches over
+ * {@link Witness} without a default, so a rule whose expectation is added and not composed does not
+ * build.
  */
 class ARepairComposesTheExpectationsAndWritesOnceTest {
 
@@ -125,25 +128,4 @@ class ARepairComposesTheExpectationsAndWritesOnceTest {
         return String.join("\n", out);
     }
 
-    /** A family whose expectation is not composed yet is refused rather than left out. A repair
-     * that skipped one would answer with a text that is not the canonical form and say nothing. */
-    @Test
-    void aFamilyWithNoExpectationYetIsRefused() {
-        String source = """
-                module fmtprobe exposing ( P, f )
-
-                data P = { alpha: Int, beta: Int }
-
-                let f (x: Int): P =
-                    P { alpha = x
-                      , beta = x
-                      }
-                """;
-        Formatter.CanonicalForm canonical = Formatter.canonicalize(CstParser.parse(source).root());
-        List<Witness> conditional = Witnesses.conditional(source, canonical);
-
-        assertTrue(!conditional.isEmpty(), "the fixture deviates, or this checks nothing");
-        assertThrows(IllegalArgumentException.class,
-                () -> Repair.repair(source, canonical, conditional));
-    }
 }
