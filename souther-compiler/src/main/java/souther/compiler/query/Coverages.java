@@ -556,13 +556,11 @@ final class Coverages {
         return left != null && right != null && left.compareTo(right) == 0;
     }
 
+    /** Asked of the term's own reader rather than spelled again here. A boundary's value and a row's
+     * are compared as numbers, and two spellings of what a number is are two chances to disagree —
+     * which is how a date read out of a row failed to match the same date read out of a line. */
     private static java.math.BigDecimal numberOf(ObservedValue v) {
-        return switch (v) {
-            case ObservedValue.Integer i -> java.math.BigDecimal.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value();
-            case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
-            case null, default -> null;
-        };
+        return souther.compiler.partition.NumericTerm.numberOf(v);
     }
 
     private Coverages() {}

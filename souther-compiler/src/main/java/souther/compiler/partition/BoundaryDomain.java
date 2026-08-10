@@ -73,6 +73,44 @@ public interface BoundaryDomain {
         }
     };
 
+    /**
+     * Souther's {@code Date}: a whole number of days, so both neighbours exist.
+     *
+     * <p>The neighbour of a date is a date. What steps is the day it counts to, and what comes back
+     * is written the way a model writes one — a report and a row show the date, never the count.
+     */
+    BoundaryDomain DATE = new BoundaryDomain() {
+        @Override
+        public Optional<ObservedValue> successor(ObservedValue value) {
+            return stepped(value, 1);
+        }
+
+        @Override
+        public Optional<ObservedValue> predecessor(ObservedValue value) {
+            return stepped(value, -1);
+        }
+
+        @Override
+        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
+            BigDecimal from = dayOf(low);
+            BigDecimal to = dayOf(high);
+            return from == null || to == null ? Optional.empty()
+                    : Optional.of(new ObservedValue.Temporal(Dates.written(
+                            from.add(to.subtract(from).divide(BigDecimal.valueOf(2))))));
+        }
+
+        private Optional<ObservedValue> stepped(ObservedValue value, int by) {
+            BigDecimal day = dayOf(value);
+            return day == null ? Optional.empty()
+                    : Optional.of(new ObservedValue.Temporal(
+                            Dates.written(day.add(BigDecimal.valueOf(by)))));
+        }
+
+        private BigDecimal dayOf(ObservedValue value) {
+            return value instanceof ObservedValue.Temporal t ? Dates.dayOf(t.iso()) : null;
+        }
+    };
+
     /** Nothing has a neighbour here. */
     BoundaryDomain NONE = new BoundaryDomain() {
         @Override

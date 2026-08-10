@@ -1217,6 +1217,11 @@ public final class Generator {
     /** A boundary value written the way the position takes it: bare where the position is a number,
      * wrapped where it is a newtype over one. */
     private static FixtureTemplate valueOf(ObservedValue value, Type type, Symbols symbols) {
+        // A date is written as one, and a newtype over a date wraps that. The day it counts to is
+        // what the ranges hold and never what a row carries.
+        if (value instanceof ObservedValue.Temporal date && Dates.dayOf(date.iso()) != null) {
+            return Witnesses.wrapped(type, FixtureTemplate.date(date.iso()), symbols);
+        }
         BigDecimal number = numberOf(value);
         if (number == null) {
             return null;
@@ -1233,17 +1238,15 @@ public final class Generator {
     }
 
     private static String written(ObservedValue value) {
+        if (value instanceof ObservedValue.Temporal date) {
+            return date.iso();
+        }
         BigDecimal number = numberOf(value);
         return number == null ? String.valueOf(value) : number.stripTrailingZeros().toPlainString();
     }
 
     private static BigDecimal numberOf(ObservedValue value) {
-        return switch (value) {
-            case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value();
-            case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
-            case null, default -> null;
-        };
+        return NumericTerm.numberOf(value);
     }
 
     private Generator() {}

@@ -100,15 +100,16 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     }
 
     /**
-     * And a comparison whose constant is not a number, which is what a line on a date is.
+     * And a comparison on a carrier whose step is not settled, which a date-time is.
      *
-     * <p>{@code Date} is one of the ordered primitives, so the comparison is ordinary and the branch
-     * is real. Nothing downstream can draw a line on it today, which is a fact about the reader.
+     * <p>A date counts days and is read. A date-time carries a finer step whose size is a decision
+     * nobody has taken, and one carrier cannot be both — so the line is left unread, and said as
+     * that rather than as a position the model divides no way.
      */
     @Test
-    void aLineDrawnOnADateIsNamedToo() {
-        assertEquals(List.of(TermPath.of("on")),
-                read("on: Date", "on < Date(\"2026-01-01\")").unread());
+    void aLineDrawnOnADateTimeIsNamedToo() {
+        assertEquals(List.of(TermPath.of("at")),
+                read("at: DateTime", "at < DateTime(\"2026-01-01T00:00:00\")").unread());
     }
 
     /** One position said once, however many comparisons in the body name it. */

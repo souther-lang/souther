@@ -347,6 +347,10 @@ public final class GuardThresholds {
             // A newtype written around a constant is that constant at this location.
             case Core.NewData nd when nd.inits().size() == 1 && nd.spreads().isEmpty() ->
                     constantOf(nd.inits().get(0).value());
+            // A date written the way a model writes one. Read by what the construction answers with
+            // rather than by the name in front of it, so a date reaches this however it is spelled.
+            case Core.Call call when call.type() == Type.DATE && call.args().size() == 1
+                    && call.args().get(0) instanceof Core.Str iso -> Dates.dayOf(iso.value());
             case null, default -> null;
         };
     }
@@ -364,7 +368,7 @@ public final class GuardThresholds {
     /** Whether a type is one whose values a threshold can order. */
     static boolean orderable(Type type, Symbols symbols) {
         Type base = TypeOps.base(type, symbols);
-        return base == Type.INT || base == Type.DECIMAL;
+        return base == Type.INT || base == Type.DECIMAL || base == Type.DATE;
     }
 
     private GuardThresholds() {}

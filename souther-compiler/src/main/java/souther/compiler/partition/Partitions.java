@@ -218,12 +218,12 @@ public final class Partitions {
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
-            boolean decimal = term.decimal(axis.type(), symbols);
+            Carrier carrier = carrierOf(term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), term, axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), reachable, decimal)).excluding(axis.excluded()));
+                    merged(axis.cuts(), reachable, carrier)).excluding(axis.excluded()));
         }
         List<UndividedPosition> undivided = new ArrayList<>();
         for (UndividedPosition each : undividedIn(out, java.util.Set.of())) {
@@ -279,13 +279,13 @@ public final class Partitions {
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
      * an invariant and a guard that state the same bound are one cut and two obligations. */
-    private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, boolean decimal) {
+    private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
         Map<String, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(same(cut.value()), cut);
         }
         for (Threshold each : thresholds) {
-            ObservedValue value = numeric(each.value(), decimal);
+            ObservedValue value = numeric(each.value(), carrier);
             byValue.merge(same(value), Cut.at(value, each.origin()),
                     (there, _) -> there.and(each.origin()));
         }
@@ -742,13 +742,15 @@ public final class Partitions {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
-        cut(byValue, bounds.min(), own == null ? null : own.min(), "min", bounds.decimal(), within);
-        cut(byValue, bounds.max(), own == null ? null : own.max(), "max", bounds.decimal(), within);
+        cut(byValue, bounds.min(), own == null ? null : own.min(), "min",
+                bounds.decimal() ? Carrier.DENSE : Carrier.WHOLE, within);
+        cut(byValue, bounds.max(), own == null ? null : own.max(), "max",
+                bounds.decimal() ? Carrier.DENSE : Carrier.WHOLE, within);
         return List.copyOf(byValue.values());
     }
 
     /** One end as a cut, owed once to each rule that put it there. */
-    private static void cut(Map<String, Cut> into, End end, End own, String clause, boolean decimal,
+    private static void cut(Map<String, Cut> into, End end, End own, String clause, Carrier carrier,
                             TypeName within) {
         if (end == null) {
             return;
@@ -758,7 +760,7 @@ public final class Partitions {
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
         for (TypeName from : end.from()) {
-            put(into, numeric(end.value(), decimal), from, clause, moved ? within : null);
+            put(into, numeric(end.value(), carrier), from, clause, moved ? within : null);
         }
     }
 
@@ -1117,9 +1119,37 @@ public final class Partitions {
         return v instanceof ObservedValue.Bool b && b.value() == expected;
     }
 
-    private static ObservedValue numeric(BigDecimal value, boolean decimal) {
-        return decimal ? new ObservedValue.Decimal(value)
-                : new ObservedValue.Integer(value.longValueExact());
+    /**
+     * A number the algebra holds, written back as the kind of value the position takes.
+     *
+     * <p>The one place that turns a carrier back into a value. A date is a day count inside the
+     * ranges and a date everywhere a person reads it, and the conversion sitting here is what keeps
+     * a cut and a fixture from disagreeing about which of the two a line is drawn at.
+     */
+    private static ObservedValue numeric(BigDecimal value, Carrier carrier) {
+        return switch (carrier) {
+            case DENSE -> new ObservedValue.Decimal(value);
+            case WHOLE -> new ObservedValue.Integer(value.longValueExact());
+            case DATE -> new ObservedValue.Temporal(Dates.written(value));
+        };
+    }
+
+    /** What kind of value a term's numbers stand for. */
+    enum Carrier {
+        /** A whole number: an {@code Int}, and every size. */
+        WHOLE,
+        /** A decimal. */
+        DENSE,
+        /** A day count, standing for a date. */
+        DATE
+    }
+
+    /** Which of the three a term at this position is. */
+    static Carrier carrierOf(NumericTerm term, Type type, Symbols symbols) {
+        if (term instanceof NumericTerm.ValueOf && TypeOps.base(type, symbols) == Type.DATE) {
+            return Carrier.DATE;
+        }
+        return term.decimal(type, symbols) ? Carrier.DENSE : Carrier.WHOLE;
     }
 
     private Partitions() {}
