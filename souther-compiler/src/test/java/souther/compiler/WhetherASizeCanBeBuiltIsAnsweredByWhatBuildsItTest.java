@@ -49,7 +49,7 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
                 """.formatted(declaration, written);
     }
 
-    /** What the generator offers at the boundaries of that behavior. */
+    /** What the generator answers for the lines that behavior draws and no row sits on. */
     private static Generator.GenerationResult boundaries(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
@@ -167,11 +167,19 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
                     invariant String.length(value) >= 1
                 """, "C(\"abc\")"));
 
-        assertTrue(filled.rows().stream().anyMatch(row -> row.classes().contains("s = 5")
-                        && row.inputs().get(1).text().equals("Size(5)")),
+        assertEquals("Size(5)", sizeAt(filled, "s = 5"),
                 "the edge on `s` is still the number written at `s`");
-        assertTrue(filled.rows().stream().anyMatch(row -> row.classes().contains("s = 1")
-                        && row.inputs().get(1).text().equals("Size(1)")),
+        assertEquals("Size(1)", sizeAt(filled, "s = 1"),
                 "and so is the edge its invariant draws");
+    }
+
+    /** The second input of the row offered at {@code edge}, or null where none was. */
+    private static String sizeAt(Generator.GenerationResult filled, String edge) {
+        for (Generator.GeneratedRow row : filled.rows()) {
+            if (row.classes().contains(edge)) {
+                return row.inputs().get(1).text();
+            }
+        }
+        return null;
     }
 }

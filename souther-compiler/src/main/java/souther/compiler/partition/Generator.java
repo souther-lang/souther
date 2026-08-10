@@ -110,7 +110,16 @@ public final class Generator {
             /** Every value tried was refused at construction. */
             ALL_CANDIDATES_REJECTED,
             /** The search stopped before it got here. */
-            SEARCH_LIMIT
+            SEARCH_LIMIT,
+            /** The module's classes were not there to build a candidate against. */
+            NOTHING_TO_BUILD_AGAINST,
+            /**
+             * Some row's value at the position could not be read.
+             *
+             * <p>So what is written there is unknown, and a row offered for a class of it may be a row
+             * that is already in the file. Nothing was withheld about the model; a reading was.
+             */
+            POSITION_NOT_READ
         }
 
         public UnresolvedCombination {
