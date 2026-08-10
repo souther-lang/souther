@@ -1470,17 +1470,36 @@ public final class Adequacy {
                             List.of(boundary.axis(), boundary.value(), boundary.origin())));
                 }
             }
-            for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {  // NOPMD
-                out.add(position.why() instanceof souther.compiler.partition.UndividedPosition.Why
-                                .CannotDerive stopped
-                        ? new Finding(Kind.PARTITION_NOT_READ, behavior.name(),
-                                // Not measured, because nothing here established anything either
-                                // way about this position.
-                                MeasurementStatus.NOT_MEASURED, behavior.pos(),
-                                List.of(position.at().toString(), said(stopped.reason())))
-                        : new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
-                                MeasurementStatus.COMPLETE, behavior.pos(),
-                                List.of(position.at().toString())));
+            // What the model divides this position no way at all, which is the classes question and
+            // is answered only for a position that has none.
+            for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
+                if (position.isAbsent()) {
+                    out.add(new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
+                            MeasurementStatus.COMPLETE, behavior.pos(),
+                            List.of(position.at().toString())));
+                }
+            }
+            // And what this could not read, which is asked of the comparisons. A position with
+            // classes can still carry a statement nothing read, so this is not filtered by the list
+            // above — and the walk stopping short is the one reason that comes from neither.
+            List<List<Object>> unread = new ArrayList<>();
+            for (souther.compiler.partition.GuardThresholds.Guards.Unread each : partition.unread()) {
+                unread.add(List.<Object>of(each.at().toString(), said(each.why())));
+            }
+            for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
+                if (position.why() instanceof souther.compiler.partition.UndividedPosition.Why
+                        .CannotDerive stopped) {
+                    List<Object> said =
+                            List.<Object>of(position.at().toString(), said(stopped.reason()));
+                    if (!unread.contains(said)) {
+                        unread.add(said);
+                    }
+                }
+            }
+            for (List<Object> each : unread) {
+                // Not measured, because nothing here established anything either way about it.
+                out.add(new Finding(Kind.PARTITION_NOT_READ, behavior.name(),
+                        MeasurementStatus.NOT_MEASURED, behavior.pos(), each));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),

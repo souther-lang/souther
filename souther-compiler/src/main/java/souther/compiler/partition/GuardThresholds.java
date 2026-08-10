@@ -98,14 +98,14 @@ public final class GuardThresholds {
                              List<GuardEdge> edges, List<Guards.Unread> unread,
                              List<Guards.Singled> singled) {
         if (e instanceof Core.If iff) {
-            List<TermPath> made =
-                    read(behavior, iff, plan, parameters, symbols, out, edges, singled);
-            // Every position this condition compares, less the one a line was drawn on. What is left
-            // is a rule the model states here and this did not read, which is the one thing that
-            // keeps a later reader from taking an empty list for a model that says nothing.
-            for (Guards.Unread compared : comparedIn(iff.cond(), parameters, symbols)) {
-                if (!made.contains(compared.at())
-                        && unread.stream().noneMatch(had -> had.at().equals(compared.at()))) {
+            List<Core> read = read(behavior, iff, plan, parameters, symbols, out, edges, singled);
+            // Every comparison this condition holds that nothing turned into a line — asked of the
+            // comparisons and not of the positions. One position carries more than one statement,
+            // and a line read at it says nothing about the rest: kept per position, a threshold on
+            // `x` swallowed the comparison beside it that nothing could read, which is "a result
+            // exists, so the reading is complete".
+            for (Guards.Unread compared : comparedIn(iff.cond(), read, parameters, symbols)) {
+                if (unread.stream().noneMatch(had -> had.equals(compared))) {
                     unread.add(compared);
                 }
             }
@@ -126,14 +126,21 @@ public final class GuardThresholds {
      * that the model draws something at this position, which is exactly what {@code not derivable}
      * would otherwise deny.
      */
-    private static List<Guards.Unread> comparedIn(Core e, List<String> parameters, Symbols symbols) {
+    private static List<Guards.Unread> comparedIn(Core e, List<Core> read, List<String> parameters,
+                                                  Symbols symbols) {
         List<Guards.Unread> out = new ArrayList<>();
-        compared(e, parameters, symbols, out);
+        compared(e, read, parameters, symbols, out);
         return out;
     }
 
-    private static void compared(Core e, List<String> parameters, Symbols symbols,
+    private static void compared(Core e, List<Core> read, List<String> parameters, Symbols symbols,
                                  List<Guards.Unread> out) {
+        // By the comparison it is, and not by what it was about: two comparisons at one position are
+        // two statements, and this one having been read is no answer about the other.
+        if (e instanceof Core.Binary comparison && orders(comparison.op())
+                && read.stream().anyMatch(each -> each == comparison)) {
+            return;
+        }
         if (e instanceof Core.Binary binary && orders(binary.op())) {
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), parameters, symbols, named);
@@ -145,7 +152,7 @@ public final class GuardThresholds {
                 }
             }
         }
-        Core.forEachChild(e, child -> compared(child, parameters, symbols, out));
+        Core.forEachChild(e, child -> compared(child, read, parameters, symbols, out));
     }
 
     /**
@@ -181,19 +188,27 @@ public final class GuardThresholds {
      */
     private static UndividedPosition.Reason why(Core.Binary comparison, List<String> parameters,
                                                 Symbols symbols) {
-        boolean leftIsATerm = termOf(comparison.left(), parameters, symbols) != null;
-        boolean rightIsATerm = termOf(comparison.right(), parameters, symbols) != null;
-        // Two positions against each other is a rule about both of them, and a class here is a set
-        // of values of one. Nothing is missing from the carrier — a line drawn on either against a
-        // number would be read — so naming the carrier would send a reader after the wrong thing.
-        if (leftIsATerm && rightIsATerm) {
+        boolean leftNames = !mentionedIn(comparison.left(), parameters, symbols).isEmpty();
+        boolean rightNames = !mentionedIn(comparison.right(), parameters, symbols).isEmpty();
+        // Which limit stopped this is asked of what the sides name, not of how far the derivation
+        // got. Two positions against each other is a rule about both of them and a class here is a
+        // set of values of one — and that is as true of `x < y + 1` as of `x < y`, where reading it
+        // off the derivation loses the second position entirely and answers with the carrier.
+        if (leftNames && rightNames) {
             return UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
         }
-        // One side the terms name, against something that is not a number this carries a line on.
-        if (leftIsATerm || rightIsATerm) {
-            return UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
-        }
-        return UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+        Core named = leftNames ? comparison.left() : comparison.right();
+        // A position the terms do name, against a value they carry no line on — against one they do
+        // not name, which is an expression rather than a carrier.
+        return termOf(named, parameters, symbols) != null
+                ? UndividedPosition.Reason.UNSUPPORTED_DOMAIN
+                : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+    }
+
+    private static List<TermPath> mentionedIn(Core e, List<String> parameters, Symbols symbols) {
+        List<TermPath> out = new ArrayList<>();
+        mentioned(e, parameters, symbols, out);
+        return out;
     }
 
     /** Whether an operator is one that compares two values rather than combining two conditions. */
@@ -212,16 +227,18 @@ public final class GuardThresholds {
      * place in the condition leaves it, and the arms are numbered once for the {@code if} they both
      * belong to.
      */
-    private static List<TermPath> read(String behavior, Core.If iff, CoverageSites.Plan plan,
-                                       List<String> parameters, Symbols symbols,
-                                       List<Threshold> out, List<GuardEdge> edges,
-                                       List<Guards.Singled> singled) {
-        List<TermPath> made = new ArrayList<>();
+    private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
+                                   List<String> parameters, Symbols symbols,
+                                   List<Threshold> out, List<GuardEdge> edges,
+                                   List<Guards.Singled> singled) {
+        // The comparisons a line came of, and not the positions they were about. A position carries
+        // more than one statement and reading one of them settles nothing about the others.
+        List<Core> made = new ArrayList<>();
         for (Placed each : comparisonsIn(iff.cond())) {
             TermPath here =
                     readOne(behavior, iff, each, plan, parameters, symbols, out, edges, singled);
             if (here != null) {
-                made.add(here);
+                made.add(each.comparison());
             }
         }
         return made;

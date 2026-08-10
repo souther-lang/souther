@@ -158,4 +158,39 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                                 UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
                 read("p: Pair", "p.x < p.y").unread());
     }
+
+    /**
+     * A line read at a position does not stand for every comparison about it.
+     *
+     * <p>One position can carry more than one statement, and reading one of them says nothing about
+     * the rest. Kept per position, a threshold on `+p.x+` swallowed the comparison beside it that
+     * nothing could read — which is "some result exists, therefore the reading is complete", the
+     * inference this whole issue is about.
+     */
+    @Test
+    void aLineReadAtAPositionDoesNotSwallowWhatWasNotReadThere() {
+        GuardThresholds.Guards guards = read("p: Pair", "p.x <= 5 && p.x + 1 < 10");
+
+        assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
+        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
+                guards.unread());
+    }
+
+    /**
+     * A relation stays a relation when one side is written with something added to it.
+     *
+     * <p>What `+p.x < p.y + 1+` needs is a class about two positions, exactly as `+p.x < p.y+` does.
+     * Read off how far the derivation got, the second side stops being a position at all and the
+     * answer becomes the carrier — which is a different piece of work and not the one that is owed.
+     */
+    @Test
+    void aRelationWithArithmeticOnOneSideIsStillARelation() {
+        assertEquals(List.of(
+                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("y"),
+                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
+                read("p: Pair", "p.x < p.y + 1").unread());
+    }
 }

@@ -33,6 +33,7 @@ import java.util.Set;
 public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
+                                List<souther.compiler.partition.GuardThresholds.Guards.Unread> unread,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
 
@@ -45,10 +46,11 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
-            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of());
+            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
+        unread = List.copyOf(unread);
         omitted = List.copyOf(omitted);
         whyUnclassified = List.copyOf(whyUnclassified);
     }

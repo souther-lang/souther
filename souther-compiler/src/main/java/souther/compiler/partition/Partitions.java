@@ -66,13 +66,15 @@ public final class Partitions {
     public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
                                Map<NumericTerm, NumericDomain.Bounds> domains,
                                java.util.Set<NumericTerm> uncertain,
-                               List<UndividedPosition> undivided) {
+                               List<UndividedPosition> undivided,
+                               List<GuardThresholds.Guards.Unread> unread) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
             domains = Map.copyOf(domains);
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
+            unread = List.copyOf(unread);
         }
 
         /** Whether an edge of this term is a value some row could carry.
@@ -128,7 +130,8 @@ public final class Partitions {
                 omitted.add(new OmittedAxis(axis.id(), !axis.cuts().isEmpty()));
             }
         }
-        return new Partitioning(kept, omitted, domains, uncertain, undividedIn(kept, stopped));
+        return new Partitioning(kept, omitted, domains, uncertain, undividedIn(kept, stopped),
+                List.of());
     }
 
     /**
@@ -266,7 +269,7 @@ public final class Partitions {
             undivided.add(stopped == null ? had : had.because(stopped));
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undivided);
+                undivided, unread);
     }
 
     /**
