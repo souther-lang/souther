@@ -89,8 +89,12 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                             || seen.contains(m.getKey() + " of " + shape)) {
                         continue;   // this shape is already among them, written this way
                     }
-                    if (!CstParser.parse(text).errors().isEmpty()
-                            || !Formatter.format(text).equals(canonical)) {
+                    // The parse is what says the grammar still admits it, and the formatter takes
+                    // what it produced rather than the text it came from — the same answer without
+                    // the second parse of every candidate.
+                    CstParser.Result parsed = CstParser.parse(text);
+                    if (!parsed.errors().isEmpty()
+                            || !Formatter.format(parsed.root()).equals(canonical)) {
                         continue;   // not a departure: another source, with a canonical form of
                                     // its own. The shape is left to be met again, so a line the
                                     // grammar refuses one way of writing does not take the shape
