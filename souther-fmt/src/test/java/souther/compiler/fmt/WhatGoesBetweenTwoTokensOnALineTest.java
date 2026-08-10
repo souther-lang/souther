@@ -12,9 +12,10 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -271,11 +272,21 @@ class WhatGoesBetweenTwoTokensOnALineTest {
                 | _ -> 0
             """);
 
+    /**
+     * One bundled standard-library source, read from where the compiler keeps it.
+     *
+     * <p>Named by path rather than looked up on the class path. The formatter depends on the syntax
+     * and not on the compiler, so the sources the compiler bundles are not on this module's class
+     * path — and a corpus that quietly came up short would leave every rule below holding over less
+     * text than it says it does.
+     */
     private static String stdlib(String module) {
-        String resource = "/souther/" + module + ".sou";
-        try (InputStream in = WhatGoesBetweenTwoTokensOnALineTest.class.getResourceAsStream(resource)) {
-            assertTrue(in != null, "missing bundled source " + resource);
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        Path source = Path.of("..", "souther-compiler", "src", "main", "resources", "souther",
+                module + ".sou");
+        try {
+            assertTrue(Files.isRegularFile(source),
+                    "missing bundled source " + source.toAbsolutePath());
+            return Files.readString(source, StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

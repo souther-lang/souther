@@ -32,6 +32,16 @@
             <groupId>org.souther-lang</groupId>
             <artifactId>souther-fmt</artifactId>
         </dependency>
+        <!-- The formatter's own tests carry the corpus and the rewrites they sweep. A check that
+             the canonical form means what the source meant needs the frontend, so it is written
+             here and reads those fixtures from where the formatter keeps them. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-fmt</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
         <!-- souther-runtime is `provided`: the compiler loads a generated `$Ctfe.check` class to
              verify a constant newtype construction at compile time (CTFE, ADR-0032), and a
              lambda-bearing invariant's bytecode references the runtime `Fn`. It is not bundled;

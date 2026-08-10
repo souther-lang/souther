@@ -54,7 +54,21 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
         }
     }
 
+    /**
+     * What the sweep answered, so that the rows and the check that they are all of them are one
+     * sweep. The corpus does not change while the class runs, and a second sweep of it would be the
+     * same few hundred candidates built from the same few thousand lines.
+     */
+    private static List<Departure> swept;
+
     static Stream<Departure> departures() {
+        if (swept == null) {
+            swept = sweep();
+        }
+        return swept.stream();
+    }
+
+    private static List<Departure> sweep() {
         List<Departure> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         // Shortest first, and one candidate per shape across the whole corpus. A shape is a shape
@@ -75,8 +89,12 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                             || seen.contains(m.getKey() + " of " + shape)) {
                         continue;   // this shape is already among them, written this way
                     }
-                    if (!CstParser.parse(text).errors().isEmpty()
-                            || !Formatter.format(text).equals(canonical)) {
+                    // The parse is what says the grammar still admits it, and the formatter takes
+                    // what it produced rather than the text it came from — the same answer without
+                    // the second parse of every candidate.
+                    CstParser.Result parsed = CstParser.parse(text);
+                    if (!parsed.errors().isEmpty()
+                            || !Formatter.format(parsed.root()).equals(canonical)) {
                         continue;   // not a departure: another source, with a canonical form of
                                     // its own. The shape is left to be met again, so a line the
                                     // grammar refuses one way of writing does not take the shape
@@ -87,7 +105,7 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                 }
             }
         }
-        return out.stream();
+        return out;
     }
 
     /**

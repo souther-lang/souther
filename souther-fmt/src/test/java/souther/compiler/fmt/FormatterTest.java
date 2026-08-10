@@ -31,12 +31,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FormatterTest {
 
     static Stream<Path> corpus() throws IOException {
-        List<Path> roots = List.of(Path.of("..", "examples"),
-                Path.of("src", "main", "resources", "souther"));
+        // The bundled prelude, named where the compiler keeps it rather than where this module
+        // happens to stand. A root that is skipped for not being there takes its sources out of the
+        // sweep and leaves the rows that remain passing, so a missing one is said instead.
+        List<Path> roots = List.of(
+                Path.of("..", "souther-compiler", "src", "main", "resources", "souther"));
         List<Path> sources = new ArrayList<>();
         for (Path root : roots) {
             if (!Files.isDirectory(root)) {
-                continue;
+                throw new IOException("the corpus root " + root.toAbsolutePath() + " is not there");
             }
             try (Stream<Path> walk = Files.walk(root)) {
                 walk.filter(p -> p.toString().endsWith(".sou")).forEach(sources::add);

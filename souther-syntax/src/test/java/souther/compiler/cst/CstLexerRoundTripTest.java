@@ -55,7 +55,7 @@ class CstLexerRoundTripTest {
     }
 
     static Stream<Path> preludeSources() throws IOException {
-        Path prelude = Path.of("src", "main", "resources", "souther");
+        Path prelude = Path.of("..", "souther-compiler", "src", "main", "resources", "souther");
         try (Stream<Path> walk = Files.walk(prelude)) {
             return walk.filter(p -> p.toString().endsWith(".sou")).toList().stream();
         }
