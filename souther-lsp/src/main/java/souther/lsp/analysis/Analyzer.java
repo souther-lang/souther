@@ -18,6 +18,7 @@ import souther.compiler.cst.CstParser;
 import souther.compiler.cst.GreenToken;
 import souther.compiler.cst.LineIndex;
 import souther.compiler.diag.CompileException;
+import souther.compiler.editor.EditorSymbols;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.DiagnosticView;
@@ -1746,13 +1747,13 @@ public final class Analyzer {
         if (isKeyword(k)) {
             return T_KEYWORD;
         }
-        if (isOperator(k)) {
+        if (EditorSymbols.isOperator(k)) {
             return T_OPERATOR;
         }
         if (k == SyntaxKind.IDENT) {
             return classifyIdent(parent, enclosing, afterFirstIdent, callee);
         }
-        return -1;   // braces, parens, commas, colons, dots
+        return -1;   // the punctuation an editor leaves alone, and whitespace
     }
 
     private int classifyIdent(SyntaxKind parent, SyntaxKind enclosing, boolean afterFirstIdent,
@@ -1795,13 +1796,6 @@ public final class Analyzer {
         };
     }
 
-    private static boolean isOperator(SyntaxKind k) {
-        return switch (k) {
-            case EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH, PLUSPLUS, ARROW,
-                 PIPEFWD, VPIPE, PIPE -> true;
-            default -> false;
-        };
-    }
 
     /** The document outline: one symbol per top-level definition, a data type's fields as children. */
     public List<DocumentSymbol> documentSymbols(String text) {

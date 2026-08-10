@@ -416,7 +416,9 @@ Where each of the language's written forms is given — its concrete syntax, and
 
 A form is stated with the construct it belongs to, once, where a reader of that construct meets it. This is the index that reaches those statements and not a second copy of them: a form written here as well would be a second place to keep in step, and the two would disagree the first time one of them moved.
 
-A row is a form, or a rule about one, together with what kind of thing it is and the section that gives it. The kinds divide in two. A token, a delimiter and an operator are sets the compiler holds, so what is listed here is checked against them. A production, a constraint and an association are the specification's own: no set the compiler enumerates says which `+then+` an `+else+` closes, and those rows are held by whatever states them.
+A row is a form, or a rule about one, together with what kind of thing it is and the section that gives it. The kinds divide in two. A token, a delimiter and an operator are written with what the compiler holds a set of, so what is listed here is checked against it: the reserved words against the words the lexer reserves, and the symbols of the three rows together against the spellings the syntax kinds carry. A production, a constraint and an association are the specification's own: no set the compiler enumerates says which `+then+` an `+else+` closes, and those rows are held by whatever states them.
+
+Which of the three a symbol is listed as is the specification's own too. The compiler holds no set that says `+->+` joins two types where `{plus}` computes from two numbers, so nothing checks the column, and reading a row for what a symbol does is reading this document. An editor asks something else — which symbols a reader wants told apart from the names and the brackets around them — and answers it for itself, so what it paints as an operator is neither this column nor derived from it.
 
 The full formal grammar (BNF) is deferred (<<future-work>>).
 

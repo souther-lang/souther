@@ -18,10 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The inventory in {@code grammar} covers the closed sets the compiler holds.
  *
- * <p>A token, a delimiter and an operator are sets the lexer has, so a list of them written down
- * can be held to them. The specification had two such lists and nothing compared either: the
- * reserved words omitted {@code unreachable} and carried {@code on}, which its own next paragraph
- * says is not one, and the operators were missing every bracket, the colon and the comma.
+ * <p>The words the lexer reserves and the symbols the kinds spell are sets, so a list of them
+ * written down can be held to them. Which of delimiter and operator a symbol is listed as is not
+ * one of those sets: it says what the symbol does, which no set the compiler holds answers, and it
+ * is read here only to find the rows that write symbols. The specification had two such lists and
+ * nothing compared either: the reserved words omitted {@code unreachable} and carried {@code on},
+ * which its own next paragraph says is not one, and the operators were missing every bracket, the
+ * colon and the comma.
  *
  * <p>The rest of the inventory is not checked here and cannot be. No set the compiler enumerates
  * says which {@code then} an {@code else} closes, or what a `data` declaration looks like; those

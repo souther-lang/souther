@@ -2,6 +2,7 @@ package souther.compiler.highlight;
 
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.SyntaxKind;
+import souther.compiler.editor.EditorSymbols;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -10,14 +11,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The generated TextMate grammar is valid JSON, categorises every lexer keyword, accounts for every
- * symbol the kinds spell, and matches the committed grammar file — so a form added to or dropped from
- * the language forces the highlighter to be regenerated. */
+/** The generated TextMate grammar is valid JSON, categorises every lexer keyword, paints the symbols
+ * the editor's classification names, and matches the committed grammar file — so a form added to or
+ * dropped from the language forces the highlighter to be regenerated. */
 class TmLanguageGeneratorTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -42,32 +45,38 @@ class TmLanguageGeneratorTest {
     }
 
     /**
-     * The symbols the grammar paints and the ones it leaves alone are exactly the symbols the
-     * language writes, and no symbol is in both.
+     * The grammar paints every symbol {@link EditorSymbols} classifies as an operator, whole, and
+     * none of the punctuation it leaves alone.
      *
-     * <p>The editor's classification is its own — {@code ...}, {@code =} and {@code ?} are painted
-     * here and called delimiters by the specification's inventory — so this cannot ask the two sides
-     * to agree on which symbol is an operator. What it can ask is that neither side hold a symbol the
-     * other has never heard of. A form dropped from the language and left in the list below goes on
-     * being painted in an editor after the compiler has stopped reading it, and nothing else in the
-     * build would say so.
-     *
-     * <p>Written as a partition rather than as a covering: a covering alone passes when a bracket is
-     * mistakenly listed as an operator, because the union does not change.
+     * <p>Run as a regex against each symbol rather than compared as a set of strings. Between the
+     * classification and what an editor colours are an escaping and an ordering, and both fail in
+     * ways a set comparison cannot see: an unescaped {@code |} paints nothing it was meant to, and a
+     * short form listed before a longer one paints the first character of it and leaves the rest.
      */
     @Test
-    void everySymbolTheLanguageWritesIsPaintedOrDeliberatelyNot() {
-        Set<String> painted = new TreeSet<>(TmLanguageGenerator.OPERATORS);
+    void theGrammarPaintsEveryClassifiedOperatorWholeAndNoPunctuation() {
+        Pattern operators = Pattern.compile(operatorPattern());
 
-        Set<String> both = new TreeSet<>(painted);
-        both.retainAll(NOT_PAINTED);
-        assertEquals(Set.of(), both,
-                "a symbol cannot be an operator and punctuation the grammar leaves alone");
+        Set<String> notPaintedWhole = new TreeSet<>();
+        for (SyntaxKind kind : EditorSymbols.operators()) {
+            String spelled = kind.fixedSpelling().orElseThrow();
+            Matcher m = operators.matcher(spelled);
+            if (!m.find() || m.start() != 0 || m.end() != spelled.length()) {
+                notPaintedWhole.add(spelled);
+            }
+        }
+        assertEquals(Set.of(), notPaintedWhole,
+                "the grammar does not paint these as operators, or paints only part of them");
 
-        Set<String> classified = new TreeSet<>(painted);
-        classified.addAll(NOT_PAINTED);
-        assertEquals(symbolsTheKindsSpell(), classified,
-                "the grammar and the kinds disagree about which symbols the language writes");
+        Set<String> painted = new TreeSet<>();
+        for (SyntaxKind kind : EditorSymbols.punctuation()) {
+            String spelled = kind.fixedSpelling().orElseThrow();
+            if (operators.matcher(spelled).find()) {
+                painted.add(spelled);
+            }
+        }
+        assertEquals(Set.of(), painted,
+                "the grammar paints punctuation the classification leaves alone");
     }
 
     /** A spelling appears once, and a longer form is listed before any prefix of it, so the
@@ -87,21 +96,6 @@ class TmLanguageGeneratorTest {
         }
     }
 
-    /** The punctuation the grammar deliberately does not paint. */
-    private static final Set<String> NOT_PAINTED =
-            Set.of("(", ")", "{", "}", "[", "]", ",", ".", ":");
-
-    /** Every symbol the language writes: the spelling of each kind that spells itself, less the
-     *  words. A keyword spells itself too and is categorised by its own rule above. */
-    private static Set<String> symbolsTheKindsSpell() {
-        Set<String> words = Set.copyOf(CstLexer.keywords());
-        Set<String> symbols = new TreeSet<>();
-        for (SyntaxKind kind : SyntaxKind.values()) {
-            kind.fixedSpelling().filter(spelled -> !words.contains(spelled)).ifPresent(symbols::add);
-        }
-        return symbols;
-    }
-
     @Test
     void theCommittedGrammarMatchesTheGenerator() throws Exception {
         String committed;
@@ -112,6 +106,16 @@ class TmLanguageGeneratorTest {
         }
         assertEquals(TmLanguageGenerator.generate(), committed,
                 "the committed grammar is stale — regenerate it with TmLanguageGenerator");
+    }
+
+    /** The regex the grammar matches operators with. */
+    @SuppressWarnings("unchecked")
+    private String operatorPattern() {
+        Map<String, Object> grammar = (Map<String, Object>) JSON.readValue(
+                TmLanguageGenerator.generate(), Object.class);
+        Map<String, Object> repository = (Map<String, Object>) grammar.get("repository");
+        Map<String, Object> node = (Map<String, Object>) repository.get("operators");
+        return (String) node.get("match");
     }
 
     /** The keyword alternatives of a repository entry whose match is {@code \b(a|b|c)\b}. */
