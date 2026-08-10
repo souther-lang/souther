@@ -201,9 +201,6 @@ public final class Main {
     private static int compileSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
-        if (args == null) {
-            return 2;
-        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         Path outDir = Path.of(".");
@@ -212,35 +209,22 @@ public final class Main {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--adequacy" -> {
-                    if (++i >= args.length || adequacyLevel(args[i]) == null) {
+                    if (adequacyLevel(args[++i]) == null) {
                         System.err.println("`--adequacy` takes off, witness or all");
                         return 2;
                     }
                     measure = Adequacy.Asked.warningsAt(adequacyLevel(args[i]));
                 }
                 case "--warnings" -> {
-                    if (++i >= args.length
-                            || !(args[i].equals("report") || args[i].equals("error"))) {
+                    if (!(args[++i].equals("report") || args[i].equals("error"))) {
                         System.err.println("`--warnings` takes report or error");
                         return 2;
                     }
                     refuseWarnings = args[i].equals("error");
                 }
-                case "-d" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`-d` needs an output directory");
-                        System.err.println(USAGE);
-                        return 2;
-                    }
-                    outDir = Path.of(args[i]);
-                }
+                case "-d" -> outDir = Path.of(args[++i]);
                 case "-cp", "--class-path" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`" + args[i - 1] + "` needs a class path");
-                        System.err.println(USAGE);
-                        return 2;
-                    }
-                    for (String entry : args[i].split(java.io.File.pathSeparator)) {
+                    for (String entry : args[++i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
                             classPath.add(Path.of(entry));
                         }
@@ -298,9 +282,6 @@ public final class Main {
     private static int examplesSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
-        if (args == null) {
-            return 2;
-        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         String module = null;
@@ -314,31 +295,14 @@ public final class Main {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-cp", "--class-path" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`" + args[i - 1] + "` needs a class path");
-                        System.err.println(USAGE);
-                        return 2;
-                    }
-                    for (String entry : args[i].split(java.io.File.pathSeparator)) {
+                    for (String entry : args[++i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
                             classPath.add(Path.of(entry));
                         }
                     }
                 }
-                case "--module" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`--module` needs a module name");
-                        return 2;
-                    }
-                    module = Reserved.name(args[i]);   // a name from outside
-                }
-                case "--behavior" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`--behavior` needs a behavior name");
-                        return 2;
-                    }
-                    behavior = Reserved.name(args[i]);   // a name from outside
-                }
+                case "--module" -> module = Reserved.name(args[++i]);   // a name from outside
+                case "--behavior" -> behavior = Reserved.name(args[++i]);   // a name from outside
                 case "--generate" -> generate = true;
                 case "--boundaries" -> boundaries = true;
                 case "--strict" -> strict = true;
@@ -535,9 +499,6 @@ public final class Main {
     private static int runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
-        if (args == null) {
-            return 2;
-        }
         Path source = firstSource(args);
         List<Path> sources = source == null ? List.of() : List.of(source);
         List<Located> warnings = new ArrayList<>();
@@ -762,25 +723,20 @@ public final class Main {
             };
         }
 
-        /** The arguments with these flags taken out, or {@code null} where one of them was written
-         *  without its value — which the caller answers as a usage error. */
+        /**
+         * The arguments with these flags taken out.
+         *
+         * <p>Each of them has its value where this reads one: an option written without one is
+         * refused before any command is run, against the same table this walk agrees with.
+         */
         String[] extract(String[] args) {
             List<String> kept = new ArrayList<>();
             for (int i = 0; i < args.length; i++) {
                 String option = args[i];
                 switch (option) {
-                    case "--format", "--lang", "--color" -> {
-                        if (++i >= args.length) {
-                            System.err.println("`" + option + "` needs a value");
-                            System.err.println(USAGE);
-                            return null;
-                        }
-                        switch (option) {
-                            case "--format" -> format = args[i];
-                            case "--lang" -> lang = args[i];
-                            default -> color = args[i];
-                        }
-                    }
+                    case "--format" -> format = args[++i];
+                    case "--lang" -> lang = args[++i];
+                    case "--color" -> color = args[++i];
                     default -> kept.add(option);
                 }
             }

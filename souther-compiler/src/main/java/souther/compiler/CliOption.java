@@ -172,9 +172,17 @@ enum CliOption {
             if (option.value == Value.TAKEN) {
                 // Whatever follows is this option's value, option-shaped or not: `--module
                 // --generate` names a module, which is what the command's own parser reads it as.
-                // A value that is not there at all is the command's to report, since what it says
-                // when one is missing is written per option.
-                if (++i < args.length && option == LANG) {
+                if (++i >= args.length) {
+                    // And an option written last has no value at all. Answered here rather than
+                    // where each one is read: `--limit` is read inside a loop that skipped it when
+                    // nothing followed, so `doc --search newtype --limit` searched under the
+                    // default and said nothing — the same silence as an option nobody reads.
+                    if (token == null) {
+                        token = new Refusal("cli.option.value", word);
+                    }
+                    break;
+                }
+                if (option == LANG) {
                     lang = args[i];   // the last one written, which is the one the parsers read
                 }
             }
@@ -199,6 +207,12 @@ enum CliOption {
             }
         }
         return null;
+    }
+
+    /** Whether the token after this one is read as its value. */
+    static boolean takesValue(String spelling) {
+        CliOption option = BY_SPELLING.get(spelling);
+        return option != null && option.value == Value.TAKEN;
     }
 
     /** What the option needs written beside it, or null where it stands on its own. */

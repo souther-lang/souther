@@ -8,6 +8,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,7 +17,12 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An option a command line writes is one the run reads, or the line is refused.
+ * An option the run does not read is not passed over in silence.
+ *
+ * <p>Not that every option written is read — {@code api Option --source String} answers about
+ * {@code Option} and drops the option, and says which of the two it read rather than refusing the
+ * line. What holds of all of them is the weaker sentence: the line is refused, or the run says what
+ * it did not use. What no line gets is the answer it would have got with the option left out.
  *
  * <p>{@code --boundaries} on its own was accepted and answered with the report it would have printed
  * anyway. The flag is read at one place, inside the branch {@code --generate} opens, so a line that
@@ -31,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code api Option --nope} ran as though it were not there and {@code api --search fold --limit 1}
  * printed every hit.
  */
-class AnOptionThatIsWrittenIsOneTheRunReadsTest {
+class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
 
     @TempDir
     Path dir;
@@ -135,19 +141,113 @@ class AnOptionThatIsWrittenIsOneTheRunReadsTest {
     }
 
     /**
-     * Counted in hits, and asked of a term the specification says a great many times. A hit is
-     * several lines — the section and the context under it — so counting lines measures how much
-     * each hit had to say rather than how many were shown, and a term with two hits answers the
-     * same text under either limit. That is how this passed here and failed on CI.
+     * What the option promises, which is that two is how many are shown — not that the answer got
+     * shorter, and not how many the specification happens to say the term.
+     *
+     * <p>Counted in hits. A hit is several lines, the section and the context quoted under it, so
+     * counting lines measures how much each one had to say; two hits under either limit print the
+     * same text and the comparison holds with the option never read. That is how this passed here
+     * and failed on CI. The control says when the question is empty.
      */
     @Test
-    void limitWithSearchIsTheLineThatWasMeant() {
+    void limitWithSearchShowsThatManyHits() {
         Said said = run("doc", "--search", "type", "--limit", "2");
         Said all = run("doc", "--search", "type", "--limit", "0");
 
         assertEquals(0, said.code(), said.err());
         assertTrue(hits(all) > 2, "a term with no more hits than the limit measures nothing: " + all.out());
-        assertTrue(hits(said) < hits(all), said.out() + " against " + all.out());
+        assertEquals(2, hits(said), said.out());
+    }
+
+    /**
+     * The value that is not there. `--limit` is read inside a loop that skipped it when nothing
+     * followed, so this searched under the default and answered as though the option had not been
+     * written — the defect this class is about, one option over.
+     */
+    @Test
+    void anOptionWrittenWithoutItsValueIsRefused() {
+        Said said = run("doc", "--search", "newtype", "--limit");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--limit`"), said.err());
+        assertEquals("", said.out(), said.out());
+    }
+
+    /**
+     * Which options take a value is written twice: in the table, where the walk above the dispatch
+     * decides whether the token after an option is its value or the next argument, and in the parser
+     * that reads it. Nothing makes the two agree, and a disagreement is not a compile error — a
+     * parser reading a value the table calls a flag takes the argument after it, and one the table
+     * calls valued has its value read as an argument.
+     *
+     * <p>Asked by writing each option the way the table says it is written, with a source file after
+     * it, and looking at what became of the file. The observation does not go through the table: a
+     * parser that swallowed the file says it was given none, and one that read the value as a second
+     * file says it could not open it. Both are what a disagreement produces, in either direction.
+     *
+     * <p>Over the commands whose subject is a file. {@code doc}, {@code api} and {@code japi} read
+     * their arguments by position rather than in a loop, so {@code --search}, {@code --limit} and
+     * {@code --source} are outside this and are held by the cases written out above.
+     */
+    @Test
+    void theTableAndTheParsersAgreeOnWhichOptionsTakeAValue() throws Exception {
+        Path out = dir.resolve("out");
+        Path empty = Files.createDirectories(dir.resolve("empty"));
+        Path formatted = canonical();
+        for (String option : Main.knownOptions()) {
+            String owner = Main.optionOwners(option).split("/")[0];
+            if (!List.of("compile", "examples", "fmt").contains(owner)) {
+                continue;
+            }
+            String value = valueFor(option, empty, out);
+            assertEquals(CliOption.takesValue(option), value != null,
+                    option + ": this test has no value to write for an option that takes one");
+
+            List<String> line = new ArrayList<>(List.of(owner));
+            if (owner.equals("compile")) {
+                line.addAll(List.of("-d", out.toString()));
+            }
+            if (option.equals("--boundaries")) {
+                line.add("--generate");   // which it is only read with
+            }
+            line.add(option);
+            if (value != null) {
+                line.add(value);
+            }
+            line.add(formatted.toString());
+
+            Said said = run(line.toArray(String[]::new));
+
+            assertFalse(said.err().contains("at least one .sou file"),
+                    line + ": the file was read as this option's value: " + said.err());
+            assertFalse(said.err().contains("io error"),
+                    line + ": this option's value was read as a file: " + said.err());
+            assertFalse(said.err().contains("unknown option"), line + ": " + said.err());
+        }
+    }
+
+    /** What to write after the option, or null where the table says it takes nothing. */
+    private String valueFor(String option, Path empty, Path out) {
+        return switch (option) {
+            case "--format" -> "human";
+            case "--lang" -> "en";
+            case "--color" -> "never";
+            case "--adequacy" -> "off";
+            case "--warnings" -> "report";
+            case "--module" -> "example.timesheet";
+            case "--behavior" -> "classify";
+            case "-cp", "--class-path" -> empty.toString();
+            case "-d" -> out.toString();
+            default -> null;
+        };
+    }
+
+    /** The model in the form `fmt --check` accepts, so that probing `--check` says nothing about
+     *  how the file happened to be written here. */
+    private Path canonical() throws Exception {
+        Path file = model();
+        assertEquals(0, run("fmt", "-w", file.toString()).code());
+        return file;
     }
 
     /** What the search answered, without the lines quoted under each one or the count of the rest. */
@@ -174,7 +274,10 @@ class AnOptionThatIsWrittenIsOneTheRunReadsTest {
                 continue;
             }
             String owner = Main.optionOwners(option).split("/")[0];
-            Said said = run(owner, option);
+            // With its value, so that what this reads is the option it is missing and not the value
+            // it is missing — an option written last is refused for that first.
+            Said said = CliOption.takesValue(option)
+                    ? run(owner, option, "1") : run(owner, option);
 
             assertEquals(2, said.code(), option + ": " + said.err());
             assertTrue(said.err().contains("`" + needed + "`"),
