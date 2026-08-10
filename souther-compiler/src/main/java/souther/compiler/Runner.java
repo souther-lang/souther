@@ -157,9 +157,6 @@ public final class Runner {
                     classPath.addAll(entriesOf(value(args, ++i, option)));
                 }
                 default -> {
-                    if (args[i].startsWith("--")) {
-                        throw usage("run.usage.unknownoption", "unknown option `" + args[i] + "`", args[i]);
-                    }
                     if (file != null) {
                         throw usage("run.usage.singlefile", "run takes a single .sou file");
                     }

@@ -33,6 +33,16 @@ public final class ApiCommand {
             listPublished(out, null);
             return 0;
         }
+        // Which of the things this line asked for is the one being answered. The forms below read
+        // the front of the line and nothing after it, so `api Option --source String` answered about
+        // `Option` and dropped an option of its own without a word — a listing a reader has no way
+        // to tell from the one they asked for. What `souther doc` already says, said here too.
+        int reads = args[0].equals("--source") || args[0].equals("--search") ? 2 : 1;
+        if (args.length > reads) {
+            err.println("`souther api` reads one at a time; asked for "
+                    + String.join(", ", List.of(args)) + " — reading `"
+                    + String.join(" ", List.of(args).subList(0, reads)) + "`");
+        }
         if (args[0].equals("--source")) {
             if (args.length < 2) {
                 err.println("usage: souther api --source <Module>");
