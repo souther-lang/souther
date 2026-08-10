@@ -502,10 +502,10 @@ The full formal grammar (BNF) is deferred (<<future-work>>).
 ----
 module   import    exposing
 data     invariant
-behavior constructs depends on
+behavior constructs depends
 match    with      as
 let      if        then     else
-guard
+guard    unreachable
 true     false
 ----
 
