@@ -125,8 +125,13 @@ final class Witnesses {
     }
 
     /**
-     * Values of {@code carrier} holding at least {@code least} of whatever counts it, or none where
-     * this can build none.
+     * What to put to the decoder at a position a rule gives a floor of {@code least}, or nothing where
+     * this can build nothing.
+     *
+     * <p>Proposals and not witnesses, which is the whole of the difference from {@link #ofSize}. What
+     * comes back holds the floor where the type has that much to give and falls short of it where the
+     * type does not, and either way it is the decoder that answers — so a caller reading this as
+     * "values of at least {@code least}" is reading a promise nothing here makes.
      *
      * <p>The minimum itself and not one element. Recognising {@code >= 3} and then offering a list of
      * one would refuse the row for the reason the empty list was refused, having read the rule and not
