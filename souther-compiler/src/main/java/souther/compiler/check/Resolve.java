@@ -647,7 +647,8 @@ public final class Resolve {
             case Ast.IfConstructed ic -> {
                 Answered a = bind(bound, ic.binder());
                 yield new Ast.IfConstructed(expr(ic.construct(), bound), a.binder(),
-                        expr(ic.then(), a.bound()), arms(ic.els(), bound), ic.pos(), ic.region());
+                        expr(ic.then(), a.bound()), arms(ic.els(), bound), ic.origin(), ic.pos(),
+                        ic.region());
             }
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
@@ -658,7 +659,7 @@ public final class Resolve {
                             a == null ? null : a.binder(), expr(c.body(), inArm),
                             c.unwrapAsserts() == null ? null : names(c.unwrapAsserts()), c.pos()));
                 }
-                yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.pos(), m.region());
+                yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.origin(), m.pos(), m.region());
             }
             default -> Ast.mapChildren(e, x -> expr(x, bound), s -> name(s, bound));
         };

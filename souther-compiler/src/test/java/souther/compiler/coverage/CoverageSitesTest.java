@@ -361,8 +361,8 @@ class CoverageSitesTest {
         assertEquals(2, arms.length);
         assertEquals("case UnderThirty", plan.site(arms[0]).label());
 
-        Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.type(),
-                match.pos());
+        Core.Match copy = new Core.Match(match.scrutinee(), match.cases(), match.origin(),
+                match.type(), match.pos());
         assertEquals(match, copy, "an equal node is easy to make");
         assertNull(plan.probesOf(copy),
                 "and it is not this one: a value-keyed plan would hand the emitter another arm's probe");

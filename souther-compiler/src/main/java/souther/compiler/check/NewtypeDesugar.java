@@ -106,7 +106,8 @@ public final class NewtypeDesugar {
             case Ast.ListLit lit -> new Ast.ListLit(mapExprs(lit.elements(), symbols), lit.pos(),
                     lit.region());
             case Ast.ListComp comp ->
-                    new Ast.ListComp(go(comp.element(), symbols), mapExprs(comp.guards(), symbols), comp.pos(),
+                    new Ast.ListComp(go(comp.element(), symbols), mapExprs(comp.guards(), symbols),
+                            comp.origin(), comp.pos(),
                             comp.region());
             case Ast.LetIn li ->
                     new Ast.LetIn(li.binder(), go(li.value(), symbols), li.declaredType(), li.annotated(), li.opens(),
@@ -124,11 +125,11 @@ public final class NewtypeDesugar {
             }
             case Ast.If iff ->
                     new Ast.If(go(iff.cond(), symbols), go(iff.then(), symbols), go(iff.els(), symbols),
-                            iff.pos(), iff.region());
+                            iff.origin(), iff.pos(), iff.region());
             // the attempted construction is written `T(v)` too, so it is a Call until this rewrites it
             case Ast.IfConstructed ic ->
                     new Ast.IfConstructed(go(ic.construct(), symbols), ic.binder(),
-                            go(ic.then(), symbols), arms(ic.els(), symbols), ic.pos(),
+                            go(ic.then(), symbols), arms(ic.els(), symbols), ic.origin(), ic.pos(),
                             ic.region());
             case Ast.Block b -> new Ast.Block(b.params(), go(b.body(), symbols), b.pos(), b.region());
             case Ast.Tuple tup -> new Ast.Tuple(mapExprs(tup.elements(), symbols), tup.pos(),
@@ -141,7 +142,8 @@ public final class NewtypeDesugar {
                     cases.add(new Ast.Case(c.caseTypes(), c.binding(), go(c.body(), symbols),
                             c.unwrapAsserts(), c.pos()));
                 }
-                yield new Ast.Match(go(mt.scrutinee(), symbols), cases, mt.pos(), mt.region());
+                yield new Ast.Match(go(mt.scrutinee(), symbols), cases, mt.origin(), mt.pos(),
+                        mt.region());
             }
             default -> e;   // literals, Var — no child expressions to rewrite
         };

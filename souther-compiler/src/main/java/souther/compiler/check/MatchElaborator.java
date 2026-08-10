@@ -123,7 +123,7 @@ public final class MatchElaborator {
         if (branchType == null) {
             throw CompileException.of(Diagnostic.at(m.pos(), 5).say(new MatchMessage.ThisMatchHasNoCases()).build());
         }
-        return new Core.Match(scrutineeCore, arms, branchType, m.pos());
+        return new Core.Match(scrutineeCore, arms, m.origin(), branchType, m.pos());
     }
 
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
@@ -171,7 +171,7 @@ public final class MatchElaborator {
         if (!missing.isEmpty()) {
             throw nonExhaustive(m.pos(), "Option", missing);
         }
-        return new Core.Match(scrutineeCore, arms, branchType, m.pos());
+        return new Core.Match(scrutineeCore, arms, m.origin(), branchType, m.pos());
     }
 
     /** What each arm name denotes — what a {@code Core} arm dispatches on. */

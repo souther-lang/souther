@@ -1,6 +1,7 @@
 package souther.compiler.core;
 
 import souther.compiler.types.BindingId;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -202,7 +203,10 @@ public sealed interface Core {
      */
     record Apply(Read fn, List<Core> args, Type type, SourcePos pos) implements Core {}
 
-    record If(Core cond, Core then, Core els, Type type, SourcePos pos) implements Core {}
+    /** {@code origin} is the fork the source wrote this as, carried from the AST so that the copies
+     * an expansion made of one fork are one coverage obligation ({@link CoverageOrigin}). */
+    record If(Core cond, Core then, Core els, CoverageOrigin origin, Type type, SourcePos pos)
+            implements Core {}
 
     /**
      * An attempted construction: {@code construct}'s invariant decides the branch. It is built and
@@ -216,7 +220,7 @@ public sealed interface Core {
      * clause is answered, so one always matches.
      */
     record IfConstructed(NewData construct, Ast.Binder binder, Core then, List<ElseArm> els,
-                         Type type, SourcePos pos) implements Core {}
+                         CoverageOrigin origin, Type type, SourcePos pos) implements Core {}
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
      * for any failure) and the value taken. */
@@ -286,7 +290,8 @@ public sealed interface Core {
         }
     }
 
-    record Match(Core scrutinee, List<Case> cases, Type type, SourcePos pos) implements Core {}
+    record Match(Core scrutinee, List<Case> cases, CoverageOrigin origin, Type type, SourcePos pos)
+            implements Core {}
 
     /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
      * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
@@ -362,7 +367,7 @@ public sealed interface Core {
                 Core then = atExpr.apply(iff.then());
                 Core els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
-                        : new If(cond, then, els, iff.type(), iff.pos());
+                        : new If(cond, then, els, iff.origin(), iff.type(), iff.pos());
             }
             case IfConstructed ic -> {
                 NewData construct = atConstruction.apply(ic.construct());
@@ -372,7 +377,8 @@ public sealed interface Core {
                     return body == arm.body() ? arm : new ElseArm(arm.clause(), body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
-                        : new IfConstructed(construct, ic.binder(), then, els, ic.type(), ic.pos());
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(), ic.type(),
+                                ic.pos());
             }
             case LetIn li -> {
                 Core value = atExpr.apply(li.value());
@@ -411,7 +417,7 @@ public sealed interface Core {
                             : new Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos());
                 });
                 yield scrutinee == m.scrutinee() && cases == m.cases() ? m
-                        : new Match(scrutinee, cases, m.type(), m.pos());
+                        : new Match(scrutinee, cases, m.origin(), m.type(), m.pos());
             }
         };
     }
