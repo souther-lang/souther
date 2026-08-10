@@ -1217,10 +1217,16 @@ public final class Generator {
     /** A boundary value written the way the position takes it: bare where the position is a number,
      * wrapped where it is a newtype over one. */
     private static FixtureTemplate valueOf(ObservedValue value, Type type, Symbols symbols) {
-        // A date is written as one, and a newtype over a date wraps that. The day it counts to is
-        // what the ranges hold and never what a row carries.
-        if (value instanceof ObservedValue.Temporal date && Dates.dayOf(date.iso()) != null) {
-            return Witnesses.wrapped(type, FixtureTemplate.date(date.iso()), symbols);
+        // A temporal is written as one, and a newtype over it wraps that. The count it is carried as
+        // inside the ranges is never what a row carries — and a temporal this cannot read is not a
+        // number either, so it is refused here rather than written as its count, which the decoder
+        // would turn down with nothing said about why.
+        if (value instanceof ObservedValue.Temporal at) {
+            if (Dates.dayOf(at.iso()) != null) {
+                return Witnesses.wrapped(type, FixtureTemplate.date(at.iso()), symbols);
+            }
+            return DateTimes.secondOf(at.iso()) == null ? null
+                    : Witnesses.wrapped(type, FixtureTemplate.dateTime(at.iso()), symbols);
         }
         BigDecimal number = numberOf(value);
         if (number == null) {

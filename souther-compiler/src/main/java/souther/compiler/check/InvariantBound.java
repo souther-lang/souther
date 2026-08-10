@@ -2,11 +2,13 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Where one conjunct of a numeric newtype's invariant leaves its value able to stop.
@@ -37,6 +39,25 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (base != Type.INT && base != Type.DECIMAL) {
             return Optional.empty();
         }
+        return of(clause, base == Type.INT ? Granularity.DISCRETE : Granularity.DENSE,
+                base == Type.INT ? InvariantBound::wholeLiteral : InvariantBound::literalOf);
+    }
+
+    /**
+     * The same, told how to read the value this clause bounds and how its values are spaced.
+     *
+     * <p>Which values a literal may name is a fact about what carries them and not about this
+     * reading, so it is handed in. A caller that draws lines on a date passes the reader that knows
+     * one; the shape of the clause, which side of it the value is on, and where a strict comparison
+     * leaves the end are the same questions whatever the values are, and were being answered twice
+     * because the reader was welded to the numbers.
+     *
+     * @param spacing   whether the values have a smallest step, which decides where a strict bound
+     *                  leaves an end
+     * @param literalOf the number a bound is written as, or null where the expression names none
+     */
+    public static Optional<InvariantBound> of(Ast.Expr clause, Granularity spacing,
+                                              Function<Ast.Expr, BigDecimal> literalOf) {
         if (!(clause instanceof Ast.Binary bin)) {
             return Optional.empty();
         }
@@ -53,11 +74,11 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!isValue(left)) {
             return Optional.empty();
         }
-        BigDecimal bound = literal(right);
-        if (bound == null || (base == Type.INT && bound.stripTrailingZeros().scale() > 0)) {
+        BigDecimal bound = literalOf.apply(right);
+        if (bound == null) {
             return Optional.empty();
         }
-        return ordered(op, bound, base == Type.INT);
+        return ordered(op, bound, spacing == Granularity.DISCRETE);
     }
 
     /**
@@ -84,11 +105,45 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!takesSizeOfValue(left, measure)) {
             return Optional.empty();
         }
-        BigDecimal bound = literal(right);
-        if (bound == null || bound.stripTrailingZeros().scale() > 0) {
+        BigDecimal bound = wholeLiteral(right);
+        if (bound == null) {
             return Optional.empty();
         }
         return ordered(op, bound, true);
+    }
+
+    /**
+     * Whether {@code clause} says where the value stops, however this reading turned out.
+     *
+     * <p>Two questions, and only the second was being asked. Whether a bound was read is
+     * {@link #of}'s; whether the model states one at all is this, and a caller with only the first
+     * answer reports "the model bounds this position no way" about a declaration two lines above it.
+     * A rule of another shape — a format, a quantifier over what the value holds — is not one of
+     * these: it says which values exist and not where they stop, and naming it as a line nothing read
+     * would send an author after a boundary nobody wrote.
+     *
+     * <p>An equality is not one either. It names a value rather than an end, is not read by
+     * {@link #of}, and a report has nowhere to put one — so saying it went unread would state an
+     * obligation that does not exist yet.
+     *
+     * @param measure the operation the number is taken by, or null where the number is the value
+     *                itself
+     */
+    public static boolean statesAnEnd(Ast.Expr clause, ValueName measure) {
+        if (!(clause instanceof Ast.Binary bin) || !orders(bin.op())) {
+            return false;
+        }
+        return measure == null
+                ? isValue(bin.left()) || isValue(bin.right())
+                : takesSizeOfValue(bin.left(), measure) || takesSizeOfValue(bin.right(), measure);
+    }
+
+    /** Whether an operator says where values stop rather than which one a value is. */
+    private static boolean orders(Ast.BinOp op) {
+        return switch (op) {
+            case LT, LE, GT, GE -> true;
+            case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
     }
 
     /** One end, from the comparison and whether the values step. */
@@ -137,13 +192,20 @@ public record InvariantBound(boolean lower, Endpoint end) {
         };
     }
 
+    /** A whole number a literal names, or null where it names one with a fraction: a value that
+     *  steps one at a time is not bounded at a place between two of its values. */
+    public static BigDecimal wholeLiteral(Ast.Expr e) {
+        BigDecimal read = literalOf(e);
+        return read == null || read.stripTrailingZeros().scale() > 0 ? null : read;
+    }
+
     /** A numeric literal, negation included. A bare integer counts against a decimal, since a literal
      * takes the other side's type. */
-    private static BigDecimal literal(Ast.Expr e) {
+    public static BigDecimal literalOf(Ast.Expr e) {
         return switch (e) {
             case Ast.IntLit lit -> BigDecimal.valueOf(lit.value());
             case Ast.DecimalLit lit -> normalized(lit.value());
-            case Ast.Neg neg -> negated(literal(neg.operand()));
+            case Ast.Neg neg -> negated(literalOf(neg.operand()));
             case null, default -> null;
         };
     }

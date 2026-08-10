@@ -105,25 +105,39 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     }
 
     /**
-     * And a comparison on a carrier whose step is not settled, which a date-time is.
+     * And a comparison on a carrier there is no count to embed into, which a string is.
      *
-     * <p>A date counts days and is read. A date-time carries a finer step whose size is a decision
-     * nobody has taken, and one carrier cannot be both — so the line is left unread, and said as
-     * that rather than as a position the model divides no way.
+     * <p>A string is ordered — the comparison typechecks and the branch is real — and nothing here
+     * draws a line on one. So it is left unread, and said as that rather than as a position the
+     * model divides no way.
      */
     @Test
-    void aLineDrawnOnADateTimeIsNamedToo() {
-        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("at"),
+    void aLineDrawnOnAStringIsNamedToo() {
+        assertEquals(List.of(new UnreadRule(TermPath.of("at"),
                         UndividedPosition.Reason.UNSUPPORTED_DOMAIN)),
-                read("at: DateTime", "at < DateTime(\"2026-01-01T00:00:00\")").unread());
+                read("at: String", "at < \"2026-01\"").unread());
+    }
+
+    /**
+     * A date-time is read, which a date already was.
+     *
+     * <p>Two temporal types differing only in resolution answered differently, and what the
+     * unsettled step decides is the value beside a line rather than whether there is one.
+     */
+    @Test
+    void aLineDrawnOnADateTimeIsRead() {
+        GuardThresholds.Guards guards =
+                read("at: DateTime", "at < DateTime(\"2026-01-01T00:00:00\")");
+
+        assertEquals(List.of(), guards.unread());
+        assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
     /** One position said once, however many comparisons in the body name it. */
     @Test
     void aPositionIsNamedOnceRatherThanPerComparison() {
-        assertEquals(1, read("at: DateTime",
-                "at < DateTime(\"2026-01-01T00:00:00\")"
-                        + " || at > DateTime(\"2020-01-01T00:00:00\")").unread().size());
+        assertEquals(1, read("at: String",
+                "at < \"2026-01\" || at > \"2020-01\"").unread().size());
     }
 
     /**
@@ -137,7 +151,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aPositionNamedInsideAnExpressionIsStillNoticed() {
-        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
                         UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
                 read("p: Pair", "p.x + 1 < 10").unread());
     }
@@ -152,9 +166,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void twoPositionsComparedWithEachOtherSayWhichLimitThatIs() {
         assertEquals(List.of(
-                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+                        new UnreadRule(TermPath.of("p").then("x"),
                                 UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
-                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("y"),
+                        new UnreadRule(TermPath.of("p").then("y"),
                                 UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
                 read("p: Pair", "p.x < p.y").unread());
     }
@@ -172,7 +186,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         GuardThresholds.Guards guards = read("p: Pair", "p.x <= 5 && p.x + 1 < 10");
 
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
-        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
                         UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
                 guards.unread());
     }
@@ -187,9 +201,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void aRelationWithArithmeticOnOneSideIsStillARelation() {
         assertEquals(List.of(
-                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+                        new UnreadRule(TermPath.of("p").then("x"),
                                 UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
-                        new GuardThresholds.Guards.Unread(TermPath.of("p").then("y"),
+                        new UnreadRule(TermPath.of("p").then("y"),
                                 UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
                 read("p: Pair", "p.x < p.y + 1").unread());
     }
@@ -204,7 +218,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
-        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+        assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
                         UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
                 read("p: Pair", "p.x < 1 + 2").unread());
     }

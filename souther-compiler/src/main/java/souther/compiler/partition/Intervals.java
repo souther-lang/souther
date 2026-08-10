@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -122,18 +121,21 @@ final class Intervals {
      */
     static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
                                           Symbols symbols) {
-        boolean decimal = of.decimal(type, symbols);
         // What the numbers in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
-        Partitions.Carrier carrier = Partitions.carrierOf(of, type, symbols);
+        Carrier carrier = Carrier.of(of, type, symbols);
         java.util.function.Function<BigDecimal, String> written =
-                carrier == Partitions.Carrier.DATE ? Dates::written : BigDecimal::toPlainString;
+                switch (carrier) {
+                    case WHOLE, DENSE -> BigDecimal::toPlainString;
+                    case DATE -> Dates::written;
+                    case MOMENT -> DateTimes::written;
+                };
         souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
                 && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
             String id = of + "/" + range.label(written);
-            BigDecimal inside = representative(range, decimal);
+            BigDecimal inside = representative(range, carrier);
             Classifier is = v -> switch (of.read(v)) {
                 case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
                 case NumericTerm.Reading.Missing missing ->
@@ -142,7 +144,7 @@ final class Intervals {
             };
             if (inside == null) {
                 classes.add(PartitionClass.ungeneratable(id, range.label(written), is,
-                        "no value of this range can be written without a smallest step"));
+                        "no value this position can hold lies inside this range"));
                 continue;
             }
             List<FixtureTemplate> values = standingIn(of, inside, type, wrapper, carrier, symbols);
@@ -159,13 +161,30 @@ final class Intervals {
         return of instanceof NumericTerm.SizeOf size ? size.measure().qualified() : "value";
     }
 
-    /** A value inside a range, or null where it holds none. Asked of the ends, which is where whether
-     * the range holds the value it stops at is written down. */
-    private static BigDecimal representative(Interval range, boolean decimal) {
-        return Endpoint.valueBetween(
+    /**
+     * A value inside a range, or null where it holds none. Asked of the ends, which is where whether
+     * the range holds the value it stops at is written down.
+     *
+     * <p>How the values step is the carrier's to say and is asked of it. Carried as "is it a decimal"
+     * it was a second spelling of the same fact, and a carrier that is dense without being the
+     * decimal — a date-time — answered no to it: the range between two moments a nanosecond apart
+     * came back as one holding no value, which is what a whole step would leave and not what the
+     * values do.
+     */
+    private static BigDecimal representative(Interval range, Carrier carrier) {
+        BigDecimal between = Endpoint.valueBetween(
                 range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
                 range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
-                decimal ? Granularity.DENSE : Granularity.DISCRETE);
+                carrier.spacing());
+        if (between == null) {
+            return null;
+        }
+        // What the carrier can hold, and then whether the range still holds it. Spacing answers what
+        // a strict bound may be sharpened onto and is not a promise that every number between two
+        // values is one — asking it for both is how a class open at both ends came to offer the
+        // value at one of its ends.
+        BigDecimal held = carrier.onTheGrid(between);
+        return held != null && range.holds(held) ? held : null;
     }
 
     /**
@@ -179,7 +198,7 @@ final class Intervals {
      */
     private static List<FixtureTemplate> standingIn(NumericTerm of, BigDecimal inside, Type type,
                                                     souther.compiler.types.TypeName wrapper,
-                                                    Partitions.Carrier carrier, Symbols symbols) {
+                                                    Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
             return List.of(written(inside, wrapper, carrier));
         }
@@ -196,11 +215,12 @@ final class Intervals {
     }
 
     private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,
-                                           Partitions.Carrier carrier) {
+                                           Carrier carrier) {
         FixtureTemplate literal = switch (carrier) {
             case DENSE -> FixtureTemplate.decimal(value);
             case WHOLE -> FixtureTemplate.integer(value.longValueExact());
             case DATE -> FixtureTemplate.date(Dates.written(value));
+            case MOMENT -> FixtureTemplate.dateTime(DateTimes.written(value));
         };
         return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
     }

@@ -33,7 +33,7 @@ import java.util.Set;
 public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
-                                List<souther.compiler.partition.GuardThresholds.Guards.Unread> unread,
+                                List<souther.compiler.partition.UnreadRule> unread,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
 

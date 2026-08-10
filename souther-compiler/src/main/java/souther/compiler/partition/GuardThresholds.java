@@ -55,7 +55,7 @@ public final class GuardThresholds {
      * say and cannot be made to say (see {@link GuardEdge}).
      */
     public record Guards(List<Threshold> thresholds, List<GuardEdge> edges,
-                         List<Unread> unread, List<Singled> singled) {
+                         List<UnreadRule> unread, List<Singled> singled) {
 
         public static final Guards NONE =
                 new Guards(List.of(), List.of(), List.of(), List.of());
@@ -69,9 +69,6 @@ public final class GuardThresholds {
          * a partition the model never drew.
          */
         public record Singled(NumericTerm term, BigDecimal value, OriginRef.GuardOrigin origin) {}
-
-        /** A position a comparison names that this did not turn into a line, and what stopped it. */
-        public record Unread(TermPath at, UndividedPosition.Reason why) {}
 
         public Guards {
             thresholds = List.copyOf(thresholds);
@@ -88,7 +85,7 @@ public final class GuardThresholds {
                             List<String> parameters, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<GuardEdge> edges = new ArrayList<>();
-        List<Guards.Unread> unread = new ArrayList<>();
+        List<UnreadRule> unread = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
         walk(behavior, body, plan, parameters, symbols, found, edges, unread, singled);
         return new Guards(found, edges, unread, singled);
@@ -96,7 +93,7 @@ public final class GuardThresholds {
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              List<String> parameters, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges, List<Guards.Unread> unread,
+                             List<GuardEdge> edges, List<UnreadRule> unread,
                              List<Guards.Singled> singled) {
         if (e instanceof Core.If iff) {
             List<Core> read = read(behavior, iff, plan, parameters, symbols, out, edges, singled);
@@ -105,7 +102,7 @@ public final class GuardThresholds {
             // and a line read at it says nothing about the rest: kept per position, a threshold on
             // `x` swallowed the comparison beside it that nothing could read, which is "a result
             // exists, so the reading is complete".
-            for (Guards.Unread compared : comparedIn(iff.cond(), read, parameters, symbols)) {
+            for (UnreadRule compared : comparedIn(iff.cond(), read, parameters, symbols)) {
                 if (unread.stream().noneMatch(had -> had.equals(compared))) {
                     unread.add(compared);
                 }
@@ -125,15 +122,15 @@ public final class GuardThresholds {
      * question, and this establishes only that the model draws something at this position — which is
      * exactly what {@code not derivable} would otherwise deny.
      */
-    private static List<Guards.Unread> comparedIn(Core e, List<Core> read, List<String> parameters,
-                                                  Symbols symbols) {
-        List<Guards.Unread> out = new ArrayList<>();
+    private static List<UnreadRule> comparedIn(Core e, List<Core> read, List<String> parameters,
+                                               Symbols symbols) {
+        List<UnreadRule> out = new ArrayList<>();
         compared(e, read, parameters, symbols, out);
         return out;
     }
 
     private static void compared(Core e, List<Core> read, List<String> parameters, Symbols symbols,
-                                 List<Guards.Unread> out) {
+                                 List<UnreadRule> out) {
         // By the comparison it is, and not by what it was about: two comparisons at one position are
         // two statements, and this one having been read is no answer about the other.
         if (e instanceof Core.Binary comparison && orders(comparison.op())
@@ -147,7 +144,7 @@ public final class GuardThresholds {
             UndividedPosition.Reason why = why(binary, parameters, symbols);
             for (TermPath each : named) {
                 if (out.stream().noneMatch(had -> had.at().equals(each))) {
-                    out.add(new Guards.Unread(each, why));
+                    out.add(new UnreadRule(each, why));
                 }
             }
         }
@@ -509,10 +506,13 @@ public final class GuardThresholds {
             // A newtype written around a constant is that constant at this location.
             case Core.NewData nd when nd.inits().size() == 1 && nd.spreads().isEmpty() ->
                     constantOf(nd.inits().get(0).value());
-            // A date written the way a model writes one. Read by what the construction answers with
-            // rather than by the name in front of it, so a date reaches this however it is spelled.
+            // A temporal written the way a model writes one. Read by what the construction answers
+            // with rather than by the name in front of it, so one reaches this however it is spelled.
+            // Which count it is on follows the type, as `Carrier` says it does.
             case Core.Call call when call.type() == Type.DATE && call.args().size() == 1
                     && call.args().get(0) instanceof Core.Str iso -> Dates.dayOf(iso.value());
+            case Core.Call call when call.type() == Type.DATETIME && call.args().size() == 1
+                    && call.args().get(0) instanceof Core.Str iso -> DateTimes.secondOf(iso.value());
             case null, default -> null;
         };
     }
@@ -527,10 +527,9 @@ public final class GuardThresholds {
         };
     }
 
-    /** Whether a type is one whose values a threshold can order. */
+    /** Whether a line can be drawn on what this type carries, asked of the one table that says so. */
     static boolean orderable(Type type, Symbols symbols) {
-        Type base = TypeOps.base(type, symbols);
-        return base == Type.INT || base == Type.DECIMAL || base == Type.DATE;
+        return Carrier.ofValue(type, symbols) != null;
     }
 
     private GuardThresholds() {}

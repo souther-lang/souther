@@ -1545,7 +1545,7 @@ public final class Adequacy {
             // classes can still carry a statement nothing read, so this is not filtered by the list
             // above — and the walk stopping short is the one reason that comes from neither.
             List<List<Object>> unread = new ArrayList<>();
-            for (souther.compiler.partition.GuardThresholds.Guards.Unread each : partition.unread()) {
+            for (souther.compiler.partition.UnreadRule each : partition.unread()) {
                 unread.add(List.<Object>of(each.at().toString(), said(each.why())));
             }
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
