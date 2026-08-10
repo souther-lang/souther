@@ -229,7 +229,7 @@ class ExampleCallsHelperTest {
 
                 example record
                   | (Loan { on = asLoanDate(Date("2026-07-30")), due = nextDay(Date("2026-07-30")) })
-                      -> Loan { on = LoanDate("2026-07-30"), due = Date("2026-07-31") }
+                      -> Loan { on = LoanDate(Date("2026-07-30")), due = Date("2026-07-31") }
                 """));
     }
 

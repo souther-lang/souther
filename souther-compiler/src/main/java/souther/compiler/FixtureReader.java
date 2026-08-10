@@ -341,7 +341,11 @@ public final class FixtureReader {
         if (whole != null && isCollection(whole)) {
             return built(expected, whole);
         }
-        return raw(expected);   // a literal expected value
+        // A literal expected value, read at the position it is written in rather than as itself. It
+        // is not decoded — a row may expect what the behavior does not answer with, and that
+        // disagreement is what it reports — but how a value of that type is written is settled by the
+        // position all the same, so a temporal expected as text is refused here as it is anywhere.
+        return raw(expected, whole == null ? null : whole.type());
     }
 
     /**
@@ -642,7 +646,7 @@ public final class FixtureReader {
         return switch (e) {
             case Ast.IntLit i -> i.value();
             case Ast.DecimalLit d -> d.value();
-            case Ast.StringLit s -> s.value();
+            case Ast.StringLit s -> text(s, expected);
             case Ast.BoolLit b -> b.value();
             case Ast.Neg n -> negate(raw(n.operand()));
             case Ast.Binary bin -> fold(bin);
@@ -670,6 +674,47 @@ public final class FixtureReader {
             }
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
+    }
+
+    /**
+     * A written string, which is a {@code String} — and at a position that declares a temporal, is
+     * not one of those.
+     *
+     * <p>A date is written {@code Date("2026-07-25")} and a date-time {@code DateTime("…")}, and the
+     * compiler parses the text where it stands, so a fixture carries a temporal already parsed. The
+     * derived decoders read ISO text as well, because that is how a temporal arrives over JSON and
+     * out of a JDBC row. What a boundary carries a value as is not a second way to write a fixture,
+     * so a fixture reaching one of those decoders is not admitted by what they additionally read.
+     */
+    private Object text(Ast.StringLit s, Type expected) {
+        Type.Prim temporal = temporalUnder(expected);
+        if (temporal != null) {
+            throw new FixtureException("a `" + temporal.shown() + "` is written `"
+                    + temporal.shown() + "(\"" + s.value() + "\")`; a string is how one arrives from"
+                    + " outside, not how a fixture writes it");
+        }
+        return s.value();
+    }
+
+    /** The temporal {@code position} is, through however many newtypes wrap one, or null where it is
+     *  not a temporal at all. A newtype's fixture is its base written as a fixture, so the rule about
+     *  how a temporal is written reaches every position that ends at one. */
+    private Type.Prim temporalUnder(Type position) {
+        Set<TypeName> through = new LinkedHashSet<>();
+        Type at = position;
+        while (true) {
+            if (at instanceof Type.Prim prim) {
+                return prim == Type.Prim.DATE || prim == Type.Prim.DATETIME ? prim : null;
+            }
+            if (!(at instanceof Type.Ref ref) || !through.add(ref.name())) {
+                return null;
+            }
+            Ast.TypeRef base = neutral.newtypeBaseType(ref.name());
+            if (base == null) {
+                return null;
+            }
+            at = neutral.shapeOf(base);
+        }
     }
 
     /**
@@ -966,13 +1011,11 @@ public final class FixtureReader {
         if (c.args().size() != 1) {
             throw new FixtureException("`" + c.written() + "` takes one argument");
         }
-        // a newtype over a temporal (`data 貸出日 = Date`) wraps the parsed value, so its written
-        // string is read here as it would be for a bare `Date("...")`
-        String base = neutral.newtypeBase(c.written());
-        if (("Date".equals(base) || "DateTime".equals(base))
-                && c.args().get(0) instanceof Ast.StringLit lit) {
-            return CallElaborator.parseTemporal(base, lit.value(), c.pos());
-        }
+        // A newtype over a temporal (`data 貸出日 = Date`) wraps a temporal, so what it takes is one:
+        // `貸出日(Date("2026-07-25"))`, which is what a model body writes (a bare string there is
+        // E1317) and what the generator writes for it. There is no reading of the argument here that
+        // this position has and the rest of the language does not.
+        //
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe

@@ -334,12 +334,6 @@ final class NeutralForm {
                 ? base : null;
     }
 
-    /** The type a newtype wraps ({@code Date} for {@code data 貸出日 = Date}), or null. */
-    String newtypeBase(String name) {
-        Ast.TypeRef base = newtypeBaseType(name);
-        return base == null ? null : base.name();
-    }
-
     // --- reading a position's type ----------------------------------------------------------------
 
     /** What a written list holds, when the position says: a list's or a set's element, or a map's
