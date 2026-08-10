@@ -59,9 +59,15 @@ public final class TmLanguageGenerator {
     private static final List<String> QUALIFIERS =
             Prelude.qualifiers().stream().sorted().toList();
 
-    /** The operators, longest first so a prefix (e.g. {@code >}) never masks a longer form ({@code >->}). */
-    private static final List<String> OPERATORS =
-            List.of(">->", "|>", "...", "->", "<-", "++", "==", "/=", "<=", ">=", "&&", "||",
+    /** The operators, longest first so a prefix (e.g. {@code >}) never masks a longer form ({@code >->}).
+     *
+     * <p>This is the editor's own classification and not one the compiler holds: the grammar paints
+     * {@code ...}, {@code =} and {@code ?} as operators where the specification's inventory calls them
+     * delimiters. What is held against the kinds is only that every symbol the language writes is
+     * accounted for — here, or as punctuation the grammar leaves alone — so that a form the language
+     * drops cannot go on being painted. */
+    static final List<String> OPERATORS =
+            List.of(">->", "|>", "...", "->", "++", "==", "/=", "<=", ">=", "&&", "||",
                     "+", "-", "*", "/", "=", "<", ">", "|", "?");
 
     private TmLanguageGenerator() {

@@ -242,7 +242,7 @@ public final class CstLexer {
             }
             case '=' -> take('=') ? SyntaxKind.EQ : SyntaxKind.ASSIGN;
             case '/' -> take('=') ? SyntaxKind.NE : SyntaxKind.SLASH;   // `//` is handled as a comment
-            case '<' -> take('=') ? SyntaxKind.LE : take('-') ? SyntaxKind.LARROW : SyntaxKind.LT;
+            case '<' -> take('=') ? SyntaxKind.LE : SyntaxKind.LT;
             case '>' -> {
                 if (take('=')) {
                     yield SyntaxKind.GE;

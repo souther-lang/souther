@@ -1056,8 +1056,15 @@ public final class Backend {
      * what a compiled module promises. A jar built before this may carry a body this compiler
      * cannot read — a literal that ran past its line — or one whose backslash the older compiler
      * dropped in silence and this one refuses.
+     *
+     * <p>Version 12 widens the same thing rather than narrowing it: {@code <-} is not a token, so a
+     * {@code <} and the negation after it need no space between them and {@code a<-1} is a body this
+     * compiler admits and copies into a jar as written. A reader is held to an equal version and not
+     * merely a lower one, which is what makes the widening matter: an older compiler would take the
+     * module for one it understands and then fail on a body whose {@code <-} its own lexer still
+     * glues into a token no production of its own reads.
      */
-    public static final int BOUNDARY_VERSION = 11;
+    public static final int BOUNDARY_VERSION = 12;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

@@ -44,19 +44,10 @@ class TheSyntaxInventoryCoversWhatTheCompilerReadsTest {
      *  {@code +} would end the passthrough it opened. */
     private static final Pattern WRITTEN = Pattern.compile("`([^`]+)`");
 
-    /**
-     * A token the lexer makes and no production reads, so it is not a form the language has and the
-     * inventory does not list it. When it stops being a token at all the assertion below says so.
-     */
-    private static final String LEXED_BUT_UNREAD = "<-";
-
     @Test
     void everySymbolTheKindsSpellIsInTheInventory() {
-        Set<String> spelled = new TreeSet<>(symbolsTheKindsSpell());
-        assertTrue(spelled.remove(LEXED_BUT_UNREAD),
-                "`" + LEXED_BUT_UNREAD + "` is no longer a kind at all, so the inventory no longer"
-                        + " has to leave it out — drop this exception");
-        assertEquals(spelled, new TreeSet<>(symbolsTheInventoryLists()),
+        assertEquals(new TreeSet<>(symbolsTheKindsSpell()),
+                new TreeSet<>(symbolsTheInventoryLists()),
                 "the inventory and the kinds disagree about the symbols the language has");
     }
 
