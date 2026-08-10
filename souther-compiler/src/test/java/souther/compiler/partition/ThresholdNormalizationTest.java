@@ -31,7 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ThresholdNormalizationTest {
 
-    private record Read(Partitions.Partitioning partitioning, List<Threshold> thresholds) {}
+    /** The symbols are carried because the reading needs them: which carrier a position's values
+     *  are on is read off its declared type, so asking with symbols that cannot resolve it is
+     *  asking a different question from the one the compiler asks. */
+    private record Read(Partitions.Partitioning partitioning, List<Threshold> thresholds,
+                        Symbols symbols) {}
 
     private static Read read(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -52,7 +56,7 @@ class ThresholdNormalizationTest {
                 spec.params().stream().map(Ast.Param::name).toList(), symbols);
         List<Threshold> thresholds = guards.thresholds();
         Partitions.Partitioning base = Partitions.of(spec, sigs.get(behavior), symbols, Exclusions.NONE);
-        return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds);
+        return new Read(Partitions.withThresholds(base, thresholds, symbols), thresholds, symbols);
     }
 
     private static Axis axis(Partitions.Partitioning partitioning, String path) {
@@ -210,7 +214,7 @@ class ThresholdNormalizationTest {
         Read read = read(CEILING, "submit");
         Axis cost = axis(read.partitioning(), "request.cost");
 
-        List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, Symbols.none(),
+        List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, read.symbols(),
                 read.partitioning().domains().get("request.cost"));
         List<String> described = obligations.stream()
                 .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
@@ -247,7 +251,7 @@ class ThresholdNormalizationTest {
         Axis amount = axis(read.partitioning(), "amount");
         assertEquals(List.of("0 <= x < 3000", "3000 <= x"), labels(amount));
 
-        List<String> described = Partitions.obligationsOf(amount, Symbols.none(),
+        List<String> described = Partitions.obligationsOf(amount, read.symbols(),
                 read.partitioning().domains().get(amount.path().toString())).stream()
                 .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
         assertTrue(described.contains("AT 3000"), described.toString());

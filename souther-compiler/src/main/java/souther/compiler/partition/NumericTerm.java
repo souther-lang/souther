@@ -95,22 +95,10 @@ public sealed interface NumericTerm {
         };
     }
 
-    /**
-     * Whether this term's values are decimals, which is a question about the term and only sometimes
-     * about the position: a size is a whole number whatever it is a size of.
-     *
-     * @param positionType what {@link #path()} is declared as
-     */
-    default boolean decimal(Type positionType, Symbols symbols) {
-        return this instanceof ValueOf && TypeOps.base(positionType, symbols) == Type.DECIMAL;
-    }
-
     /** How the values beside a boundary on this term are found. A size steps like an {@code Int}. */
     default BoundaryDomain intervals(Type positionType, Symbols symbols) {
-        if (this instanceof ValueOf && TypeOps.base(positionType, symbols) == Type.DATE) {
-            return BoundaryDomain.DATE;
-        }
-        return decimal(positionType, symbols) ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
+        Carrier carrier = Carrier.of(this, positionType, symbols);
+        return carrier == null ? BoundaryDomain.NONE : carrier.intervals();
     }
 
     /**
@@ -152,9 +140,13 @@ public sealed interface NumericTerm {
         return switch (at) {
             case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
             case ObservedValue.Decimal d -> d.value();
-            // A date counts days, which is the order it is compared in. A date-time is not read: its
-            // step is a separate decision and one carrier cannot be both.
-            case ObservedValue.Temporal t -> Dates.dayOf(t.iso());
+            // Which of the two counts a written temporal is on is decided by its own text, and the
+            // two do not overlap: a date-time carries its time and a date does not, so each reader
+            // declines the other's. What makes that safe is the declared type — a position holding
+            // dates never holds a date-time — so the count here and the count a line was drawn on
+            // are on one carrier without this having to be told which.
+            case ObservedValue.Temporal t -> t.iso() != null && t.iso().indexOf('T') >= 0
+                    ? DateTimes.secondOf(t.iso()) : Dates.dayOf(t.iso());
             case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
             case null, default -> null;
         };

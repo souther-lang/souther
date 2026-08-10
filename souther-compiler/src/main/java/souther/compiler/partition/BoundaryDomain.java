@@ -117,6 +117,41 @@ public interface BoundaryDomain {
         }
     };
 
+    /**
+     * Souther's {@code DateTime}. A neighbour needs a smallest step, and which one a date-time moves
+     * in — a second, a millisecond, a nanosecond — is not something the language says, so there is
+     * none to give. What lies between two of them is a different question and is answered.
+     *
+     * <p>The same shape a {@code Decimal} has, reached for the same reason: a boundary is still
+     * worth a row and the value beside it is reported as not derivable rather than invented.
+     */
+    BoundaryDomain MOMENT = new BoundaryDomain() {
+        @Override
+        public Optional<ObservedValue> successor(ObservedValue value) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<ObservedValue> predecessor(ObservedValue value) {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
+            BigDecimal from = secondOf(low);
+            BigDecimal to = secondOf(high);
+            if (from == null || to == null) {
+                return Optional.empty();
+            }
+            return Optional.of(new ObservedValue.Temporal(DateTimes.written(
+                    from.add(to).divide(BigDecimal.valueOf(2)))));
+        }
+
+        private BigDecimal secondOf(ObservedValue value) {
+            return value instanceof ObservedValue.Temporal t ? DateTimes.secondOf(t.iso()) : null;
+        }
+    };
+
     /** Nothing has a neighbour here. */
     BoundaryDomain NONE = new BoundaryDomain() {
         @Override
