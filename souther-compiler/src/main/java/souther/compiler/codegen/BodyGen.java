@@ -1611,15 +1611,32 @@ final class BodyGen {
 
         private void binary(Core.Binary bin) {
             switch (bin.op()) {
+                // Left to right, stopping as soon as the answer is settled. Not an optimisation:
+                // `/` aborts on a zero divisor and `Int` overflows, so a left operand is how the
+                // domain the right one is evaluated in gets narrowed, and `x /= 0 && 100 / x > 1`
+                // is a guard or it is nothing. `iand` and `ior` are the eager conjunction of two
+                // booleans, which is a different operator from the one the language has.
                 case AND -> {
                     genExpr(bin.left());
+                    Label settled = code.newLabel();
+                    Label end = code.newLabel();
+                    code.ifeq(settled);
                     genExpr(bin.right());
-                    code.iand();
+                    code.goto_(end);
+                    code.labelBinding(settled);
+                    code.iconst_0();
+                    code.labelBinding(end);
                 }
                 case OR -> {
                     genExpr(bin.left());
+                    Label settled = code.newLabel();
+                    Label end = code.newLabel();
+                    code.ifne(settled);
                     genExpr(bin.right());
-                    code.ior();
+                    code.goto_(end);
+                    code.labelBinding(settled);
+                    code.iconst_1();
+                    code.labelBinding(end);
                 }
                 // `+ - * /` work on two Int or two Decimal operands (spec
                 // §an-operator-takes-the-types-it-is-defined-for). Int aborts on overflow, and `/` aborts on
