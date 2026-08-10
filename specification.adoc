@@ -222,6 +222,39 @@ omitting it there is a compile error.
 
 Keywords and the standard library are in English, but user-defined identifiers (types, fields, behaviors) MAY use Unicode. Because the spec DSL is written in Japanese, business vocabulary can be used as identifiers directly. Identifiers SHALL be *NFC-normalized* before binding and comparison; in Japanese a precomposed character and a combining sequence can look identical, so without normalization names that look the same would diverge in binding. Source is UTF-8.
 
+[#identifier]
+=== What a name is made of
+
+An identifier is UAX #31's default form:
+
+....
+identifier = XID_Start XID_Continue*
+....
+
+The properties are Unicode's, read from `+DerivedCoreProperties.txt+` at the version below and not
+re-derived from character categories. Every script's letters begin a name, so `+数量+` and
+`+髙島屋+` are names, and so is one written with a character outside the basic multilingual plane —
+the language reads a source file by code point, and `+𠮷+` is one character to it as it is one to
+`+String.length+` (<<stdlib-string>>).
+
+`+_+` continues a name and begins none: `+foo_bar+` is a name and `+_foo+` is not. On its own `+_+`
+is not an identifier at all but a form of its own, written where a value arrives under no name:
+inside a binding pattern (<<binding-patterns>>), in the departure arm answering the clauses that
+carry no name (<<attempt-departures>>), and as a `+fake+` table's default row (<<example-fakes>>).
+
+`+$+` is not written in a name. It is how the compiler spells the names it generates beside the ones
+a model declares — a data's codecs, a behavior's implementation, the locals a desugaring introduces
+— and the two sets have to be disjoint: a model able to declare the name a generated class already
+has would take that class's place rather than collide with it, and the compile would succeed
+(<<no-two-declarations-become-one-class>>).
+
+The Unicode version is *17.0.0*, fixed by the language rather than taken from whatever platform a
+compile runs on. Which characters may spell a name decides which sources read at all, and a
+published module carries its helpers' bodies as source for an importing compiler to read again
+(<<exposed-values>>) — so a compiler answering from its host's tables would make one artifact mean
+different things on two machines. Moving to a later Unicode version admits names that were not names
+before, and moves the boundary version with it (<<exposed-values>>).
+
 [,souther]
 ----
 data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
@@ -426,7 +459,8 @@ The full formal grammar (BNF) is deferred (<<future-work>>).
 !===
 !Form or rule !Kind !Given in
 
-!a name !lexical form !<<future-work>>
+!a name !lexical form !<<identifier>>
+!`+_+` !token !<<identifier>>
 !a string literal !lexical form !<<string-literal>>
 !an integer and a `+Decimal+` literal !lexical form !<<numeric-literal>>
 !a `+Date+` and a `+DateTime+` literal !lexical form !<<temporal-literal>>
@@ -2003,6 +2037,7 @@ let TagSet(ts) = set                    // open a newtype
 let { name, quantity } = line           // read fields under their own names
 let { quantity = n } = line             // ... or under another
 let (k, v) = pair                       // open a tuple (<<tuple>>)
+let (k, _) = pair                       // ... reading one of its members
 
 let count (TagSet(ts)) = Set.size(ts)   // a helper's parameter
 
@@ -2011,6 +2046,10 @@ let size (TagSet(ts)) = Set.size(ts)    // a behavior implementation's parameter
 
 List.map((TagSet(ts)) -> Set.size(ts), sets)   // a lambda's parameter
 ----
+
+[[a-discard-stands-inside-a-pattern-for-what-is-not-read]]Inside a pattern, `+_+` stands for a part of the value the pattern does not read: a member of a tuple (`+let (_, out) = pair+`), the value a newtype's constructor opens, and a lambda's parameter. `+_+` is not a name (<<identifier>>), and nothing reads what it received — an expression writing `+_+` is refused — so a discarded part has no name anywhere.
+
+A whole binding is not written `+_+`. `+let _ = e+`, a helper's or behavior's parameter, and the name a record pattern renames a field to (`+{ f = _ }+`) each take a name: a binding that reads nothing of what it binds is a line to delete rather than a form to write.
 
 A pattern that some values of the type do not satisfy — a sum's case, `+Some+` — MUST NOT be written here; it belongs to `+match+` (<<match>>), which has the arm that catches what fails. A binding has one arm and nothing to fall to. Whether a name is refutable is decided by what it declares, so `+let X(v) = e+` is refused when `+X+` is not a newtype, and the report names `+match+`.
 
@@ -3627,7 +3666,11 @@ The first is decided at the declaration, before anything is emitted. The other t
 [#target-jdk]
 === Target JDK
 
-The artifacts target Java 25 or later, which is also what the compiler is built and run on. Unicode identifiers are generated to conform to Java's identifier rules (escaping / romanization, if needed, is the backend's responsibility).
+The artifacts target Java 25 or later, which is also what the compiler is built and run on.
+
+A name reaches the class file as it was written. What a class file may hold is an unqualified name, which admits a Unicode character generally and excludes `+.+`, `+;+`, `+[+` and `+/+` (and `+<+` and `+>+` in a method name) — none of which spells a Souther name (<<identifier>>). So a model written in Japanese is emitted in Japanese, and nothing is escaped or romanized.
+
+What a class file holds and what Java source can write are two different limits, and neither contains the other. Souther's alphabet and Java's identifier rules do not coincide: each admits characters the other does not, and each is read against its own Unicode version. A name outside what Java writes is still emitted and still loads; what it costs is that Java code cannot name it — and Java names a generated type where it implements an injected behavior or calls a decoder (<<java-example>>). A model whose types are reached from Java is spelled in characters Java can write, which is the author's decision at the boundary and not a rule the compiler enforces on every name in the language.
 
 The class-file version of the generated `+.class+` is fixed at Java 25 (major 69). It MUST NOT be left to the default of the JDK running the backend: pinning is what makes the floor a decision rather than a property of whichever JDK ran the build. souther-runtime is on the artifact side and is compiled to the same target.
 
@@ -5946,7 +5989,6 @@ var result = handle.apply(rawInput);
 The language core is implemented. The following are future extensions — distinct from what is permanently absent (<<out-of-scope>>).
 
 * A full formal grammar (BNF). The key delimiters and precedence are stated ahead in <<delimiters>>, and where each written form is given is <<grammar>>.
-* What a name may be made of. An identifier may be written in any script and is NFC-normalized before binding (<<modules>>); which characters one may begin and continue with is not fixed here.
 * Incremental compilation.
 
 [#non-functional]

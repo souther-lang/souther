@@ -2678,9 +2678,11 @@ public final class Formatter {
         return TokenDoc.token(t.kind(), t.text());
     }
 
-    /** An identifier the canonical form writes. */
+    /** A name the canonical form writes, as the token that spelling is. The discard is written
+     *  where a name is written and is not one, so a document that laid it out as a name would hold
+     *  a token the output does not have. */
     private static TokenDoc ident(String text) {
-        return TokenDoc.token(SyntaxKind.IDENT, text);
+        return TokenDoc.token(text.equals("_") ? SyntaxKind.UNDERSCORE : SyntaxKind.IDENT, text);
     }
 
     private static TokenDoc dottedName(List<SyntaxToken> idents) {
@@ -2756,7 +2758,7 @@ public final class Formatter {
     private List<SyntaxToken> idents(SyntaxNode n) {
         List<SyntaxToken> out = new ArrayList<>();
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 out.add(t);
             }
         }
@@ -2765,7 +2767,7 @@ public final class Formatter {
 
     private String firstIdent(SyntaxNode n) {
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 return t.text();
             }
         }
@@ -2775,7 +2777,7 @@ public final class Formatter {
     private String lastIdent(SyntaxNode n) {
         String last = null;
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 last = t.text();
             }
         }

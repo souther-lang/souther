@@ -249,7 +249,7 @@ public final class Backend {
             }
         });
         b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
-        Map<String, byte[]> out = new LinkedHashMap<>();
+        Map<String, byte[]> out = new OneClassPerName();
         behaviorResults.forEach((resultName, members) -> {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
@@ -448,6 +448,36 @@ public final class Backend {
                     + "; a body was walked without counting its arms");
         }
         return out;
+    }
+
+    /**
+     * What a module emits, holding one class under one binary name.
+     *
+     * <p>The names a module declares and the names the compiler generates beside them are spelled
+     * into one namespace, and a map takes the second write of a name as the value of it — so two
+     * classes wanting one name left the artifact set short of a class, with the compile reporting
+     * nothing and the loss arriving as a linkage error against whichever class went missing. The
+     * language keeps the two apart by refusing {@code $} in a name (spec §identifier), and a
+     * declaration that would emit a class another declaration already has is refused where it is
+     * declared (spec §no-two-declarations-become-one-class). This says the same thing at the one
+     * place both are true of, so a naming scheme changed later cannot bring the silence back.
+     */
+    static final class OneClassPerName extends LinkedHashMap<String, byte[]> {
+
+        @Override
+        public byte[] put(String name, byte[] bytes) {
+            if (containsKey(name)) {
+                throw new IllegalStateException("two classes were emitted as " + name
+                        + "; a module's declared and generated names are one namespace and this one"
+                        + " is written twice");
+            }
+            return super.put(name, bytes);
+        }
+
+        @Override
+        public void putAll(Map<? extends String, ? extends byte[]> classes) {
+            classes.forEach(this::put);
+        }
     }
 
     /**
@@ -1063,8 +1093,16 @@ public final class Backend {
      * merely a lower one, which is what makes the widening matter: an older compiler would take the
      * module for one it understands and then fail on a body whose {@code <-} its own lexer still
      * glues into a token no production of its own reads.
+     *
+     * <p>Version 13 settles what a name is made of: {@code XID_Start XID_Continue*} at Unicode
+     * 17.0.0 (spec §identifier). It moves in both directions. A jar built before this may carry a
+     * body naming something this compiler will not read — a name holding {@code $}, or beginning
+     * with {@code _} — because the older compiler read Java's identifier rule. And a body written
+     * now may name something an older compiler cannot read, since a name may hold a character
+     * outside the basic plane, which the older one scanned by UTF-16 unit and refused. The same
+     * number covers a later Unicode version, which admits names that were not names before.
      */
-    public static final int BOUNDARY_VERSION = 12;
+    public static final int BOUNDARY_VERSION = 13;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

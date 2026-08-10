@@ -467,6 +467,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             IDENT QUESTION
             IDENT RBRACKET
             INT_LIT COMMA
+            LPAREN UNDERSCORE
             INT_LIT RBRACKET
             INT_LIT RPAREN
             LBRACE RBRACE
@@ -502,6 +503,8 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             TYPEVAR GT
             TYPEVAR QUESTION
             TYPEVAR RPAREN
+            UNDERSCORE COMMA
+            UNDERSCORE RPAREN
             """;
 
     private static final String SPACED = """
@@ -533,6 +536,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             COLON TYPEVAR
             COMMA FALSE_KW
             COMMA IDENT
+            COMMA UNDERSCORE
             COMMA INT_LIT
             COMMA LBRACKET
             COMMA LPAREN
@@ -605,6 +609,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             OR IDENT
             PIPE IDENT
             PIPE LPAREN
+            PIPE UNDERSCORE
             PIPE STRING_LIT
             PIPEFWD IDENT
             PLUS IDENT
@@ -639,6 +644,7 @@ class WhatGoesBetweenTwoTokensOnALineTest {
             THEN_KW LPAREN
             TRUE_KW RBRACE
             TYPEVAR ASSIGN
+            UNDERSCORE ARROW
             UNREACHABLE_KW STRING_LIT
             VPIPE IDENT
             WITH_KW IDENT

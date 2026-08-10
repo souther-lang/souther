@@ -2,6 +2,7 @@ package souther.compiler.highlight;
 
 import souther.compiler.Prelude;
 import souther.compiler.cst.CstLexer;
+import souther.compiler.cst.IdentifierAlphabet;
 import souther.compiler.editor.EditorSymbols;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -21,7 +22,10 @@ import java.util.stream.Collectors;
  * The keyword list comes from {@link CstLexer#keywords()} — the single source of truth — and a test
  * asserts every keyword is categorised here, so adding one to the lexer forces a grammar update. The
  * symbols come from {@link EditorSymbols}, which the language server reads too, so what an editor
- * paints as an operator is decided once for both.
+ * paints as an operator is decided once for both. A name's characters come from
+ * {@link IdentifierAlphabet} the same way, written out as character classes: an editor's engine
+ * cannot ask the compiler and has no Unicode property for the answer, so it is given the answer
+ * rather than an ASCII pattern standing in for it.
  *
  * <p>A regex grammar deliberately stops at what the token stream can classify (keywords, operators,
  * literals, comments, stdlib qualifiers). Distinguishing a type name from a value — which in Souther
@@ -99,7 +103,8 @@ public final class TmLanguageGenerator {
         repository.put("depends-on", match("keyword.control.souther", "\\bdepends\\s+on\\b"));
         repository.put("control-keywords",
                 match("keyword.control.souther", wordAlternation(CONTROL)));
-        repository.put("type-variable", match("variable.other.generic.souther", "'[A-Za-z][A-Za-z0-9_]*"));
+        repository.put("type-variable", match("variable.other.generic.souther",
+                "'[" + IdentifierAlphabet.startClass() + "][" + IdentifierAlphabet.continueClass() + "]*"));
         repository.put("qualifiers",
                 match("support.class.souther", "\\b(" + String.join("|", QUALIFIERS) + ")\\b(?=\\s*\\.)"));
         repository.put("operators", match("keyword.operator.souther", operatorAlternation()));

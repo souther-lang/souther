@@ -369,7 +369,10 @@ public final class CstParser {
     private void invariantClause() {
         start(SyntaxKind.INVARIANT_CLAUSE);
         bump();   // invariant
-        if (at(SyntaxKind.IDENT) && nth(1) == SyntaxKind.ASSIGN) {
+        // `_` is read here as well as a name, so that a clause written `_ =` is answered by the rule
+        // it breaks — a clause named `_` could never be answered by name — rather than by a reader
+        // being told that `_` is not a name and left to work out why one would have wanted it.
+        if ((at(SyntaxKind.IDENT) || at(SyntaxKind.UNDERSCORE)) && nth(1) == SyntaxKind.ASSIGN) {
             bump();   // the clause name
             bump();   // =
         }
@@ -698,8 +701,8 @@ public final class CstParser {
     /** {@code ( args ) -> output} or {@code _ -> output} (a default). */
     private void fakeRow() {
         start(SyntaxKind.FAKE_ROW);
-        if (atContextual("_")) {
-            bump();   // _  (the wildcard default; `_` lexes as an identifier)
+        if (at(SyntaxKind.UNDERSCORE)) {
+            bump();   // _ — the row every unlisted input falls to
         } else {
             argList();
         }
@@ -931,8 +934,27 @@ public final class CstParser {
             return;
         }
         start(SyntaxKind.PATTERN_NAME);
-        expect(SyntaxKind.IDENT, Reading.A_PATTERN);
+        nameOrDiscard(Reading.A_PATTERN);
         finish();
+    }
+
+    /**
+     * A position that takes a name or the discard.
+     *
+     * <p>{@code _} is a token of its own rather than a name (a name may not begin with one), and
+     * these are the positions the language writes it in: a binding pattern, a departure arm for the
+     * clauses that carry no name, a fake table's default row, and an invariant clause's name, where
+     * a clause called {@code _} is answered by the rule it breaks. A match arm is not one of them —
+     * every arm names a case, and there is no wildcard arm. What it means where it stands is
+     * unchanged — it is read on as the name it was read as before it had a token, so this settles
+     * how it is written and nothing about what it binds.
+     */
+    private void nameOrDiscard(Reading reading) {
+        if (at(SyntaxKind.UNDERSCORE)) {
+            bump();
+            return;
+        }
+        expect(SyntaxKind.IDENT, reading);
     }
 
     /** A possibly-dotted name followed by {@code (}: the constructor form. */
@@ -1001,12 +1023,11 @@ public final class CstParser {
         finish();
     }
 
-    /** {@code | <clause> -> e}, or {@code | _ -> e} for the clauses that carry no name (`_` lexes as
-     * an identifier, as it does in a fake table's default row). */
+    /** {@code | <clause> -> e}, or {@code | _ -> e} for the clauses that carry no name. */
     private void elseArm() {
         start(SyntaxKind.ELSE_ARM);
         bump();   // |
-        expect(SyntaxKind.IDENT, Reading.AN_EXPRESSION);
+        nameOrDiscard(Reading.AN_EXPRESSION);
         expect(SyntaxKind.ARROW, Reading.AN_EXPRESSION);
         expr();
         finish();
@@ -1344,6 +1365,8 @@ public final class CstParser {
     /** {@code A [| B ...] [binding] [{ fields }] [as x] -> body} — kept structural for lowering. */
     private void matchCase() {
         start(SyntaxKind.MATCH_CASE);
+        // A name, and not the discard: every arm names a case and there is no wildcard arm, so `_`
+        // is refused here where it is read in a fake's rows and an attempt's departures.
         expect(SyntaxKind.IDENT, Reading.A_PATTERN);
         dottedTail();
         while (at(SyntaxKind.PIPE) && nth(1) == SyntaxKind.IDENT) {
