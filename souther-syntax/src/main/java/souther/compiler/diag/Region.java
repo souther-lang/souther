@@ -30,6 +30,29 @@ public record Region(SourcePos start, SourcePos end) {
     }
 
     /**
+     * Whether {@code inner} lies within {@code outer}, ends allowed to meet — and vacuously so where
+     * either of them is nowhere, there being no two places to disagree about.
+     *
+     * <p>What a caller holding a form and something written inside it checks: an expression and the
+     * name it consists of, a construction and the field it sets. Regions in two files are not one
+     * inside the other however their numbers compare.
+     */
+    public static boolean encloses(Region outer, Region inner) {
+        if (outer == null || inner == null) {
+            return true;
+        }
+        if (!java.util.Objects.equals(outer.start.sourceId(), inner.start.sourceId())) {
+            return false;
+        }
+        return !before(inner.start, outer.start) && !before(outer.end, inner.end);
+    }
+
+    /** Whether {@code a} comes before {@code b} in the file they share. */
+    private static boolean before(SourcePos a, SourcePos b) {
+        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
+    }
+
+    /**
      * How much of the start line the region covers, in UTF-16 code units, and at least one.
      *
      * <p>A region that ends on a later line answers one. How much of the first line such a region

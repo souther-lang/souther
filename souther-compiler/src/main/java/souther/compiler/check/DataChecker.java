@@ -356,7 +356,7 @@ public final class DataChecker {
         for (Ast.Name c : sum.cases()) {
             if (symbols.isForeign(c.denotes())) {
                 throw CompileException.of(Diagnostic
-                                .at(c.name().region())
+                                .at(c.name().reportedAt())
                                 
                                 .hint(new BehaviorMessage.ASumsCasesAreDeclaredWithIt(c.written())).say(new BehaviorMessage.ACaseIsDeclaredInAnotherModule(c.written(), sum.name(), c.denotes().module())).build());
             }
@@ -627,7 +627,7 @@ public final class DataChecker {
             }
             Type ft = fields.get(init.name());
             if (ft == null) {
-                throw CompileException.of(Diagnostic.at(init.written().region())
+                throw CompileException.of(Diagnostic.at(init.written().reportedAt())
                         .say(new DataMessage.NotAFieldOf(init.name(), typeName))
                         .build());
             }
@@ -644,7 +644,7 @@ public final class DataChecker {
             // a case value widens to its sum-typed field (spec §sum-data)
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {
                 throw CompileException.of(Diagnostic
-                                .at(init.written().region())
+                                .at(init.written().reportedAt())
                                 
                                 .diff(Type.show(vt, ft), Type.show(ft, vt)).say(new DataMessage.AFieldExpectsAnotherType(init.name(), Type.show(ft), Type.show(vt))).build());
             }

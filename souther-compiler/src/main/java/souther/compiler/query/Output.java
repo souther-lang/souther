@@ -678,7 +678,7 @@ public final class Output {
             List<Report> reports = new ArrayList<>();
             for (souther.compiler.ExampleStatements.Disagreement d : read.disagreements()) {
                 reports.add(Report.saidAt(said(d),
-                        Report.Delivery.atEveryRegionOf(d.recorded().at().sourceId())));
+                        Report.Delivery.atEveryRegionOf(d.recorded().sourceId())));
             }
             for (souther.compiler.ExampleStatements.UnreadFake f : read.unread()) {
                 reports.add(Report.saidAt(unread(f),
@@ -722,14 +722,13 @@ public final class Output {
             boolean viaWith = d.viaWith();
             // The second region names its source only when that is another file: within one file
             // there is nothing to say, and the renderer would quote the same name twice.
-            String elsewhere = standIn.at().sourceId().equals(recorded.at().sourceId())
-                    ? null : standIn.at().sourceId();
-            return Diagnostic.at(recorded.at().pos(), recorded.width())
+            String elsewhere = standIn.sourceId().equals(recorded.sourceId())
+                    ? null : standIn.sourceId();
+            return Diagnostic.at(recorded.region())
                     .say(viaWith
                             ? new ExampleMessage.TheRowAndTheWithDisagree(d.behavior())
                             : new ExampleMessage.TheRowAndTheFakeDisagree(d.behavior()))
-                    .secondaryIn(elsewhere,
-                            Region.ofWidth(standIn.at().pos(), standIn.width()),
+                    .secondaryIn(elsewhere, standIn.region(),
                             viaWith ? new ExampleMessage.TheWithIsHere(d.behavior())
                                     : new ExampleMessage.TheFakeRowIsHere(d.behavior()))
                     .hint(viaWith
@@ -936,7 +935,7 @@ public final class Output {
                 for (Ast.FnDef value : parsed.module().fns()) {
                     boolean fresh = taken.add(value.name());
                     if (!fresh && id.equals(sourceId)) {
-                        reports.add(Report.of(Diagnostic.at(value.written().region())
+                        reports.add(Report.of(Diagnostic.at(value.written().reportedAt())
                                 .say(new ExampleMessage.TheNameIsAlreadyDeclared(value.name(), name))
                                 .build()));
                     }

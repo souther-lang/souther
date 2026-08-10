@@ -23,7 +23,7 @@ class ConstEvalMatchBudgetTest {
 
     private static Optional<Object> fold(String pattern, String subject) {
         return ConstEval.eval(new Ast.Apply("String.matches",
-                List.of(new Ast.StringLit(pattern, POS), new Ast.StringLit(subject, POS)), POS));
+                List.of(new Ast.StringLit(pattern, POS, null), new Ast.StringLit(subject, POS, null)), POS, null));
     }
 
     @Test

@@ -149,10 +149,15 @@ public final class HelperNames {
         Ast.Expr rebuilt = alsoInGiven(Ast.mapChildren(e, c -> qualifyHelpers(c, which),
                 s -> qualified(s, which)), c -> qualifyHelpers(c, which));
         return switch (rebuilt) {
+            // The name is this pass's and the place is the callee's: only the spelling changes, so
+            // what is underlined for it is the stretch the name it replaced was read over — not the
+            // application's, which takes in arguments this pass did not touch.
             case Ast.Apply call when foreign(call.denotes(), which) ->
-                    new Ast.Apply(qualifiedName(call.denotes()), call.denotes(),
-                            ofModule(call.denotes()), call.args(), call.origin(),
-                            call.pos());
+                    new Ast.Apply(
+                            Ast.Var.respelled(qualifiedName(call.denotes()), call.denotes(),
+                                    ofModule(call.denotes()), call.function().pos(),
+                                    call.function().region()),
+                            call.args(), call.origin(), call.pos(), call.region());
             case Ast.Var v -> qualified(v, which);
             default -> rebuilt;
         };
@@ -161,8 +166,8 @@ public final class HelperNames {
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Ast.Var qualified(Ast.Var name, Predicate<ValueName.Helper> which) {
         return foreign(name.denotes(), which)
-                ? new Ast.Var(qualifiedName(name.denotes()), name.denotes(),
-                        ofModule(name.denotes()), name.pos())
+                ? Ast.Var.respelled(qualifiedName(name.denotes()), name.denotes(),
+                        ofModule(name.denotes()), name.pos(), name.region())
                 : name;
     }
 
@@ -191,7 +196,7 @@ public final class HelperNames {
                     : new Ast.Given(g.declaredType(), value, g.applied(), g.arrivesAs()));
         }
         return any ? new Ast.Expansion(ex.callee(), ex.application(), ex.bound(), given,
-                ex.declaredReturn(), ex.body(), ex.pos()) : e;
+                ex.declaredReturn(), ex.body(), ex.pos(), ex.region()) : e;
     }
 
     /** Whether {@code denotes} is a helper {@code which} accepts. */

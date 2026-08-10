@@ -10,6 +10,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
@@ -529,9 +530,8 @@ public final class ExampleStatements {
                 // The output, not the row: what disagrees is the answer, and the marker lands on it
                 // the way a row's does on its expected.
                 found.add(new Disagreement(fk.target(),
-                        said(row.at(), row.expected(), row.answer()),
-                        said(new SourceRef(origin, answering.row().output().pos()),
-                                answering.row().output(), stood),
+                        said(row.at().sourceId(), row.expected(), row.answer()),
+                        said(origin, answering.row().output(), stood),
                         false));
             }
         }
@@ -583,8 +583,9 @@ public final class ExampleStatements {
                 for (RecordedRow recordedRow : rows) {
                     if (differs(recordedRow.answer(), constant)) {
                         found.add(new Disagreement(w.dep(),
-                                said(recordedRow.at(), recordedRow.expected(), recordedRow.answer()),
-                                said(new SourceRef(origin, w.value().pos()), w.value(), constant),
+                                said(recordedRow.at().sourceId(), recordedRow.expected(),
+                                        recordedRow.answer()),
+                                said(origin, w.value(), constant),
                                 true));
                     }
                 }
@@ -601,8 +602,8 @@ public final class ExampleStatements {
      * date is its ISO form, a qualified case name is its short one — so a marker measured from it
      * underlines the wrong columns and can run past the end of the line.
      */
-    private Statement said(SourceRef at, Ast.Expr written, Answered asserted) {
-        return new Statement(at, souther.compiler.check.Elaborator.width(written), shown(asserted));
+    private Statement said(String sourceId, Ast.Expr written, Answered asserted) {
+        return new Statement(sourceId, written.reportedAt(), shown(asserted));
     }
 
     /** What an answer says, from what was already read. Rendering from the text again would build
@@ -639,7 +640,7 @@ public final class ExampleStatements {
      * <p>{@code answer} is rendered here rather than at the report, because reading it needs the
      * decoders and the module's classes and the report has neither.
      */
-    public record Statement(SourceRef at, int width, String answer) {}
+    public record Statement(String sourceId, Region region, String answer) {}
 
     /**
      * One input for which two written statements about a behavior answer differently.

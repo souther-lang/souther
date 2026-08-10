@@ -38,10 +38,10 @@ class OneCallSettlesOneSignatureTest {
     /** {@code List.filter(x -> true, [])} — nothing in the call says what the list holds. */
     private static Ast.Expr filterOverAnEmptyList() {
         Ast.Block predicate = new Ast.Block(List.of(BINDERS.binder("x", POS)),
-                new Ast.BoolLit(true, POS), POS);
+                new Ast.BoolLit(true, POS, null), POS, null);
         return new Ast.Apply("List.filter", new ValueName.Stdlib("List", "filter"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "filter")),
-                List.of(predicate, new Ast.ListLit(List.of(), POS)), ConstructionOrigin.own(), POS);
+                List.of(predicate, new Ast.ListLit(List.of(), POS, null)), ConstructionOrigin.own(), POS, null);
     }
 
     @Test
@@ -113,7 +113,7 @@ class OneCallSettlesOneSignatureTest {
         // The same guarantee where the answers come from: what a rule reasoned about and what reached
         // the tree are one elaboration of one argument.
         CallElaborator.CallArgs args = new CallElaborator.CallArgs(
-                List.of(new Ast.IntLit(1, POS)), Scope.NONE, CheckContext.of(Symbols.none()));
+                List.of(new Ast.IntLit(1, POS, null)), Scope.NONE, CheckContext.of(Symbols.none()));
 
         args.type(0);
         Core first = args.cores().get(0);
@@ -130,14 +130,15 @@ class OneCallSettlesOneSignatureTest {
         Ast.Expr call = new Ast.Apply("Option.withDefault",
                 new ValueName.Stdlib("Option", "withDefault"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("Option", "withDefault")),
-                List.of(new Ast.ListLit(List.of(), POS),
+                List.of(new Ast.ListLit(List.of(), POS, null),
                         new Ast.Apply("List.get", new ValueName.Stdlib("List", "get"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "get")),
-                                List.of(new Ast.IntLit(0, POS),
+                                List.of(new Ast.IntLit(0, POS, null),
                                         new Ast.ListLit(List.of(new Ast.ListLit(
-                                                List.of(new Ast.IntLit(1, POS)), POS)), POS)),
-                                ConstructionOrigin.own(), POS)),
-                ConstructionOrigin.own(), POS);
+                                                List.of(new Ast.IntLit(1, POS, null)), POS, null)),
+                                                POS, null)),
+                                ConstructionOrigin.own(), POS, null)),
+                ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none()).preserving(KEPT));

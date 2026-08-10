@@ -35,7 +35,7 @@ class EverySlotIsAChildTest {
         return new Ast.NewData(Ast.Name.written("Person", POS),
                 List.of(new Ast.FieldInit("age", name("n"), POS)),
                 List.of(name("base")),
-                ConstructionOrigin.own(), POS);
+                ConstructionOrigin.own(), POS, null);
     }
 
     private static List<Ast.Expr> childrenOf(Ast.Expr e) {

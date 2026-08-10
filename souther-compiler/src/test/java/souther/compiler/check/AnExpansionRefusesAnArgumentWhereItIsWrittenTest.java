@@ -49,7 +49,7 @@ class AnExpansionRefusesAnArgumentWhereItIsWrittenTest {
                     )
                 """;
 
-        assertEquals("String.append", underlined(source, regionOf(source)),
+        assertEquals("String.append(a, b)", underlined(source, regionOf(source)),
                 "the argument is `String.append(a, b)`, so the caret covers it rather than its "
                         + "first character");
     }

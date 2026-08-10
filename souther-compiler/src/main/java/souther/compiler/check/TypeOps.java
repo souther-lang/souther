@@ -924,13 +924,13 @@ public final class TypeOps {
         for (Ast.Name inc : data.includes()) {
             TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
-                throw CompileException.of(Diagnostic.at(inc.name().region())
+                throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
                         .say(new DataMessage.SpreadIsNotAProductData(inc.written()))
                         .build());
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
                 if (types.put(e.getKey(), e.getValue()) != null) {
-                    throw CompileException.of(Diagnostic.at(inc.name().region())
+                    throw CompileException.of(Diagnostic.at(inc.name().reportedAt())
                             .say(new DataMessage.SpreadFieldCollision(
                                     e.getKey(), inc.written(), suppliedBy.get(e.getKey())))
                             .build());
@@ -1645,12 +1645,12 @@ public final class TypeOps {
             String module = symbols.moduleOfQualifier(qualifier);
             if (module == null) {
                 return CompileException.of(Diagnostic.say(new ModuleMessage.NoModuleOfThatName(qualifier, name))
-                                .at(written.region())
+                                .at(written.reportedAt())
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build());
             }
             boolean declared = symbols.contains(new TypeName(module, name));
-            return CompileException.of(Diagnostic.at(written.region())
+            return CompileException.of(Diagnostic.at(written.reportedAt())
                             .say(declared
                                     ? new ModuleMessage.ItIsDeclaredThereAndNotExposed(name, module)
                                     : new ModuleMessage.TheModuleDeclaresNoSuchQualifiedName(name,
@@ -1660,7 +1660,7 @@ public final class TypeOps {
         }
         Set<String> known = symbols.namesInScope();
         return CompileException.of(Diagnostic
-                        .at(written.region())
+                        .at(written.reportedAt())
                         
                         .suggestion(Suggest.candidate(canonical, known))
                         .say(new NameMessage.NoTypeOfThatName(written.quoted())).build());

@@ -39,8 +39,8 @@ class CallElaboratorNoCalleeTest {
 
     private static RuntimeException answerFor(ValueName denotes) {
         return CallElaborator.noCallee(
-                new Ast.Apply("f", denotes, new ReachName.Bare("f"), List.of(new Ast.IntLit(1, AT)),
-                        ConstructionOrigin.own(), AT));
+                new Ast.Apply("f", denotes, new ReachName.Bare("f"), List.of(new Ast.IntLit(1, AT, null)),
+                        ConstructionOrigin.own(), AT, null));
     }
 
     /** A behavior named from a helper `let` or a `>->` composition, neither of which reaches one. */

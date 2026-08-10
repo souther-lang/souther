@@ -613,20 +613,20 @@ public final class Resolve {
             // is answered as the expression it is, and what may be applied is the check's to say.
             case Ast.Apply call when call.appliesAName() -> applied(call, bound);
             case Ast.Apply call -> new Ast.Apply(callee(call.function(), bound),
-                    exprs(call.args(), bound), call.origin(), call.pos());
+                    exprs(call.args(), bound), call.origin(), call.pos(), call.region());
             // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
             // the parser read as a field taken off a name because it reads no case at all. Folded
             // here and nowhere earlier: `Map` may be a parameter, and a binding in force wins over
             // everything else — which is a fact the parser and the AST builder do not have.
             case Ast.FieldAccess fa -> {
                 Ast.Var member = qualifiedName(fa, false, bound);
-                yield member != null ? member
-                        : new Ast.FieldAccess(expr(fa.target(), bound), fa.field(), fa.pos());
+                yield member != null ? member : fa.withTarget(expr(fa.target(), bound));
             }
             // the type being built is this case's business; everything under it is a slot like any
             // other
             case Ast.NewData nd -> Ast.mapChildren(
-                    new Ast.NewData(type(nd.typeName()), nd.inits(), nd.spreads(), nd.origin(), nd.pos()),
+                    new Ast.NewData(type(nd.typeName()), nd.inits(), nd.spreads(), nd.origin(), nd.pos(),
+                            nd.region()),
                     x -> expr(x, bound), s -> name(s, bound));
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
@@ -636,18 +636,18 @@ public final class Resolve {
                 yield new Ast.LetIn(a.binder(), value,
                         paramType(li.declaredType()), li.annotated(),
                         li.opens() == null ? null : caseName(li.opens()),
-                        expr(li.body(), a.bound()), li.pos());
+                        expr(li.body(), a.bound()), li.pos(), li.region());
             }
             case Ast.Block b -> {
                 AnsweredAll ps = bindAll(bound, b.params());
-                yield new Ast.Block(ps.binders(), expr(b.body(), ps.bound()), b.pos());
+                yield new Ast.Block(ps.binders(), expr(b.body(), ps.bound()), b.pos(), b.region());
             }
             // an attempt's binder names the value only where there is one to name — the success
             // branch. The construction and the else value are outside it.
             case Ast.IfConstructed ic -> {
                 Answered a = bind(bound, ic.binder());
                 yield new Ast.IfConstructed(expr(ic.construct(), bound), a.binder(),
-                        expr(ic.then(), a.bound()), arms(ic.els(), bound), ic.pos());
+                        expr(ic.then(), a.bound()), arms(ic.els(), bound), ic.pos(), ic.region());
             }
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
@@ -658,7 +658,7 @@ public final class Resolve {
                             a == null ? null : a.binder(), expr(c.body(), inArm),
                             c.unwrapAsserts() == null ? null : names(c.unwrapAsserts()), c.pos()));
                 }
-                yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.pos());
+                yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.pos(), m.region());
             }
             default -> Ast.mapChildren(e, x -> expr(x, bound), s -> name(s, bound));
         };
@@ -681,9 +681,15 @@ public final class Resolve {
      * here — the same pair, from the same place, as a name standing on its own. */
     private Ast.Expr applied(Ast.Apply call, Bindings bound) {
         ValueName denotes = answered(call.name(), calledName(call, bound));
-        Ast.Var name = new Ast.Var(call.name(), denotes,
-                ReachName.of(denotes, call.written(), values.module()));
-        return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos());
+        // Answered rather than rebuilt: what the callee means is settled here and where it is
+        // written is not this pass's to decide. Building one from the name would take its extent
+        // from the characters that spell it, which is short of what a parenthesized callee covers.
+        Ast.Var name = call.function() instanceof Ast.Var applied
+                ? applied.denoting(denotes, ReachName.of(denotes, call.written(), values.module()))
+                : new Ast.Var(call.name(), denotes,
+                        ReachName.of(denotes, call.written(), values.module()));
+        return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos(),
+                call.region());
     }
 
     /**
@@ -952,13 +958,13 @@ public final class Resolve {
             return null;
         }
         return CompileException.of(Diagnostic
-                        .at(written.region()).say(new NameMessage.NotAStandardLibraryFunction(written.quoted())).build());
+                        .at(written.reportedAt()).say(new NameMessage.NotAStandardLibraryFunction(written.quoted())).build());
     }
 
     private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
         String name = written.canonical();
         if (name.equals("null")) {
-            return CompileException.of(Diagnostic.at(written.region()).say(new DeclarationMessage.NullIsNotPartOfTheLanguage()).build());
+            return CompileException.of(Diagnostic.at(written.reportedAt()).say(new DeclarationMessage.NullIsNotPartOfTheLanguage()).build());
         }
         CompileException notALibraryMember = notALibraryMember(written);
         if (notALibraryMember != null) {
@@ -974,7 +980,7 @@ public final class Resolve {
         }
         List<String> candidates = reachable(bound);
         Diagnostic.Builder report = Diagnostic
-                .at(written.region())
+                .at(written.reportedAt())
                 .suggestion(Suggest.candidate(name, candidates));
         // A name another module of this compilation exposes is the one kind of unresolved name that
         // has somewhere to go, and it is what a name left off an import list looks like from here.

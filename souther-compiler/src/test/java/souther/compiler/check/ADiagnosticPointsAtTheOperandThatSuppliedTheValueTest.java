@@ -18,6 +18,10 @@ import souther.compiler.diag.Region;
  * its arguments are written from its callee, so the two can be a page apart. What the reader cannot
  * recover from the message is the operand, and that is what the caret is for.
  *
+ * <p>The operand is the whole of what was written there, arguments and all. An argument that is
+ * itself a call did not fit as the call it is, and a caret stopping at its callee's name leaves the
+ * reader to work out that the rest of it is the same expression.
+ *
  * <p>Which region a report gets is not decided by its code. The rows below cover the three paths a
  * call written in a body is typed by — a kernel applied against its declared signature, a helper
  * expanded, a behavior called by name — which answered three different ways for one code and one
@@ -55,7 +59,7 @@ class ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest {
                     )
                 """;
 
-        assertEquals("String.length", underlined(source, regionOf(source)),
+        assertEquals("String.length(b)", underlined(source, regionOf(source)),
                 "argument 2 is `String.length(b)` on line 8, not the callee on line 6");
     }
 
@@ -122,7 +126,7 @@ class ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest {
                     )
                 """;
 
-        assertEquals("String.length", underlined(source, regionOf(source)),
+        assertEquals("String.length(x)", underlined(source, regionOf(source)),
                 "argument 1 is `String.length(x)` on line 10, not the callee on line 9");
     }
 

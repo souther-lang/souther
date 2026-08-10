@@ -144,7 +144,7 @@ public final class SpecChecker {
                 // the local ones. All are reported at the name, as the clause that names nothing is.
                 boolean dependsOnNothing = calleeSigs.containsKey(req);
                 boolean aComposition = required.denotes() instanceof ValueName.Behavior;
-                throw CompileException.of(Diagnostic.at(required.written().region())
+                throw CompileException.of(Diagnostic.at(required.written().reportedAt())
                         .say(dependsOnNothing
                                 ? new DeclarationMessage
                                         .DependsOnNamesSomethingThatDependsOnNothing(spec.name(),

@@ -79,33 +79,38 @@ public final class NewtypeDesugar {
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(Diagnostic
-                                        .at(call.name().region())
+                                        .at(call.appliedAt())
                                         .say(new DataMessage.ANewtypeWrapsOneValue(call.written(), String.valueOf(args.size()))).build());
                     }
+                    // `T(v)` is what the author wrote and a construction is what it means, so the
+                    // node that replaces the application stands over the same characters.
                     yield new Ast.NewData(
                             new Ast.Name(call.name(), built),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
-                            List.of(), ConstructionOrigin.own(), call.pos());
+                            List.of(), ConstructionOrigin.own(), call.pos(), call.region());
                 }
                 yield call.withArgs(args);
             }
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
                 for (Ast.FieldInit fi : nd.inits()) {
-                    inits.add(new Ast.FieldInit(fi.name(), go(fi.value(), symbols), fi.pos()));
+                    inits.add(fi.withValue(go(fi.value(), symbols)));
                 }
-                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.pos());
+                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.pos(), nd.region());
             }
-            case Ast.Neg neg -> new Ast.Neg(go(neg.operand(), symbols), neg.pos());
+            case Ast.Neg neg -> new Ast.Neg(go(neg.operand(), symbols), neg.pos(), neg.region());
             case Ast.Binary bin ->
-                    new Ast.Binary(bin.op(), go(bin.left(), symbols), go(bin.right(), symbols), bin.pos());
-            case Ast.FieldAccess fa -> new Ast.FieldAccess(go(fa.target(), symbols), fa.field(), fa.pos());
-            case Ast.ListLit lit -> new Ast.ListLit(mapExprs(lit.elements(), symbols), lit.pos());
+                    new Ast.Binary(bin.op(), go(bin.left(), symbols), go(bin.right(), symbols), bin.pos(),
+                            bin.region());
+            case Ast.FieldAccess fa -> fa.withTarget(go(fa.target(), symbols));
+            case Ast.ListLit lit -> new Ast.ListLit(mapExprs(lit.elements(), symbols), lit.pos(),
+                    lit.region());
             case Ast.ListComp comp ->
-                    new Ast.ListComp(go(comp.element(), symbols), mapExprs(comp.guards(), symbols), comp.pos());
+                    new Ast.ListComp(go(comp.element(), symbols), mapExprs(comp.guards(), symbols), comp.pos(),
+                            comp.region());
             case Ast.LetIn li ->
                     new Ast.LetIn(li.binder(), go(li.value(), symbols), li.declaredType(), li.annotated(), li.opens(),
-                            go(li.body(), symbols), li.pos());
+                            go(li.body(), symbols), li.pos(), li.region());
             // A construction written inside a helper is written `T(v)` there too, and reaches an
             // invariant already expanded. What `given` holds is inside the body as well, and is
             // rewritten there.
@@ -115,24 +120,28 @@ public final class NewtypeDesugar {
                     bound.add(new Ast.Bound(b.binder(), b.declaredType(), go(b.value(), symbols)));
                 }
                 yield new Ast.Expansion(ex.callee(), ex.application(), bound, ex.given(),
-                        ex.declaredReturn(), go(ex.body(), symbols), ex.pos());
+                        ex.declaredReturn(), go(ex.body(), symbols), ex.pos(), ex.region());
             }
             case Ast.If iff ->
-                    new Ast.If(go(iff.cond(), symbols), go(iff.then(), symbols), go(iff.els(), symbols), iff.pos());
+                    new Ast.If(go(iff.cond(), symbols), go(iff.then(), symbols), go(iff.els(), symbols),
+                            iff.pos(), iff.region());
             // the attempted construction is written `T(v)` too, so it is a Call until this rewrites it
             case Ast.IfConstructed ic ->
                     new Ast.IfConstructed(go(ic.construct(), symbols), ic.binder(),
-                            go(ic.then(), symbols), arms(ic.els(), symbols), ic.pos());
-            case Ast.Block b -> new Ast.Block(b.params(), go(b.body(), symbols), b.pos());
-            case Ast.Tuple tup -> new Ast.Tuple(mapExprs(tup.elements(), symbols), tup.pos());
-            case Ast.TupleGet tg -> new Ast.TupleGet(go(tg.tuple(), symbols), tg.index(), tg.arity(), tg.pos());
+                            go(ic.then(), symbols), arms(ic.els(), symbols), ic.pos(),
+                            ic.region());
+            case Ast.Block b -> new Ast.Block(b.params(), go(b.body(), symbols), b.pos(), b.region());
+            case Ast.Tuple tup -> new Ast.Tuple(mapExprs(tup.elements(), symbols), tup.pos(),
+                    tup.region());
+            case Ast.TupleGet tg -> new Ast.TupleGet(go(tg.tuple(), symbols), tg.index(), tg.arity(),
+                    tg.pos(), tg.region());
             case Ast.Match mt -> {
                 List<Ast.Case> cases = new ArrayList<>();
                 for (Ast.Case c : mt.cases()) {
                     cases.add(new Ast.Case(c.caseTypes(), c.binding(), go(c.body(), symbols),
                             c.unwrapAsserts(), c.pos()));
                 }
-                yield new Ast.Match(go(mt.scrutinee(), symbols), cases, mt.pos());
+                yield new Ast.Match(go(mt.scrutinee(), symbols), cases, mt.pos(), mt.region());
             }
             default -> e;   // literals, Var — no child expressions to rewrite
         };

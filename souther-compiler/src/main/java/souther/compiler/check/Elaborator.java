@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
@@ -12,7 +13,6 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -142,8 +142,7 @@ public final class Elaborator {
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
                     throw CompileException.of(Diagnostic
-                                    .at(new Region(neg.pos(), region(neg.operand()).end()))
-                                    
+                                    .at(neg.reportedAt())
                                     .say(new TypeMessage.UnaryMinusNeedsANumber(Type.show(t))).build());
                 }
                 yield new Core.Neg(operand, t, neg.pos());
@@ -245,7 +244,7 @@ public final class Elaborator {
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(Diagnostic
-                                    .at(built.name().region())
+                                    .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
@@ -283,15 +282,17 @@ public final class Elaborator {
                 }
                 throw CompileException.of(Diagnostic
                                 .at(iff.pos(), 2)
-                                .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())), new TypeMessage.TheThenBranchProduces(Type.show(tt)))
-                                .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())), new TypeMessage.TheElseBranchProduces(Type.show(et)))
+                                .secondary(iff.then().reportedAt(),
+                                        new TypeMessage.TheThenBranchProduces(Type.show(tt)))
+                                .secondary(iff.els().reportedAt(),
+                                        new TypeMessage.TheElseBranchProduces(Type.show(et)))
                                 .hint(new TypeMessage.MakeBothBranchesProduceOneType())
                                 .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
             }
             case Ast.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
                 if (!(built instanceof Core.NewData construct)) {
-                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                    throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
                             .say(new AttemptMessage.ThisIsNotAConstruction())
                             .hint(new AttemptMessage.WriteTheConstructionWhoseInvariantDecides())
                             .build());
@@ -300,7 +301,7 @@ public final class Elaborator {
                 // and the else value could never be reached. Reported rather than compiled into a
                 // branch that is not one — the same call a unit data's forbidden invariant makes.
                 if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
-                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                    throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
                             .say(new AttemptMessage.TheTypeDeclaresNoInvariant(
                                     construct.typeName().name()))
                             .hint(new AttemptMessage.ConstructItDirectlyOrGiveItAnInvariant(
@@ -325,7 +326,7 @@ public final class Elaborator {
                         // with is the join of the branches before it and not the `then` branch's
                         // type — labelling `then` with it named a type the join was not refused at
                         // and left the arms between them out of the report altogether.
-                        throw CompileException.of(Diagnostic.at(region(arm.body()))
+                        throw CompileException.of(Diagnostic.at(arm.body().reportedAt())
                                         .say(new TypeMessage.ThisBranchAndThePrecedingOnes(
                                                 Type.show(body.type()), Type.show(joined)))
                                         .hint(new TypeMessage.MakeBothBranchesProduceOneType())
@@ -360,7 +361,7 @@ public final class Elaborator {
                         // element's type only when one has been read, which is a fact about how
                         // long the list is rather than about where the type came from. It is said
                         // instead, so `[1, "x", 2]` and `[1, 2, "x"]` are reported the one way.
-                        throw CompileException.of(Diagnostic.at(region(el))
+                        throw CompileException.of(Diagnostic.at(el.reportedAt())
                                 .say(new TypeMessage.ThisElementAndThePrecedingOnes(
                                         Type.show(c.type()), Type.show(elem)))
                                 .hint(new TypeMessage.MakeEveryElementTheSameType())
@@ -425,7 +426,7 @@ public final class Elaborator {
                 }
             }
             Diagnostic.Builder d = Diagnostic
-                    .at(fa.name().region());
+                    .at(fa.name().reportedAt());
             if (!without.isEmpty()) {
                 d = d.hint(new ModuleMessage.TheseCasesHaveNoSuchField(fa.field(), String.join(", ", without)));
             } else if (target instanceof Type.Ref) {
@@ -437,7 +438,7 @@ public final class Elaborator {
             throw CompileException.of(d.say(new ModuleMessage.CannotReadAFieldOnASum(fa.field(), Type.show(target))).build());
         }
         throw CompileException.of(Diagnostic
-                        .at(fa.name().region()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
+                        .at(fa.name().reportedAt()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
     }
 
     /**
@@ -1304,7 +1305,7 @@ public final class Elaborator {
      */
     static CompileException doesNotFit(Ast.Expr operand, Type actual, Type expected, String what) {
         return CompileException.of(Diagnostic
-                        .at(region(operand))
+                        .at(operand.reportedAt())
                         .diff(Type.show(actual, expected), Type.show(expected, actual))
                         .hint(new TypeMessage.AdjustTheValueOrThePosition())
                         .say(new TypeMessage.ItDoesNotHaveTheTypeItNeedsHere(what)).build());
@@ -1342,7 +1343,7 @@ public final class Elaborator {
                        Symbols symbols, String what) {
         if (decided.decide(declared, actual, symbols) instanceof Fit.Disagrees d) {
             throw CompileException.of(Diagnostic
-                            .at(region(operand))
+                            .at(operand.reportedAt())
                             .diff(Type.show(d.actual(), d.expected()), Type.show(d.expected(), d.actual()))
                             .say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what,
                                     Type.show(d.expected(), d.actual()),
@@ -1355,7 +1356,7 @@ public final class Elaborator {
                      Symbols symbols, String what) {
         if (decided.hold(declared, actual, symbols) instanceof Fit.Disagrees d) {
             throw CompileException.of(Diagnostic
-                            .at(region(operand))
+                            .at(operand.reportedAt())
                             .diff(Type.show(d.actual(), d.expected()), Type.show(d.expected(), d.actual()))
                             .say(new DeclarationMessage.ItExpectsAnotherType(what,
                                     Type.show(d.expected(), d.actual()),
@@ -1405,10 +1406,10 @@ public final class Elaborator {
         };
         if (denotes != null) {
             return CompileException.of(Diagnostic
-                            .at(v.written().region()).say(new DeclarationMessage.ItCannotBeHeldAsAValueHere(v.name(), denotes)).build());
+                            .at(v.written().reportedAt()).say(new DeclarationMessage.ItCannotBeHeldAsAValueHere(v.name(), denotes)).build());
         }
         return CompileException.of(Diagnostic
-                        .at(v.written().region())
+                        .at(v.written().reportedAt())
                         
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))
                         .say(new NameMessage.NoValueOfThatNameInScope(v.name())).build());
@@ -1499,25 +1500,6 @@ public final class Elaborator {
         }
     }
 
-    /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source
-     * text is known, otherwise 1. The renderer underlines this many columns from the node's start. */
-    /**
-     * The characters an expression occupies, as far as a report needs to underline it.
-     *
-     * <p>A name answers with where it is written, which is not what {@link #width} would measure: a
-     * decomposed spelling is wider than the name it denotes, and a qualified one is as far apart as
-     * the source spells it. Everything else is measured from its start, there being nothing else to
-     * measure it by.
-     */
-    public static Region region(Ast.Expr e) {
-        return switch (e) {
-            case Ast.Var v -> v.written().region();
-            case Ast.FieldAccess fa -> fa.name().region();
-            case Ast.Apply c -> c.name().region();
-            default -> Region.ofWidth(e.pos(), width(e));
-        };
-    }
-
     /**
      * What a report about the value a function argument answered with underlines.
      *
@@ -1537,7 +1519,8 @@ public final class Elaborator {
      * goes.
      */
     public static Region answerRegion(Ast.Expr fnArg) {
-        return region(fnArg instanceof Ast.Block block ? answering(block.body()) : fnArg);
+        Ast.Expr answered = fnArg instanceof Ast.Block block ? answering(block.body()) : fnArg;
+        return answered.reportedAt();
     }
 
     /** {@code body} with the bindings written above its answer stepped over. */
@@ -1545,16 +1528,4 @@ public final class Elaborator {
         return body instanceof Ast.LetIn li ? answering(li.body()) : body;
     }
 
-    public static int width(Ast.Expr e) {
-        return switch (e) {
-            case Ast.Var v -> v.name().length();
-            case Ast.StringLit s -> s.value().length() + 2;
-            case Ast.IntLit i -> Long.toString(i.value()).length();
-            case Ast.BoolLit b -> b.value() ? 4 : 5;
-            case Ast.DecimalLit d -> d.value().toPlainString().length() + 1;
-            case Ast.FieldAccess fa -> fa.field().length();
-            case Ast.Apply c -> c.written().length();
-            default -> 1;
-        };
-    }
 }

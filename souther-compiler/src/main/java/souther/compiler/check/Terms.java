@@ -707,20 +707,23 @@ final class Terms {
      * has nothing to fold.
      */
     static Ast.Expr asWrittenValue(Core e) {
+        // Written over nothing, every one of them. A value rendered back out of what was computed is
+        // the value and not the characters any of it came from: the fold has already been over them,
+        // and what it arrived at may be a number no line of the file spells.
         return switch (e) {
-            case Core.Int i -> new Ast.IntLit(i.value(), i.pos());
-            case Core.Decimal d -> new Ast.DecimalLit(d.value(), d.pos());
-            case Core.Str s -> new Ast.StringLit(s.value(), s.pos());
-            case Core.Bool b -> new Ast.BoolLit(b.value(), b.pos());
+            case Core.Int i -> new Ast.IntLit(i.value(), i.pos(), null);
+            case Core.Decimal d -> new Ast.DecimalLit(d.value(), d.pos(), null);
+            case Core.Str s -> new Ast.StringLit(s.value(), s.pos(), null);
+            case Core.Bool b -> new Ast.BoolLit(b.value(), b.pos(), null);
             case Core.Neg n -> {
                 Ast.Expr operand = asWrittenValue(n.operand());
-                yield operand == null ? null : new Ast.Neg(operand, n.pos());
+                yield operand == null ? null : new Ast.Neg(operand, n.pos(), null);
             }
             case Core.Binary b -> {
                 Ast.Expr left = asWrittenValue(b.left());
                 Ast.Expr right = asWrittenValue(b.right());
                 yield left == null || right == null ? null
-                        : new Ast.Binary(b.op(), left, right, b.pos());
+                        : new Ast.Binary(b.op(), left, right, b.pos(), null);
             }
             case Core.PreservedCall call -> {
                 List<Ast.Expr> args = new ArrayList<>();
@@ -732,7 +735,8 @@ final class Terms {
                     args.add(written);
                 }
                 yield new Ast.Apply(call.operation().name(), call.operation(),
-                        reachOf(call.operation()), args, ConstructionOrigin.own(), call.pos());
+                        reachOf(call.operation()), args, ConstructionOrigin.own(), call.pos(),
+                        null);
             }
             case null, default -> null;
         };

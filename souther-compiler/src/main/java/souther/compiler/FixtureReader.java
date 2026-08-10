@@ -975,7 +975,7 @@ public final class FixtureReader {
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
                 throw new FixtureException("`" + c.written() + "` takes one written string");
             }
-            return CallElaborator.parseTemporal(c.written(), lit.value(), Elaborator.region(lit));
+            return CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt());
         }
         if (!neutral.isNewtype(c.written())) {
             String reached = helperKey(c);

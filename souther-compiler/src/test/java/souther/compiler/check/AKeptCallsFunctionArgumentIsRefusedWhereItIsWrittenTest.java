@@ -41,11 +41,11 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
     void aBlockThatAnswersTheWrongTypeIsUnderlinedWhereItIsWritten() {
         Ast.Binders binders = new Ast.Binders(new BindingOwner.OfValue("demo", "test"));
         Ast.Block answersAnInt = new Ast.Block(List.of(binders.binder("x", ARGUMENT)),
-                new Ast.IntLit(1, ARGUMENT), ARGUMENT);
+                new Ast.IntLit(1, ARGUMENT, null), ARGUMENT, null);
         Ast.Expr call = new Ast.Apply("List.flatMap", new ValueName.Stdlib("List", "flatMap"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
-                List.of(answersAnInt, new Ast.ListLit(List.of(new Ast.IntLit(2, CALL)), CALL)),
-                ConstructionOrigin.own(), CALL);
+                List.of(answersAnInt, new Ast.ListLit(List.of(new Ast.IntLit(2, CALL, null)), CALL, null)),
+                ConstructionOrigin.own(), CALL, null);
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none())
@@ -64,11 +64,11 @@ class AKeptCallsFunctionArgumentIsRefusedWhereItIsWrittenTest {
     void itIsRefusedBySameSentenceAsAValueArgument() {
         Ast.Binders binders = new Ast.Binders(new BindingOwner.OfValue("demo", "test"));
         Ast.Block answersAnInt = new Ast.Block(List.of(binders.binder("x", ARGUMENT)),
-                new Ast.IntLit(1, ARGUMENT), ARGUMENT);
+                new Ast.IntLit(1, ARGUMENT, null), ARGUMENT, null);
         Ast.Expr call = new Ast.Apply("List.flatMap", new ValueName.Stdlib("List", "flatMap"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
-                List.of(answersAnInt, new Ast.ListLit(List.of(new Ast.IntLit(2, CALL)), CALL)),
-                ConstructionOrigin.own(), CALL);
+                List.of(answersAnInt, new Ast.ListLit(List.of(new Ast.IntLit(2, CALL, null)), CALL, null)),
+                ConstructionOrigin.own(), CALL, null);
 
         CompileException e = assertThrows(CompileException.class,
                 () -> Elaborator.elaborate(call, Scope.NONE, CheckContext.of(Symbols.none())

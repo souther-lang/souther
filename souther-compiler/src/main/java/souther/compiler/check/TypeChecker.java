@@ -462,7 +462,7 @@ public final class TypeChecker {
                 // would make a `| Some v` pattern ambiguous between Option and the user case, so the
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
                 rejected.add(CompileException.of(Diagnostic
-                                .at(def.written().region()).say(new BehaviorMessage.ABuiltInOptionCaseCannotBeDeclared(def.name())).build()));
+                                .at(def.written().reportedAt()).say(new BehaviorMessage.ABuiltInOptionCaseCannotBeDeclared(def.name())).build()));
                 continue;
             }
             if (symbols.containsKey(def.name())) {

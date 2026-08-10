@@ -127,10 +127,13 @@ public final class Lower {
      * abort in) a guard the original comprehension short-circuited past.
      */
     private static Ast.Expr listCompToIf(Ast.ListComp comp) {
-        Ast.Expr result = new Ast.ListLit(List.of(comp.element()), comp.pos());
+        // The `if` stands where the comprehension was written; the two lists are this lowering's
+        // own — no run of characters in the file spells either of them.
+        Ast.Expr result = new Ast.ListLit(List.of(comp.element()), comp.pos(), null);
         List<Ast.Expr> guards = comp.guards();
         for (int i = guards.size() - 1; i >= 0; i--) {
-            result = new Ast.If(guards.get(i), result, new Ast.ListLit(List.of(), comp.pos()), comp.pos());
+            result = new Ast.If(guards.get(i), result, new Ast.ListLit(List.of(), comp.pos(), null),
+                    comp.pos(), comp.region());
         }
         return result;
     }

@@ -70,7 +70,7 @@ final class PartialHelperUse {
         String reached = path.get(path.size() - 1);
         String rendered = PartialReachability.render(path);
         return CompileException.of(Diagnostic
-                        .at(helper.written().region()).say(new BehaviorMessage.ItReachesAPartialHelper(helper.name(), reached, rendered)).build());
+                        .at(helper.written().reportedAt()).say(new BehaviorMessage.ItReachesAPartialHelper(helper.name(), reached, rendered)).build());
     }
 
     /**
@@ -110,7 +110,7 @@ final class PartialHelperUse {
                 // function type would have to carry the guarantee for and cannot.
                 if (reachability.isPartialFunctionNamed(v)) {
                     throw CompileException.of(Diagnostic
-                                    .at(v.written().region()).say(new BehaviorMessage.APartialHelperIsWrittenWhereAValueGoes(v.name())).build());
+                                    .at(v.written().reportedAt()).say(new BehaviorMessage.APartialHelperIsWrittenWhereAValueGoes(v.name())).build());
                 }
             }
             default -> Ast.forEachChild(e, child -> walkForNamedAsValue(child, reachability));

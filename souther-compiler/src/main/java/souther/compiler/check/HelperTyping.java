@@ -74,7 +74,7 @@ public final class HelperTyping {
                     if (recursive) {
                         // a recursive helper is lowered to a method, not inlined, so no call site
                         // expands it — its parameter types cannot be inferred and must be declared.
-                        throw CompileException.of(Diagnostic.at(p.written().region())
+                        throw CompileException.of(Diagnostic.at(p.written().reportedAt())
                                 .say(new HelperMessage.AParameterNeedsItsType(h.name(), p.name()))
                                 .build());
                     }
@@ -271,7 +271,7 @@ public final class HelperTyping {
         for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
             if (HelperParams.isApplied(body, p.binder())) {
-                throw CompileException.of(Diagnostic.at(p.written().region())
+                throw CompileException.of(Diagnostic.at(p.written().reportedAt())
                         .say(new HelperMessage.AFunctionTypedParameterNeedsItsType(h.name(),
                                 p.name()))
                         .build());
@@ -298,13 +298,13 @@ public final class HelperTyping {
             // not ask — where a body that says nothing at all might have said something.
             HelperParams.OpenUse left = openUses.get(idx);
             boolean field = left != null && left.readAField();
-            Diagnostic.Builder d = Diagnostic.at(p.written().region())
+            Diagnostic.Builder d = Diagnostic.at(p.written().reportedAt())
                     .say(field
                             ? new HelperMessage.AParameterIsOnlyReadThroughAField(h.name(), p.name())
                             : new HelperMessage.AParameterIsNotDeterminedByTheBody(h.name(),
                                     p.name()));
             if (left != null) {
-                d.secondary(Region.ofWidth(left.use().pos(), Elaborator.width(left.use())),
+                d.secondary(left.use().reportedAt(),
                         field ? new HelperMessage.AFieldIsReadOffItAndThatNamesNoType()
                                 : new HelperMessage.ThisUseNamesNoType());
             }
@@ -339,7 +339,7 @@ public final class HelperTyping {
             List<Type> params = new ArrayList<>();
             for (Ast.FnParam p : h.params()) {
                 if (p.type() == null) {
-                    throw CompileException.of(Diagnostic.at(p.written().region())
+                    throw CompileException.of(Diagnostic.at(p.written().reportedAt())
                             .say(new HelperMessage.AParameterNeedsItsType(name, p.name()))
                             .build());
                 }
@@ -372,7 +372,7 @@ public final class HelperTyping {
         String reached = path.get(path.size() - 1);
         String rendered = "invariant -> " + PartialReachability.render(path);
         Ast.Apply at = firstCallTo(e, path.get(0));
-        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().region())
+        throw CompileException.of(Diagnostic.at(at == null ? null : at.name().reportedAt())
                 .say(new InvariantMessage.TheInvariantReachesAPartialHelper(data, reached, rendered))
                 .build());
     }
@@ -449,7 +449,7 @@ public final class HelperTyping {
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
         if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
             throw CompileException.of(Diagnostic
-                            .at(call.name().region()).say(new NameMessage.ARecursiveHelperIsPure(helper, call.written())).build());
+                            .at(call.appliedAt()).say(new NameMessage.ARecursiveHelperIsPure(helper, call.written())).build());
         }
         TypeChecker.forEachChild(e, c -> rejectInjectedCalls(c, helper, injected));
     }

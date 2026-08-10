@@ -468,7 +468,9 @@ public final class AstBuilder {
                 // positioned on the pattern: what a complaint about it has to name is the parameter
                 // the author wrote, not the definition it sits in
                 SourcePos at = pos(pat);
-                body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at), body, at);
+                // What the pattern lowers to holds the body, so it covers what the body covers.
+                body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at), body, at,
+                        body.region());
             }
         }
         // What the definition says, measured on what was built for it. Folding a block writes a
@@ -652,11 +654,13 @@ public final class AstBuilder {
             case FIELD_ACCESS -> fieldAccess(n);
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
-            case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n));
+            case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n), region(n));
             case PIPE_EXPR -> pipe(n);
-            case PAREN_EXPR -> expr(onlyExpr(n));
-            case TUPLE_EXPR -> new Ast.Tuple(exprList(n), pos(n));
-            case LIST_EXPR -> new Ast.ListLit(exprList(n), pos(n));
+            // The parentheses are dropped from the tree and not from the file: what stands here is
+            // the expression inside them, written over the whole of what the author bracketed.
+            case PAREN_EXPR -> Ast.withRegion(expr(onlyExpr(n)), region(n));
+            case TUPLE_EXPR -> new Ast.Tuple(exprList(n), pos(n), region(n));
+            case LIST_EXPR -> new Ast.ListLit(exprList(n), pos(n), region(n));
             case LIST_COMP -> listComp(n);
             case IF_EXPR -> ifExpr(n);
             case MATCH_EXPR -> matchExpr(n);
@@ -672,12 +676,17 @@ public final class AstBuilder {
     private Ast.Expr literal(SyntaxNode n) {
         SyntaxToken t = firstMeaningfulToken(n);
         SourcePos pos = posOf(t);
+        // The token's own slice, never the decoded value's length. A literal is written with the
+        // escapes the author typed and read as the characters they stand for, and it is canonicalized
+        // as it is read, so the value is the wrong ruler for the file in two ways at once.
+        Region region = regionOf(t);
         return switch (t.kind()) {
-            case INT_LIT -> new Ast.IntLit(Long.parseLong(t.text()), pos);
-            case DECIMAL_LIT -> new Ast.DecimalLit(new BigDecimal(stripDecimalSuffix(t.text())), pos);
-            case STRING_LIT -> new Ast.StringLit(stringValue(t.text()), pos);
-            case TRUE_KW -> new Ast.BoolLit(true, pos);
-            case FALSE_KW -> new Ast.BoolLit(false, pos);
+            case INT_LIT -> new Ast.IntLit(Long.parseLong(t.text()), pos, region);
+            case DECIMAL_LIT ->
+                    new Ast.DecimalLit(new BigDecimal(stripDecimalSuffix(t.text())), pos, region);
+            case STRING_LIT -> new Ast.StringLit(stringValue(t.text()), pos, region);
+            case TRUE_KW -> new Ast.BoolLit(true, pos, region);
+            case FALSE_KW -> new Ast.BoolLit(false, pos, region);
             default -> throw error(pos, new ParseMessage.ALiteralWasExpected());
         };
     }
@@ -688,13 +697,13 @@ public final class AstBuilder {
         if (!(reason instanceof Ast.StringLit lit)) {
             throw error(pos(n), new ParseMessage.UnreachableStatesItsReasonAsAString());
         }
-        return new Ast.Unreachable(lit.value(), pos(n));
+        return new Ast.Unreachable(lit.value(), pos(n), region(n));
     }
 
     private Ast.Expr fieldAccess(SyntaxNode n) {
         Ast.Expr target = expr(firstExprChild(n));
         SyntaxToken field = lastIdentToken(n);
-        return new Ast.FieldAccess(target, nameOf(field), posOf(field));
+        return new Ast.FieldAccess(target, nameOf(field), posOf(field), region(n));
     }
 
     /**
@@ -713,13 +722,16 @@ public final class AstBuilder {
                 args.add(expr(arg));
             }
         });
-        return new Ast.Apply(expr(callee), args, ConstructionOrigin.own(), pos(callee));
+        return new Ast.Apply(expr(callee), args, ConstructionOrigin.own(), pos(callee), region(n));
     }
 
     private Ast.Expr binary(SyntaxNode n) {
         List<SyntaxNode> operands = exprChildren(n);
         SyntaxToken op = operatorToken(n);
-        return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)), posOf(op));
+        // Anchored at the operator, which is what a report about the operation is about, and written
+        // over both operands, which is what the operation is.
+        return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)),
+                posOf(op), region(n));
     }
 
     private static Ast.BinOp binOp(SyntaxKind k) {
@@ -747,20 +759,24 @@ public final class AstBuilder {
         List<SyntaxNode> operands = exprChildren(n);
         Ast.Expr left = expr(operands.get(0));
         Ast.Expr right = expr(operands.get(1));
+        // The application this becomes is anchored where the callee is written, which is where a
+        // report about what is being applied belongs, and is written over the whole pipe — the value
+        // on the left is an argument of it however far from the callee the author put it.
+        Region written = region(n);
         if (right instanceof Ast.Apply c) {
             List<Ast.Expr> args = new ArrayList<>(c.args());
             args.add(left);
-            return new Ast.Apply(c.function(), args, c.origin(), c.pos());
+            return new Ast.Apply(c.function(), args, c.origin(), c.pos(), written);
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Apply(v.name(), List.of(left), v.pos());
+            return new Ast.Apply(v, List.of(left), ConstructionOrigin.own(), v.pos(), written);
         }
         // `e |> Mod.name`: the read is handed over as the callee it is, rather than reassembled
         // into a name here. Whether it is a namespace member or a field taken off a binding is
         // resolution's to say, and it says it once, for this and for `Mod.name(e)` alike.
         if (right instanceof Ast.FieldAccess fa) {
             return new Ast.Apply(fa, List.of(left), ConstructionOrigin.own(),
-                    pos(operands.get(1)));
+                    pos(operands.get(1)), written);
         }
         throw CompileException.of(Diagnostic.at(right.pos())
                 .say(new DeclarationMessage.TheRightSideOfAValuePipeIsACall()).build());
@@ -773,7 +789,7 @@ public final class AstBuilder {
         for (int i = 1; i < exprs.size(); i++) {
             guards.add(expr(exprs.get(i)));
         }
-        return new Ast.ListComp(element, guards, pos(n));
+        return new Ast.ListComp(element, guards, pos(n), region(n));
     }
 
     private Ast.Expr ifExpr(SyntaxNode n) {
@@ -783,13 +799,14 @@ public final class AstBuilder {
         List<Ast.ElseArm> arms = elseArms(n, binder);
         if (arms != null) {
             return new Ast.IfConstructed(expr(exprs.get(0)),
-                    binderOf(as), expr(exprs.get(1)), arms, pos(n));
+                    binderOf(as), expr(exprs.get(1)), arms, pos(n), region(n));
         }
         return binder == null
-                ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n))
+                ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n),
+                        region(n))
                 : new Ast.IfConstructed(expr(exprs.get(0)),
                         binderOf(as), expr(exprs.get(1)),
-                        List.of(Ast.ElseArm.any(expr(exprs.get(2)))), pos(n));
+                        List.of(Ast.ElseArm.any(expr(exprs.get(2)))), pos(n), region(n));
     }
 
     /**
@@ -855,14 +872,17 @@ public final class AstBuilder {
                     ? binderOf(p)
                     : Ast.Binder.desugared("$p" + (patternCounter++), pos(p)));
         }
-        Ast.Expr body = expr(lastExprChild(n));
+        SyntaxNode bodyNode = lastExprChild(n);
+        Ast.Expr body = expr(bodyNode);
+        Region bodyRegion = region(bodyNode);
         for (int i = pats.size() - 1; i >= 0; i--) {
             if (pats.get(i).kind() != SyntaxKind.PATTERN_NAME) {
                 SourcePos at = pos(pats.get(i));
-                body = bindPattern(pats.get(i), Ast.Var.desugared(params.get(i).name(), at), body, at);
+                body = bindPattern(pats.get(i), Ast.Var.desugared(params.get(i).name(), at), body,
+                        at, bodyRegion);
             }
         }
-        return new Ast.Block(List.copyOf(params), body, pos);
+        return new Ast.Block(List.copyOf(params), body, pos, region(n));
     }
 
     private Ast.Expr fieldGetter(SyntaxNode n) {
@@ -873,9 +893,11 @@ public final class AstBuilder {
         SyntaxToken field = lastIdentToken(n);
         SourcePos pos = pos(n);
         String param = "$g" + (getterCounter++);
+        // Both the getter and the read inside it are written over the `.field` that stands for
+        // them: the parameter is a name nobody typed, and the characters here are the field's.
         Ast.Expr body = new Ast.FieldAccess(Ast.Var.desugared(param, pos), nameOf(field),
-                posOf(field));
-        return Ast.Block.desugared(List.of(param), body, pos);
+                posOf(field), region(n));
+        return Ast.Block.desugared(List.of(param), body, pos, region(n));
     }
 
     private Ast.Expr newData(SyntaxNode n) {
@@ -897,7 +919,8 @@ public final class AstBuilder {
                     Ast.Expr value = new Ast.Var(nameOf(path.get(0)), null, null);
                     for (int i = 1; i < path.size(); i++) {
                         value = new Ast.FieldAccess(value, nameOf(path.get(i)),
-                                posOf(path.get(i)));
+                                posOf(path.get(i)),
+                                new Region(posOf(path.get(0)), lines.posOf(path.get(i).end())));
                     }
                     pathNames.add(bound);
                     pathValues.add(value);
@@ -913,9 +936,12 @@ public final class AstBuilder {
                 inits.add(new Ast.FieldInit(field, v));
             }
         }
-        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, ConstructionOrigin.own(), pos(n));
+        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, ConstructionOrigin.own(),
+                pos(n), region(n));
+        // The bindings the spread paths become are the construction as it was written: they stand
+        // where it stands and there is nothing else at those characters.
         for (int i = pathNames.size() - 1; i >= 0; i--) {
-            built = new Ast.LetIn(pathNames.get(i), pathValues.get(i), built, pos(n));
+            built = new Ast.LetIn(pathNames.get(i), pathValues.get(i), built, pos(n), region(n));
         }
         return built;
     }
@@ -927,7 +953,7 @@ public final class AstBuilder {
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
             cases.add(matchCase(c));
         }
-        return new Ast.Match(scrutinee, cases, pos(n));
+        return new Ast.Match(scrutinee, cases, pos(n), region(n));
     }
 
     /** A name as the source wrote it — bare, or qualified through a module or an import alias — read
@@ -1059,7 +1085,11 @@ public final class AstBuilder {
                     unwrapNames.get(0).written()));
         }
         // skip the arrow, then the body is the trailing expression node
-        Ast.Expr body = expr(lastExprChild(n));
+        SyntaxNode bodyNode = lastExprChild(n);
+        Ast.Expr body = expr(bodyNode);
+        // What the pattern lowers to holds the arm's body, so that is what those bindings are
+        // written over. The reads they bind are the lowering's own and were written nowhere.
+        Region bodyRegion = region(bodyNode);
 
         String binding = someBinding != null ? someBinding : asBinding;
         if (!fieldNames.isEmpty()) {
@@ -1069,8 +1099,9 @@ public final class AstBuilder {
             }
             for (int k = fieldNames.size() - 1; k >= 0; k--) {
                 body = new Ast.LetIn(fieldVars.get(k),
-                        new Ast.FieldAccess(Ast.Var.desugared(whole, casePos), fieldNames.get(k), casePos),
-                        body, casePos);
+                        new Ast.FieldAccess(Ast.Var.desugared(whole, casePos), fieldNames.get(k),
+                                casePos),
+                        body, casePos, bodyRegion);
             }
             binding = whole;
         } else if (!unwrapNames.isEmpty()) {
@@ -1089,7 +1120,7 @@ public final class AstBuilder {
                 target = new Ast.FieldAccess(target, "value", casePos);
             }
             Ast.Name innermost = unwrapNames.get(unwrapNames.size() - 1);
-            body = new Ast.LetIn(Ast.Binder.of(innermost), target, body, casePos);
+            body = new Ast.LetIn(Ast.Binder.of(innermost), target, body, casePos, bodyRegion);
             binding = whole;
         }
         // null = no constructor destructure; otherwise the inner names (before the bound variable),
@@ -1204,6 +1235,9 @@ public final class AstBuilder {
         }
         SyntaxNode s = stmts.get(index);
         SourcePos pos = pos(s);
+        // A statement folded into what follows it is written over both: the expression this becomes
+        // begins at the statement and ends where the block's result does.
+        Region held = spanning(s, result);
         return switch (s.kind()) {
             case LET_STMT -> {
                 Ast.RetType annotation = s.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
@@ -1213,8 +1247,8 @@ public final class AstBuilder {
                 // asking what a cursor is on has only the name to compare against.
                 Ast.Binder bound = binderOf(s);
                 yield annotation == null
-                        ? new Ast.LetIn(bound, value, rest, pos)
-                        : Ast.LetIn.annotated(bound, value, annotation, rest, pos);
+                        ? new Ast.LetIn(bound, value, rest, pos, held)
+                        : Ast.LetIn.annotated(bound, value, annotation, rest, pos, held);
             }
             case GUARD_STMT -> {
                 List<SyntaxNode> exprs = exprChildren(s);
@@ -1223,19 +1257,20 @@ public final class AstBuilder {
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 if (arms != null) {
-                    yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, pos);
+                    yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, pos,
+                            held);
                 }
                 Ast.Expr settles = expr(exprs.get(0));
                 Ast.Expr otherwise = expr(exprs.get(1));
                 yield binder == null
-                        ? new Ast.If(settles, rest, otherwise, pos)
+                        ? new Ast.If(settles, rest, otherwise, pos, held)
                         : new Ast.IfConstructed(settles, binderOf(as), rest,
-                                List.of(Ast.ElseArm.any(otherwise)), pos);
+                                List.of(Ast.ElseArm.any(otherwise)), pos, held);
             }
             case LET_DESTRUCTURE -> {
                 SyntaxNode pat = patternChild(s);
                 yield bindPattern(pat, expr(onlyExpr(s)),
-                        foldStatements(stmts, index + 1, result), pos(pat));
+                        foldStatements(stmts, index + 1, result), pos(pat), held);
             }
             default -> throw error(pos, new ParseMessage.AStatementWasExpected());
         };
@@ -1285,28 +1320,31 @@ public final class AstBuilder {
         };
     }
 
-    private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos) {
+    private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos,
+                                 Region held) {
         return switch (pat.kind()) {
-            case PATTERN_NAME -> new Ast.LetIn(binderOf(pat), value, rest, pos);
+            case PATTERN_NAME -> new Ast.LetIn(binderOf(pat), value, rest, pos, held);
             case PATTERN_TUPLE -> {
                 List<SyntaxNode> elems = patternChildren(pat);
                 if (elems.size() == 1) {
-                    yield bindPattern(elems.get(0), value, rest, pos);   // `(p)` is grouping
+                    yield bindPattern(elems.get(0), value, rest, pos, held);   // `(p)` is grouping
                 }
                 String whole = "$t" + (tupleCounter++);
                 Ast.Expr body = rest;
                 for (int i = elems.size() - 1; i >= 0; i--) {
                     body = bindPattern(elems.get(i),
-                            new Ast.TupleGet(Ast.Var.desugared(whole, pos), i, elems.size(), pos), body, pos);
+                            new Ast.TupleGet(Ast.Var.desugared(whole, pos), i, elems.size(), pos,
+                                    null),
+                            body, pos, held);
                 }
-                yield new Ast.LetIn(whole, value, body, pos);
+                yield new Ast.LetIn(whole, value, body, pos, held);
             }
             case PATTERN_CTOR -> {
                 String whole = "$p" + (patternCounter++);
                 Ast.Expr inner = new Ast.FieldAccess(Ast.Var.desugared(whole, pos), "value", pos);
-                Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos);
+                Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos, held);
                 yield Ast.LetIn.opening(whole, value,
-                        new Ast.Name(qualifiedNameOf(pat), null), body, pos);
+                        new Ast.Name(qualifiedNameOf(pat), null), body, pos, held);
             }
             case PATTERN_RECORD -> {
                 String whole = "$r" + (patternCounter++);
@@ -1317,9 +1355,10 @@ public final class AstBuilder {
                     String field = ident(names.get(0));
                     SyntaxToken var = names.size() > 1 ? names.get(1) : names.get(0);
                     body = new Ast.LetIn(binderOf(var),
-                            new Ast.FieldAccess(Ast.Var.desugared(whole, pos), field, pos), body, pos);
+                            new Ast.FieldAccess(Ast.Var.desugared(whole, pos), field, pos), body,
+                            pos, held);
                 }
-                yield new Ast.LetIn(whole, value, body, pos);
+                yield new Ast.LetIn(whole, value, body, pos, held);
             }
             default -> throw error(pos, new ParseMessage.APatternWasExpected());
         };
@@ -1583,8 +1622,62 @@ public final class AstBuilder {
         return lines.posOf(firstMeaningfulToken(n).start());
     }
 
+    private SyntaxToken lastMeaningfulTokenOrNull(SyntaxNode n) {
+        List<SyntaxElement> children = n.children();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            SyntaxElement e = children.get(i);
+            if (e instanceof SyntaxToken t && !t.isTrivia()) {
+                return t;
+            }
+            if (e instanceof SyntaxNode c) {
+                SyntaxToken inner = lastMeaningfulTokenOrNull(c);
+                if (inner != null) {
+                    return inner;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The stretch of source {@code n} was written over: the first character of its first meaningful
+     * token to the last of its last.
+     *
+     * <p>Both ends off the tokens rather than off the node. A node's own extent takes in the trivia
+     * the parser flushed into it, and what stands between two forms belongs to neither: a comment
+     * after the last operand of a condition is not part of the condition, and an underline that ran
+     * to the end of it would say it was.
+     *
+     * <p>Null for a node holding no meaningful token, which is what a recovery node can be. A form
+     * the parser could not read is not one the author wrote a definite stretch of.
+     */
+    private Region region(SyntaxNode n) {
+        SyntaxToken first = firstMeaningfulTokenOrNull(n);
+        SyntaxToken last = lastMeaningfulTokenOrNull(n);
+        return first == null || last == null ? null
+                : new Region(lines.posOf(first.start()), lines.posOf(last.end()));
+    }
+
     private SourcePos posOf(SyntaxToken t) {
         return lines.posOf(t.start());
+    }
+
+    /** The characters {@code t} is written with — its own slice of the file, escapes and all. */
+    private Region regionOf(SyntaxToken t) {
+        return new Region(lines.posOf(t.start()), lines.posOf(t.end()));
+    }
+
+    /**
+     * From where {@code from} begins to where {@code to} ends.
+     *
+     * <p>What a statement folded into the rest of its block is written over. {@code let x = e} is one
+     * expression holding everything after it, so the characters it covers are its own and the ones
+     * it nests, and neither node has both ends of that on its own.
+     */
+    private Region spanning(SyntaxNode from, SyntaxNode to) {
+        Region begins = region(from);
+        Region ends = region(to);
+        return begins == null || ends == null ? null : new Region(begins.start(), ends.end());
     }
 
     /** The name {@code n} binds, written where the source writes it. */

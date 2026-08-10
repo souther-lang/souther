@@ -464,12 +464,12 @@ final class TotalityChecker {
      *  underlines the keyword rather than what it is about. */
     private static <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
             CompileException error(Ast.FnDef h, M said) {
-        return CompileException.of(Diagnostic.at(h.written().region()).say(said).build());
+        return CompileException.of(Diagnostic.at(h.written().reportedAt()).say(said).build());
     }
 
     private static <M extends souther.compiler.diag.msg.Message & souther.compiler.diag.msg.Reported>
             CompileException error(Ast.Apply call, M said) {
-        return CompileException.of(Diagnostic.at(call.name().region()).say(said).build());
+        return CompileException.of(Diagnostic.at(call.appliedAt()).say(said).build());
     }
 
     // --- a direct-child visitor mirroring the one in HelperInliner/TypeChecker ---
