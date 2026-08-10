@@ -105,4 +105,28 @@ class WhichArmWitnessesAComparisonIsPerComparisonTest {
                         "r.c", OriginRef.GuardOrigin.Witness.THEN),
                 witnesses("(r.a >= 0 || r.b >= 0) && r.c >= 0"));
     }
+
+    /**
+     * A conjunction inside a disjunction, which is the other nesting.
+     *
+     * <p>{@code B} is reached whenever {@code A} was false, and reaching the arm where the whole
+     * thing failed is what says so. {@code C} is not: the conjunction failing is as easily
+     * {@code B} being false as {@code C} being, and then {@code C} never ran — on either arm.
+     */
+    @Test
+    void aConjunctionInsideADisjunctionKeepsWhatItsPlaceProves() {
+        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
+                        "r.b", OriginRef.GuardOrigin.Witness.ELSE,
+                        "r.c", OriginRef.GuardOrigin.Witness.NEITHER),
+                witnesses("r.a >= 0 || (r.b >= 0 && r.c >= 0)"));
+    }
+
+    /** And a conjunction over a disjunction, where the last operand is the one the failure reaches. */
+    @Test
+    void aDisjunctionOverAConjunctionKeepsWhatItsPlaceProves() {
+        assertEquals(Map.of("r.a", OriginRef.GuardOrigin.Witness.BOTH,
+                        "r.b", OriginRef.GuardOrigin.Witness.NEITHER,
+                        "r.c", OriginRef.GuardOrigin.Witness.ELSE),
+                witnesses("(r.a >= 0 && r.b >= 0) || r.c >= 0"));
+    }
 }

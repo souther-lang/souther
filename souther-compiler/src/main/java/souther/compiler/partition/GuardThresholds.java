@@ -211,6 +211,19 @@ public final class GuardThresholds {
     /**
      * What reaching each arm of the enclosing {@code if} says about one subtree of its condition.
      *
+     * <p>Four answers and not six, on a premise worth stating rather than leaving to be rediscovered.
+     * A subtree can be forced true only where the whole condition is true and forced false only where
+     * it is false — {@code &&} passes a true value down to both operands, {@code ||} passes a false
+     * one, and neither passes anything the other way. So "false on {@code then}" and "true on
+     * {@code else}" are unreachable and are not carried.
+     *
+     * <p>What makes that hold is that a condition is built from {@code &&} and {@code ||} and
+     * nothing else. There is no negation operator: {@code Bool.not} is a helper, inlined to an
+     * {@code if} whose condition is the comparison itself, so it never stands between a comparison
+     * and the arms this is about. An operator that inverted a value inside a condition would break
+     * the premise and want the other two answers, and would find this comment rather than a wrong
+     * result.
+     *
      * @param onThen    whether reaching the {@code then} arm implies this subtree was evaluated
      * @param onElse    the same for {@code else}
      * @param trueThen  whether reaching {@code then} implies this subtree's own value was true
