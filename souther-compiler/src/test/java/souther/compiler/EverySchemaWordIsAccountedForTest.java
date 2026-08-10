@@ -89,6 +89,14 @@ class EverySchemaWordIsAccountedForTest {
         }
     }
 
+    /** The kinds of site a branch measure counts, spelled by the writer's own encoder. */
+    private static Set<String> armWords() {
+        return Arrays.stream(CoverageSites.Site.Kind.values())
+                .filter(CoverageSites.Site.Kind::isArm)
+                .map(AdequacyReport::word)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+    }
+
     /** What a document may say a status is. Two of the compiler's four states share one of them. */
     private static final Set<String> STATUS_WORDS =
             new LinkedHashSet<>(List.of("complete", "partial", "unavailable"));
@@ -113,10 +121,14 @@ class EverySchemaWordIsAccountedForTest {
             new Vocabulary("status", List.of("$defs", "status"), STATUS_WORDS),
             new Vocabulary("branch.reason", List.of("$defs", "branch", "properties", "reason"),
                     Adequacy.BranchEvidence.Reason.class),
+            // The arms, which is fewer than the kinds a site has. A comparison of a guard's condition
+            // is a site and not a fork a row is in or out of, so it never reaches this field —
+            // projected off the same predicate the measure uses rather than listed here, so that an
+            // arm kind added later still has to teach the schema its word.
             new Vocabulary("branch.unreached[].kind",
                     List.of("$defs", "branch", "properties", "unreached", "items", "properties",
                             "kind"),
-                    CoverageSites.Site.Kind.class),
+                    CoverageSites.Site.Kind.class, armWords(), Set.of()),
             new Vocabulary("partition.axesMeasure.reason",
                     List.of("$defs", "partition", "properties", "axesMeasure", "properties",
                             "reason"),
@@ -137,10 +149,14 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "side"),
                     BoundaryObligation.BoundarySide.class),
+            // `no_arm_witnesses_it` was what a guard's line came back as where the arms could not
+            // separate the rows that reached its comparison from the rows that did not. The
+            // comparison is observed where it runs now, so nothing produces the word — and reports of
+            // this version were written carrying it, and a version says what its documents may carry.
             new Vocabulary("partition.boundaries[].reason",
                     List.of("$defs", "partition", "properties", "boundaries", "items", "properties",
                             "reason"),
-                    BoundaryAssessment.Coverage.Reason.class),
+                    BoundaryAssessment.Coverage.Reason.class, Set.of("no_arm_witnesses_it")),
             new Vocabulary("partition.pairs.reason",
                     List.of("$defs", "partition", "properties", "pairs", "properties", "reason"),
                     PartitionEvidence.PairSpace.Reason.class),

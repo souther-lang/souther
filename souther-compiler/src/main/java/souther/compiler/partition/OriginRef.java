@@ -39,56 +39,48 @@ public sealed interface OriginRef {
      * writing the value: the comparison has to have been evaluated. A row can hand the behavior the
      * exact threshold and never reach the guard that cares about it.
      *
-     * @param guard             which {@code if} — by the arms it owns, so a hit set answers whether
-     *                          it ran
+     * @param guard             which {@code if} — by the arms it owns, which is what says which
+     *                          class of the partition a row landed in
+     * @param site              where the comparison's own value is recorded. Required, and this is
+     *                          what meeting the line is measured against: a row met it by getting the
+     *                          comparison to answer, which is not what any arm records. A condition
+     *                          stops as soon as it is settled, so under {@code A && B} the arm where
+     *                          the condition failed holds rows that made {@code B} false and rows
+     *                          that never reached {@code B}
      * @param valueBelongsBelow which side of the line the cut value itself is on. It decides which
      *                          neighbour is the other class's edge: {@code <= 3000} leaves 3001 over
      *                          there, {@code < 3000} leaves 2999.
-     * @param witness           which arms of the {@code if} prove this comparison was evaluated.
-     *                          Both, where the comparison is the whole condition. Under {@code A &&
-     *                          B} only {@code then} proves the second operand ran, and under
-     *                          {@code A || B} only {@code else} does — so a row that landed in the
-     *                          other arm has shown nothing about this line, however its value reads
-     * @param holdsAtTheValue   whether the comparison is true at the line's own value, which is what
-     *                          says which side of it a row would have to be on to reach a witnessing
-     *                          arm. Not derivable from {@code valueBelongsBelow}: {@code x <= c} and
-     *                          {@code x > c} agree about the class the value is in and disagree here
+     * @param witness           which arms of the {@code if} a row reaching this comparison can land
+     *                          in. Not what says the comparison ran — {@code site} is — but what says
+     *                          which arm's edge is this comparison's to draw, which is a question
+     *                          about the classes either side of the line
+     * @param holdsAtTheValue   whether the comparison is true at the line's own value. Not derivable
+     *                          from {@code valueBelongsBelow}: {@code x <= c} and {@code x > c} agree
+     *                          about the class the value is in and disagree here
      */
-    record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, SourceRef at,
-                       boolean valueBelongsBelow, Witness witness, boolean holdsAtTheValue,
-                       boolean singles) implements OriginRef {
+    record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
+                       SourceRef at, boolean valueBelongsBelow, Witness witness,
+                       boolean holdsAtTheValue, boolean singles) implements OriginRef {
 
-        public GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, SourceRef at,
-                           boolean valueBelongsBelow, Witness witness, boolean holdsAtTheValue) {
-            this(guard, at, valueBelongsBelow, witness, holdsAtTheValue, false);
+        public GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
+                           SourceRef at, boolean valueBelongsBelow, Witness witness,
+                           boolean holdsAtTheValue) {
+            this(guard, site, at, valueBelongsBelow, witness, holdsAtTheValue, false);
         }
 
-        /** Which arms prove the comparison ran. */
+        /** Which arms a row that reached this comparison can be in. */
         public enum Witness {
-            /** Reaching either arm proves it: the comparison is on the leftmost spine. */
+            /** Either: the comparison is on the leftmost spine, so it runs whatever the condition
+             * comes to. */
             BOTH,
             /** Only the arm the whole condition is true on, which is a conjunction. */
             THEN,
             /** Only the arm it is false on, which is a disjunction. */
             ELSE,
-            /**
-             * Neither, which a condition mixing {@code &&} and {@code ||} leaves.
-             *
-             * <p>Not a claim that no row reaches the comparison — rows reach it all the time. It is
-             * that no arm of this {@code if} separates the rows that did from the rows that did not,
-             * so nothing this build records can tell them apart.
-             */
+            /** Neither on its own, which a condition mixing {@code &&} and {@code ||} leaves: a row
+             * that reached the comparison can be in either arm, so neither arm's edge is this
+             * comparison's alone. */
             NEITHER
-        }
-
-        /** Whether an arm could witness a row written at a value the comparison is {@code true} at. */
-        public boolean witnessedWhereItHolds(boolean holds) {
-            return switch (witness) {
-                case BOTH -> true;
-                case THEN -> holds;
-                case ELSE -> !holds;
-                case NEITHER -> false;
-            };
         }
     }
 

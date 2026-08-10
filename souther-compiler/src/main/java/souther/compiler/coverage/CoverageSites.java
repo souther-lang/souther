@@ -1,5 +1,6 @@
 package souther.compiler.coverage;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.TypeName;
@@ -69,7 +70,28 @@ public final class CoverageSites {
             /** The arm an attempted construction takes when the value was built. */
             CONSTRUCTED,
             /** An arm it takes when a clause refused. */
-            DEPARTURE
+            DEPARTURE,
+            /**
+             * One comparison of a guard's condition, recorded where it produced its boolean value.
+             *
+             * <p>Not an arm, and counted as one nowhere. A condition stops as soon as its answer is
+             * settled, so which arm a row landed in does not say which of the condition's comparisons
+             * ran: under {@code A && B} the arm where the condition failed is where a row that made
+             * {@code B} false lands and where a row that never reached {@code B} lands. Only an
+             * observation at the comparison separates them.
+             */
+            COMPARISON;
+
+            /** Whether a site of this kind is one of the arms a branch measure counts, and so one a
+             * report can name as an arm no row goes through. */
+            public boolean isArm() {
+                return this != COMPARISON;
+            }
+        }
+
+        /** Whether this is one of the arms a branch measure counts. */
+        public boolean isArm() {
+            return kind.isArm();
         }
     }
 
@@ -95,18 +117,62 @@ public final class CoverageSites {
      * are equal, and a value-keyed map would hand the emitter the wrong arm's probe. The instances
      * here must be the ones the emitter is walking — the same answer, not an equal one.
      */
-    public record Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode) {
+    public record Plan(List<Site> sites, List<GuardRef> guards, IdentityHashMap<Core, int[]> byNode,
+                       IdentityHashMap<Core, Integer> byComparison) {
 
-        public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>());
+        public static final Plan NONE = new Plan(List.of(), List.of(), new IdentityHashMap<>(),
+                new IdentityHashMap<>());
 
         public boolean isEmpty() {
             return sites.isEmpty();
         }
 
         /** The probe numbers of {@code node}'s arms, in the order the emitter emits them, or null
-         * where this node has none. An entry is {@link #NO_SITE} where that arm answers nothing. */
+         * where this node has none. An entry is {@link #NO_SITE} where that arm answers nothing.
+         *
+         * <p>Arms only, and positional. A comparison's site is not in here and must not be put in
+         * here: the emitter and the readers index this array by an arm's place among its siblings,
+         * and anything else in it lights a neighbour's probe. */
         public int[] probesOf(Core node) {
             return byNode.get(node);
+        }
+
+        /**
+         * Where a comparison's value is recorded, for a comparison that has such a site.
+         *
+         * <p>Empty is an ordinary answer. What gets a site is decided from the shape of the code —
+         * every comparison of a guard's condition — while whether a line is drawn on one is decided
+         * later and from more: a comparison the partition reads nothing off keeps its site and nobody
+         * asks about it. The emitter walks comparisons in both cases and asks this of each.
+         */
+        public java.util.OptionalInt comparisonSiteOf(Core comparison) {
+            Integer site = byComparison.get(comparison);
+            return site == null ? java.util.OptionalInt.empty() : java.util.OptionalInt.of(site);
+        }
+
+        /**
+         * The same, where the caller's own construction says there is one.
+         *
+         * <p>A guard-origin boundary is read off a comparison of a condition this plan instruments,
+         * so the site was planned before the line was. Absent here is not a boundary that cannot be
+         * measured — it is this plan and the reader that found the comparison disagreeing about what
+         * a condition is made of, which no measurement should paper over.
+         */
+        public int requireComparisonSiteOf(Core comparison) {
+            Integer site = byComparison.get(comparison);
+            if (site == null) {
+                throw new IllegalStateException(
+                        "no comparison site was planned at " + comparison.pos()
+                                + "; a line is read off a comparison this plan does not hold");
+            }
+            return site;
+        }
+
+        /** The arms of one behavior, which is what a branch measure counts. */
+        public List<Site> arms(String behavior) {
+            return sites.stream()
+                    .filter(site -> site.behavior().equals(behavior) && site.isArm())
+                    .toList();
         }
 
         public Site site(int index) {
@@ -121,7 +187,8 @@ public final class CoverageSites {
         for (Map.Entry<String, Core> body : behaviorBodies.entrySet()) {
             walk.behavior(body.getKey(), body.getValue());
         }
-        return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode);
+        return new Plan(List.copyOf(walk.sites), List.copyOf(walk.guards), walk.byNode,
+                walk.byComparison);
     }
 
     private static final class Walk {
@@ -130,6 +197,7 @@ public final class CoverageSites {
         private final List<Site> sites = new ArrayList<>();
         private final List<GuardRef> guards = new ArrayList<>();
         private final IdentityHashMap<Core, int[]> byNode = new IdentityHashMap<>();
+        private final IdentityHashMap<Core, Integer> byComparison = new IdentityHashMap<>();
         private final IdentityHashMap<Core, Boolean> answering = new IdentityHashMap<>();
         private String behavior;
         private int ordinal;
@@ -254,6 +322,7 @@ public final class CoverageSites {
                     if (then != NO_SITE || els != NO_SITE) {
                         guards.add(new GuardRef(behavior, then, els,
                                 new SourceRef(sourceId, iff.pos())));
+                        comparisons(iff.cond());
                     }
                 }
                 case Core.Match m -> {
@@ -278,6 +347,39 @@ public final class CoverageSites {
                     }
                     byNode.put(ic, arms);
                 }
+            }
+        }
+
+        /**
+         * Every comparison one condition is made of, numbered where the code says one is.
+         *
+         * <p>Read off the shape of the condition and nothing else. Which of these a line is later
+         * drawn on takes the behavior's parameters and the module's symbols to answer, and neither is
+         * here — nor should be. A plan's numbering has to be a function of the bodies alone, because
+         * the emitter builds one plan and a measurement builds another and the two are the same
+         * numbering or the probes mean nothing. So this is deliberately wider than what gets read: a
+         * comparison no boundary is drawn on keeps a site nobody asks about, which costs two
+         * instructions in a measuring build and keeps the numbering answerable without the partition.
+         *
+         * <p>Descends through {@code &&} and {@code ||} only, because that is what a condition is
+         * built out of and what the reader of lines walks. Anything else is where the condition's
+         * operands stop.
+         */
+        private void comparisons(Core condition) {
+            if (condition instanceof Core.Binary binary
+                    && (binary.op() == Ast.BinOp.AND || binary.op() == Ast.BinOp.OR)) {
+                comparisons(binary.left());
+                comparisons(binary.right());
+                return;
+            }
+            // Numbered once. A node reached twice is one comparison written once, and a second number
+            // for it would be a site the emitter never lights — which is the shape of a real omission
+            // and would be reported as one.
+            if (condition instanceof Core.Binary comparison
+                    && !byComparison.containsKey(comparison)) {
+                byComparison.put(comparison,
+                        site(Site.Kind.COMPARISON, comparison.op().toString(), comparison,
+                                comparison));
             }
         }
 

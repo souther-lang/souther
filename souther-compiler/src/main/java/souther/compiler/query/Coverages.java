@@ -357,12 +357,6 @@ final class Coverages {
             BoundaryObligation obligation, Axis axis, List<String> parameters,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
-        // Asked before the rows are, because no row could answer it. Reading the rows first would
-        // report "no row is at this value" about a value no row can be seen to be at.
-        if (!obligation.witnessed()) {
-            return new BoundaryAssessment.Coverage.NotMeasured(
-                    BoundaryAssessment.Coverage.Reason.NO_ARM_WITNESSES_IT);
-        }
         boolean guard = obligation.origin() instanceof OriginRef.GuardOrigin;
         BoundaryAssessment.Coverage.Reason absent = guard
                 ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen())
@@ -484,13 +478,18 @@ final class Coverages {
     private enum Met { YES, NO, UNREADABLE, UNDECIDED }
 
     /**
-     * Whether a row wrote the boundary value <em>and</em> got as far as the comparison that cares
-     * about it.
+     * Whether a row wrote the boundary value <em>and</em> got the comparison that cares about it to
+     * produce a value.
      *
      * <p>Both, because either alone is a different claim. A row can hand a behavior exactly 100000 and
      * take an earlier branch that never reaches {@code cost <= 100000}, and counting that as having
-     * tried the boundary would report a rule as exercised that nothing has run. Reaching either arm of
-     * the {@code if} is enough: the comparison was evaluated to get to either one.
+     * tried the boundary would report a rule as exercised that nothing has run.
+     *
+     * <p>Asked of the comparison's own site and of no arm. A condition stops as soon as its answer is
+     * settled, so which arm a row landed in is not an answer about which of the condition's
+     * comparisons ran: under {@code A && B} the arm the condition failed on holds the rows that made
+     * {@code B} false and the rows that never reached {@code B}. Reading the arms here credited the
+     * second kind and could not credit the first.
      */
     private static Met evaluatedAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
                                    ObservedValue boundary, OriginRef.GuardOrigin origin) {
@@ -501,8 +500,7 @@ final class Coverages {
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
                     if (sameNumber(number.value(), boundary)
-                            && (row.hits().contains(origin.guard().siteIndexThen())
-                                    || row.hits().contains(origin.guard().siteIndexElse()))) {
+                            && row.hits().contains(origin.site())) {
                         return Met.YES;
                     }
                 }

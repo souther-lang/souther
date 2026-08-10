@@ -3,10 +3,15 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -89,11 +94,22 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     /** A position a comparison names, in a form nothing reads. */
     @Test
     void aPositionComparedInsideAConjunctionIsSaidToBeUnread() {
-        String block = blockOf("inAConjunction");
+        assertTrue(linesOf("inAConjunction").stream()
+                        .anyMatch(line -> line.axis().equals("inAConjunction/r.cost")),
+                "the body compares it two lines above, so a line was read on it");
+        assertFalse(blockOf("inAConjunction").contains("not derivable: r.cost"),
+                "the body compares it two lines above: " + blockOf("inAConjunction"));
+    }
 
-        assertTrue(block.contains("r.cost"), block);
-        assertFalse(block.contains("not derivable: r.cost"),
-                "the body compares it two lines above: " + block);
+    /** Every line one behavior's rules drew, which is what says the position was read at all. */
+    private static List<BoundaryAssessment> linesOf(String behavior) {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, List<BoundaryAssessment>> boundaries =
+                compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
+        assertNotNull(boundaries, "the model under test compiles");
+        return boundaries.get(behavior);
     }
 
     /** A position nothing compares, which is the sentence the other one was borrowing. */

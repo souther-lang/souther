@@ -704,8 +704,11 @@ public final class Adequacy {
 
             Map<String, BranchEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
-                List<souther.compiler.coverage.CoverageSites.Site> arms = plan.sites().stream()
-                        .filter(site -> site.behavior().equals(behavior.name())).toList();
+                // The arms, and not every site of the behavior. A comparison of a guard's condition
+                // has a site of its own and is not a fork a row is in or out of, so counting it here
+                // would report an arm the body does not have.
+                List<souther.compiler.coverage.CoverageSites.Site> arms =
+                        plan.arms(behavior.name());
                 Observed observed = byTarget.getOrDefault(behavior.name(), Observed.NONE);
                 BranchEvidence.Reason absent =
                         whyNoArms(behavior.name(), withBodies, measured, observed);
