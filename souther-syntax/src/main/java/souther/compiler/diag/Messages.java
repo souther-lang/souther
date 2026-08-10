@@ -6,6 +6,7 @@ import souther.compiler.diag.msg.MessageTemplate;
 import souther.compiler.diag.msg.MessageValues;
 
 import java.text.MessageFormat;
+import java.util.IllformedLocaleException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -28,6 +29,12 @@ import java.util.ResourceBundle;
  * code a diagnostic carries is the same string in every language, so the English documents stay
  * reachable from an answer in any of them.
  *
+ * <p>What a language may be named by is a language tag, and that is the whole of the rule: a tag no
+ * catalog answers is a language nobody has translated this into yet and falls back to the base, and
+ * a tag that is not one is not a language at all. The two are separate questions and a caller asks
+ * the second with {@link #namesALanguage} — an answer in English is what naming a language with no
+ * catalog gets, and it must not also be what naming nothing gets.
+ *
  * <p>The machine's locale is not consulted. It says which language the machine's own interface is
  * in, which is not evidence about the reader: everything the toolchain ships to read — the
  * specification, the bundled library topics, the CLI's own topics — is written in English, so a
@@ -41,9 +48,22 @@ public final class Messages {
     private Messages() {
     }
 
+    /** Where a language is named when the command line names none. */
+    public static final String ENVIRONMENT_VARIABLE = "SOUTHER_LANG";
+
+    /**
+     * The tag this invocation names its language with, and whether it was the environment that named
+     * it rather than the line.
+     *
+     * <p>The two are answered together because a caller refusing the tag has to say where it was
+     * written: a reader told that {@code --lang} is malformed when what is malformed is a variable
+     * their shell exports is sent to fix something they did not write.
+     */
+    public record Named(String tag, boolean fromEnvironment) {}
+
     /** Resolves the locale from an explicit language tag (from {@code --lang}); null means "not set". */
     public static Locale resolveLocale(String explicit) {
-        return resolveLocale(explicit, System.getenv("SOUTHER_LANG"));
+        return resolveLocale(explicit, System.getenv(ENVIRONMENT_VARIABLE));
     }
 
     /**
@@ -56,11 +76,102 @@ public final class Messages {
      * read in one place, and what is done with what it said is a function.
      */
     public static Locale resolveLocale(String explicit, String fromEnvironment) {
-        String tag = explicit == null || explicit.isBlank() ? fromEnvironment : explicit;
-        if (tag != null && !tag.isBlank()) {
-            return Locale.forLanguageTag(tag.replace('_', '-'));
+        return resolveLocale(namedLanguage(explicit, fromEnvironment));
+    }
+
+    /**
+     * The locale of whatever named the language, or the default where nothing did.
+     *
+     * <p>Where the precedence has already been settled — a caller that reads an option knows whether
+     * it was written, which is more than the value of it says, and answers that question once rather
+     * than once here and once where it refuses. Nothing is reached for beyond what is named: a tag
+     * this cannot read resolves to what {@link Locale#forLanguageTag} leaves of it, which is the
+     * default for a tag with nothing readable in front, and never to the value that was outranked.
+     */
+    public static Locale resolveLocale(Named named) {
+        return named == null ? defaultLocale() : Locale.forLanguageTag(asLanguageTag(named.tag()));
+    }
+
+    /** As {@link #namedLanguage(String, String)}, with the environment this process is running in. */
+    public static Named namedLanguage(String explicit) {
+        return namedLanguage(explicit, System.getenv(ENVIRONMENT_VARIABLE));
+    }
+
+    /**
+     * Which tag the precedence chose and where it was written, or null where nothing named a
+     * language.
+     *
+     * <p>The one a caller holds to being a language tag, and the only one: the value that lost the
+     * precedence is not read, and a caller refusing it would be stating that every language anything
+     * on this machine names has to be well formed, which is a different rule from the one that says
+     * which of them is used. {@code SOUTHER_LANG=!! souther compile x.sou --lang en} is a line that
+     * names English, and it compiles.
+     *
+     * <p>Blank is not a language named, on either side, which is the rule {@link #resolveLocale}
+     * resolves by and is stated once for both. A shell exports a variable empty to unset it, and an
+     * adapter passing an option through has nothing to pass when nobody wrote one.
+     *
+     * <p>That a command line's {@code --lang} was written at all is not something this can be asked:
+     * a blank value arrives here as the blank that means nothing was named. Whoever read the option
+     * knows whether it was there, and holds it to being a tag before asking this — {@code --lang ''}
+     * is somebody writing a value where a language goes, and answering it from the environment is
+     * answering a line in a language it did not ask for.
+     */
+    public static Named namedLanguage(String explicit, String fromEnvironment) {
+        if (explicit != null && !explicit.isBlank()) {
+            return new Named(explicit, false);
         }
-        return defaultLocale();
+        if (fromEnvironment != null && !fromEnvironment.isBlank()) {
+            return new Named(fromEnvironment, true);
+        }
+        return null;
+    }
+
+    /**
+     * Whether the whole of {@code tag} is a language tag, which is what a caller asks before naming
+     * a language with it.
+     *
+     * <p>Asked of {@link Locale.Builder}, which refuses a tag it cannot read, and not of
+     * {@link Locale#forLanguageTag}, which is written to be tolerant: given a subtag it cannot read
+     * it keeps the well-formed part in front of it and drops the rest, so {@code en-!!} arrives as
+     * English and the reader is never told that what they wrote after {@code en} said nothing. That
+     * tolerance is what makes it the right thing to resolve with — a caller past this point has a
+     * tag — and the wrong thing to check with.
+     *
+     * <p>Well formed, and not one of the languages this toolchain ships a catalog for. Which
+     * languages are answered in is decided by which catalogs are on the class path and falls back to
+     * the base one; that a reader named a language nobody has translated yet is not a mistake in
+     * what they wrote. So {@code fr}, {@code und} and a private-use {@code x-souther} are all tags,
+     * and all are answered in English until a catalog for them ships.
+     */
+    public static boolean namesALanguage(String tag) {
+        if (tag.isBlank()) {
+            // Said here rather than left to the builder, which does not answer it the same way
+            // everywhere: on 25 an empty tag is a subtag that is missing and is refused, and on 26 it
+            // resets the builder and comes back as `und`. A rule about what a reader may write is not
+            // one the runtime underneath gets to decide.
+            return false;
+        }
+        try {
+            new Locale.Builder().setLanguageTag(asLanguageTag(tag));
+            return true;
+        } catch (IllformedLocaleException _) {
+            return false;
+        }
+    }
+
+    /**
+     * The tag as BCP 47 spells it: an underscore is read as the hyphen it stands in for, so that
+     * {@code ja_JP} — how a POSIX locale writes the same thing, and what a reader copying one out of
+     * their environment has to hand — names Japanese in Japan.
+     *
+     * <p>The alias and nothing else. What it produces is held to being a language tag like any
+     * other, so {@code ja_JP.UTF-8} is refused: the codeset a POSIX locale carries is not part of
+     * naming a language, and reading the tag up to it and dropping the rest is the silence this is
+     * spelt out to avoid.
+     */
+    private static String asLanguageTag(String tag) {
+        return tag.replace('_', '-');
     }
 
     /**
