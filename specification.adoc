@@ -547,7 +547,7 @@ A backslash is read before these characters, and before nothing else:
 \\   a backslash
 ----
 
-A backslash written before anything else is refused (<<e2305>>). It is not read as the character alone: doing that would take a character the author wrote out of the value and say nothing about it, so `+"\d"+` would be the text `+d+`. A regular expression's class is therefore written with the backslash doubled — `+"\\d{3}"+` is the four characters `+\d{3}+` (<<stdlib-string>>).
+A backslash written before anything else is refused (<<e2305>>). It is not read as the character alone: doing that would take a character the author wrote out of the value and say nothing about it, so `+"\d"+` would be the text `+d+`. A regular expression's class is therefore written with the backslash doubled — `+"\\d{3}"+` is the text `+\d{3}+` (<<stdlib-string>>).
 
 A literal's value is normalized to Unicode NFC. A source file is text from an editor, which is the other place text arrives from outside — the first being a decoder, which canonicalizes for the same reason (<<decoder>>). Two canonically equivalent forms are the same text by Unicode's definition and different values to a comparison by code units, so a literal left as written would compare unequal to the same text that came in through a boundary. Which form an editor writes is not something the author chose. The folding is NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a full-width one, which is a different claim about the text than "these are the same characters".
 
