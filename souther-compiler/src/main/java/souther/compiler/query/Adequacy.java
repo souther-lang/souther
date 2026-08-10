@@ -1055,7 +1055,7 @@ public final class Adequacy {
                     // that the switch stays exhaustive over the kinds rather than over the ones
                     // thought of here.
                     case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
-                            PARTITION_OMITTED ->
+                            PARTITION_NOT_READ, PARTITION_OMITTED ->
                             throw new IllegalStateException("not a gap a build refuses: " + gap);
                 }));
             }

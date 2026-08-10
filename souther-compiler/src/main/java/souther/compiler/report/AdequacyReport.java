@@ -761,6 +761,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case NOTHING_COMPOSES_ONE -> "nothing here composes a value at " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
             case SEARCH_LIMIT -> "the search stopped before reaching " + at;
+            case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
+            case LINKAGE_FAILED -> "the generated classes would not link";
+            case NO_REASON_RECORDED -> "nothing was recorded about why";
         };
     }
 
