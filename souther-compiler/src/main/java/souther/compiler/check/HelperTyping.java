@@ -506,9 +506,11 @@ public final class HelperTyping {
             try {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
                         env, new CheckContext(symbols, null, reqs));
-                TypeOps.unify(declared.get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
+                if (TypeOps.unify(declared.get(i), at, bind, symbols) instanceof Fit.Disagrees) {
+                    return;   // the argument does not fit; leave it to the inlined check
+                }
             } catch (CompileException _) {
-                return;   // can't pin the types here; leave it to the inlined check
+                return;   // can't type the argument here; leave it to the inlined check
             }
         }
         for (int i = 0; i < declared.size(); i++) {
@@ -590,9 +592,7 @@ public final class HelperTyping {
                 // what there is to check: `'b?` accepts a block answering with an optional and rejects
                 // one answering with a plain value. Unifying also pins `'b` for the arguments after
                 // this one. A failure is reported as the mismatch it is, in written types.
-                try {
-                    TypeOps.unify(want.result(), got, bind, symbols, lambda.pos(), "block result");
-                } catch (CompileException _) {
+                if (TypeOps.unify(want.result(), got, bind, symbols) instanceof Fit.Disagrees) {
                     throw blockReturnMismatch(h, paramName, want.result(), got, lambda.pos());
                 }
                 return;

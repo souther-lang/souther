@@ -44,8 +44,7 @@ class ASignatureIsNotInstantiatedPerUseTest {
     void aVariableTheExpectedTypeSettledComesBackAsThatType() {
         Prelude.Signature get = Prelude.entry("List.get").signature();
         Map<String, Type> bind = new HashMap<>();
-        BottomInfer.pinResultTypeVars(get.result(), Type.option(Type.var("$0")), bind,
-                null, POS, "result");
+        BottomInfer.pinResultTypeVars(get.result(), Type.option(Type.var("$0")), bind, null);
         assertEquals(Type.var("$0"), bind.get("'a"));
         assertEquals(Type.list(Type.var("$0")), TypeOps.substitute(get.params().get(1), bind));
     }
