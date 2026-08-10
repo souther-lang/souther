@@ -69,7 +69,7 @@ class AnIndentationWitnessNamesTheLevelsAndNotTheLinesTest {
         assertEquals(1, found.size(), "one step was got wrong: " + found);
         Witness.Indentation only = assertInstanceOf(Witness.Indentation.class, found.get(0));
         assertEquals(4, only.canonical());
-        assertEquals(6, only.source());
+        assertEquals(List.of(6), only.source());
     }
 
     /** And the count does not follow the number of lines the level holds. */
@@ -104,7 +104,7 @@ class AnIndentationWitnessNamesTheLevelsAndNotTheLinesTest {
 
         assertEquals(1, found.size(),
                 "the inner level is still four further in than the outer: " + found);
-        assertEquals(6, ((Witness.Indentation) found.get(0)).source());
+        assertEquals(List.of(6), ((Witness.Indentation) found.get(0)).source());
     }
 
     /** Two steps got wrong are two witnesses, each naming a pair of levels of its own. */
@@ -116,8 +116,10 @@ class AnIndentationWitnessNamesTheLevelsAndNotTheLinesTest {
         assertNotEquals(((Witness.Indentation) found.get(0)).unit(),
                 ((Witness.Indentation) found.get(1)).unit(),
                 "each witness names a pair of levels of its own");
-        assertEquals(List.of(6, 8),
-                found.stream().map(w -> ((Witness.Indentation) w).source()).sorted().toList());
+        assertEquals(List.of(List.of(6), List.of(8)),
+                found.stream().map(w -> ((Witness.Indentation) w).source())
+                        .sorted(java.util.Comparator.comparingInt(c -> c.get(0))).toList(),
+                "each names the step the source wrote at its own pair");
     }
 
     /** A source that broke somewhere the canonical form does not is not this rule's to report: the

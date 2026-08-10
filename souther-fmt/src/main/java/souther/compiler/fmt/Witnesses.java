@@ -58,8 +58,7 @@ final class Witnesses {
                         "one level of nesting, written at column " + already + " and at column "
                                 + n.indent() + "; a level has one column and the layout wrote two");
             }
-            Integer column = sourceColumn(source, canonical,
-                    opened.get(n.offset() + 1 + n.indent()), lineAfter(layout.text(), n));
+            Integer column = columnFor(source, canonical, opened, n);
             if (column != null) {
                 had.computeIfAbsent(innermost, _ -> new LinkedHashSet<>()).add(column);
             }
@@ -76,8 +75,8 @@ final class Witnesses {
                     continue;
                 }
                 Integer step = step(written, outer, inner);
-                Integer wrote = sourceStep(had, outer, inner);
-                if (step != null && wrote != null && !step.equals(wrote)) {
+                List<Integer> wrote = sourceSteps(had, outer, inner);
+                if (step != null && wrote != null && !wrote.equals(List.of(step))) {
                     out.add(new Witness.Indentation(unit, step, wrote));
                 }
             }
@@ -99,16 +98,62 @@ final class Witnesses {
         Map<Integer, Place> opened = placesByStart(layout);
         Map<Newline, Integer> out = new LinkedHashMap<>();
         for (Newline n : layout.breaks()) {
-            Place place = opened.get(n.offset() + 1 + n.indent());
-            Integer column = sourceColumn(source, canonical, place, lineAfter(layout.text(), n));
-            if (column == null) {
-                continue;
+            Integer start = lineStartFor(source, canonical, opened, n);
+            if (start != null) {
+                out.put(n, start);
             }
-            List<Written> from = canonical.construction().places().sourcesOf(place);
-            int start = from.get(0).start();
-            out.put(n, source.lastIndexOf('\n', Math.max(0, start - 1)) + 1);
         }
         return out;
+    }
+
+    /**
+     * How far in the source wrote the line the canonical form opens with {@code n}, or null where
+     * it opened no line there.
+     *
+     * <p>Two ways of finding that line, because not every line the canonical form opens is a
+     * place's. A closing bracket takes a line of its own and is written by the construct rather
+     * than at a place, so a break in front of one is found through the token the two texts have in
+     * common instead.
+     */
+    private static Integer columnFor(String source, Formatter.CanonicalForm canonical,
+            Map<Integer, Place> opened, Newline n) {
+        Integer start = lineStartFor(source, canonical, opened, n);
+        if (start == null) {
+            return null;
+        }
+        int indent = 0;
+        while (start + indent < source.length() && source.charAt(start + indent) == ' ') {
+            indent++;
+        }
+        return indent;
+    }
+
+    /** Where the source begins the line, by the same two ways. */
+    private static Integer lineStartFor(String source, Formatter.CanonicalForm canonical,
+            Map<Integer, Place> opened, Newline n) {
+        Layout layout = canonical.layout();
+        Place place = opened.get(n.offset() + 1 + n.indent());
+        if (sourceColumn(source, canonical, place, lineAfter(layout.text(), n)) != null) {
+            int start = canonical.construction().places().sourcesOf(place).get(0).start();
+            return source.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+        }
+        if (place != null) {
+            return null;   // a place is written there and the source did not open a line for it
+        }
+        List<SyntaxToken> had = code(CstParser.parse(source).root());
+        List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
+        if (had.size() != writes.size()) {
+            return null;
+        }
+        for (int i = 0; i + 1 < writes.size(); i++) {
+            if (writes.get(i).end() > n.offset() || n.offset() > writes.get(i + 1).start()) {
+                continue;
+            }
+            int at = had.get(i + 1).start();
+            int lineStart = source.lastIndexOf('\n', Math.max(0, at - 1)) + 1;
+            return source.substring(lineStart, at).isBlank() ? lineStart : null;
+        }
+        return null;
     }
 
     /**
@@ -204,9 +249,11 @@ final class Witnesses {
      * opportunity it settles, so a source that broke some of them and ran the rest together has not
      * laid it out that way: the decision is one and it is about all of them.
      *
-     * <p>A group written down the page because it holds a forced break is not this rule's. That
-     * decision was taken before the width was asked, and reporting it here would tell an author to
-     * close up a line that a comment or a member of its own keeps open.
+     * <p>A group written down the page because it holds a forced break is still this rule's. What
+     * the forced decision settled is why the group is not flat, not whether it is: the group broke,
+     * every opportunity it settles broke with it, and a source that ran them together departed from
+     * that. What such a witness never says is that the canonical form keeps the group whole, which
+     * is the answer that would tell an author to close up a line a comment holds open.
      */
     static List<Witness> conditional(String source, Formatter.CanonicalForm canonical) {
         Layout layout = canonical.layout();
@@ -240,9 +287,6 @@ final class Witnesses {
         List<Witness> out = new ArrayList<>();
         for (Map.Entry<Doc.GroupRef, Integer> e : where.entrySet()) {
             Outcome outcome = outcomes.get(e.getKey());
-            if (!(outcome instanceof Outcome.Flat) && !(outcome instanceof Outcome.BrokenByWidth)) {
-                continue;   // settled by what it holds, before the width was asked
-            }
             boolean whole = outcome instanceof Outcome.Flat;
             boolean sourceWhole = !Boolean.TRUE.equals(broken.get(e.getKey()));
             if (!Boolean.TRUE.equals(agrees.get(e.getKey()))) {
@@ -436,16 +480,27 @@ final class Witnesses {
         return in == null || out == null ? null : in - out;
     }
 
-    /** The same for the source, or null where it wrote either level in more than one column or in
-     *  none. A level the source is not consistent about is not one step it got wrong. */
-    private static Integer sourceStep(Map<Doc.NestRef, Set<Integer>> had, Doc.NestRef outer,
+    /**
+     * The steps the source wrote at a pair of levels, in order and without repeats, or null where
+     * it wrote no line for either of them.
+     *
+     * <p>More than one where the source was not consistent about the inner level. That is one
+     * decision it got wrong and several columns it wrote, not several decisions — the rule was
+     * evaluated once and says one step.
+     *
+     * <p>The outer level has to be one column. Where it is not, its own pair is the unit that is
+     * wrong, and asking this one about a step measured from a column that moves would name a
+     * number neither level has.
+     */
+    private static List<Integer> sourceSteps(Map<Doc.NestRef, Set<Integer>> had, Doc.NestRef outer,
             Doc.NestRef inner) {
         Set<Integer> in = had.get(inner);
         Set<Integer> out = outer == null ? Set.of(0) : had.get(outer);
-        if (in == null || out == null || in.size() != 1 || out.size() != 1) {
+        if (in == null || out == null || out.size() != 1) {
             return null;
         }
-        return in.iterator().next() - out.iterator().next();
+        int from = out.iterator().next();
+        return in.stream().map(c -> c - from).distinct().sorted().toList();
     }
 
     /** Which place each column of the canonical text opens, taking the widest where several begin

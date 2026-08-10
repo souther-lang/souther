@@ -36,8 +36,18 @@ sealed interface Witness {
      *
      * <p>Both are differences and neither is a column. A source that indents a whole construct by
      * two writes every line inside it in the wrong column, and what it got wrong is one step.
+     *
+     * <p>The source's is a list because a source need not have been consistent. The rule was
+     * evaluated once and says one step; what the source wrote at that unit can be two, and saying
+     * so is not two decisions.
      */
-    record Indentation(Levels unit, int canonical, int source) implements Witness {}
+    record Indentation(Levels unit, int canonical, java.util.List<Integer> source)
+            implements Witness {
+
+        public Indentation {
+            source = java.util.List.copyOf(source);
+        }
+    }
 
     /**
      * The spacing rule's unit: one boundary of the canonical form, named by which adjacency of its
