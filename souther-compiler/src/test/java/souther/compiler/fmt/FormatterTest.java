@@ -223,20 +223,15 @@ class FormatterTest {
                 module demo
 
                 data NoItems
-
                 data Duplicate
-
                 data Accepted =
                     { items: Items
                     }
-
                 data Items = List<Int>
                     invariant nonEmpty = List.length(value) >= 1
                     invariant unique = List.allDistinctBy(x -> x, value)
-
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | Duplicate
                     constructs Accepted, Items, NoItems, Duplicate
-
                 let build (xs) = {
                     guard Items(xs) as items else
                         | nonEmpty -> NoItems
@@ -277,15 +272,12 @@ class FormatterTest {
 
                 data Id = String
                     invariant length(value) > 0
-
                 data M =
                     { id: Id
                     , name: String
                     }
-
                 behavior f : (x: M) -> M
                     constructs M
-
                 let f (x) = M { id = x.id, name = x.name }
                 """;
         assertEquals(expected, Formatter.format(messy));
@@ -314,21 +306,15 @@ class FormatterTest {
 
                 data Amount = Int
                     invariant value >= 0
-
                 data Paid = Int
-
                 data Refused
-
                 behavior clock : () -> Amount
                     constructs Amount
-
                 behavior audit : (a: Amount) -> Amount
                     constructs Amount
-
                 behavior pay : (a: Amount) -> Paid | Refused
                     depends on clock, audit
                     constructs Paid, Refused
-
                 let pay (a, clock, audit) = {
                     guard a.value <= 100 else Refused
                     guard Amount(a.value - 1) as charged else Refused
@@ -353,14 +339,10 @@ class FormatterTest {
                 module demo
 
                 data Amount = Int
-
                 let cap = Amount(100)
-
                 let raise (a) = a.value + 1
-
                 behavior pay : (a: Amount) -> Amount
                     constructs Amount
-
                 let pay (a) = Amount(raise(a) + cap.value)
                 """;
         assertEquals(expected, Formatter.format(messy));
@@ -513,12 +495,9 @@ class FormatterTest {
                 data M =
                     { n: Int
                     }
-
                 behavior f : (x: M) -> M
                     constructs M
-
                 let f (x) = x
-
                 example f
                     | "holds" : (M { n = 1 }) -> M { n = 1 }
                 """;
@@ -540,19 +519,14 @@ class FormatterTest {
                 data R =
                     { x: Int
                     }
-
                 behavior clock : () -> String
-
                 behavior f : (r: R) -> R
                     depends on clock
                     constructs R
-
                 let f (r, clock) = r
-
                 fake lookup
                     | (R { x = 1 }) -> R { x = 2 }
                     | _ -> R { x = 0 }
-
                 example f
                     | (R { x = 1 }) with clock = "t" -> R { x = 1 }
                 """;

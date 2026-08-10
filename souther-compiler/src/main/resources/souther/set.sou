@@ -10,19 +10,19 @@ module souther.set
 // `String.contains` use, since it is the same question. `union` / `intersection` / `difference(a, b)`
 // are the set algebra (`difference` is `a` minus `b`); being binary operations they keep their
 // operands in the written order rather than taking a subject last.
-let empty : Set<'a> = intrinsic "set.empty"
+let empty: Set<'a> = intrinsic "set.empty"
 
-let singleton (value: 'a) : Set<'a> = intrinsic "set.singleton"
-let insert (value: 'a, s: Set<'a>) : Set<'a> = intrinsic "set.insert"
-let remove (value: 'a, s: Set<'a>) : Set<'a> = intrinsic "set.remove"
-let contains (value: 'a, s: Set<'a>) : Bool = intrinsic "set.contains"
-let union (a: Set<'a>, b: Set<'a>) : Set<'a> = intrinsic "set.union"
-let intersection (a: Set<'a>, b: Set<'a>) : Set<'a> = intrinsic "set.intersection"
-let difference (a: Set<'a>, b: Set<'a>) : Set<'a> = intrinsic "set.difference"
-let isEmpty (s: Set<'a>) : Bool = intrinsic "set.isEmpty"
-let size (s: Set<'a>) : Int = intrinsic "set.size"
-let toList (s: Set<'a>) : List<'a> = intrinsic "set.toList"
-let fromList (xs: List<'a>) : Set<'a> = intrinsic "set.fromList"
+let singleton (value: 'a): Set<'a> = intrinsic "set.singleton"
+let insert (value: 'a, s: Set<'a>): Set<'a> = intrinsic "set.insert"
+let remove (value: 'a, s: Set<'a>): Set<'a> = intrinsic "set.remove"
+let contains (value: 'a, s: Set<'a>): Bool = intrinsic "set.contains"
+let union (a: Set<'a>, b: Set<'a>): Set<'a> = intrinsic "set.union"
+let intersection (a: Set<'a>, b: Set<'a>): Set<'a> = intrinsic "set.intersection"
+let difference (a: Set<'a>, b: Set<'a>): Set<'a> = intrinsic "set.difference"
+let isEmpty (s: Set<'a>): Bool = intrinsic "set.isEmpty"
+let size (s: Set<'a>): Int = intrinsic "set.size"
+let toList (s: Set<'a>): List<'a> = intrinsic "set.toList"
+let fromList (xs: List<'a>): Set<'a> = intrinsic "set.fromList"
 
 // The higher-order operations (Elm `Set.map` / `filter` / `foldl` / `partition`). Like `Map`, `Set`
 // adds no loop of its own: each one goes out through `toList`, uses the List combinator, and comes
@@ -35,18 +35,21 @@ let fromList (xs: List<'a>) : Set<'a> = intrinsic "set.fromList"
 // duplicates (Elm behaves the same way). `fold` runs over `toList`'s order, which is deterministic
 // but unspecified, so a step whose result depends on the order is a mistake the compiler cannot
 // catch — combine with something associative and commutative, as one would in Elm.
-let fold (step: ('acc, 'a) -> 'acc, seed: 'acc, s: Set<'a>) : 'acc =
+let fold (step: ('acc, 'a) -> 'acc, seed: 'acc, s: Set<'a>): 'acc =
     List.fold(step, seed, Set.toList(s))
 
-let map (f: ('a) -> 'b, s: Set<'a>) : Set<'b> =
-    Set.fromList(List.map(f, Set.toList(s)))
+let map (f: ('a) -> 'b, s: Set<'a>): Set<'b> = Set.fromList(List.map(f, Set.toList(s)))
 
-let filter (keep: ('a) -> Bool, s: Set<'a>) : Set<'a> =
+let filter (keep: ('a) -> Bool, s: Set<'a>): Set<'a> =
     Set.fromList(List.filter(keep, Set.toList(s)))
 
 // `partition` answers the pair (kept, rest), the same shape `List.partition` gives.
 let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
-    Set.fold((acc, x) -> {
-        let (yes, no) = acc
-        if keep(x) then (Set.insert(x, yes), no) else (yes, Set.insert(x, no))
-    }, (Set.empty, Set.empty), s)
+    Set.fold(
+        (acc, x) -> {
+            let (yes, no) = acc
+            if keep(x) then (Set.insert(x, yes), no) else (yes, Set.insert(x, no))
+        },
+        (Set.empty, Set.empty),
+        s
+    )

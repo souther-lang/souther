@@ -73,9 +73,7 @@ class ACommentSitsAboveTheWholeMemberLineTest {
                 module m
 
                 data A
-
                 data B
-
                 data S = A
                     // the comment
                     | B
@@ -99,9 +97,7 @@ class ACommentSitsAboveTheWholeMemberLineTest {
                 module m
 
                 data A
-
                 data B
-
                 data S =
                     // the comment
                     A | B

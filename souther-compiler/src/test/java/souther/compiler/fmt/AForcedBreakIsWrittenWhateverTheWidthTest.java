@@ -255,6 +255,7 @@ class AForcedBreakIsWrittenWhateverTheWidthTest {
             data Alpha
 
             data Beta
+            data Gamma
             """;
 
     /** The blank lines between the line holding {@code above} and the line holding {@code below}. */
@@ -280,13 +281,20 @@ class AForcedBreakIsWrittenWhateverTheWidthTest {
         return between.size();
     }
 
-    /** One blank line between top-level items, and none between a module header and its imports. */
+    /**
+     * A blank line under a module header whatever was written there, and between two items whatever
+     * the author wrote there and nothing else. All three are breaks the width has no say in.
+     */
     @Test
-    void oneBlankLineSeparatesTopLevelItemsAndAnImportFollowsItsHeader() {
+    void aBlankLineUnderTheHeaderAndWhereTheAuthorPutOne() {
         String formatted = Formatter.format(TWO_ITEMS);
-        assertEquals(1, blankLinesBetween(formatted, "data Alpha", "data Beta"));
-        assertEquals(0, blankLinesBetween(formatted,
-                "module fmtprobe exposing ( f )", "import some.place ( alpha )"));
+        assertEquals(1, blankLinesBetween(formatted,
+                "module fmtprobe exposing ( f )", "import some.place ( alpha )"),
+                "a header is written with a blank line under it, and the source has none");
+        assertEquals(1, blankLinesBetween(formatted, "data Alpha", "data Beta"),
+                "the author wrote one here");
+        assertEquals(0, blankLinesBetween(formatted, "data Beta", "data Gamma"),
+                "and none here");
     }
 
     /** A file ends with a newline, and with one. */

@@ -35,7 +35,10 @@ sealed interface Doc {
      * boundary. */
     final class LineRef {
     }
-    record Hard(Ref ref) implements Doc {}
+
+    /** A break, and whether it writes the indent of the line it opens. The one that does not is the
+     *  one that leaves a blank line: nothing is on that line, so it has no indent. */
+    record Hard(Ref ref, boolean indents) implements Doc {}
     record Concat(List<Doc> parts) implements Doc {}
     record Nest(NestRef ref, int indent, Doc doc) implements Doc {}
 
@@ -85,7 +88,12 @@ sealed interface Doc {
 
     /** Always a newline, and the group holding it is never laid out flat. */
     static Doc hardline() {
-        return new Hard(new Ref());
+        return new Hard(new Ref(), true);
+    }
+
+    /** The same, leaving the line it opens empty: a blank line, written with no indent on it. */
+    static Doc blankLine() {
+        return new Hard(new Ref(), false);
     }
 
     /** Writes nothing, and the group holding it is never laid out flat. */
@@ -213,13 +221,14 @@ sealed interface Doc {
                         sb.append(l.flat());
                         col += l.flat().length();
                     } else {
-                        breaks.add(newline(sb, it));
+                        breaks.add(newline(sb, it, it.indent));
                         col = it.indent;
                     }
                 }
-                case Hard _ -> {
-                    breaks.add(newline(sb, it));
-                    col = it.indent;
+                case Hard h -> {
+                    int indent = h.indents() ? it.indent : 0;
+                    breaks.add(newline(sb, it, indent));
+                    col = indent;
                 }
                 case Trailing t -> {
                     sb.append(' ').append(t.s());
@@ -232,11 +241,12 @@ sealed interface Doc {
         return new Layout(sb.toString(), decisions, extents, breaks, opportunities);
     }
 
-    /** Writes a break and says what it wrote. */
-    private static Newline newline(StringBuilder sb, Item it) {
+    /** Writes a break and says what it wrote. {@code indent} is the item's, except on the break
+     *  that leaves a blank line, whose line has nothing on it to indent. */
+    private static Newline newline(StringBuilder sb, Item it, int indent) {
         int offset = sb.length();
-        sb.append('\n').append(" ".repeat(it.indent()));
-        return new Newline(offset, it.indent(),
+        sb.append('\n').append(" ".repeat(indent));
+        return new Newline(offset, indent,
                 it.under() == null ? List.of() : it.under().outermostFirst());
     }
 

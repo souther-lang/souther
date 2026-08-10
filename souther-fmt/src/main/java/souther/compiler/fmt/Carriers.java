@@ -119,7 +119,7 @@ final class Carriers {
             switch (slot.which()) {
                 case ABOVE -> parts.add(TokenDoc.concat(c, TokenDoc.HARD_GAP));
                 case TRAILING -> parts.add(c);
-                case AT_END -> parts.add(TokenDoc.concat(TokenDoc.HARD_GAP, c));
+                case BELOW, AT_END -> parts.add(TokenDoc.concat(TokenDoc.HARD_GAP, c));
             }
         }
         return TokenDoc.concat(parts);

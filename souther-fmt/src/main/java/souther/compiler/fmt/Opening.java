@@ -41,7 +41,7 @@ sealed interface Opening {
     /** The boundary that opens the line, or nothing where the line is already open. */
     default TokenDoc boundary() {
         return switch (this) {
-            case Breaks b -> new TokenDoc.Gap(b.policy());
+            case Breaks b -> new TokenDoc.Gap(b.policy(), true);
             case FileBegins _, None _ -> TokenDoc.NIL;
         };
     }
