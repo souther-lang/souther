@@ -20,6 +20,26 @@ import souther.compiler.cst.SyntaxKind;
 sealed interface Witness {
 
     /**
+     * The unit of the rules about which code tokens are written: one site of the source the grammar
+     * lets the two differ at.
+     *
+     * <p>A site and not a token. Two of these are about a token the source wrote and the canonical
+     * form does not, and one is about the other way round — so the unit is the place in the source
+     * where the question is asked, which is there whichever way it is answered.
+     */
+    record TokenSite(Rewrites.Kind kind, int at) {}
+
+    /**
+     * What the canonical form writes at a site where its code tokens are not the source's.
+     *
+     * <p>First in the order the rules depend on each other. Every other rule here answers about a
+     * boundary between two of the canonical form's tokens and asks what the source has between the
+     * same two of its own; which tokens those are is what this settles, and until it did a source
+     * that wrote a trailing comma had a report with nothing at all in it.
+     */
+    record ACodeToken(TokenSite unit, String canonical, String source) implements Witness {}
+
+    /**
      * The indentation rule's unit: a level of nesting and the one it is written inside.
      *
      * <p>A pair, because what the rule says is that the inner is one indent further in than the
@@ -110,6 +130,27 @@ sealed interface Witness {
             implements Witness {}
 
     /**
+     * The unit of the rule about what a line ends with: one line of the source, named by where what
+     * stands at the end of it begins.
+     *
+     * <p>The source's line and not the canonical form's. What this rule expects is nothing, which
+     * is true of a line wherever it stands, so it is asked of every line the source has rather than
+     * of the ones the two texts share.
+     */
+    record LineEnd(int at) {}
+
+    /**
+     * What a line ends with: nothing, against what the source wrote there.
+     *
+     * <p>The layout writes whitespace after a newline, as the indent of the line it opens, and
+     * never before one. The rules that answer about the same characters answer other questions —
+     * how many lines end at a boundary, what stands between two tokens on a line, how far in a
+     * level begins — so until this was a value a space at the end of a line was a departure with no
+     * rule to name it.
+     */
+    record AtTheEndOfALine(LineEnd unit, String canonical, String source) implements Witness {}
+
+    /**
      * The comment rules' unit: one comment, named by where the source wrote it.
      *
      * <p>The comment and not the line it is on. Where a run of them stands above a definition, each
@@ -147,6 +188,27 @@ sealed interface Witness {
      * numbers are adjacencies of the code both texts share.
      */
     record CommentCarrier(Comment unit, int canonical, int source) implements Witness {}
+
+    /**
+     * The unit of the rule about what a group's break writes: one place a group settled by breaking,
+     * named by which adjacency of the canonical form's tokens it stands at.
+     *
+     * <p>The boundary and not the group. Whether the group is written down the page is one decision
+     * about all of them, and {@link Conditional} is that; how many lines end at one of them is asked
+     * and answered there, the same as at a boundary an obligation breaks.
+     */
+    record BrokenBoundary(int adjacency) {}
+
+    /**
+     * A group's break at one boundary: how many lines the canonical form ends there, and how many
+     * the source ends.
+     *
+     * <p>One. A blank line inside a construct is a paragraph break the author wrote between two of
+     * its members, which is a forced break and says so; at a place a group settles, nothing writes
+     * a second line. Only where the source ended a line there too — one that ran the boundary
+     * together departed from the group's decision, and {@link Conditional} is what says that.
+     */
+    record Settled(BrokenBoundary unit, int canonical, int source) implements Witness {}
 
     /**
      * A forced-layout rule's unit: one boundary the canonical form breaks whatever the width, and

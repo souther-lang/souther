@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * form's and cannot say why any of them is there, so a reader who wanted to write the canonical form
  * rather than have it written for them had to work the rule out from the characters.
  *
- * <p>What is not named is said. Some of what a canonical form has against a source is not a rule
- * that has been written down yet, and a list that named what it can and stopped would read as a file
- * with these differences and no others.
+ * <p>What is not named is said. A list that named what it can and stopped would read as a file with
+ * these differences and no others, so the command shows a diff for whatever is left over — which
+ * over every source measured is nothing.
  */
 class AFormatCheckSaysWhichRuleEachDifferenceAnswersToTest {
 
@@ -99,15 +99,16 @@ class AFormatCheckSaysWhichRuleEachDifferenceAnswersToTest {
     }
 
     /**
-     * And a difference no rule accounts for is said and shown.
+     * A difference in the code tokens is a rule like any other.
      *
      * <p>A definition whose right-hand side is a lambda is written with its parameters on the left,
      * which writes tokens the source has not — so the rules that hold the two token streams side by
-     * side cannot answer about it, and what the others say is not all of it. A reader told only what
-     * is named would take the file for fixed.
+     * side have nothing to pair, and this used to be answered with a diff and the note that what was
+     * named was not all of it. Which tokens are written is itself a decision, and it is the one the
+     * others read.
      */
     @Test
-    void aDifferenceNoRuleAccountsForIsSaidAndShown() throws Exception {
+    void aDifferenceInTheCodeTokensIsNamedTheSameWay() throws Exception {
         Path file = source("m.sou", """
                 module billing exposing ( f )
 
@@ -117,8 +118,10 @@ class AFormatCheckSaysWhichRuleEachDifferenceAnswersToTest {
         Said said = run("fmt", file.toString(), "--check");
 
         assertEquals(1, said.code());
-        assertTrue(said.out().contains("no rule accounts for yet"), said.out());
-        assertTrue(said.out().contains("@@"),
-                "and what is left is shown rather than left to be guessed at: " + said.out());
+        assertTrue(said.out().contains("a definition writes its parameters to the left of the `=`"),
+                "the rule is named: " + said.out());
+        assertTrue(!said.out().contains("no rule accounts for yet"),
+                "and there is nothing left over to show a diff for: " + said.out());
+        assertTrue(!said.out().contains("@@"), said.out());
     }
 }
