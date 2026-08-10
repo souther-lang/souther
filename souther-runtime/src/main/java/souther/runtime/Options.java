@@ -16,4 +16,20 @@ public final class Options {
                 ? Option.some(f.apply(new Object[] {s.value()}))
                 : Option.none();
     }
+
+    /**
+     * An optional written where there is no key to omit — a collection's member, a map's value —
+     * which is {@code null} for an absent one and {@code inner}'s form for a present one
+     * (spec {@code [#absence-is-written-as-null]}).
+     *
+     * <p>{@code inner} arrives as a {@link java.util.function.Function} rather than as the boundary
+     * library's encoder, because the kernel does not know that library: representation is the
+     * boundary's and the domain's types are Souther's (spec {@code [#separate-representation]}).
+     * What is bound here is the encoder's own method, so the indirection costs a call and no
+     * knowledge.
+     */
+    public static Object encodedOrNull(java.util.function.Function<Object, Object> inner,
+                                       Option<?> o) {
+        return o instanceof Option.Some<?> s ? inner.apply(s.value()) : null;
+    }
 }

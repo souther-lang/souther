@@ -18,6 +18,7 @@ import souther.compiler.check.TypeOps;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -62,17 +63,26 @@ public final class Deriver {
             // a type like this is never emitted.
             return d;
         }
+        // One walk decides what each field carries, and the decoder and the encoder are both lowered
+        // from it. Asked separately they would agree only by coincidence: a builder with an arm the
+        // other lacks reports the shape it did not implement as one the language refuses, which is
+        // how an unimplemented case comes to look like a rule (see CodecShape).
+        Map<String, CodecShape> shapes = new LinkedHashMap<>();
+        for (Map.Entry<String, Type> f : fields.entrySet()) {
+            shapes.put(f.getKey(), CodecShape.of(f.getValue(), d, f.getKey(),
+                    fieldPos(d, f.getKey()), symbols));
+        }
         // the decoder and the encoder each read the value under a name of their own, so each owns
         // the bindings it writes rather than sharing the declaration's
         BindingOwner declared = new BindingOwner.OfData(symbols.own(d.name()));
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
                 ? d.decoder()
-                : Optional.of(deriveDecoder(d, fields, symbols,
+                : Optional.of(deriveDecoder(d, shapes, symbols,
                         new Ast.Binders(new BindingOwner.Synthesized(declared,
                                 BindingOwner.Pass.DERIVER, 0))));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()
                 ? d.encoder()
-                : Optional.of(deriveEncoder(d, fields, symbols,
+                : Optional.of(deriveEncoder(d, shapes,
                         new Ast.Binders(new BindingOwner.Synthesized(declared,
                                 BindingOwner.Pass.DERIVER, 1))));
         return new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(), d.invariants(),
@@ -81,15 +91,15 @@ public final class Deriver {
 
     // --- decoder derivation ---
 
-    private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, Type> fields,
+    private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, CodecShape> shapes,
                                                Symbols symbols, Ast.Binders binders) {
         SourcePos pos = d.pos();
         Ast.Name self = Ast.Name.resolved(symbols.own(d.name()), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
         // with one field (spec 8.7).
-        Map.Entry<String, Type> single = bareField(d, fields);
+        Map.Entry<String, CodecShape> single = bareField(d, shapes);
         if (single != null) {
-            Ast.RawKind kind = rawKind(single.getValue());
+            Ast.RawKind kind = rawKind(((CodecShape.Scalar) single.getValue()).kind());
             Ast.Binder input = binders.binder("__in", pos);
             Ast.Construct result = new Ast.Construct(self,
                     List.of(new Ast.FieldInit(single.getKey(), Ast.Var.local(input, pos), pos)), pos);
@@ -97,243 +107,142 @@ public final class Deriver {
         }
         // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec 8.7)
         if (d.newtype()) {
-            Map.Entry<String, Type> only = fields.entrySet().iterator().next();
+            Map.Entry<String, CodecShape> only = shapes.entrySet().iterator().next();
             Ast.Binder input = binders.binder("__in", pos);
             Ast.Construct result = new Ast.Construct(self,
                     List.of(new Ast.FieldInit(only.getKey(), Ast.Var.local(input, pos), pos)), pos);
-            return new Ast.NewtypeDecoder(
-                    decRef(only.getValue(), d, only.getKey(), fieldPos(d, only.getKey()), symbols),
+            return new Ast.NewtypeDecoder(decRef(only.getValue(), fieldPos(d, only.getKey())),
                     input, result, pos);
         }
         List<Ast.Bind> binds = new ArrayList<>();
         List<Ast.FieldInit> inits = new ArrayList<>();
-        for (Map.Entry<String, Type> f : fields.entrySet()) {
+        for (Map.Entry<String, CodecShape> f : shapes.entrySet()) {
             Ast.Binder took = binders.binder(f.getKey(), pos);
             binds.add(new Ast.Bind(took, f.getKey(),
-                    decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey()), symbols), pos));
+                    decRef(f.getValue(), fieldPos(d, f.getKey())), pos));
             inits.add(new Ast.FieldInit(f.getKey(), Ast.Var.local(took, pos), pos));
         }
         return new Ast.ObjectDecoder(binds, new Ast.Construct(self, inits, pos), pos);
     }
 
-    private static Ast.RawKind rawKind(Type t) {
-        if (t == Type.STRING) {
-            return Ast.RawKind.TEXT;
-        }
-        if (t == Type.BOOL) {
-            return Ast.RawKind.BOOL;
-        }
-        if (t == Type.DECIMAL) {
-            return Ast.RawKind.DECIMAL;
-        }
-        if (t == Type.DATE) {
-            return Ast.RawKind.DATE;
-        }
-        if (t == Type.DATETIME) {
-            return Ast.RawKind.DATETIME;
-        }
-        return Ast.RawKind.INT;
+    /** How a bare newtype's single scalar is read straight off the input. */
+    private static Ast.RawKind rawKind(LeafScalar kind) {
+        return switch (kind) {
+            case STRING -> Ast.RawKind.TEXT;
+            case BOOL -> Ast.RawKind.BOOL;
+            case DECIMAL -> Ast.RawKind.DECIMAL;
+            case DATE -> Ast.RawKind.DATE;
+            case DATETIME -> Ast.RawKind.DATETIME;
+            case INT -> Ast.RawKind.INT;
+        };
     }
 
-    private static LeafScalar primKind(Type t) {
-        if (t == Type.STRING) {
-            return LeafScalar.STRING;
-        }
-        if (t == Type.BOOL) {
-            return LeafScalar.BOOL;
-        }
-        if (t == Type.DECIMAL) {
-            return LeafScalar.DECIMAL;
-        }
-        if (t == Type.DATE) {
-            return LeafScalar.DATE;
-        }
-        if (t == Type.DATETIME) {
-            return LeafScalar.DATETIME;
-        }
-        return LeafScalar.INT;
+    // --- lowering a shape to the decoder IR ---
+
+    /**
+     * The decoder for a shape. This and {@link #bareDecRef} are the same walk split where
+     * {@link CodecShape} splits, so the two trees agree by construction rather than by a cast: what
+     * an optional holds is a {@code Bare} shape and lowers to a {@code Bare} reference.
+     */
+    private static Ast.DecRef decRef(CodecShape s, SourcePos pos) {
+        return switch (s) {
+            case CodecShape.Bare b -> bareDecRef(b, pos);
+            case CodecShape.OptionOf o -> new Ast.OptionDecRef(bareDecRef(o.present(), pos), pos);
+        };
     }
 
-    private static Ast.DecRef decRef(Type t, Ast.Data d, String field, SourcePos pos,
-                                     Symbols symbols) {
-        if (t == Type.STRING || t == Type.INT || t == Type.BOOL
-                || t == Type.DECIMAL || t == Type.DATE || t == Type.DATETIME) {
-            return new Ast.PrimDecRef(primKind(t), pos);
-        }
-        if (t instanceof Type.Ref r) {
-            return new Ast.DataDecRef(Ast.Name.resolved(r.name(), pos), pos);
-        }
-        if (t instanceof Type.ListOf lo) {
-            return new Ast.ListDecRef(decRef(lo.element(), d, field, pos, symbols), pos);
-        }
-        if (t instanceof Type.SetOf so) {
-            return new Ast.SetDecRef(decRef(so.element(), d, field, pos, symbols), pos);
-        }
-        if (t instanceof Type.OptionOf oo) {
-            return new Ast.OptionDecRef(decRef(oo.element(), d, field, pos, symbols), pos);
-        }
-        if (t instanceof Type.MapOf mo) {
-            return new Ast.MapDecRef(decRef(mo.value(), d, field, pos, symbols),
-                    mapKey(mo, d, field, pos, symbols), pos);
-        }
-        throw noCodec(t, d, field, pos);
+    private static Ast.DecRef.Bare bareDecRef(CodecShape.Bare s, SourcePos pos) {
+        return switch (s) {
+            case CodecShape.Scalar sc -> new Ast.PrimDecRef(sc.kind(), pos);
+            case CodecShape.Named n -> new Ast.DataDecRef(Ast.Name.resolved(n.name(), pos), pos);
+            case CodecShape.ListOf l -> new Ast.ListDecRef(decRef(l.element(), pos), pos);
+            case CodecShape.SetOf st -> new Ast.SetDecRef(decRef(st.element(), pos), pos);
+            case CodecShape.MapOf m -> new Ast.MapDecRef(decRef(m.value(), pos), m.key(), pos);
+        };
     }
 
     // --- encoder derivation ---
 
-    private static Ast.EncoderDef deriveEncoder(Ast.Data d, Map<String, Type> fields,
-                                                Symbols symbols, Ast.Binders binders) {
+    private static Ast.EncoderDef deriveEncoder(Ast.Data d, Map<String, CodecShape> shapes,
+                                                Ast.Binders binders) {
         SourcePos pos = d.pos();
         Ast.Binder self = binders.binder("self", pos);
-        Map.Entry<String, Type> single = bareField(d, fields);
+        Map.Entry<String, CodecShape> single = bareField(d, shapes);
         if (single != null) {
             Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), single.getKey(), pos);
-            return new Ast.EncoderDef(self, primRaw(single.getValue(), access, pos), pos);
+            return new Ast.EncoderDef(self,
+                    primRaw(((CodecShape.Scalar) single.getValue()).kind(), access, pos), pos);
         }
         // a newtype over a non-primitive Y encodes self.value as Y writes itself — Y's
         // representation, not `{value: ...}` (spec 8.7). Y is a named data, a sum, or a collection,
         // so this is the same choice a field of type Y makes.
         if (d.newtype()) {
-            Map.Entry<String, Type> only = fields.entrySet().iterator().next();
+            Map.Entry<String, CodecShape> only = shapes.entrySet().iterator().next();
             Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), only.getKey(), pos);
             return new Ast.EncoderDef(self,
-                    rawForAccess(only.getValue(), access, d, only.getKey(), symbols, pos, binders), pos);
+                    rawForAccess(only.getValue(), access, fieldPos(d, only.getKey()), binders), pos);
         }
         List<Ast.RawEntry> entries = new ArrayList<>();
-        for (Map.Entry<String, Type> f : fields.entrySet()) {
+        for (Map.Entry<String, CodecShape> f : shapes.entrySet()) {
+            Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), f.getKey(), pos);
             entries.add(new Ast.RawEntry(f.getKey(),
-                    rawFor(f.getValue(), f.getKey(), d, fieldPos(d, f.getKey()), symbols, self, binders), pos));
+                    rawForAccess(f.getValue(), access, fieldPos(d, f.getKey()), binders), pos));
         }
         return new Ast.EncoderDef(self, new Ast.ObjectRaw(entries, pos), pos);
     }
 
-    private static Ast.RawExpr primRaw(Type t, Ast.Expr access, SourcePos pos) {
-        if (t == Type.STRING) {
-            return new Ast.TextRaw(access, pos);
-        }
-        if (t == Type.BOOL) {
-            return new Ast.BoolRaw(access, pos);
-        }
-        if (t == Type.DECIMAL) {
-            return new Ast.DecimalRaw(access, pos);
-        }
-        if (t == Type.DATE || t == Type.DATETIME) {
-            return new Ast.IsoTextRaw(access, pos);
-        }
-        return new Ast.IntRaw(access, pos);
-    }
-
-    private static boolean isPrim(Type t) {
-        return t == Type.STRING || t == Type.INT || t == Type.BOOL
-                || t == Type.DECIMAL || t == Type.DATE || t == Type.DATETIME;
-    }
-
-    private static Ast.RawExpr rawFor(Type t, String field, Ast.Data d, SourcePos pos, Symbols symbols,
-                                      Ast.Binder self, Ast.Binders binders) {
-        return rawForAccess(t, new Ast.FieldAccess(Ast.Var.local(self, pos), field, pos),
-                d, field, symbols, pos, binders);
-    }
-
-    private static Ast.RawExpr rawForAccess(Type t, Ast.Expr access, Ast.Data d, String field,
-                                            Symbols symbols,
-                                            SourcePos pos, Ast.Binders binders) {
-        if (isPrim(t)) {
-            return primRaw(t, access, pos);
-        }
-        if (t instanceof Type.Ref r) {
-            return new Ast.EncodeRaw(Ast.Name.resolved(r.name(), pos), access, pos);
-        }
-        if (t instanceof Type.ListOf lo) {
-            return new Ast.ListEnc(access, encElem(lo.element(), d, field, pos, symbols), pos);
-        }
-        if (t instanceof Type.SetOf so) {
-            return new Ast.SetEnc(access, encElem(so.element(), d, field, pos, symbols), pos);
-        }
-        if (t instanceof Type.OptionOf oo) {
-            Ast.Binder elem = binders.binder("$opt", pos);
-            Ast.RawExpr inner = rawForAccess(oo.element(), Ast.Var.local(elem, pos), d, field, symbols, pos,
-                    binders);
-            return new Ast.OptionRaw(access, inner, elem, pos);
-        }
-        if (t instanceof Type.MapOf mo) {
-            return new Ast.MapEnc(access, encElem(mo.value(), d, field, pos, symbols),
-                    mapKey(mo, d, field, pos, symbols), pos);
-        }
-        throw noCodec(t, d, field, pos);
+    private static Ast.RawExpr primRaw(LeafScalar kind, Ast.Expr access, SourcePos pos) {
+        return switch (kind) {
+            case STRING -> new Ast.TextRaw(access, pos);
+            case BOOL -> new Ast.BoolRaw(access, pos);
+            case DECIMAL -> new Ast.DecimalRaw(access, pos);
+            case DATE, DATETIME -> new Ast.IsoTextRaw(access, pos);
+            case INT -> new Ast.IntRaw(access, pos);
+        };
     }
 
     /**
-     * How a map's keys cross the boundary. A JSON object's keys are strings, so a key is decoded from
-     * and encoded to a bare string, and which string is the checker's answer rather than one worked
-     * out here: this asks for the classification and puts it in the codec IR, where the backend reads
-     * it. A key with no classification never had a boundary representation, and is refused (ADR-0040).
+     * What a field writes. An optional here stands under a key, so absence omits the key rather than
+     * writing {@code null} — the form a value position takes is {@link #encElem}'s
+     * (spec {@code [#absence-is-written-as-null]}).
      */
-    private static MapKeyRepresentation mapKey(Type.MapOf mo, Ast.Data d, String field, SourcePos pos,
-                                         Symbols symbols) {
-        MapKeyRepresentation key = TypeOps.classifyConcreteMapKey(mo.key(), symbols);
-        if (key == null) {
-            throw badMapKey(mo.key(), d, field, pos);
-        }
-        return key;
+    private static Ast.RawExpr rawForAccess(CodecShape s, Ast.Expr access, SourcePos pos,
+                                            Ast.Binders binders) {
+        return switch (s) {
+            case CodecShape.Scalar sc -> primRaw(sc.kind(), access, pos);
+            case CodecShape.Named n -> new Ast.EncodeRaw(Ast.Name.resolved(n.name(), pos), access, pos);
+            case CodecShape.ListOf l -> new Ast.ListEnc(access, encElem(l.element(), pos), pos);
+            case CodecShape.SetOf st -> new Ast.SetEnc(access, encElem(st.element(), pos), pos);
+            case CodecShape.MapOf m -> new Ast.MapEnc(access, encElem(m.value(), pos), m.key(), pos);
+            case CodecShape.OptionOf o -> {
+                Ast.Binder elem = binders.binder("$opt", pos);
+                yield new Ast.OptionRaw(access,
+                        rawForAccess(o.present(), Ast.Var.local(elem, pos), pos, binders), elem, pos);
+            }
+        };
     }
 
     /**
-     * A key that cannot key a JSON object. Derivation runs ahead of the checker that makes the same
-     * judgement on a data's fields, so it reports the same way rather than as a codec that gave up:
-     * the reader has to change the key type either way, and being told twice in two vocabularies
-     * helps nobody.
+     * The encoder for one member of a collection, where there is no key to omit: an absent one is
+     * written {@code null}. A collection may hold a collection
+     * ({@code Map<String, List<商品ID>>}), so this recurses the way {@link #decRef} does on the
+     * decoding side — the two stay symmetric, and what decodes in encodes back out.
      */
-    private static CompileException badMapKey(Type key, Ast.Data d, String field, SourcePos pos) {
-        return CompileException.of(Diagnostic
-                        .at(pos)
-                        .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings()).say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(where(d, field), Type.show(key))).build());
+    private static Ast.EncElem encElem(CodecShape s, SourcePos pos) {
+        return switch (s) {
+            case CodecShape.Bare b -> bareEncElem(b, pos);
+            case CodecShape.OptionOf o -> new Ast.OptionElemEnc(bareEncElem(o.present(), pos), pos);
+        };
     }
 
-    /** How to name the place a boundary complaint belongs to. A newtype's single field is implicit —
-     * the author wrote {@code data X = Y}, never a field called {@code value} — so it is named by
-     * the type alone. */
-    private static String where(Ast.Data d, String field) {
-        return d.newtype() ? d.name() : d.name() + "." + field;
-    }
-
-    /** The encoder for one element of a collection. A collection may hold a collection
-     * ({@code Map<String, List<商品ID>>}), so this recurses the same way {@link #decRef} does on the
-     * decoding side — the two stay symmetric, and what decodes in encodes back out. */
-    private static Ast.EncElem encElem(Type t, Ast.Data d, String field, SourcePos pos,
-                                       Symbols symbols) {
-        if (isPrim(t)) {
-            return new Ast.PrimEnc(primKind(t), pos);   // every primitive has a leaf encoder
-        }
-        if (t instanceof Type.Ref r) {
-            return new Ast.DataEnc(Ast.Name.resolved(r.name(), pos), pos);
-        }
-        if (t instanceof Type.ListOf lo) {
-            return new Ast.ListElemEnc(encElem(lo.element(), d, field, pos, symbols), pos);
-        }
-        if (t instanceof Type.SetOf so) {
-            return new Ast.SetElemEnc(encElem(so.element(), d, field, pos, symbols), pos);
-        }
-        if (t instanceof Type.MapOf mo) {
-            return new Ast.MapElemEnc(encElem(mo.value(), d, field, pos, symbols),
-                    mapKey(mo, d, field, pos, symbols), pos);
-        }
-        throw noCodec(t, d, field, pos);
-    }
-
-    /**
-     * The one report for a field whose type has no boundary representation, wherever in the type it
-     * sits: it names the field and prints the type as it was written
-     * ({@code Map<String, (String, Int)>}), and it is positioned on the field rather than on the
-     * data, so the caret lands on what has to change. The message says what is unrepresentable — a
-     * tuple has no field names to write — rather than naming the codec that gave up.
-     */
-    private static CompileException noCodec(Type t, Ast.Data d, String field, SourcePos pos) {
-        if (t instanceof Type.TupleOf) {
-            return CompileException.of(Diagnostic
-                            .at(pos).say(new DataMessage.ATupleHasNoExternalRepresentation(where(d, field), Type.show(t))).build());
-        }
-        return CompileException.of(Diagnostic
-                        .at(pos).say(new DataMessage.NoCodecCanBeDerived(where(d, field), Type.show(t))).build());
+    private static Ast.EncElem.Bare bareEncElem(CodecShape.Bare s, SourcePos pos) {
+        return switch (s) {
+            case CodecShape.Scalar sc -> new Ast.PrimEnc(sc.kind(), pos);
+            case CodecShape.Named n -> new Ast.DataEnc(Ast.Name.resolved(n.name(), pos), pos);
+            case CodecShape.ListOf l -> new Ast.ListElemEnc(encElem(l.element(), pos), pos);
+            case CodecShape.SetOf st -> new Ast.SetElemEnc(encElem(st.element(), pos), pos);
+            case CodecShape.MapOf m -> new Ast.MapElemEnc(encElem(m.value(), pos), m.key(), pos);
+        };
     }
 
     /** Where the field was written, for a diagnostic to point at. A field a data takes in through
@@ -418,11 +327,11 @@ public final class Deriver {
      * standalone representation, and the {@code "value"} envelope a sum's case wears is what the
      * sum's own encoding adds to it.
      */
-    private static Map.Entry<String, Type> bareField(Ast.Data d, Map<String, Type> fields) {
+    private static Map.Entry<String, CodecShape> bareField(Ast.Data d, Map<String, CodecShape> shapes) {
         if (!d.newtype()) {
             return null;
         }
-        Map.Entry<String, Type> only = fields.entrySet().iterator().next();
-        return isPrim(only.getValue()) ? only : null;
+        Map.Entry<String, CodecShape> only = shapes.entrySet().iterator().next();
+        return only.getValue() instanceof CodecShape.Scalar ? only : null;
     }
 }

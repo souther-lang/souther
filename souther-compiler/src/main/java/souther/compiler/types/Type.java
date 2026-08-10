@@ -342,6 +342,16 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     }
 
     /**
+     * {@code t} rendered as it is written where a type argument goes, which differs from
+     * {@link #show} for an optional: {@code Option<Int>} rather than {@code Int?}. A message about a
+     * type standing inside another one names it this way, so that what it names is a form the author
+     * can write.
+     */
+    static String showInside(Type t) {
+        return show(t, java.util.Set.<String>of(), true);
+    }
+
+    /**
      * Renders {@code t} for a message that also shows {@code against}. Where one name stands for two
      * types — {@code Mid} of one module beside {@code Mid} of another — both are written with their
      * module, so a mismatch does not read as {@code Mid} against {@code Mid}.
@@ -397,6 +407,19 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     }
 
     private static String show(Type t, java.util.Set<String> qualify) {
+        return show(t, qualify, false);
+    }
+
+    /**
+     * {@code inside} says whether {@code t} stands in a type argument or a tuple's member rather
+     * than as a whole type, which decides how an optional is spelled: {@code ?} marks where an
+     * optional is made and is written on a whole type only, so a nested one is named
+     * {@code Option<T>} (spec {@code [#an-optional-is-not-written-inside-another-type]}). A message
+     * that showed {@code List<T?>} or {@code Int??} would name a form the author cannot write.
+     *
+     * <p>A function type's parameter and its result are whole types, so they are not inside one.
+     */
+    private static String show(Type t, java.util.Set<String> qualify, boolean inside) {
         return switch (t) {
             case Prim p -> p.shown();
             case Ref r -> showName(r.name(), qualify);
@@ -416,17 +439,20 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
             // and finds a mismatch to describe. If one does, say what it is rather than a shape the
             // author could go looking for.
             case Erroneous _ -> "?";
-            case ListOf l -> "List<" + show(l.element(), qualify) + ">";
-            case SetOf s -> "Set<" + show(s.element(), qualify) + ">";
-            case OptionOf o -> show(o.element(), qualify) + "?";
-            case MapOf m -> "Map<" + show(m.key(), qualify) + ", " + show(m.value(), qualify) + ">";
+            case ListOf l -> "List<" + show(l.element(), qualify, true) + ">";
+            case SetOf s -> "Set<" + show(s.element(), qualify, true) + ">";
+            case OptionOf o -> inside
+                    ? "Option<" + show(o.element(), qualify, true) + ">"
+                    : show(o.element(), qualify, true) + "?";
+            case MapOf m -> "Map<" + show(m.key(), qualify, true) + ", "
+                    + show(m.value(), qualify, true) + ">";
             case Union u -> u.members().stream().map(n -> showName(n, qualify))
                     .collect(java.util.stream.Collectors.joining(" | "));
-            case TupleOf tu -> tu.elements().stream().map(e -> show(e, qualify))
+            case TupleOf tu -> tu.elements().stream().map(e -> show(e, qualify, true))
                     .collect(java.util.stream.Collectors.joining(", ", "(", ")"));
-            case FnOf f -> f.params().stream().map(p -> show(p, qualify))
+            case FnOf f -> f.params().stream().map(p -> show(p, qualify, false))
                     .collect(java.util.stream.Collectors.joining(", ", "(", ")"))
-                    + " -> " + show(f.result(), qualify);
+                    + " -> " + show(f.result(), qualify, false);
         };
     }
 

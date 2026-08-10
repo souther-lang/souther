@@ -2002,12 +2002,21 @@ public final class Formatter {
                     TokenDoc.at(ofTheTest, expr(exprs.get(0), ofTheTest)),
                     attemptBinder(n), GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"), departures));
         }
-        Place ofTheDeparture = places.under(at, exprs.get(1).kind(), Opening.NONE,
+        // The `else` opens the departure's line, so it is the place's opener: a guard that does not
+        // fit gives way there before its condition gives way anywhere. The two are one group and
+        // this is the order it takes — the departure is what the guard is for, and left to the
+        // condition's own breaking it ends up at the end of whichever continuation line the
+        // condition happened to finish on. The condition's group is measured afterwards, on the
+        // line the `guard` left it, so it stays flat where it fits there.
+        Place ofTheDeparture = places.under(at, exprs.get(1).kind(),
+                new Opening.Breaks(TokenDoc.Break.MAY,
+                        concat(TokenDoc.token(SyntaxKind.ELSE_KW, "else"), GAP)),
                 Written.of(exprs.get(1)));
-        return TokenDoc.node(n.kind(), concat(TokenDoc.token(SyntaxKind.GUARD_KW, "guard"), GAP,
+        return TokenDoc.node(n.kind(), group(concat(
+                TokenDoc.token(SyntaxKind.GUARD_KW, "guard"), GAP,
                 TokenDoc.at(ofTheTest, expr(exprs.get(0), ofTheTest)),
-                attemptBinder(n), GAP, TokenDoc.token(SyntaxKind.ELSE_KW, "else"), GAP,
-                TokenDoc.at(ofTheDeparture, expr(exprs.get(1), ofTheDeparture))));
+                attemptBinder(n),
+                nest(INDENT, TokenDoc.at(ofTheDeparture, expr(exprs.get(1), ofTheDeparture))))));
     }
 
     // --- comments ---
@@ -2232,6 +2241,12 @@ public final class Formatter {
                 case EXAMPLE_ROW, FAKE_ROW, MATCH_CASE -> true;
                 default -> false;
             };
+            // A guard's `else` opens the departure's line the way a comma opens a member's, so a
+            // comment written above it is about the departure after it. Read as part of the guard
+            // instead, the comment came back above the `else` — a position the next formatting reads
+            // as a comment about the whole guard, so the first one had already moved it.
+            case ELSE_KW -> t.parent().kind() == SyntaxKind.GUARD_STMT
+                    && t.parent().child(SyntaxKind.ELSE_ARMS).isEmpty();
             default -> isBinaryOperator(t.kind());
         };
     }

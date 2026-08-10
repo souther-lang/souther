@@ -66,13 +66,22 @@ public final class DocCommand {
             }
             int limit = DEFAULT_LIMIT;
             for (int i = 2; i < args.length; i++) {
-                if (args[i].equals("--limit") && i + 1 < args.length) {
-                    try {
-                        limit = Integer.parseInt(args[++i]);
-                    } catch (NumberFormatException e) {
-                        err.println("--limit takes a number, or 0 for everything");
-                        return 2;
-                    }
+                if (!args[i].equals("--limit")) {
+                    continue;
+                }
+                // Written last, this used to fall out of the condition and leave the default in
+                // force — the search ran, answered under a limit nobody asked for, and said nothing
+                // about the option it dropped. A caller reaching this command through `souther doc`
+                // is refused before it; one reaching it directly is refused here.
+                if (i + 1 >= args.length) {
+                    err.println("--limit takes a number, or 0 for everything");
+                    return 2;
+                }
+                try {
+                    limit = Integer.parseInt(args[++i]);
+                } catch (NumberFormatException e) {
+                    err.println("--limit takes a number, or 0 for everything");
+                    return 2;
                 }
             }
             String term = args[1];

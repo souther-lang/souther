@@ -57,7 +57,7 @@ public final class Main {
               japi <class-or-package>[#<member>] [-cp <path>]      a dependency jar's public API, with javadoc
             options (doc):
               --search <term>           sections and topics that say the term, best answer first
-              --limit <n>               how many hits to show (default 20; 0 for all of them)
+              --limit <n>               with --search, how many hits to show (default 20; 0 for all)
             options (api):
               --source <Module>         a stdlib module's own source, design comments included
               mcp                                                  serve doc/api/japi over MCP stdio
@@ -79,42 +79,9 @@ public final class Main {
                                        (overrides SOUTHER_LANG; with neither, en)
               --color auto|always|never  color the human output (default: auto)""";
 
-    /**
-     * Which commands take each option: what a command reads when it has to say that an option is
-     * not its own but is somebody's.
-     *
-     * <p>Written here rather than read back out of {@link #USAGE}. The usage text is what an author
-     * is shown, and reading it for what an option means is the dependency the wrong way round — it
-     * says an option under the heading of the commands it is documented with, which is not the same
-     * set as the commands that accept it — {@code --behavior} is documented under {@code examples}
-     * and taken by {@code run} as well. This table is the one the commands answer from, and a test
-     * holds it against both the usage text and what each parser has a case for.
-     */
-    private static final Map<String, String> OPTION_OWNERS = Map.ofEntries(
-            Map.entry("--format", "compile/run/examples"),
-            Map.entry("--lang", "compile/run/examples"),
-            Map.entry("--color", "compile/run/examples"),
-            Map.entry("-cp", "compile/run/examples/japi"),
-            Map.entry("--class-path", "compile/run/examples/japi"),
-            Map.entry("-d", "compile"),
-            Map.entry("--adequacy", "compile"),
-            Map.entry("--warnings", "compile"),
-            Map.entry("--behavior", "run/examples"),
-            Map.entry("--input", "run"),
-            Map.entry("-w", "fmt"),
-            Map.entry("--write", "fmt"),
-            Map.entry("--check", "fmt"),
-            Map.entry("--module", "examples"),
-            Map.entry("--generate", "examples"),
-            Map.entry("--boundaries", "examples"),
-            Map.entry("--strict", "examples"),
-            Map.entry("--search", "doc/api"),
-            Map.entry("--limit", "doc"),
-            Map.entry("--source", "api"));
-
-    /** Every option this table names, for the test that holds it against the usage text. */
+    /** Every option this compiler knows, for the test that holds the table against the usage text. */
     static java.util.Set<String> knownOptions() {
-        return OPTION_OWNERS.keySet();
+        return CliOption.spellings();
     }
 
     /** The usage text, for the test that holds it against the table. */
@@ -124,28 +91,7 @@ public final class Main {
 
     /** The commands that take {@code option}, or null where this compiler has no such option. */
     static String optionOwners(String option) {
-        return OPTION_OWNERS.get(option);
-    }
-
-    /**
-     * Whether the token reads as an option rather than as a path.
-     *
-     * <p>What {@code run} has always asked, now asked by the commands that were not asking it. A
-     * short option a command does not know still reads as a path, which is where {@code run} draws
-     * the line too. A bare {@code --} reads as an option and is refused as an unknown one; no command
-     * takes it as the end of its options yet.
-     */
-    private static boolean looksLikeOption(String arg) {
-        return arg.startsWith("--");
-    }
-
-    /** The usage error a command answers with when a token reads as an option it has no case for. */
-    private static int unknownOption(String command, String option) {
-        String owners = OPTION_OWNERS.get(option);
-        System.err.println("unknown option `" + option + "` for `" + command + "`"
-                + (owners == null ? "" : " — it is an option of " + owners));
-        System.err.println(USAGE);
-        return 2;
+        return CliOption.owners(option);
     }
 
     public static void main(String[] args) {
@@ -188,24 +134,49 @@ public final class Main {
     static int dispatch(String[] args) {
         String command = args.length == 0 ? "" : args[0];
         String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);
+        java.util.function.IntSupplier asked = commandNamed(command, rest);
+        if (asked == null) {
+            String hint = command.endsWith(".sou")
+                    ? "no command given — did you mean `souther compile " + command
+                            + " …` or `souther run " + command + " …`?"
+                    : command.isEmpty() ? "no command given" : "unknown command `" + command + "`";
+            System.err.println(hint);
+            System.err.println(USAGE);
+            return 2;
+        }
+        // Before the command, and the same check whichever one was named. What each parser used to
+        // ask for itself — is this token mine — three of them asked and two did not, and none of
+        // them could ask the question the tokens cannot answer one at a time: whether an option
+        // written here is one this line ever reads.
+        CliOption.Reading read = CliOption.read(command, rest);
+        if (read.refusal() != null) {
+            System.err.println(Messages.get(read.refusal().key(),
+                    RenderOptions.asking(read.lang()).locale(), read.refusal().args()));
+            System.err.println(USAGE);
+            return 2;
+        }
+        return asked.getAsInt();
+    }
+
+    /**
+     * The command this line names, or null where it names none.
+     *
+     * <p>Resolved before its arguments are checked and kept unrun, so which commands there are is
+     * said once. A list of the names beside this one is a second statement of it, and the check
+     * above reads a command name — a name missing from that list is a command whose options nothing
+     * looks at, which is the shape of the defect the check exists for.
+     */
+    private static java.util.function.IntSupplier commandNamed(String command, String[] rest) {
         return switch (command) {
-            case "run" -> runSubcommand(rest);
-            case "compile" -> compileSubcommand(rest);
-            case "fmt" -> fmtSubcommand(rest);
-            case "examples" -> examplesSubcommand(rest);
-            case "doc" -> DocCommand.run(rest, System.out, System.err);
-            case "api" -> ApiCommand.run(rest, System.out, System.err);
-            case "japi" -> JapiCommand.run(rest, System.out, System.err);
-            case "mcp" -> McpServer.serve(System.in, System.out);
-            default -> {
-                String hint = command.endsWith(".sou")
-                        ? "no command given — did you mean `souther compile " + command
-                                + " …` or `souther run " + command + " …`?"
-                        : command.isEmpty() ? "no command given" : "unknown command `" + command + "`";
-                System.err.println(hint);
-                System.err.println(USAGE);
-                yield 2;
-            }
+            case "run" -> () -> runSubcommand(rest);
+            case "compile" -> () -> compileSubcommand(rest);
+            case "fmt" -> () -> fmtSubcommand(rest);
+            case "examples" -> () -> examplesSubcommand(rest);
+            case "doc" -> () -> DocCommand.run(rest, System.out, System.err);
+            case "api" -> () -> ApiCommand.run(rest, System.out, System.err);
+            case "japi" -> () -> JapiCommand.run(rest, System.out, System.err);
+            case "mcp" -> () -> mcpSubcommand(rest);
+            default -> null;
         };
     }
 
@@ -231,9 +202,6 @@ public final class Main {
     private static int compileSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
-        if (args == null) {
-            return 2;
-        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         Path outDir = Path.of(".");
@@ -242,46 +210,28 @@ public final class Main {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--adequacy" -> {
-                    if (++i >= args.length || adequacyLevel(args[i]) == null) {
+                    if (adequacyLevel(args[++i]) == null) {
                         System.err.println("`--adequacy` takes off, witness or all");
                         return 2;
                     }
                     measure = Adequacy.Asked.warningsAt(adequacyLevel(args[i]));
                 }
                 case "--warnings" -> {
-                    if (++i >= args.length
-                            || !(args[i].equals("report") || args[i].equals("error"))) {
+                    if (!(args[++i].equals("report") || args[i].equals("error"))) {
                         System.err.println("`--warnings` takes report or error");
                         return 2;
                     }
                     refuseWarnings = args[i].equals("error");
                 }
-                case "-d" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`-d` needs an output directory");
-                        System.err.println(USAGE);
-                        return 2;
-                    }
-                    outDir = Path.of(args[i]);
-                }
+                case "-d" -> outDir = Path.of(args[++i]);
                 case "-cp", "--class-path" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`" + args[i - 1] + "` needs a class path");
-                        System.err.println(USAGE);
-                        return 2;
-                    }
-                    for (String entry : args[i].split(java.io.File.pathSeparator)) {
+                    for (String entry : args[++i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
                             classPath.add(Path.of(entry));
                         }
                     }
                 }
-                default -> {
-                    if (looksLikeOption(args[i])) {
-                        return unknownOption("compile", args[i]);
-                    }
-                    sources.add(Path.of(args[i]));
-                }
+                default -> sources.add(Path.of(args[i]));
             }
         }
         if (sources.isEmpty()) {
@@ -333,9 +283,6 @@ public final class Main {
     private static int examplesSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
-        if (args == null) {
-            return 2;
-        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         String module = null;
@@ -349,40 +296,18 @@ public final class Main {
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-cp", "--class-path" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`" + args[i - 1] + "` needs a class path");
-                        System.err.println(USAGE);
-                        return 2;
-                    }
-                    for (String entry : args[i].split(java.io.File.pathSeparator)) {
+                    for (String entry : args[++i].split(java.io.File.pathSeparator)) {
                         if (!entry.isBlank()) {
                             classPath.add(Path.of(entry));
                         }
                     }
                 }
-                case "--module" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`--module` needs a module name");
-                        return 2;
-                    }
-                    module = Reserved.name(args[i]);   // a name from outside
-                }
-                case "--behavior" -> {
-                    if (++i >= args.length) {
-                        System.err.println("`--behavior` needs a behavior name");
-                        return 2;
-                    }
-                    behavior = Reserved.name(args[i]);   // a name from outside
-                }
+                case "--module" -> module = Reserved.name(args[++i]);   // a name from outside
+                case "--behavior" -> behavior = Reserved.name(args[++i]);   // a name from outside
                 case "--generate" -> generate = true;
                 case "--boundaries" -> boundaries = true;
                 case "--strict" -> strict = true;
-                default -> {
-                    if (looksLikeOption(args[i])) {
-                        return unknownOption("examples", args[i]);
-                    }
-                    sources.add(Path.of(args[i]));
-                }
+                default -> sources.add(Path.of(args[i]));
             }
         }
         if (sources.isEmpty()) {
@@ -462,6 +387,28 @@ public final class Main {
         }
     }
 
+    /**
+     * {@code souther mcp}: serves doc, api and japi over MCP stdio, and is written on its own.
+     *
+     * <p>Said here rather than left to the check above the dispatch, because what the check lets
+     * through is a permission this command cannot honour. A token that reads as a short option
+     * another command owns is passed on as an operand — a file may be named {@code -d}, and the
+     * command that has no {@code -d} reads it as one — and that is sound wherever there is an
+     * operand for it to be. There is none here. This command was handed its arguments and read none
+     * of them, so {@code souther mcp -w} served as though nothing had been written, and so did
+     * {@code souther mcp model.sou}. What a command takes no arguments at all is a fact about its
+     * own grammar, which is where it is now stated.
+     */
+    private static int mcpSubcommand(String[] args) {
+        if (args.length > 0) {
+            System.err.println(Messages.get("cli.mcp.arguments",
+                    RenderOptions.asking(null).locale(), String.join(", ", args)));
+            System.err.println(USAGE);
+            return 2;
+        }
+        return McpServer.serve(System.in, System.out);
+    }
+
     /** The level {@code --adequacy} names, or null where it names none. */
     private static Adequacy.Level adequacyLevel(String written) {
         return switch (written) {
@@ -497,21 +444,12 @@ public final class Main {
             switch (a) {
                 case "-w", "--write" -> write = true;
                 case "--check" -> check = true;
-                default -> {
-                    if (looksLikeOption(a)) {
-                        return unknownOption("fmt", a);
-                    }
-                    files.add(Path.of(a));
-                }
+                default -> files.add(Path.of(a));
             }
         }
         if (files.isEmpty()) {
             System.err.println("fmt takes at least one .sou file");
             System.err.println(USAGE);
-            return 2;
-        }
-        if (write && check) {
-            System.err.println("`-w` and `--check` are mutually exclusive");
             return 2;
         }
         if (!write && !check && files.size() > 1) {
@@ -613,9 +551,6 @@ public final class Main {
     private static int runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
-        if (args == null) {
-            return 2;
-        }
         Path source = firstSource(args);
         List<Path> sources = source == null ? List.of() : List.of(source);
         List<Located> warnings = new ArrayList<>();
@@ -807,6 +742,20 @@ public final class Main {
         }
 
         /**
+         * These flags as a line that wrote {@code --lang} and nothing else, for the refusal raised
+         * before any subcommand has parsed its arguments.
+         *
+         * <p>Through here rather than resolving beside it. A usage error is one of the answers this
+         * command line gives, and which language it is written in is this class's question — asking
+         * it twice is two policies that happen to agree.
+         */
+        static RenderOptions asking(String lang) {
+            RenderOptions options = new RenderOptions();
+            options.lang = lang;
+            return options;
+        }
+
+        /**
          * The language this invocation answers in: the {@code --lang} value if one was written,
          * then {@code SOUTHER_LANG}, then the default.
          *
@@ -826,25 +775,20 @@ public final class Main {
             };
         }
 
-        /** The arguments with these flags taken out, or {@code null} where one of them was written
-         *  without its value — which the caller answers as a usage error. */
+        /**
+         * The arguments with these flags taken out.
+         *
+         * <p>Each of them has its value where this reads one: an option written without one is
+         * refused before any command is run, against the same table this walk agrees with.
+         */
         String[] extract(String[] args) {
             List<String> kept = new ArrayList<>();
             for (int i = 0; i < args.length; i++) {
                 String option = args[i];
                 switch (option) {
-                    case "--format", "--lang", "--color" -> {
-                        if (++i >= args.length) {
-                            System.err.println("`" + option + "` needs a value");
-                            System.err.println(USAGE);
-                            return null;
-                        }
-                        switch (option) {
-                            case "--format" -> format = args[i];
-                            case "--lang" -> lang = args[i];
-                            default -> color = args[i];
-                        }
-                    }
+                    case "--format" -> format = args[++i];
+                    case "--lang" -> lang = args[++i];
+                    case "--color" -> color = args[++i];
                     default -> kept.add(option);
                 }
             }
