@@ -104,6 +104,20 @@ class ALanguageIsNamedByATagAndNotByACatalogTest {
     }
 
     /**
+     * And no tag is one either, which is what a caller holding a value it knows was written asks.
+     *
+     * <p>Said by the rule rather than by the builder underneath it, which does not answer the empty
+     * tag the same way everywhere: on 25 it is a missing subtag and is refused, and on 26 it resets
+     * the builder and comes back as {@code und}. A check that took whichever answer the runtime gave
+     * would refuse {@code --lang ''} on one and accept it on the next.
+     */
+    @Test
+    void noTagIsBlank() {
+        assertFalse(Messages.namesALanguage(""));
+        assertFalse(Messages.namesALanguage("   "));
+    }
+
+    /**
      * Only what the precedence chose. A caller holding the value that lost to being a tag would be
      * stating that every language anything on this machine names has to be well formed, which is a
      * different rule from the one that says which of them is read — and would leave a reader whose

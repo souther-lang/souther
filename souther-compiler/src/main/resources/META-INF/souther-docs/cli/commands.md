@@ -287,6 +287,11 @@ of the two was written. Only the value the precedence chose is read: with `SOUTH
 something that is not a tag, a line writing `--lang en` compiles, because the variable is not what
 named the language.
 
+What counts as naming one differs between the two. A shell unsets a variable by exporting it empty,
+so a blank `SOUTHER_LANG` is a variable nobody set. A blank `--lang` is not a line that left the
+option out — somebody wrote a value where a language goes — so it is refused, rather than answered
+under whatever the environment says.
+
 `--color` is read where the human renderer is built, and `--format json` builds the other one, so a
 line that writes both is refused. It is refused whichever value `--color` was given, `auto` included:
 the default in force where nobody wrote the option and the same value written out are not the same

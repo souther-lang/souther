@@ -771,6 +771,20 @@ public final class Main {
         }
 
         /**
+         * What named the language for this invocation: the option where the line wrote it, and
+         * {@code SOUTHER_LANG} where the line did not.
+         *
+         * <p>Whether the option was written is what this class has and the value alone does not.
+         * {@code lang} is null until {@code --lang} is read, so a blank value is a line writing one
+         * where a language goes rather than a line leaving the option out — and the environment is
+         * outranked by it either way. Reading the two alike is what sent {@code --lang ''} to the
+         * shell to be answered in a language the line did not ask for.
+         */
+        private Messages.Named named() {
+            return lang != null ? new Messages.Named(lang, false) : Messages.namedLanguage(null);
+        }
+
+        /**
          * The language this invocation answers in: the {@code --lang} value if one was written,
          * then {@code SOUTHER_LANG}, then the default.
          *
@@ -779,7 +793,7 @@ public final class Main {
          * to.
          */
         Locale locale() {
-            return Messages.resolveLocale(lang);
+            return Messages.resolveLocale(named());
         }
 
         boolean useColor() {
@@ -831,14 +845,13 @@ public final class Main {
          * unread under would be answering a question about a line they did not write.
          *
          * <p>And the language before either, being the one every other answer would be written in.
-         * A line whose tag names no language has not said what to write the rest of its answers in,
-         * so this is the one refusal that cannot be held to the language the line asked for: it is
-         * written in whatever the tolerant reading of the tag leaves — Japanese for
-         * {@code ja_JP.UTF-8}, English for a tag with nothing readable in front — which is the best
-         * this can do for a reader whose tag it has just refused.
+         * This refusal is written in whatever the tag it refuses resolves to and never in the
+         * language the line outranked: {@code ja_JP.UTF-8} is answered in Japanese, and a tag with
+         * nothing readable in front of it in the default — including a blank one, where reaching for
+         * the environment would be the fallback this refusal exists to stop.
          */
         private String refusal() {
-            Messages.Named named = Messages.namedLanguage(lang);
+            Messages.Named named = named();
             if (named != null && !Messages.namesALanguage(named.tag())) {
                 return Messages.get(named.fromEnvironment() ? "cli.lang.environment" : "cli.lang.tag",
                         locale(), named.tag());

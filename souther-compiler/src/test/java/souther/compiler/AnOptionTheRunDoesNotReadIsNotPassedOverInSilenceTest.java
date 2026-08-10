@@ -457,6 +457,23 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
     }
 
     /**
+     * A value written where a language goes names a language, and a blank one names it badly. Read
+     * as a way of writing nothing it is the same silence one option along: the line asked for a
+     * language and was answered under whatever else was in force.
+     */
+    @Test
+    void aBlankLanguageTagIsRefused() throws Exception {
+        for (String tag : List.of("", "   ")) {
+            Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                    "--lang", tag);
+
+            assertEquals(2, said.code(), "[" + tag + "]: " + said.err());
+            assertTrue(said.err().contains("`--lang`"), "[" + tag + "]: " + said.err());
+            assertEquals("", said.out(), "[" + tag + "]: " + said.out());
+        }
+    }
+
+    /**
      * And a tag is accepted whether or not this compiler answers in it. {@code fr} names a language
      * somebody reads; that nobody has translated the messages into it yet is what the fallback to
      * the base catalog is for, and is not a mistake in what they wrote.

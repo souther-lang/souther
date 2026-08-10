@@ -76,7 +76,19 @@ public final class Messages {
      * read in one place, and what is done with what it said is a function.
      */
     public static Locale resolveLocale(String explicit, String fromEnvironment) {
-        Named named = namedLanguage(explicit, fromEnvironment);
+        return resolveLocale(namedLanguage(explicit, fromEnvironment));
+    }
+
+    /**
+     * The locale of whatever named the language, or the default where nothing did.
+     *
+     * <p>Where the precedence has already been settled — a caller that reads an option knows whether
+     * it was written, which is more than the value of it says, and answers that question once rather
+     * than once here and once where it refuses. Nothing is reached for beyond what is named: a tag
+     * this cannot read resolves to what {@link Locale#forLanguageTag} leaves of it, which is the
+     * default for a tag with nothing readable in front, and never to the value that was outranked.
+     */
+    public static Locale resolveLocale(Named named) {
         return named == null ? defaultLocale() : Locale.forLanguageTag(asLanguageTag(named.tag()));
     }
 
@@ -94,6 +106,16 @@ public final class Messages {
      * on this machine names has to be well formed, which is a different rule from the one that says
      * which of them is used. {@code SOUTHER_LANG=!! souther compile x.sou --lang en} is a line that
      * names English, and it compiles.
+     *
+     * <p>Blank is not a language named, on either side, which is the rule {@link #resolveLocale}
+     * resolves by and is stated once for both. A shell exports a variable empty to unset it, and an
+     * adapter passing an option through has nothing to pass when nobody wrote one.
+     *
+     * <p>That a command line's {@code --lang} was written at all is not something this can be asked:
+     * a blank value arrives here as the blank that means nothing was named. Whoever read the option
+     * knows whether it was there, and holds it to being a tag before asking this — {@code --lang ''}
+     * is somebody writing a value where a language goes, and answering it from the environment is
+     * answering a line in a language it did not ask for.
      */
     public static Named namedLanguage(String explicit, String fromEnvironment) {
         if (explicit != null && !explicit.isBlank()) {
@@ -123,6 +145,13 @@ public final class Messages {
      * and all are answered in English until a catalog for them ships.
      */
     public static boolean namesALanguage(String tag) {
+        if (tag.isBlank()) {
+            // Said here rather than left to the builder, which does not answer it the same way
+            // everywhere: on 25 an empty tag is a subtag that is missing and is refused, and on 26 it
+            // resets the builder and comes back as `und`. A rule about what a reader may write is not
+            // one the runtime underneath gets to decide.
+            return false;
+        }
         try {
             new Locale.Builder().setLanguageTag(asLanguageTag(tag));
             return true;

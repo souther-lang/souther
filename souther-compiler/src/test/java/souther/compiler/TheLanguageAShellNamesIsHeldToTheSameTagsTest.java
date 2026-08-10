@@ -119,6 +119,37 @@ class TheLanguageAShellNamesIsHeldToTheSameTagsTest {
     }
 
     /**
+     * A variable exported empty is how a shell unsets one, and names no language. The line is not
+     * read that way — the case below says so — so this is where the two part company.
+     */
+    @Test
+    void aVariableExportedBlankIsAVariableNobodySet() throws Exception {
+        Answer answer = souther(Map.of("SOUTHER_LANG", ""),
+                "compile", source(MODEL, "ok.sou").toString(), "-d", dir.resolve("out").toString());
+
+        assertEquals(0, answer.code(), answer.err());
+    }
+
+    /**
+     * And a line writing the option with nothing in it is not a line that left it out. It named a
+     * language and named it badly; falling back to the variable would answer it in a language it did
+     * not ask for, which is what this did.
+     */
+    @Test
+    void aBlankValueOnTheLineDoesNotFallBackToTheVariable() throws Exception {
+        Answer answer = souther(Map.of("SOUTHER_LANG", "ja"),
+                "compile", source(BROKEN, "broken.sou").toString(), "-d", dir.resolve("out").toString(),
+                "--lang", "");
+
+        assertEquals(2, answer.code(), answer.err());
+        assertTrue(answer.err().contains("`--lang`"), answer.err());
+        assertFalse(answer.err().contains("構文エラー"),
+                "the compile did not run: " + answer.err());
+        assertFalse(answer.err().contains("整形式の言語タグ"),
+                "and the refusal is not written in the language the line outranked: " + answer.err());
+    }
+
+    /**
      * And the value that lost the precedence is not read at all. The line names the language, so a
      * variable that names nothing is not what this invocation was going to be answered in — holding
      * it to being a tag would leave a reader whose shell exports something malformed unable to name
