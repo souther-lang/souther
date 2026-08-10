@@ -269,6 +269,32 @@ rather than resumed at.
 
 These apply to `compile`, `run` and `examples`. Passing them to another command is an error.
 
+`--format` and `--color` take the values written above and no others. A value outside the set is
+refused rather than read as the default: a caller that asked for `--format jsn` was answered with a
+human snippet and the exit code the JSON run gives, which is the answer to a question they did not
+ask.
+
+`--lang` is not a closed set in the same way. What it takes is a language tag, and a language this
+compiler ships no catalog for is answered from the English base — `fr` is a language somebody may
+read, and that nobody has translated the messages into yet is not a mistake in what they wrote. What
+is refused is a tag that is not one: `--lang en-!!` named nothing after `en`, and was read as `en`
+with the rest dropped. `_` is accepted where `-` belongs, so a POSIX-style `ja_JP` names Japanese in
+Japan; what that produces is held to being a language tag like any other, so `ja_JP.UTF-8` is
+refused rather than read up to the codeset.
+
+`SOUTHER_LANG` names a language the same way and is held to the same tags, and a refusal says which
+of the two was written. Only the value the precedence chose is read: with `SOUTHER_LANG` set to
+something that is not a tag, a line writing `--lang en` compiles, because the variable is not what
+named the language.
+
+`--color` is read where the human renderer is built, and `--format json` builds the other one, so a
+line that writes both is refused. It is refused whichever value `--color` was given, `auto` included:
+the default in force where nobody wrote the option and the same value written out are not the same
+statement, and a line that asked for a colour policy is told that nothing here reads one rather than
+being answered as though it had asked for nothing. The refusal is what says it because the JSON
+stream cannot: it is one diagnostic per line and a sentence among them is a line its reader parses as
+nothing.
+
 `--lang` chooses the language a compile error is written in, and nothing else. The documents `souther
 doc` answers from are in English whichever language is chosen; a diagnostic's code is the same string
 in every language, so it stays the name to look the answer up by.

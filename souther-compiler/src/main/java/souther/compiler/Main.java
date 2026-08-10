@@ -74,9 +74,10 @@ public final class Main {
 
             options (compile/run/examples):
               --format human|json      how to render a compile error (default: human)
-              --lang <tag>             message locale, e.g. ja or en
+              --lang <tag>             message locale as a language tag, e.g. ja or en
                                        (overrides SOUTHER_LANG; with neither, en)
-              --color auto|always|never  color the human output (default: auto)""";
+              --color auto|always|never  color the human output (default: auto)
+                                       (not written with --format json, which reads no color)""";
 
     /** Every option this compiler knows, for the test that holds the table against the usage text. */
     static java.util.Set<String> knownOptions() {
@@ -201,6 +202,9 @@ public final class Main {
     private static int compileSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         Path outDir = Path.of(".");
@@ -282,6 +286,9 @@ public final class Main {
     private static int examplesSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         String module = null;
@@ -521,6 +528,9 @@ public final class Main {
     private static int runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
+        if (args == null) {
+            return 2;
+        }
         Path source = firstSource(args);
         List<Path> sources = source == null ? List.of() : List.of(source);
         List<Located> warnings = new ArrayList<>();
@@ -701,11 +711,46 @@ public final class Main {
         return null;
     }
 
-    /** Rendering flags shared by both subcommands, and the extraction that strips them out. */
+    /**
+     * Rendering flags shared by both subcommands, and the extraction that strips them out.
+     *
+     * <p>Which of them a run has a reader for is decided here and not in {@link CliOption}. What that
+     * table states is which options may appear beside which — an option's owner, the option it needs,
+     * the option it excludes — and each of those holds of the tokens as written, before anything is
+     * made of them. That {@code --color} goes unread under {@code --format json} holds of what the
+     * values mean: it is the JSON renderer, chosen by one option's value, that is not a reader of the
+     * other. Written as a row in that table it would read as a fact about the two options being
+     * written together, which is not the fact — the same two options under {@code --format human} are
+     * the line that was meant.
+     *
+     * <p>What values each of them has is decided here for the same reason, and was decided nowhere
+     * at all: these three arrived as strings and were matched where they were read, so a value none
+     * of the arms matched fell to the default and the run went on under the value that was in force
+     * anyway. {@code --format jsn} rendered a snippet and answered a caller asking for JSON with the
+     * exit code the JSON run gives. Each command's own options already refuse a value they do not
+     * have — {@code --warnings}, {@code --adequacy} — and these are the ones that did not.
+     */
     private static final class RenderOptions {
+
+        /** The values {@code --format} has, in the order the usage text writes them. */
+        private static final List<String> FORMATS = List.of("human", "json");
+
+        /** The values {@code --color} has, in the order the usage text writes them. */
+        private static final List<String> COLORS = List.of("auto", "always", "never");
+
         private String format = "human";
         private String lang = null;
         private String color = "auto";
+
+        /**
+         * How the line wrote {@code --color}, or null where it did not write it.
+         *
+         * <p>Beside the value rather than read back out of it. The value a line writes and the value
+         * in force where nobody wrote one are the same string — {@code auto} is the default — and
+         * they are not the same statement: one line has asked for a colour policy and the other has
+         * not. Recovering that from the value is the loss this class had, one option along.
+         */
+        private String colorAsWritten = null;
 
         boolean json() {
             return "json".equals(format);
@@ -746,7 +791,8 @@ public final class Main {
         }
 
         /**
-         * The arguments with these flags taken out.
+         * The arguments with these flags taken out, or null where what they say refuses the line —
+         * said here, so that a command that has one of these has the refusal too.
          *
          * <p>Each of them has its value where this reads one: an option written without one is
          * refused before any command is run, against the same table this walk agrees with.
@@ -758,11 +804,67 @@ public final class Main {
                 switch (option) {
                     case "--format" -> format = args[++i];
                     case "--lang" -> lang = args[++i];
-                    case "--color" -> color = args[++i];
+                    case "--color" -> {
+                        colorAsWritten = option;
+                        color = args[++i];
+                    }
                     default -> kept.add(option);
                 }
             }
+            String refusal = refusal();
+            if (refusal != null) {
+                System.err.println(refusal);
+                return null;
+            }
             return kept.toArray(new String[0]);
+        }
+
+        /**
+         * Why these flags refuse the line, or null where they do not.
+         *
+         * <p>Asked after the whole walk rather than where each value is read, so that a refusal is
+         * written in the language the line asked for wherever on it {@code --lang} was written.
+         *
+         * <p>What the value is before what it is read with. An option given a value it does not have
+         * is told that first: {@code --format jsn --color always} is a line whose author wrote a
+         * format this compiler has no such thing as, and answering it with what {@code --color} goes
+         * unread under would be answering a question about a line they did not write.
+         *
+         * <p>And the language before either, being the one every other answer would be written in.
+         * A line whose tag names no language has not said what to write the rest of its answers in,
+         * so this is the one refusal that cannot be held to the language the line asked for: it is
+         * written in whatever the tolerant reading of the tag leaves — Japanese for
+         * {@code ja_JP.UTF-8}, English for a tag with nothing readable in front — which is the best
+         * this can do for a reader whose tag it has just refused.
+         */
+        private String refusal() {
+            Messages.Named named = Messages.namedLanguage(lang);
+            if (named != null && !Messages.namesALanguage(named.tag())) {
+                return Messages.get(named.fromEnvironment() ? "cli.lang.environment" : "cli.lang.tag",
+                        locale(), named.tag());
+            }
+            if (!FORMATS.contains(format)) {
+                return outsideItsValues("--format", format, FORMATS);
+            }
+            if (!COLORS.contains(color)) {
+                return outsideItsValues("--color", color, COLORS);
+            }
+            if (json() && colorAsWritten != null) {
+                return Messages.get("cli.option.unread", locale(),
+                        colorAsWritten, "--format json");
+            }
+            return null;
+        }
+
+        /**
+         * That the option has no such value, and which ones it has.
+         *
+         * <p>The values listed rather than described. What a reader does next is write one of them,
+         * and a sentence about what the option means is not one of them.
+         */
+        private String outsideItsValues(String option, String written, List<String> values) {
+            return Messages.get("cli.option.values", locale(),
+                    option, String.join(", ", values), written);
         }
     }
 

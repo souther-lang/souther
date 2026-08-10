@@ -21,8 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Not that every option written is read — {@code api Option --source String} answers about
  * {@code Option} and drops the option, and says which of the two it read rather than refusing the
- * line. What holds of all of them is the weaker sentence: the line is refused, or the run says what
- * it did not use. What no line gets is the answer it would have got with the option left out.
+ * line. What holds of all of them is the weaker sentence: an option a line writes is one that
+ * invocation has a reader for, or the line is refused.
+ *
+ * <p>Has a reader for, and not that the output changed. {@code compile ok.sou --color always} writes
+ * what it writes without the option — nothing went wrong, so there was no diagnostic to colour — and
+ * the colour policy was read all the same. {@code --format human} names the default and is read
+ * too. Reading a difference in the output as the sign that an option applied would call both of
+ * those the defect this class is about, and would call every option whose effect depends on the
+ * source one whenever the source does not exercise it. What is asked here is whether the invocation
+ * has anywhere to read the option, which is a question about the line and is settled from the line.
  *
  * <p>{@code --boundaries} on its own was accepted and answered with the report it would have printed
  * anyway. The flag is read at one place, inside the branch {@code --generate} opens, so a line that
@@ -283,6 +291,220 @@ class AnOptionTheRunDoesNotReadIsNotPassedOverInSilenceTest {
             assertTrue(said.err().contains("`" + needed + "`"),
                     option + " needs " + needed + ": " + said.err());
         }
+    }
+
+    // --- the option another option's value leaves unread -------------------------------------------
+
+    /**
+     * {@code --color} is read where the human renderer is built, so a line that writes it under
+     * {@code --format json} has asked for a colour policy nothing in the run is a reader of. That is
+     * the same silence as {@code --boundaries} without {@code --generate}, and it is not a fact about
+     * the two options being written together: what makes the reader unreachable is the value
+     * {@code --format} was given.
+     */
+    @Test
+    void colorUnderJsonIsRefused() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--format", "json", "--color", "always");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--color`"), said.err());
+        assertTrue(said.err().contains("`--format json`"), said.err());
+        assertEquals("", said.out(), said.out());
+    }
+
+    /**
+     * Whatever value it was written with, {@code auto} included. The value a line writes and the
+     * value in force where nobody wrote one are the same string and are not the same statement — a
+     * line that writes {@code --color auto} has asked for a colour policy, and reading the default
+     * back out as though it had been asked for is how an option that was written stops being
+     * distinguishable from one that was not.
+     */
+    @Test
+    void colorUnderJsonIsRefusedWhateverValueItWasWrittenWith() throws Exception {
+        for (String value : List.of("auto", "always", "never")) {
+            Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                    "--format", "json", "--color", value);
+
+            assertEquals(2, said.code(), value + ": " + said.err());
+            assertTrue(said.err().contains("`--color`"), value + ": " + said.err());
+        }
+    }
+
+    /** The order they are written in is not one of the conditions. */
+    @Test
+    void colorBeforeFormatIsTheSameLine() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--color", "always", "--format", "json");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--color`"), said.err());
+    }
+
+    /**
+     * And the human renderer is the line that was meant. The option is read there whether or not this
+     * compile had a diagnostic to colour, which is why the answer does not depend on the source.
+     */
+    @Test
+    void colorUnderHumanIsTheLineThatWasMeant() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--format", "human", "--color", "always");
+
+        assertEquals(0, said.code(), said.err());
+    }
+
+    /** And a line that leaves {@code --color} out asks for nothing under either format. */
+    @Test
+    void jsonWithoutColorIsTheLineItAlwaysWas() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--format", "json");
+
+        assertEquals(0, said.code(), said.err());
+    }
+
+    /**
+     * Every command that takes the two, so one added tomorrow is under this without anything here
+     * being written again. Read off the same table the refusal for a foreign option is read from:
+     * {@code --color} and {@code --format} are owned by the same commands, and a command that took
+     * one without the other would be a command this reads and finds nothing to say about.
+     */
+    @Test
+    void everyCommandThatTakesColorRefusesItUnderJson() throws Exception {
+        for (String command : Main.optionOwners("--color").split("/")) {
+            List<String> line = new ArrayList<>(List.of(command, model().toString()));
+            if (command.equals("compile")) {
+                line.addAll(List.of("-d", dir.resolve("out").toString()));
+            }
+            line.addAll(List.of("--format", "json", "--color", "always"));
+
+            Said said = run(line.toArray(String[]::new));
+
+            assertEquals(2, said.code(), line + ": " + said.err());
+            assertTrue(said.err().contains("`--color`"), line + ": " + said.err());
+            assertEquals("", said.out(), line + ": " + said.out());
+        }
+    }
+
+    /** Written in the language the line asks for, as every other refusal is. */
+    @Test
+    void theColorRefusalIsWrittenInTheLanguageTheLineAsksFor() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--format", "json", "--color", "always", "--lang", "ja");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--color`"), said.err());
+        assertFalse(said.err().contains("is not read with"), said.err());
+    }
+
+    // --- the value the option does not have --------------------------------------------------------
+
+    /**
+     * {@code --format} matched {@code json} where it was read and let everything else fall to the
+     * human renderer, so a caller that asked for JSON and misspelt it was answered with a snippet and
+     * the exit code the JSON run gives — nothing on the line said this compiler has no such format.
+     */
+    @Test
+    void aFormatThisCompilerHasNoSuchThingAsIsRefused() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--format", "jsn");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--format`"), said.err());
+        assertTrue(said.err().contains("jsn"), said.err());
+        assertTrue(said.err().contains("json"), said.err());
+        assertEquals("", said.out(), said.out());
+    }
+
+    @Test
+    void aColorPolicyThisCompilerHasNoSuchThingAsIsRefused() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--color", "bright");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--color`"), said.err());
+        assertTrue(said.err().contains("bright"), said.err());
+    }
+
+    /** Spelt as the option is spelt. A value is the string it is, and one that differs by its case
+     *  is a value this compiler does not have — {@code always} is not {@code ALWAYS}. */
+    @Test
+    void aValueSpeltInAnotherCaseIsAnotherValue() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--color", "ALWAYS");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--color`"), said.err());
+    }
+
+    /**
+     * {@code --lang} is not a closed set — a language this compiler ships no catalog for is a reader
+     * saying which language they read — so what is held is that the value is a language tag.
+     * {@code en-!!} is the case that says it: the tolerant reading this used to go through keeps
+     * {@code en} and drops what follows, so the reader was answered in English and never told that
+     * the rest of what they wrote said nothing.
+     */
+    @Test
+    void aLanguageTagWithASubtagThatNamesNothingIsRefused() throws Exception {
+        for (String tag : List.of("!!", "en-!!", "ja_JP.UTF-8")) {
+            Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                    "--lang", tag);
+
+            assertEquals(2, said.code(), tag + ": " + said.err());
+            assertTrue(said.err().contains("`--lang`"), tag + ": " + said.err());
+            assertTrue(said.err().contains(tag), tag + ": " + said.err());
+            assertEquals("", said.out(), tag + ": " + said.out());
+        }
+    }
+
+    /**
+     * And a tag is accepted whether or not this compiler answers in it. {@code fr} names a language
+     * somebody reads; that nobody has translated the messages into it yet is what the fallback to
+     * the base catalog is for, and is not a mistake in what they wrote.
+     */
+    @Test
+    void aLanguageThisCompilerHasNoCatalogForIsAccepted() throws Exception {
+        for (String tag : List.of("ja", "en", "fr", "fr-CA", "ja_JP")) {
+            Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                    "--lang", tag);
+
+            assertEquals(0, said.code(), tag + ": " + said.err());
+        }
+    }
+
+    /**
+     * Every value each of them has, so that the refusal above is a refusal of what is outside the
+     * set and not of everything. A row nothing ever accepts measures nothing; these are what say the
+     * set is the set the usage text writes.
+     */
+    @Test
+    void everyValueTheseOptionsHaveIsAccepted() throws Exception {
+        for (String format : List.of("human", "json")) {
+            Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                    "--format", format);
+
+            assertEquals(0, said.code(), format + ": " + said.err());
+        }
+        for (String color : List.of("auto", "always", "never")) {
+            Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                    "--color", color);
+
+            assertEquals(0, said.code(), color + ": " + said.err());
+        }
+    }
+
+    /**
+     * What the value is, before what it is read with. The line writes a format this compiler has no
+     * such thing as and a colour beside it; answering it with what {@code --color} goes unread under
+     * would be answering about a line its author did not write.
+     */
+    @Test
+    void aValueOutsideTheSetIsAnsweredBeforeWhatItWouldBeReadWith() throws Exception {
+        Said said = run("compile", model().toString(), "-d", dir.resolve("out").toString(),
+                "--format", "jsn", "--color", "always");
+
+        assertEquals(2, said.code(), said.err());
+        assertTrue(said.err().contains("`--format`"), said.err());
+        assertFalse(said.err().contains("is not read with"), said.err());
     }
 
     // --- the two that may not be written together -------------------------------------------------
