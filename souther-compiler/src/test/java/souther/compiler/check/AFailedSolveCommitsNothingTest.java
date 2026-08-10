@@ -53,6 +53,24 @@ class AFailedSolveCommitsNothingTest {
         assertEquals(Type.STRING, bind.get("'a"));
     }
 
+    /**
+     * What the contract says is that the map is as the caller left it, which is not the same as
+     * empty. A walk that emptied it on the way out would answer this test's first case and still
+     * take away what another reading had settled before this one was tried.
+     */
+    @Test
+    void whatWasSettledBeforeTheWalkIsStillThereAfterwards() {
+        Map<String, Type> bind = new HashMap<>();
+        bind.put("'settled", Type.STRING);
+        Type param = Type.tuple(List.of(Type.var("'a"), Type.INT));
+        Type arg = Type.tuple(List.of(Type.BOOL, Type.STRING));
+
+        assertInstanceOf(Fit.Disagrees.class, TypeOps.unify(param, arg, bind, Symbols.none()));
+
+        assertEquals(Map.of("'settled", Type.STRING), bind,
+                "a walk that did not fit left the map as " + bind);
+    }
+
     /** The answer names the position that disagreed, not the pair the walk started from — the two
      * types a reader is shown are the ones that did not go together. */
     @Test

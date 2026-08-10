@@ -131,6 +131,15 @@ final class Substitution {
      * go with this one: two readings of one variable, which is the one disagreement only a reader
      * holding the whole signature can see. The types are answered rather than reported, because
      * where a reader is sent belongs to whoever still has the operand.
+     *
+     * <p>A reading that disagrees leaves behind what it decided before it got there. Unlike
+     * {@link TypeOps#unify}, which settles a caller's map and so has to leave it as the caller left
+     * it, this settles what the application already owns: what a walk decides is the application's
+     * decision from the moment it is made, and a reading that turned out to disagree does not
+     * un-decide the positions before it. So a caller that goes on after {@code Disagrees} is
+     * carrying an application whose readings did not all agree, which is not something to build a
+     * type from. Every caller today either refuses at once or drops the whole {@code Substitution},
+     * and a caller that wants to do neither is asking for something this does not offer.
      */
     Fit decide(Type declared, Type actual, Symbols symbols) {
         // Neither side is written through first. A variable already decided is still the variable
