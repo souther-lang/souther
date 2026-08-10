@@ -987,8 +987,9 @@ final class Witnesses {
         return in.stream().map(c -> c - from).distinct().sorted().toList();
     }
 
-    /** Which place each column of the canonical text opens, taking the widest where several begin
-     *  together: the line belongs to what holds the rest of it. */
+    /** Which place each offset of the canonical text opens, taking the widest where several begin
+     *  together: the line belongs to what holds the rest of it. An offset, not a column — an extent
+     *  indexes the text, and only a layout's own width arithmetic is in columns. */
     private static Map<Integer, Place> placesByStart(Layout layout) {
         Map<Integer, Place> out = new LinkedHashMap<>();
         layout.extents().forEach((place, extent) -> {

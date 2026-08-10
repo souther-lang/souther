@@ -53,7 +53,12 @@ public final class Formatter {
      * expression's: a module header that lists more names than fit breaks the same way a call with
      * more arguments than fit does. A line wider than this is one whose content has no separator to
      * break at — a long pattern, a single long token, or a nesting deep enough that the indent alone
-     * takes the width. */
+     * takes the width.
+     *
+     * <p>Columns on the screen, under {@code DisplayColumns}: a full-width name takes two of them
+     * per character, which is what makes a line of a model written in Japanese as long as it looks.
+     * Counting the characters instead would let such a line past the width by however many
+     * full-width characters it holds. */
     private static final int WIDTH = 100;
 
     /** The comments taken by some construct, by where they are in the source. A comment is reachable

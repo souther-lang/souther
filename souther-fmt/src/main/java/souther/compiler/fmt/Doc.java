@@ -1,5 +1,7 @@
 package souther.compiler.fmt;
 
+import souther.compiler.text.DisplayColumns;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -210,7 +212,12 @@ sealed interface Doc {
         StringBuilder sb = new StringBuilder();
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(new Item(0, Mode.BREAK, this));   // the outermost context breaks
-        int col = 0;
+        // Two counts run side by side here and they are not interchangeable. `displayCol` is where
+        // the line has reached on the screen, which is what the width is about and what a
+        // full-width character advances by two. Everything taken from `sb.length()` — an extent, an
+        // opportunity, a newline's offset — is an index into the text, which is what the readers of
+        // a layout use to cut and search the same Java string, and stays in UTF-16 units.
+        int displayCol = 0;
         while (!todo.isEmpty()) {
             Item it = todo.pop();
             if (it.closes != null) {
@@ -221,7 +228,7 @@ sealed interface Doc {
                 case Nil _ -> { }
                 case Text t -> {
                     sb.append(t.s());
-                    col += t.s().length();
+                    displayCol = DisplayColumns.advance(t.s(), displayCol);
                 }
                 case Concat c -> {
                     List<Doc> parts = c.parts();
@@ -242,9 +249,9 @@ sealed interface Doc {
                     todo.push(it.within(a.doc()));
                 }
                 case Group g -> {
-                    Outcome outcome = flatnessOf(width - col,
+                    Outcome outcome = flatnessOf(displayCol, width,
                             new Item(it.indent, Mode.FLAT, g.doc()), todo);
-                    decisions.add(new GroupDecision(g.ref(), col, outcome));
+                    decisions.add(new GroupDecision(g.ref(), displayCol, outcome));
                     todo.push(new Item(it.indent,
                             outcome instanceof Outcome.Flat ? Mode.FLAT : Mode.BREAK, g.doc(),
                             null, it.under, g.ref()));
@@ -260,22 +267,22 @@ sealed interface Doc {
                     }
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
-                        col += l.flat().length();
+                        displayCol = DisplayColumns.advance(l.flat(), displayCol);
                     } else {
                         breaks.add(newline(sb, it, it.indent,
                                 new Newline.Cause.Settled(l.ref()), true));
-                        col = it.indent;
+                        displayCol = it.indent;
                     }
                 }
                 case Hard h -> {
                     int indent = h.indents() ? it.indent : 0;
                     breaks.add(newline(sb, it, indent,
                             new Newline.Cause.Forced(h.ref().obligation()), h.indents()));
-                    col = indent;
+                    displayCol = indent;
                 }
                 case Trailing t -> {
                     sb.append(' ').append(t.s());
-                    col += t.s().length() + 1;
+                    displayCol = DisplayColumns.advance(t.s(), displayCol + 1);
                 }
                 case MustBreak _ -> { }
             }
@@ -303,9 +310,16 @@ sealed interface Doc {
      * of the two the walk met first would make the reason a fact about where the measuring stopped.
      * The walk therefore goes on past the overflow, over the group's own flat content, to see
      * whether one is there.
+     *
+     * <p>It walks forward from {@code from}, the column the group begins at, rather than spending a
+     * budget of what is left of the width. The two are the same arithmetic until a tab is written:
+     * a tab advances to the next stop, which is decided by the absolute column it stands at and
+     * cannot be recovered from how much of the width remains. A comment or a string literal carries
+     * one through to here as it was written, so this is not a case the formatter can rule out.
      */
-    private static Outcome flatnessOf(int remaining, Item first, Deque<Item> rest) {
-        boolean over = remaining < 0;
+    private static Outcome flatnessOf(int from, int limit, Item first, Deque<Item> rest) {
+        int displayCol = from;
+        boolean over = displayCol > limit;
         Deque<Item> todo = new ArrayDeque<>();
         todo.push(first);
         Iterator<Item> restIt = rest.iterator();
@@ -321,8 +335,8 @@ sealed interface Doc {
             switch (it.doc) {
                 case Nil _ -> { }
                 case Text t -> {
-                    remaining -= t.s().length();
-                    over |= remaining < 0;
+                    displayCol = DisplayColumns.advance(t.s(), displayCol);
+                    over |= displayCol > limit;
                 }
                 case Concat c -> {
                     List<Doc> parts = c.parts();
@@ -336,8 +350,8 @@ sealed interface Doc {
                 case PointOf _ -> { }
                 case Line l -> {
                     if (it.mode == Mode.FLAT) {
-                        remaining -= l.flat().length();
-                        over |= remaining < 0;
+                        displayCol = DisplayColumns.advance(l.flat(), displayCol);
+                        over |= displayCol > limit;
                     } else {
                         // the measured stretch ends here, and what follows is another line's
                         return over ? new Outcome.BrokenByWidth() : new Outcome.Flat();
