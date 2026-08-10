@@ -1493,6 +1493,11 @@ public final class Adequacy {
         private static String said(souther.compiler.partition.UndividedPosition.Reason reason) {
             return switch (reason) {
                 case UNSUPPORTED_SYNTAX -> "a comparison here is written in a form this does not read";
+                case UNSUPPORTED_PARTITION_SHAPE ->
+                        "the classes it divides the values into are not intervals, which is the"
+                                + " only shape a class here has";
+                case UNSUPPORTED_DOMAIN ->
+                        "it is compared against values no line can be drawn on here";
                 case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
             };
         }

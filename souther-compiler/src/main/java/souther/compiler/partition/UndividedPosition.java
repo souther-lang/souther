@@ -38,6 +38,17 @@ public record UndividedPosition(TermPath at, Why why) {
     public enum Reason {
         /** A comparison this position is named by sits inside a condition this does not read. */
         UNSUPPORTED_SYNTAX,
+        /**
+         * The classes the comparison divides the values into are not intervals.
+         *
+         * <p>An equality divides them into the value and everything else, and the second of those is
+         * not a range. Told apart from a form this cannot read because what would have to change is
+         * different: a partition class here is a convex interval, and holding this one means
+         * generalising that rather than reading another kind of condition.
+         */
+        UNSUPPORTED_PARTITION_SHAPE,
+        /** The values the comparison is against are not ones a line can be drawn on here. */
+        UNSUPPORTED_DOMAIN,
         /** The walk stopped before it reached the fields under this position. */
         DEPTH_LIMIT
     }

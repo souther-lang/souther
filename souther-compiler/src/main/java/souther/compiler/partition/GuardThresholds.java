@@ -44,9 +44,12 @@ public final class GuardThresholds {
      * say and cannot be made to say (see {@link GuardEdge}).
      */
     public record Guards(List<Threshold> thresholds, List<GuardEdge> edges,
-                         List<TermPath> unread) {
+                         List<Unread> unread) {
 
         public static final Guards NONE = new Guards(List.of(), List.of(), List.of());
+
+        /** A position a comparison names that this did not turn into a line, and what stopped it. */
+        public record Unread(TermPath at, UndividedPosition.Reason why) {}
 
         public Guards {
             thresholds = List.copyOf(thresholds);
@@ -62,21 +65,22 @@ public final class GuardThresholds {
                             List<String> parameters, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<GuardEdge> edges = new ArrayList<>();
-        List<TermPath> unread = new ArrayList<>();
+        List<Guards.Unread> unread = new ArrayList<>();
         walk(behavior, body, plan, parameters, symbols, found, edges, unread);
         return new Guards(found, edges, unread);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              List<String> parameters, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges, List<TermPath> unread) {
+                             List<GuardEdge> edges, List<Guards.Unread> unread) {
         if (e instanceof Core.If iff) {
             List<TermPath> made = read(behavior, iff, plan, parameters, symbols, out, edges);
             // Every position this condition compares, less the one a line was drawn on. What is left
             // is a rule the model states here and this did not read, which is the one thing that
             // keeps a later reader from taking an empty list for a model that says nothing.
-            for (TermPath compared : comparedIn(iff.cond(), parameters, symbols)) {
-                if (!made.contains(compared) && !unread.contains(compared)) {
+            for (Guards.Unread compared : comparedIn(iff.cond(), parameters, symbols)) {
+                if (!made.contains(compared.at())
+                        && unread.stream().noneMatch(had -> had.at().equals(compared.at()))) {
                     unread.add(compared);
                 }
             }
@@ -97,23 +101,40 @@ public final class GuardThresholds {
      * that the model draws something at this position, which is exactly what {@code not derivable}
      * would otherwise deny.
      */
-    private static List<TermPath> comparedIn(Core e, List<String> parameters, Symbols symbols) {
-        List<TermPath> out = new ArrayList<>();
+    private static List<Guards.Unread> comparedIn(Core e, List<String> parameters, Symbols symbols) {
+        List<Guards.Unread> out = new ArrayList<>();
         compared(e, parameters, symbols, out);
         return out;
     }
 
     private static void compared(Core e, List<String> parameters, Symbols symbols,
-                                 List<TermPath> out) {
+                                 List<Guards.Unread> out) {
         if (e instanceof Core.Binary binary && orders(binary.op())) {
             for (Core side : List.of(binary.left(), binary.right())) {
                 NumericTerm named = termOf(side, parameters, symbols);
-                if (named != null && !out.contains(named.path())) {
-                    out.add(named.path());
+                if (named != null && out.stream().noneMatch(had -> had.at().equals(named.path()))) {
+                    out.add(new Guards.Unread(named.path(), why(binary)));
                 }
             }
         }
         Core.forEachChild(e, child -> compared(child, parameters, symbols, out));
+    }
+
+    /**
+     * What would have to change before this comparison could be a line.
+     *
+     * <p>Three different things, and a reader told one sentence for all of them cannot tell which
+     * limit is theirs to wait on. An equality is read perfectly well and asks for a class that is not
+     * a range; a comparison against something that is not a number this carries asks for a carrier;
+     * and what is left is a condition this does not take apart.
+     */
+    private static UndividedPosition.Reason why(Core.Binary comparison) {
+        if (comparison.op() == Ast.BinOp.EQ || comparison.op() == Ast.BinOp.NE) {
+            return UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+        }
+        return constantOf(comparison.left()) == null && constantOf(comparison.right()) == null
+                ? UndividedPosition.Reason.UNSUPPORTED_DOMAIN
+                : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
     }
 
     /** Whether an operator is one that compares two values rather than combining two conditions. */

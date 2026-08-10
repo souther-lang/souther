@@ -96,7 +96,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void anEqualityIsNamedToo() {
-        assertEquals(List.of(TermPath.of("n")), read("n.value == 3").unread());
+        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("n"),
+                        UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
+                read("n.value == 3").unread());
     }
 
     /**
@@ -108,14 +110,14 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
      */
     @Test
     void aLineDrawnOnADateTimeIsNamedToo() {
-        assertEquals(List.of(TermPath.of("at")),
+        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("at"),
+                        UndividedPosition.Reason.UNSUPPORTED_DOMAIN)),
                 read("at: DateTime", "at < DateTime(\"2026-01-01T00:00:00\")").unread());
     }
 
     /** One position said once, however many comparisons in the body name it. */
     @Test
     void aPositionIsNamedOnceRatherThanPerComparison() {
-        assertEquals(List.of(TermPath.of("n")),
-                read("n.value == 1 || n.value /= 3").unread());
+        assertEquals(1, read("n.value == 1 || n.value /= 3").unread().size());
     }
 }

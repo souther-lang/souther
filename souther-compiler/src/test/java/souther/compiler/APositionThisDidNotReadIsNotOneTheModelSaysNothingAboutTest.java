@@ -50,6 +50,15 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
                 constructs Auto, Manual
             let tooDeep (o) = if o.middle.deep.note == "x" then Auto else Manual
 
+            behavior byEquality : (r: Request) -> Auto | Manual
+                constructs Auto, Manual
+            let byEquality (r) = if r.cost == 3 then Auto else Manual
+
+            behavior byDateTime : (at: DateTime) -> Auto | Manual
+                constructs Auto, Manual
+            let byDateTime (at) =
+                if at < DateTime("2026-01-01T00:00:00") then Auto else Manual
+
             behavior nothingCompared : (r: Request) -> Auto | Manual
                 constructs Auto, Manual
             let nothingCompared (r) =
@@ -108,6 +117,31 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
         assertFalse(block.contains("not derivable: o.middle.deep"), block);
         assertTrue(block.contains("the walk stopped before reaching what is under it"), block);
+    }
+
+    /**
+     * An equality is not a form this cannot read — it is a partition this cannot hold.
+     *
+     * <p>`retries == 3` divides the values the behavior distinguishes into `{3}` and everything
+     * else, and the second of those is not an interval. Reported as the shape it is, because that
+     * says what would have to change: a class that is not convex, rather than a reader for a form of
+     * condition.
+     */
+    @Test
+    void anEqualityIsSaidToBeAShapeRatherThanAForm() {
+        String block = blockOf("byEquality");
+
+        assertTrue(block.contains("not read: r.cost"), block);
+        assertTrue(block.contains("interval"), block);
+    }
+
+    /** And a carrier no line can be drawn on is neither of those. */
+    @Test
+    void aCarrierNoLineIsDrawnOnSaysThat() {
+        String block = blockOf("byDateTime");
+
+        assertTrue(block.contains("not read: at"), block);
+        assertFalse(block.contains("interval"), block);
     }
 
     /** The one that is read is not named either way. */

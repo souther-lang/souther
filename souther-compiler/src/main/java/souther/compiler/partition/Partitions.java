@@ -176,7 +176,7 @@ public final class Partitions {
      * place that knows is the reader that gave up.
      */
     public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
-                                              Symbols symbols, List<TermPath> unread) {
+                                              Symbols symbols, List<GuardThresholds.Guards.Unread> unread) {
         List<Axis> out = new ArrayList<>();
         for (Axis axis : base.axes()) {
             NumericTerm declared = axis.term();
@@ -229,8 +229,10 @@ public final class Partitions {
         for (UndividedPosition each : undividedIn(out, java.util.Set.of())) {
             UndividedPosition had = base.undivided().stream()
                     .filter(before -> before.at().equals(each.at())).findFirst().orElse(each);
-            undivided.add(unread.contains(each.at())
-                    ? had.because(UndividedPosition.Reason.UNSUPPORTED_SYNTAX) : had);
+            UndividedPosition.Reason stopped = unread.stream()
+                    .filter(one -> one.at().equals(each.at())).map(GuardThresholds.Guards.Unread::why)
+                    .findFirst().orElse(null);
+            undivided.add(stopped == null ? had : had.because(stopped));
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
                 undivided);
