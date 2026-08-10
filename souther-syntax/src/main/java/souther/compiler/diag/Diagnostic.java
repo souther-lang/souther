@@ -157,7 +157,9 @@ public final class Diagnostic {
         return new Builder().at(pos);
     }
 
-    /** The same, underlining {@code width} columns from {@code pos}. */
+    /** The same, over the {@code width} UTF-16 code units from {@code pos} — the length of the text
+     * it is about, which is what a {@link Region} is measured in. Not a width on a screen: how much
+     * room that text takes is the renderer's to work out, from the line it is quoting. */
     public static Builder at(SourcePos pos, int width) {
         return new Builder().at(pos, width);
     }

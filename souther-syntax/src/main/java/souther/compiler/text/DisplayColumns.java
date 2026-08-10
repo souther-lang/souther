@@ -25,9 +25,14 @@ import java.util.List;
  * including {@code Ambiguous}, which terminals genuinely disagree about — is one; a tab advances to
  * the next multiple of {@link #TAB_STOP}. It has to be a convention rather than an observation
  * because the formatter's canonical form is decided by it: a width read from the terminal the tool
- * happens to be run in would make the same file format differently in two windows. Combining marks,
- * variation selectors and emoji sequences are outside what this states; whichever answer they are
- * given later, they are given it here.
+ * happens to be run in would make the same file format differently in two windows.
+ *
+ * <p>Every code point gets an answer and the answers add up, which is the whole of the model. What
+ * is left out is not a set of characters but a behaviour: nothing here composes. A combining mark
+ * is measured on its own — {@code 3099} is in the table as wide and is answered two, rather than
+ * folding into the letter before it — and a variation selector and an emoji sequence are read the
+ * same way, as their parts. Anything that would have to look at more than one code point at a time
+ * to answer is not modelled, and when it is, it is modelled here.
  *
  * <p>The widths are the Unicode Character Database's own text, carried as a resource and read here,
  * for the reasons {@code IdentifierAlphabet} carries its alphabet the same way. The two files move

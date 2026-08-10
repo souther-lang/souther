@@ -95,6 +95,22 @@ class AColumnIsNotACharacterTest {
     }
 
     /**
+     * The whole of what is left out. Nothing composes: a mark is measured on its own rather than
+     * folded into the letter it is written over, so a decomposed {@code が} is answered four where
+     * the precomposed one is answered two and a terminal draws them alike. Written down because the
+     * convention answers for every code point — there is no character it declines — and what it
+     * does not model is reading more than one of them at a time.
+     */
+    @Test
+    void nothing_composes_so_a_mark_is_measured_on_its_own() {
+        assertEquals(2, DisplayColumns.width("\u304C"), "precomposed \u304C");
+        assertEquals(4, DisplayColumns.width("\u304B\u3099"),
+                "the same syllable decomposed, answered as its two parts");
+        assertEquals(2, DisplayColumns.width("e\u0301"),
+                "and a mark that is not wide is still a column of its own");
+    }
+
+    /**
      * The two Unicode files are read separately and have to be read at one version. Held against
      * each other rather than against a constant, because a constant would be a third copy of an
      * answer both files already carry.

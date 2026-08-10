@@ -139,7 +139,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
         // measured from the column it starts at, and the gutter is part of that column, since the
         // quoted line and the carets under it are written on the same terminal line.
         int from = Math.min(Math.max(start.column() - 1, 0), line.length());
-        int to = Math.min(from + region.caretWidth(), line.length());
+        int to = Math.min(from + region.sourceSpan(), line.length());
         int at = DisplayColumns.advance(line.substring(0, from), DisplayColumns.width(gutter));
         int span = Math.max(1, DisplayColumns.advance(line.substring(from, to), at) - at);
         out.append(color(caretColor, " ".repeat(at) + "^".repeat(span))).append('\n');
