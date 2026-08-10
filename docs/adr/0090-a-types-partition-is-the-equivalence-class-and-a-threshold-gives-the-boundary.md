@@ -4,7 +4,8 @@ Status: Accepted. Fixes what the compiler may derive as an equivalence class, an
 Revised in place for #427: what a threshold is intersected with is what the *position* admits, which
 is the field's type read under the rules of the record holding it. Revised again for #510: what a
 line is drawn on is a numeric *term*, not a position — the content of a location, or a size taken of
-one.
+one. Revised again for #622: which values a term's line can be drawn on is one table, and a rule
+written over values it does not hold is reported as unread rather than dropped.
 
 ## Context
 
@@ -87,6 +88,32 @@ and its non-negativity is its own rather than something a rule has to state.
 A position no rule measures keeps its own name. A `String` nothing says anything about is not
 derivable and is reported as the position, because naming its length there would put a term in the
 report that nobody wrote.
+
+One table says which values carry a line, and every reader asks it. A line is drawn on an `Int`, a
+`Decimal`, a `Date` and a `DateTime`, and on a single-value newtype over one of them; a `String` and
+an enumeration are ordered and are not measured. The table is exhaustive over the primitives, so a
+primitive added to the language stops the build at the one place that would otherwise answer for it
+by omission — and it closes only the primitives, since a newtype is reduced to its base before the
+table is asked and an enumeration is not a primitive at all.
+
+Why a table rather than a predicate at each reader: there were three, and they disagreed. A `Date`
+was a carrier to the reader that drew a `guard`'s line and not to the one that read an invariant's
+bound, so the same rule about the same position answered differently depending on where it was
+written — and the report said nothing about the difference, because the reader that dropped the
+bound had nowhere to say so.
+
+What a value carries and what lies beside it are separate. A carrier says whether a line can be
+drawn; the type's own spacing says whether the value beside that line exists. A whole number and a
+date have a neighbour; a `Decimal` and a `DateTime` do not, the second because which step a
+date-time moves in is a decision this language has not taken. Deriving the second from the first is
+what left a date-time unread entirely: an unsettled step is a reason to ask for no neighbour, not a
+reason to draw no line.
+
+A rule this could not read is named, whichever rule it was. A `guard`'s comparison already said so;
+an invariant's bound did not, and a bound it dropped left the position looking like one no rule
+bounds — which at a position whose only rule was that bound made the report state the opposite of
+the declaration. The two producers now say it in the same words, because they answer the same
+question: this position was written about and this could not draw the line.
 
 An invariant's bound gives a boundary and not a partition: everything outside it is refused at
 construction, so there is no class on the far side to cover. A `guard`'s line has values on both
