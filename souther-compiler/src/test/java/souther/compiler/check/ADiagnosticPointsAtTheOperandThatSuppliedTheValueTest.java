@@ -18,10 +18,10 @@ import souther.compiler.diag.Region;
  * its arguments are written from its callee, so the two can be a page apart. What the reader cannot
  * recover from the message is the operand, and that is what the caret is for.
  *
- * <p>Which region a report gets is not decided by its code. Three paths type a call — a kernel
- * applied against its declared signature, a helper expanded, a behavior called by name — and two of
- * them already answer with the argument. The rows below hold all three to one rule, so a path added
- * later is held to it too.
+ * <p>Which region a report gets is not decided by its code. The rows below cover the three paths a
+ * call written in a body is typed by — a kernel applied against its declared signature, a helper
+ * expanded, a behavior called by name — which answered three different ways for one code and one
+ * kind of failure. They are the paths that exist now; a fourth is not held to anything here.
  */
 class ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest {
 
@@ -57,6 +57,32 @@ class ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest {
 
         assertEquals("String.length", underlined(source, regionOf(source)),
                 "argument 2 is `String.length(b)` on line 8, not the callee on line 6");
+    }
+
+    /**
+     * A block is typed against what the value arguments settled, so a value argument that does not
+     * fit is refused before the block is reached.
+     *
+     * <p>Otherwise the block is checked against a parameter type worked out from a type the call
+     * does not have, and what it reports is something wrong inside the block — which is a second
+     * wrong place to send the reader, and one the message does not even name the argument in.
+     */
+    @Test
+    void aValueArgumentIsRefusedBeforeTheBlockThatWasTypedFromIt() {
+        String source = """
+                module demo
+
+                behavior sorted : (n: Int) -> List<Int>
+
+                let sorted (n) =
+                    List.sortBy(
+                        x -> String.length(x),
+                        n
+                    )
+                """;
+
+        assertEquals("n", underlined(source, regionOf(source)),
+                "`n` is what does not fit; `String.length(x)` is a block typed from it");
     }
 
     /** A helper is expanded rather than applied, and answers with the argument already. */

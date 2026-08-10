@@ -162,6 +162,7 @@ public final class CallElaborator {
             arity(call, params.size());
         }
         Map<String, Type> bind = settledByValues(call, params, kept.result(), expected, ca::type, ctx);
+        requireValueArgs(call, params, ca, bind);
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
                 Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
@@ -172,12 +173,6 @@ public final class CallElaborator {
                 // kept because its meaning belongs to whoever reads it, not to this.
                 TypeOps.unify(declared.result(), answered, bind, ctx.symbols(),
                         call.pos(), "argument " + (i + 1) + " of " + call.written());
-            }
-        }
-        for (int i = 0; i < params.size(); i++) {
-            if (!(params.get(i) instanceof Type.FnOf)) {
-                ca.requireTyped(i, TypeOps.substitute(params.get(i), bind),
-                        "argument " + (i + 1) + " of " + call.written());
             }
         }
         return new Core.PreservedCall(call.denotes(), ca.cores(),
@@ -412,15 +407,22 @@ public final class CallElaborator {
      *       bound from the context before the step is checked (issue #70). With no function
      *       argument nothing waits, and pinning anyway would answer an argument mismatch against
      *       the type the context wanted rather than the one the declaration asks for;</li>
-     *   <li>type the value arguments and unify each with its declared parameter;</li>
+     *   <li>type the value arguments, settle what they say of the signature's variables, and
+     *       require each of them against the parameter it was given to;</li>
      *   <li>type the function arguments last, against parameter types the earlier arguments
      *       settled. A failure that is genuinely an empty-collection seed nothing typed — one that
      *       reported the unresolved bottom — is re-pointed at the seed rather than at the
      *       arithmetic the bottom reached; an unrelated error in the step is rethrown untouched
      *       (issue #70);</li>
-     *   <li>require each value argument against its settled parameter type, and substitute into
-     *       the declared result.</li>
+     *   <li>substitute into the declared result.</li>
      * </ol>
+     *
+     * <p>The value arguments are required before a function argument is typed because a function
+     * argument is typed against what they settled. Where one of them does not fit, what the
+     * signature says the function takes was worked out from a type the call does not have — and a
+     * body checked against that reports something wrong with the block, which is the reader's cue
+     * to look at a block that is not the problem. Held in the other order, {@code List.sortBy(x ->
+     * String.length(x), n)} on an {@code n} that is no list answers about {@code String.length}.
      *
      * <p>Arity is the caller's to check first, in its own words; this throws where the two
      * disagree rather than walking off the shorter list.
@@ -434,6 +436,7 @@ public final class CallElaborator {
         }
         Map<String, Type> bind = settledByValues(call, signature.params(), signature.result(),
                 expected, ca::type, ctx);
+        requireValueArgs(call, signature.params(), ca, bind);
         try {
             for (int i = 0; i < args.size(); i++) {
                 if (signature.params().get(i) instanceof Type.FnOf declaredStep) {
@@ -453,14 +456,20 @@ public final class CallElaborator {
             }
             throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
         }
-        for (int i = 0; i < args.size(); i++) {
-            Type param = signature.params().get(i);
+        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
+    }
+
+    /** Each value argument held to the parameter it was given to, at its own position — the
+     * refusal {@link #settledByValues} leaves to whoever has the argument in hand. */
+    private static void requireValueArgs(Ast.Apply call, List<Type> params, CallArgs ca,
+                                         Map<String, Type> bind) {
+        for (int i = 0; i < params.size(); i++) {
+            Type param = params.get(i);
             if (!(param instanceof Type.FnOf)) {
                 ca.requireTyped(i, TypeOps.substitute(param, bind),
                         "argument " + (i + 1) + " of " + call.written());
             }
         }
-        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
     }
 
     static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
