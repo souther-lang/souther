@@ -6,6 +6,12 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import souther.compiler.cst.CstParser;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -15,6 +21,7 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -336,6 +343,58 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
         assertTrue(report.whole(),
                 "what is named is not all of it: " + report.deviations() + "\n"
                         + departure.text());
+    }
+
+    /**
+     * These are the departures there are.
+     *
+     * <p>This class is the oracle the rules are held against, and the sweep that fills it now
+     * refuses a candidate on a smaller question than the one that decides it. A refusal that is
+     * wrong takes a departure out of the world, and every other check here would stay green while
+     * it did: the check below asks that each way of writing a line is among them somewhere, which
+     * one candidate of eight hundred answers for. An oracle made faster is an oracle that needs one.
+     *
+     * <p>So what it finds is written down — as the {@code kind of shape} pairs the sweep
+     * deduplicates by, which is the unit it covers in rather than a count, since a count is the
+     * same when one pair leaves and another arrives.
+     *
+     * <p>A pair that stops being found is something dropping a candidate. A pair that arrives is the
+     * canonical form having a shape it did not have. Both are for a reader to look at, and this file
+     * is where they say which it was.
+     */
+    @Test
+    void andTheseAreTheOnesThereAre() throws IOException {
+        List<String> found = new ArrayList<>();
+        departures().forEach(d -> found.add(d.kind() + " of " + d.shape()));
+        java.util.Collections.sort(found);
+
+        List<String> written = recorded();
+
+        List<String> gone = new ArrayList<>(written);
+        gone.removeAll(found);
+        List<String> arrived = new ArrayList<>(found);
+        arrived.removeAll(written);
+        assertEquals(written, found,
+                "no longer found (" + gone.size() + "): " + head(gone)
+                        + "\nnewly found (" + arrived.size() + "): " + head(arrived));
+    }
+
+    /** The first few of them, which is as much as a failure can usefully say. */
+    private static String head(List<String> some) {
+        return some.isEmpty() ? "none"
+                : String.join("\n  ", some.subList(0, Math.min(5, some.size())))
+                        + (some.size() > 5 ? "\n  … and " + (some.size() - 5) + " more" : "");
+    }
+
+    /** The pairs this sweep found when it was last looked at. */
+    private static List<String> recorded() throws IOException {
+        String resource = "every-departure-there-is.txt";
+        try (InputStream in = EveryDepartureFromTheCanonicalFormIsSomeRulesTest.class
+                .getResourceAsStream(resource)) {
+            assertNotNull(in, "the departures this sweep found are not beside it: " + resource);
+            return new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))
+                    .lines().toList();
+        }
     }
 
     /**
