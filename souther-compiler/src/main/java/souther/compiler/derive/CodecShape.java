@@ -1,0 +1,156 @@
+package souther.compiler.derive;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeOps;
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.msg.DataMessage;
+import souther.compiler.diag.msg.TypeMessage;
+import souther.compiler.types.LeafScalar;
+import souther.compiler.types.MapKeyRepresentation;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+
+/**
+ * What a field carries across the boundary, as the shape a codec is built out of.
+ *
+ * <p>Reading a type and admitting it are one walk, for the reason {@code SignatureBoundary} gives on
+ * the behavior's side: asked separately, what the checker admits and what the builders can construct
+ * agree only by coincidence, and a builder missing an arm then reports the type it did not implement
+ * as a type the language refuses. A shape exists because {@link #of} built it, and both the decoder
+ * and the encoder are lowered from that one shape rather than each deciding again.
+ *
+ * <p>The split between this and {@link Bare} is the one rule the tree itself holds: an optional's
+ * value is a {@code Bare}, so an optional under an optional cannot be constructed. Absence has one
+ * form wherever it stands (spec {@code [#absence-is-written-as-null]}), so {@code None},
+ * {@code Some(None)} and {@code Some(Some(v))} are three values facing two forms; leaving the
+ * recursion open would give this tree an admitted set wider than the boundary has representations
+ * for, which is the disagreement the type is here to make unwritable.
+ */
+sealed interface CodecShape {
+
+    /**
+     * A shape that is not an optional. Everything but an optional is one, and what the distinction
+     * is for is the single position that requires it: what an optional holds.
+     */
+    sealed interface Bare extends CodecShape {}
+
+    /** A primitive written as itself. */
+    record Scalar(LeafScalar kind) implements Bare {}
+
+    /** A named data, read and written by its own derived codec. */
+    record Named(TypeName name) implements Bare {}
+
+    /** A {@code List<T>}, written as an array. */
+    record ListOf(CodecShape element) implements Bare {}
+
+    /** A {@code Set<T>}, written as an array its own members order (spec {@code [#collections]}). */
+    record SetOf(CodecShape element) implements Bare {}
+
+    /** A {@code Map<K, V>}, written as an object whose keys are {@code key}'s bare text. */
+    record MapOf(MapKeyRepresentation key, CodecShape value) implements Bare {}
+
+    /** An {@code Option<T>}. Where it stands decides how absence is written — a field omits its key,
+     *  and an element or a map's value writes {@code null} — so the shape says only that absence is
+     *  possible and the lowering says which form it takes. */
+    record OptionOf(Bare present) implements CodecShape {}
+
+    /**
+     * The shape {@code t} carries, or a refusal naming what had no external representation.
+     *
+     * @param t      the field's type, as the checker resolved it
+     * @param d      the data the field belongs to, for naming the refusal
+     * @param field  the field's name
+     * @param pos    where the field is written, for the caret
+     */
+    static CodecShape of(Type t, Ast.Data d, String field, SourcePos pos, Symbols symbols) {
+        return switch (t) {
+            case Type.Prim p -> scalar(p, t, d, field, pos);
+            case Type.Ref r -> new Named(r.name());
+            case Type.ListOf l -> new ListOf(of(l.element(), d, field, pos, symbols));
+            case Type.SetOf s -> new SetOf(of(s.element(), d, field, pos, symbols));
+            case Type.MapOf m -> new MapOf(mapKey(m, d, field, pos, symbols),
+                    of(m.value(), d, field, pos, symbols));
+            case Type.OptionOf o -> new OptionOf(present(o, d, field, pos, symbols));
+            case Type.TupleOf _ -> throw aTuple(t, d, field, pos);
+            case Type.FnOf _, Type.Union _, Type.Erroneous _,
+                 Type.Var _, Type.MetaVar _, Type.Nothing _, Type.Never _ ->
+                    throw noRepresentation(t, d, field, pos);
+        };
+    }
+
+    /** What an optional holds, which is not another optional. */
+    private static Bare present(Type.OptionOf o, Ast.Data d, String field, SourcePos pos,
+                                Symbols symbols) {
+        // The inner type is read before it is judged, so a tuple under an optional is reported as
+        // the tuple it is rather than as the optional carrying one.
+        if (of(o.element(), d, field, pos, symbols) instanceof Bare b) {
+            return b;
+        }
+        throw noRepresentation(o, d, field, pos);
+    }
+
+    /** The scalar a primitive is written as. {@code Raw} is the language's own vocabulary and is
+     *  written as itself nowhere, so it has no leaf codec to be given one. */
+    private static Scalar scalar(Type.Prim prim, Type t, Ast.Data d, String field, SourcePos pos) {
+        LeafScalar leaf = LeafScalar.of(prim);
+        if (leaf == null) {
+            throw noRepresentation(t, d, field, pos);
+        }
+        return new Scalar(leaf);
+    }
+
+    /**
+     * How a map's keys cross. A JSON object's keys are strings, so a key is decoded from and encoded
+     * to a bare string, and which string is the checker's answer rather than one worked out here. A
+     * key with no classification never had a boundary representation (ADR-0040).
+     */
+    private static MapKeyRepresentation mapKey(Type.MapOf m, Ast.Data d, String field, SourcePos pos,
+                                               Symbols symbols) {
+        MapKeyRepresentation key = TypeOps.classifyConcreteMapKey(m.key(), symbols);
+        if (key == null) {
+            throw badMapKey(m.key(), d, field, pos);
+        }
+        return key;
+    }
+
+    /** A tuple names what is unrepresentable about it — it has no field names to write — rather than
+     *  naming the codec that gave up. */
+    private static CompileException aTuple(Type t, Ast.Data d, String field, SourcePos pos) {
+        return CompileException.of(Diagnostic.at(pos)
+                .say(new DataMessage.ATupleHasNoExternalRepresentation(where(d, field), Type.showInside(t)))
+                .build());
+    }
+
+    /** The one report for a field whose type has no boundary representation, wherever in the type it
+     *  sits. It is positioned on the field rather than on the data, so the caret lands on what has to
+     *  change, and it prints the part that had no representation — which is not always the whole
+     *  field type, and is what the author has to replace. */
+    private static CompileException noRepresentation(Type t, Ast.Data d, String field, SourcePos pos) {
+        return CompileException.of(Diagnostic.at(pos)
+                .say(new DataMessage.NoCodecCanBeDerived(where(d, field), Type.showInside(t)))
+                .build());
+    }
+
+    /**
+     * A key that cannot key a JSON object. This runs ahead of the checker that makes the same
+     * judgement on a data's fields, so it reports the same way rather than as a codec that gave up:
+     * the reader has to change the key type either way, and being told twice in two vocabularies
+     * helps nobody.
+     */
+    private static CompileException badMapKey(Type key, Ast.Data d, String field, SourcePos pos) {
+        return CompileException.of(Diagnostic.at(pos)
+                .hint(new TypeMessage.AMapIsAJsonObjectKeyedByStrings())
+                .say(new TypeMessage.AFieldsMapCannotBeKeyedByThat(where(d, field), Type.show(key)))
+                .build());
+    }
+
+    /** How to name the place a boundary complaint belongs to. A newtype's single field is implicit —
+     *  the author wrote {@code data X = Y}, never a field called {@code value} — so it is named by
+     *  the type alone. */
+    private static String where(Ast.Data d, String field) {
+        return d.newtype() ? d.name() : d.name() + "." + field;
+    }
+}

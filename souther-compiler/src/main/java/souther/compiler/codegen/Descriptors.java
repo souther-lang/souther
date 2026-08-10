@@ -288,6 +288,8 @@ final class Descriptors {
     static final MethodTypeDesc MTD_partDecode = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
     static final MethodTypeDesc MTD_asDecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_listDec = MethodTypeDesc.of(CD_ListDecoder, CD_RDecoder);
+    /** {@code nullable(dec)} — reads null as an absent value rather than a required one. */
+    static final MethodTypeDesc MTD_nullableDec = MethodTypeDesc.of(CD_RDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_mapDec = MethodTypeDesc.of(CD_RecordDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_Rvariant = MethodTypeDesc.of(CD_RVariant, CD_String, CD_RDecoder);
     static final MethodTypeDesc MTD_Rdiscriminate =
@@ -396,6 +398,9 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Err_issues = MethodTypeDesc.of(CD_RIssues);
     static final MethodTypeDesc MTD_nested = MethodTypeDesc.of(CD_RDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_ofNullable = MethodTypeDesc.of(CD_Option, CD_Object);
+    /** {@code Options.encodedOrNull(inner, opt)} — an absent member is written null. */
+    static final MethodTypeDesc MTD_encodedOrNull =
+            MethodTypeDesc.of(CD_Object, CD_Function, CD_Option);
     static final MethodTypeDesc MTD_error = MethodTypeDesc.of(CD_Object);
     // Per-source (JSON / jOOQ) decode targets (spec 10.6). Every source's `field` answers a
     // `CombinePart`; the three differ only in the input type they read, which is erased.
