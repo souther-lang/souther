@@ -265,6 +265,37 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
                 outputs, "nothing searches for an input by the case it would answer with");
     }
 
+    // --- classes that were not there, and classes that would not link -----------------------------
+
+    private static String saidAbout(souther.compiler.partition.GenerationReason why) {
+        return GeneratedRows.of("example.kind",
+                Map.of("pick", new Adequacy.Filling(
+                        new souther.compiler.partition.Generator.GenerationResult(
+                                List.of(), List.of(), List.of(why)),
+                        souther.compiler.partition.Generator.GenerationResult.NONE, List.of())),
+                true);
+    }
+
+    /**
+     * Classes that would not link are not classes that were not there.
+     *
+     * <p>The assessment records which of the two it met, and both leave no row to offer. That is all
+     * they share: a sentence saying the classes were not there, printed where they were built and
+     * could not be reached, is this compiler choosing which of the things it saw to report.
+     */
+    @Test
+    void classesThatWouldNotLinkAreNotClassesThatWereNotThere() {
+        String linked = saidAbout(
+                new souther.compiler.partition.GenerationReason.LinkageFailed("pick"));
+        String absent = saidAbout(
+                new souther.compiler.partition.GenerationReason.NothingToBuildAgainst("pick"));
+
+        assertTrue(linked.contains("would not link"), linked);
+        assertFalse(linked.contains("nothing to build a candidate against"), linked);
+        assertTrue(absent.contains("nothing to build a candidate against"), absent);
+        assertFalse(absent.contains("would not link"), absent);
+    }
+
     @Test
     void anArmNoStrategyReachesIsNamedInTheBlock() {
         Compilation compilation = compiled(POLICY);

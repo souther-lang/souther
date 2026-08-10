@@ -1009,7 +1009,7 @@ public final class Adequacy {
                     // flow rather than as a value.
                     pairs = new Generator.GenerationResult(List.of(), List.of(),
                             List.of(new souther.compiler.partition.GenerationReason
-                                    .NothingToBuildAgainst(spec.name())));
+                                    .LinkageFailed(spec.name())));
                 }
                 out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
                         dispositions(findings == null ? List.of()
@@ -1084,13 +1084,27 @@ public final class Adequacy {
                             new GenerationOutcome.Generated(List.of(built.row()));
                     case BoundaryAssessment.Attempt.Unresolved why ->
                             new GenerationOutcome.CannotGenerate(why.why());
-                    // The two that reach an unmet edge are the two about the classes: a row is not
-                    // already there, and the line was measured, or this would not be a gap.
-                    case BoundaryAssessment.Attempt.NotAttempted _ ->
-                            new GenerationOutcome.CannotGenerate(
-                                    new Generator.UnresolvedCombination(List.of(subject),
-                                            Generator.UnresolvedCombination.Reason
-                                                    .NOTHING_TO_BUILD_AGAINST));
+                    // Carried apart, because the assessment kept them apart. Classes that were not
+                    // there and classes that would not link are two things this saw, and choosing
+                    // one of them to print is this compiler deciding what it observed.
+                    //
+                    // The other two reasons do not reach an unmet edge: a row is already at the
+                    // value, or the line was never measured against the rows, and neither is a gap.
+                    // Where one arrives, the assessment and the finding disagree about the same
+                    // measurement, which is not something about generating a row.
+                    case BoundaryAssessment.Attempt.NotAttempted absent -> switch (absent.reason()) {
+                        case NO_CLASSES -> new GenerationOutcome.CannotGenerate(
+                                new Generator.UnresolvedCombination(List.of(subject),
+                                        Generator.UnresolvedCombination.Reason
+                                                .NOTHING_TO_BUILD_AGAINST));
+                        case LINKAGE_FAILED -> new GenerationOutcome.CannotGenerate(
+                                new Generator.UnresolvedCombination(List.of(subject),
+                                        Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
+                        case A_ROW_IS_ALREADY_THERE, NOT_MEASURED ->
+                                throw new IllegalStateException("the assessment at " + subject
+                                        + " says " + absent.reason() + ", which is not a gap: "
+                                        + gap);
+                    };
                 };
             }
             // The gap was established from an assessment, so one names it. Where the two lists have
@@ -1130,15 +1144,26 @@ public final class Adequacy {
             if (!written.isEmpty()) {
                 return new GenerationOutcome.Generated(written);
             }
-            // Asked before the row list is read, because a search that had nothing to build against
-            // wrote nothing at every class, and a reason taken from the empty result it left would
-            // name the one thing that did not happen.
-            if (pairs.reasons().stream().anyMatch(
-                    why -> why instanceof souther.compiler.partition.GenerationReason
-                            .NothingToBuildAgainst)) {
-                return new GenerationOutcome.CannotGenerate(
-                        new Generator.UnresolvedCombination(List.of(label),
-                                Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST));
+            // Asked before the row list is read, because a search with nothing to put a candidate
+            // through wrote nothing at every class, and a reason taken from the empty result it left
+            // would name the one thing that did not happen. Which of the two it was is carried as
+            // the search recorded it.
+            for (souther.compiler.partition.GenerationReason why : pairs.reasons()) {
+                Generator.UnresolvedCombination.Reason said = switch (why) {
+                    case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ ->
+                            Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
+                    case souther.compiler.partition.GenerationReason.LinkageFailed _ ->
+                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
+                    // Reasons about this search rather than about there being nothing to search
+                    // with. They are said in their own words elsewhere and answer nothing here.
+                    case souther.compiler.partition.GenerationReason.PositionWithheld _,
+                            souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.RowsNotRead _ -> null;
+                };
+                if (said != null) {
+                    return new GenerationOutcome.CannotGenerate(
+                            new Generator.UnresolvedCombination(List.of(label), said));
+                }
             }
             return pairs.unresolved().stream()
                     .filter(left -> left.classes().contains(label))
@@ -1181,11 +1206,14 @@ public final class Adequacy {
                     // thing as the reason beside it — nothing could be built against — and that is
                     // what is said.
                     case BoundaryAssessment.Attempt.NotAttempted absent -> {
-                        if (absent.reason() == BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED
-                                || absent.reason()
-                                        == BoundaryAssessment.Attempt.Reason.NO_CLASSES) {
-                            stopped.add(new souther.compiler.partition.GenerationReason
-                                    .NothingToBuildAgainst(behavior));
+                        switch (absent.reason()) {
+                            case NO_CLASSES -> stopped.add(
+                                    new souther.compiler.partition.GenerationReason
+                                            .NothingToBuildAgainst(behavior));
+                            case LINKAGE_FAILED -> stopped.add(
+                                    new souther.compiler.partition.GenerationReason
+                                            .LinkageFailed(behavior));
+                            case A_ROW_IS_ALREADY_THERE, NOT_MEASURED -> { }
                         }
                     }
                 }

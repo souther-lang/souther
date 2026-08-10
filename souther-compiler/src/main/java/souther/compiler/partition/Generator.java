@@ -113,6 +113,9 @@ public final class Generator {
             SEARCH_LIMIT,
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
+            /** The generated classes would not link, so the decoders could not be reached. Told
+             * apart from the one above it because they were there, which is not what that says. */
+            LINKAGE_FAILED,
             /**
              * A strategy that takes this class produced neither a row nor a reason for it.
              *

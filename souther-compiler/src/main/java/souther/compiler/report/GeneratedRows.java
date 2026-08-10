@@ -281,6 +281,10 @@ public final class GeneratedRows {
                 case GenerationReason.NothingToBuildAgainst none -> String.format(
                         "// generation stopped for `%s`: there was nothing to build a candidate"
                                 + " against%n", none.behavior());
+                case GenerationReason.LinkageFailed failed -> String.format(
+                        "// generation stopped for `%s`: the generated classes would not link, so"
+                                + " the decoders a candidate is built through were out of reach%n",
+                        failed.behavior());
                 // The reasons it rests on rather than a word of its own. What was not read is a
                 // measurement's answer and is already said in those words; saying it again in the
                 // generator's would be the same fact under two spellings, read side by side.
@@ -334,6 +338,9 @@ public final class GeneratedRows {
             case SEARCH_LIMIT -> "the search stopped before reaching it";
             case NOTHING_TO_BUILD_AGAINST ->
                     "the module's classes were not there to build a candidate against";
+            case LINKAGE_FAILED ->
+                    "the generated classes would not link, so the decoders a candidate is built"
+                            + " through were out of reach";
             case NO_REASON_RECORDED ->
                     "the search that takes this class left no reason, which is this compiler failing"
                             + " to say rather than anything established about the class";
