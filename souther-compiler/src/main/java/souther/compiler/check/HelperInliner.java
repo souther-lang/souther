@@ -1297,8 +1297,7 @@ public final class HelperInliner {
         // The block and the application in it are this pass's: what the author wrote there is a
         // name, and these are the parameters and the call it stands for.
         return new Ast.Block(params,
-                new Ast.Apply(function.name(), function.denotes(), function.reachedAs(), args,
-                        ConstructionOrigin.own(), function.pos(), null),
+                new Ast.Apply(function, args, ConstructionOrigin.own(), function.pos(), null),
                 function.pos(), null);
     }
 
@@ -1695,8 +1694,14 @@ public final class HelperInliner {
     private Ast.Expr rename(Ast.Expr e, Renaming renaming) {
         return switch (e) {
             case Ast.Var v -> renameVar(v, renaming);
-            case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), renaming), fa.name(),
-                    renaming.at(fa.pos()), renaming.over(fa.region()));
+            // The field's occurrence goes the way the initialiser's does below: it is in the callee's
+            // file, so a copy being read against the caller's does not carry it. A report about the
+            // read is anchored at the field, so keeping it would send one to the callee's source
+            // while everything around it points at the call.
+            case Ast.FieldAccess fa -> renaming.stamps()
+                    ? Ast.FieldAccess.restamped(rename(fa.target(), renaming), fa.field(),
+                            renaming.at(fa.pos()), renaming.over(fa.region()))
+                    : fa.withTarget(rename(fa.target(), renaming));
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Ast.Var` held here, so it goes through the arm above and is substituted
             // exactly as a read of it would be — the position cannot ask a different question.
@@ -1793,12 +1798,25 @@ public final class HelperInliner {
                         rename(block.body(), renaming),
                         renaming.at(block.pos()), renaming.over(block.region()));
             }
-            case Ast.IntLit _ -> e;
-            case Ast.DecimalLit _ -> e;
-            case Ast.StringLit _ -> e;
-            case Ast.BoolLit _ -> e;
+            case Ast.IntLit lit -> renaming.stamps()
+                    ? new Ast.IntLit(lit.value(), renaming.at(lit.pos()), renaming.over(lit.region()))
+                    : e;
+            case Ast.DecimalLit lit -> renaming.stamps()
+                    ? new Ast.DecimalLit(lit.value(), renaming.at(lit.pos()),
+                            renaming.over(lit.region()))
+                    : e;
+            case Ast.StringLit lit -> renaming.stamps()
+                    ? new Ast.StringLit(lit.value(), renaming.at(lit.pos()),
+                            renaming.over(lit.region()))
+                    : e;
+            case Ast.BoolLit lit -> renaming.stamps()
+                    ? new Ast.BoolLit(lit.value(), renaming.at(lit.pos()),
+                            renaming.over(lit.region()))
+                    : e;
             // it names nothing, so a substitution has nothing to rewrite in it
-            case Ast.Unreachable _ -> e;
+            case Ast.Unreachable u -> renaming.stamps()
+                    ? new Ast.Unreachable(u.reason(), renaming.at(u.pos()), renaming.over(u.region()))
+                    : e;
         };
     }
 
@@ -1828,13 +1846,35 @@ public final class HelperInliner {
      * <p>A substituted name keeps what the argument resolved to, so a named function handed to a
      * combinator stays the helper it is rather than becoming a binding of that spelling.
      */
+    /**
+     * A name in the copy, reading whatever it reads here.
+     *
+     * <p>Three cases, and they differ in whether the characters this name stands at still spell it.
+     * A parameter read becomes a read of the binding this expansion made, which is this pass's
+     * however much it reads like the parameter — the same thing {@link Copy#of(Ast.Binder)} says
+     * about the binder. A copy stamped with the call site is read against the caller's file, and the
+     * occurrence it was written at is in the callee's. Neither is written where it stands, so
+     * neither keeps an occurrence; both keep somewhere to complain and the stretch of source the
+     * name they replaced was read over.
+     *
+     * <p>The third is an ordinary name in a body keeping its own positions, and it keeps its
+     * occurrence with them. Rebuilding one from {@link Ast.Var#name()} and a position — which is
+     * what this did — takes the canonical name and measures it at the anchor, so a decomposed
+     * spelling comes out of an expansion a unit short and a qualified one written over a line break
+     * comes out as far as its spelling is long.
+     */
     private Ast.Var renameVar(Ast.Var v, Renaming renaming) {
         Substituted stands = renaming.substituted(v.denotes());
-        return stands != null
-                ? new Ast.Var(stands.name(), stands.denotes(), stands.reachedAs(),
-                        renaming.at(v.pos()))
-                : new Ast.Var(v.name(), renaming.copy().of(v.denotes()), v.reachedAs(),
-                        renaming.at(v.pos()));
+        if (stands != null) {
+            return Ast.Var.respelled(stands.name(), stands.denotes(), stands.reachedAs(),
+                    renaming.at(v.pos()), renaming.over(v.region()));
+        }
+        ValueName denotes = renaming.copy().of(v.denotes());
+        if (renaming.stamps()) {
+            return Ast.Var.respelled(v.name(), denotes, v.reachedAs(),
+                    renaming.at(v.pos()), renaming.over(v.region()));
+        }
+        return new Ast.Var(v.written(), denotes, v.reachedAs(), v.region());
     }
 
     private List<Ast.Expr> renameList(List<Ast.Expr> es, Renaming renaming) {

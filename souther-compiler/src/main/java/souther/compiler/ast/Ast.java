@@ -1556,6 +1556,19 @@ public interface Ast {
             this(target, WrittenName.synthetic(field, pos), pos, null);
         }
 
+        /**
+         * An access standing where the author wrote something else — a copy of a body from another
+         * source, stamped at the place it was carried to.
+         *
+         * <p>The field is named and written nowhere, the occurrence it was read from being in the
+         * file this copy is no longer being read against. The characters are still somebody's, and
+         * they are whatever stands at {@code region} in the file this is read in. The counterpart of
+         * {@link Var#respelled}, for the same reason.
+         */
+        public static FieldAccess restamped(Expr target, String field, SourcePos at, Region over) {
+            return new FieldAccess(target, WrittenName.synthetic(field, at), at, over);
+        }
+
         /** The same access over a rewritten target. The field's occurrence and the stretch of source
          * the read was written over are the author's and survive a rewrite of what it reads from —
          * naming the field again here would put a spelling where an occurrence was. */
@@ -1588,16 +1601,26 @@ public interface Ast {
             this(function, args, origin, null, pos, region);
         }
 
-        /** Applying a name, as the parser read it, before resolution has said what the name denotes. */
+        /**
+         * Applying a name a pass chose, at the form it stands in.
+         *
+         * <p>{@code fn} is a spelling and not an occurrence — a library name a rewrite reached for,
+         * a fixture's constructor, a value rendered back out of what was computed — so the applied
+         * name is written nowhere and the characters at {@code pos} spell whatever the author put
+         * there. A name the author applied is passed as the {@link Var} it is, which is where its
+         * occurrence is; building one from a spelling and a position measures the spelling at the
+         * anchor, and the two are the same number only until they are not.
+         */
         public Apply(String fn, List<Expr> args, SourcePos pos, Region region) {
-            this(new Var(fn, pos), args, ConstructionOrigin.own(), pos, region);
+            this(Var.respelled(fn, null, null, pos, region), args, ConstructionOrigin.own(), pos,
+                    region);
         }
 
-        /** Applying a name a pass already knows the meaning of, and knows how the body it is
-         * writing into reaches. */
+        /** The same, for a pass that already knows what the name means and how the body it is
+         * writing into reaches it. */
         public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
                      ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(new Var(fn, denotes, reachedAs, pos), args, origin, pos, region);
+            this(Var.respelled(fn, denotes, reachedAs, pos, region), args, origin, pos, region);
         }
 
         /** Whether what this applies is a name. A reader that wants the name itself matches on

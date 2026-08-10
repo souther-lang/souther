@@ -79,7 +79,16 @@ which turned an occurrence the author made into a synthetic name and a fabricate
 is copied out of another module, the existing rule decides: `HelperInliner.keepsItsPositions` already
 stamped a prelude body with the call site so an error inside it points at the user's call, and that
 rule now stamps the extent as well as the point. It is the same policy carried to the new value, not
-a second one.
+a second one, and it is applied to the whole copy — the literals were exempt from the old stamping
+for no reason anyone wrote down, so a `Date("…")` inside a prelude helper reported at a line of
+`souther.list` while everything around it reported at the call.
+
+A name a pass chooses is written nowhere, and the constructors say so. Taking a spelling and a
+position — `WrittenName.of(name, pos)` — reads the spelling as if it were the source at that place,
+which it is for a token the parser just read and is not for a library name a rewrite reached for or a
+canonical form a copy rebuilt. `Var.respelled` and `FieldAccess.restamped` are what a pass writes,
+and the `Apply` constructors that take a spelling build one. A name the author applied is handed over
+as the `Var` it is, occurrence and all.
 
 `Elaborator.region` and `Elaborator.width` are deleted.
 
@@ -99,7 +108,8 @@ one column.
 
 *Fix the literals and leave `WrittenName.synthetic`.* The fabricated width there is the same rule
 broken in the same way one abstraction over. Left standing, what this changed is one call path rather
-than the rule.
+than the rule — and it was the fabrication there that had been hiding the three passes that re-spell
+a name, since a width that happens to be right is a width nothing measures.
 
 ## Consequences
 
@@ -118,6 +128,11 @@ it is not yet; a published region and an editor reading one get the whole of it 
 
 Two rows of `ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest` expected an argument to be
 underlined as far as its callee's name. They now expect the argument.
+
+What holds the rule at a rewrite is a property rather than a case: every name an expansion says the
+author wrote has to be spelled by the characters it points at, part by part, checked against the
+source. It is what found the third place a spelling was being measured at an anchor — the prelude
+rewrite that replaces one library call with another — after the two the deleted table accounted for.
 
 ## References
 

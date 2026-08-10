@@ -769,7 +769,7 @@ public final class AstBuilder {
             return new Ast.Apply(c.function(), args, c.origin(), c.pos(), written);
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Apply(v.name(), List.of(left), v.pos(), written);
+            return new Ast.Apply(v, List.of(left), ConstructionOrigin.own(), v.pos(), written);
         }
         // `e |> Mod.name`: the read is handed over as the callee it is, rather than reassembled
         // into a name here. Whether it is a namespace member or a field taken off a binding is
