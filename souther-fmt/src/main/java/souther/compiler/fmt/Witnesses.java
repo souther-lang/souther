@@ -7,6 +7,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -547,11 +548,23 @@ final class Witnesses {
      * opportunity it settles, so a source that broke some of them and ran the rest together has not
      * laid it out that way: the decision is one and it is about all of them.
      *
-     * <p>A group written down the page because it holds a forced break is still this rule's. What
-     * the forced decision settled is why the group is not flat, not whether it is: the group broke,
-     * every opportunity it settles broke with it, and a source that ran them together departed from
-     * that. What such a witness never says is that the canonical form keeps the group whole, which
-     * is the answer that would tell an author to close up a line a comment holds open.
+     * <p>What the witness carries is the opportunity, though, and not the group's two answers. A
+     * source that broke some of them departed at the ones it ran together, and a witness holding
+     * only whether the canonical form keeps the group whole against whether the source broke it
+     * anywhere has thrown away which those were — leaving a report that has to name a difference
+     * with two values that are equal in exactly the case it was asked about. The first of them is
+     * what the witness stands at; the repair writes them all.
+     *
+     * <p>Two departures, and they are not one rule. A source can disagree about the form — it wrote
+     * whole what the canonical form writes down the page, or the other way about — and it can agree
+     * about the form and run some of the places together. The first is a choice between two ways of
+     * writing the construct and is named by whatever made that choice; the second is about a place
+     * and holds whatever made it, so the two are told apart here rather than in the report.
+     *
+     * <p>A group written down the page because it holds a forced break is still this family's. What
+     * the forced decision settled is why the group is not flat, not whether it is, and a source can
+     * depart from it either way — so the witness carries that reason and lets the rule be named
+     * from it, rather than being answered for by a rule about the width that decided nothing here.
      */
     static List<Witness> conditional(String source, Formatter.CanonicalForm canonical) {
         return conditional(source, canonical, new Pairing(source, canonical));
@@ -569,33 +582,37 @@ final class Witnesses {
                             + writes.size() + "; the two cannot be held side by side");
         }
         Map<Doc.GroupRef, Outcome> outcomes = new IdentityHashMap<>();
-        Map<Doc.GroupRef, Integer> where = new IdentityHashMap<>();
         for (GroupDecision d : layout.decisions()) {
             outcomes.put(d.group(), d.outcome());
         }
-        Map<Doc.GroupRef, Boolean> broken = new IdentityHashMap<>();
-        Map<Doc.GroupRef, Boolean> agrees = new IdentityHashMap<>();
+        Map<Doc.GroupRef, Opportunity> parted = new IdentityHashMap<>();
+        Map<Doc.GroupRef, Boolean> brokeAnywhere = new IdentityHashMap<>();
         for (Opportunity o : layout.opportunities()) {
-            where.merge(o.settledBy(), o.at(), Math::min);
             boolean brokeThere = brokeInSource(source, had, writes, o.at());
-            Boolean already = broken.get(o.settledBy());
-            broken.put(o.settledBy(), (already != null && already) || brokeThere);
-            // A group written down the page breaks at every opportunity it settles, so a source
-            // that broke some of them and not the rest has not laid it out that way either. The
-            // decision is one and it is about all of them.
-            Boolean sofar = agrees.get(o.settledBy());
-            agrees.put(o.settledBy(),
-                    (sofar == null || sofar) && brokeThere == o.broke());
+            brokeAnywhere.merge(o.settledBy(), brokeThere, (a, b) -> a || b);
+            if (brokeThere == o.broke()) {
+                continue;   // the source settled this place the way the group did
+            }
+            Opportunity already = parted.get(o.settledBy());
+            if (already == null || o.at() < already.at()) {
+                parted.put(o.settledBy(), o);
+            }
         }
 
+        List<Opportunity> firsts = new ArrayList<>(parted.values());
+        // By where they stand, so that the report a source gets does not depend on the order the
+        // groups happened to be met in.
+        firsts.sort(Comparator.comparingInt(Opportunity::at));
         List<Witness> out = new ArrayList<>();
-        for (Map.Entry<Doc.GroupRef, Integer> e : where.entrySet()) {
-            Outcome outcome = outcomes.get(e.getKey());
-            boolean whole = outcome instanceof Outcome.Flat;
-            boolean sourceWhole = !Boolean.TRUE.equals(broken.get(e.getKey()));
-            if (!Boolean.TRUE.equals(agrees.get(e.getKey()))) {
-                out.add(new Witness.Conditional(new Witness.Group(e.getKey(), e.getValue()),
-                        whole, sourceWhole));
+        for (Opportunity o : firsts) {
+            Witness.Group unit = new Witness.Group(o.settledBy(), o.at());
+            Outcome why = outcomes.get(o.settledBy());
+            boolean canonicalIsWhole = why instanceof Outcome.Flat;
+            boolean sourceIsWhole = !Boolean.TRUE.equals(brokeAnywhere.get(o.settledBy()));
+            if (canonicalIsWhole != sourceIsWhole) {
+                out.add(new Witness.Conditional(unit, canonicalIsWhole, sourceIsWhole, why));
+            } else {
+                out.add(new Witness.RunTogether(unit, o.broke(), !o.broke()));
             }
         }
         return out;
@@ -845,7 +862,7 @@ final class Witnesses {
      * <p>The opportunity stands between two of the canonical form's tokens, and the source's
      * answer is what it wrote between the same two of its own.
      */
-    private static boolean brokeInSource(String source, List<SyntaxToken> had,
+    static boolean brokeInSource(String source, List<SyntaxToken> had,
             List<SyntaxToken> writes, int at) {
         for (int i = 0; i + 1 < writes.size(); i++) {
             if (writes.get(i).end() <= at && at <= writes.get(i + 1).start()) {

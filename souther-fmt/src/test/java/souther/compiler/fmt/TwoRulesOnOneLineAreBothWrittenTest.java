@@ -54,7 +54,8 @@ class TwoRulesOnOneLineAreBothWrittenTest {
         assertTrue(found.stream().anyMatch(w -> w instanceof Witness.BetweenTwoTokens),
                 "the padding in front of the `=`: " + found);
         assertTrue(found.stream().anyMatch(w -> w instanceof Witness.Forced
-                        || w instanceof Witness.Conditional),
+                        || w instanceof Witness.Conditional
+                        || w instanceof Witness.RunTogether),
                 "and the body written down the page: " + found);
         assertEquals(Formatter.format(source), repaired(source),
                 "repairing both writes the canonical form");

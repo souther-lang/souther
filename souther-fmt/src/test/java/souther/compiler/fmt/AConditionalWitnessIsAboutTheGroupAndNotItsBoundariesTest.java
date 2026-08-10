@@ -20,6 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is no break of its own to point at, and a source that broke inside it has still departed from the
  * decision; a report built from the breaks the layout wrote would have nothing to say about the
  * commonest deviation there is.
+ *
+ * <p>One witness per group is how many there are, and it stands at the first place the source
+ * settled the other way rather than at the head of the construct. Which of the two it is depends on
+ * what differs: a source that wrote whole what the canonical form writes down the page disagrees
+ * about the form, and one that wrote it down the page and ran some of its places together agrees
+ * about the form and differs at those places.
  */
 class AConditionalWitnessIsAboutTheGroupAndNotItsBoundariesTest {
 
@@ -97,12 +103,12 @@ class AConditionalWitnessIsAboutTheGroupAndNotItsBoundariesTest {
     }
 
     /**
-     * A group written down the page because it holds a forced break is not this rule's. The width
-     * did not decide it, and telling an author to close the line up would be telling them to undo
-     * what the forced rule wrote.
+     * A group written down the page because it holds a forced break is never said to be one the
+     * canonical form keeps whole. Telling an author to close the line up would be telling them to
+     * undo what the forced rule wrote, and the width decided nothing here to tell them about.
      */
     @Test
-    void aGroupBrokenByWhatItHoldsIsNotThisRulesToReport() {
+    void aGroupBrokenByWhatItHoldsIsNeverSaidToBeKeptWhole() {
         String source = """
                 module fmtprobe exposing ( f )
 
@@ -111,10 +117,13 @@ class AConditionalWitnessIsAboutTheGroupAndNotItsBoundariesTest {
                 """;
 
         for (Witness w : witnesses(source)) {
-            Witness.Conditional c = (Witness.Conditional) w;
-            assertTrue(!c.canonicalIsWhole(),
-                    "no witness may say the canonical form keeps whole a construct it writes down"
-                            + " the page for a reason of its own: " + c);
+            if (w instanceof Witness.Conditional c) {
+                assertTrue(!c.canonicalIsWhole(),
+                        "no witness may say the canonical form keeps whole a construct it writes"
+                                + " down the page for a reason of its own: " + c);
+                assertInstanceOf(Outcome.BrokenByForcedLayout.class, c.why(),
+                        "and it carries what put it down the page: " + c);
+            }
         }
     }
 }
