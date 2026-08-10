@@ -189,8 +189,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             behavior twoLinesMoment : (x: DateTime) -> Verdict
                 constructs Ok, No
             let twoLinesMoment (x) = {
-                guard x < DateTime("2026-08-01T00:00:00.000000001") else Ok
-                guard x < DateTime("2026-08-01T00:00:00.000000002") else No
+                guard x < DateTime("2026-08-01T00:00:01") else Ok
+                guard x < DateTime("2026-08-01T00:00:02") else No
                 Ok }
 
             behavior openOnBothSidesDense : (x: Decimal) -> Verdict
@@ -202,8 +202,8 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             data TwoDecimals = Decimal
                 invariant value >= 0.0m && value <= 1.0m
             data TwoMoments = DateTime
-                invariant value >= DateTime("2026-08-01T00:00:00.000000000")
-                    && value <= DateTime("2026-08-01T00:00:00.000000001")
+                invariant value >= DateTime("2026-08-01T00:00:00")
+                    && value <= DateTime("2026-08-01T00:00:01")
 
             behavior singledDense : (x: TwoDecimals) -> Verdict
                 constructs Ok, No
@@ -214,15 +214,15 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             behavior singledMoment : (x: TwoMoments) -> Verdict
                 constructs Ok, No
             let singledMoment (x) = {
-                guard x.value == DateTime("2026-08-01T00:00:00.000000000") else Ok
-                guard x.value == DateTime("2026-08-01T00:00:00.000000001") else No
+                guard x.value == DateTime("2026-08-01T00:00:00") else Ok
+                guard x.value == DateTime("2026-08-01T00:00:01") else No
                 Ok }
 
             behavior openOnBothSidesMoment : (x: DateTime) -> Verdict
                 constructs Ok, No
             let openOnBothSidesMoment (x) = {
-                guard x <= DateTime("2026-08-01T00:00:00.000000001") else Ok
-                guard x < DateTime("2026-08-01T00:00:00.000000002") else No
+                guard x <= DateTime("2026-08-01T00:00:01") else Ok
+                guard x < DateTime("2026-08-01T00:00:02") else No
                 Ok }
             """;
 
@@ -230,9 +230,11 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      * A {@code guard}'s line, at a bare position and at a newtype over the same values.
      *
      * <p>The line and the value beside it where the carrier steps; the line alone where it does not.
-     * A {@code Decimal} and a {@code DateTime} have no smallest step this language names, so the row
-     * beside the line is not asked for — which is a fact about the values and not about the reading,
-     * and is why they are two obligations short of the whole numbers rather than unread.
+     * A {@code Decimal} has no smallest step this language names, so the row beside the line is not
+     * asked for — which is a fact about the values and not about the reading, and is why it is an
+     * obligation short of the whole numbers rather than unread. A {@code DateTime} is held to the
+     * second (spec §a-local-temporal-is-held-to-the-second) and steps like a day count, so it is
+     * asked for both.
      */
     @Test
     void aGuardsLineIsDrawnOnTheCarriersThatHaveACount() {
@@ -240,7 +242,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardWholeBare", read(2));
         expected.put("guardDenseBare", read(1));
         expected.put("guardDayBare", read(2));
-        expected.put("guardMomentBare", read(1));
+        expected.put("guardMomentBare", read(2));
         expected.put("guardTextBare", NO_CARRIER);
         // The line and the case beside it, written as case names. The classes are still the three
         // cases: `read(2)` would say the cut replaced them, and it does not.
@@ -248,7 +250,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardWholeWrapped", read(2));
         expected.put("guardDenseWrapped", read(1));
         expected.put("guardDayWrapped", read(2));
-        expected.put("guardMomentWrapped", read(1));
+        expected.put("guardMomentWrapped", read(2));
         expected.put("guardTextWrapped", NO_CARRIER);
         // Not what the bare position answers, and not what this row is about. The line is drawn —
         // the carrier is asked of what the name wraps, as it is for every other newtype here — and
@@ -338,9 +340,9 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      * A class open at both ends offers a value of its own or none.
      *
      * <p>The pair of the test above, and the half of it that spacing alone gets wrong. Between two
-     * decimals a whole apart there is a decimal; between two moments a nanosecond apart there is a
+     * decimals a whole apart there is a decimal; between two moments a second apart there is a
      * number and no date-time, because what a date-time can be written as sits on a grid at the
-     * nanosecond however dense the carrier is for the purpose of sharpening a strict bound.
+     * second. Half a second is a count and not a value the position holds.
      *
      * <p>Read at the row and not at the count. What went wrong was not an arithmetic error — the
      * number offered was between the two ends — it was that writing it back landed on one of them,
@@ -361,12 +363,13 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                 "a decimal lies between two decimals a whole apart: " + dense);
 
         String moment = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.matrix", "openOnBothSidesMoment", true, SourceNameResolver.identity());
-        assertTrue(moment.contains("no row for `x=2026-08-01T00:00:00.000000001 < x <"
-                        + " 2026-08-01T00:00:00.000000002`"),
+                compilation, "example.matrix", "openOnBothSidesMoment", true,
+                SourceNameResolver.identity());
+        assertTrue(moment.contains("no row for `x=2026-08-01T00:00:01 < x <"
+                        + " 2026-08-01T00:00:02`"),
                 "nothing lies strictly between two adjacent moments: " + moment);
         assertFalse(moment.contains(
-                        "< x < 2026-08-01T00:00:00.000000002 x x = 2026-08-01T00:00:00.000000002"),
+                        "< x < 2026-08-01T00:00:02 x x = 2026-08-01T00:00:02"),
                 "and no row is offered for that class carrying the value at its far end: " + moment);
     }
 
@@ -396,10 +399,10 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         String moment = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.matrix", "singledMoment", true, SourceNameResolver.identity());
         assertTrue(moment.contains("no row for `x=/= 2026-08-01T00:00:00,"
-                        + " 2026-08-01T00:00:00.000000001`"),
+                        + " 2026-08-01T00:00:01`"),
                 "the position holds nothing but the two singled out: " + moment);
         assertFalse(moment.contains("=/= 2026-08-01T00:00:00,"
-                        + " 2026-08-01T00:00:00.000000001 x x = "),
+                        + " 2026-08-01T00:00:01 x x = "),
                 "and neither of them is offered under that class's name: " + moment);
     }
 
@@ -438,11 +441,15 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     /**
      * How the values step is the carrier's answer, and only the carrier's.
      *
-     * <p>The class between two lines has a value in it where the values are dense, whatever they are
-     * dense in: two decimals a whole apart and two moments a nanosecond apart both leave a range
-     * holding something. Asked as "is this the decimal" it was a second spelling of the question,
-     * and a carrier dense without being that one answered no — the range came back holding no value,
-     * which is what a whole step would leave and not what the values do.
+     * <p>The class between two lines holds something, and which carrier it is on decides what. Two
+     * decimals a whole apart leave a range dense in decimals; two moments a second apart leave the
+     * lower of them, the way two days a day apart would. Asked as "is this the decimal" it was a
+     * second spelling of the question, and a carrier dense without being that one answered no — the
+     * range came back holding no value, which is what neither of these leaves.
+     *
+     * <p>The moment row was the dense case here while a {@code DateTime} carried nanoseconds. It is
+     * a stepping carrier now, so what it holds the reader to is that the answer is read off the
+     * carrier at all; {@code twoLinesDense} is what still holds it to the dense reading.
      */
     @Test
     void howTheValuesStepIsAskedOfTheCarrier() {

@@ -80,9 +80,11 @@ no implementation to get a `DateTime` back — the same way it gets the current 
 the older number would be told a value crosses that no longer does. It widened too — `Time` and
 `Instant` are shapes an older compiler has no type for.
 
-Nothing in the corpus, the examples or the tests wrote a sub-second temporal, so the narrowing broke
-nothing here. That it broke nothing is not why it is right: nanoseconds were unreadable, so the
-capability being removed was one no model could use.
+Nothing in the corpus or the examples wrote a sub-second temporal. One test did —
+`OneCarrierTableAnswersForEveryOrderedTypeTest`, whose moments were a nanosecond apart to stand for
+adjacent ones — and it is now written a second apart, which is what adjacent means. That the rest
+broke nothing is not why the narrowing is right: nanoseconds were unreadable, so the capability
+being removed was one no model could use.
 
 Two primitives cost more than two enum constants. `DATETIME` was named at 37 places across 18 files,
 and about six of them were `type == Type.DATETIME` comparisons or hand-written name lists that
@@ -97,6 +99,18 @@ fails a test rather than passing one that named the types it knew about.
 `fromParts` answers one case for a calendar that has no such day and for a year a date cannot hold,
 as `NotANumber` answers one case for text that is no number and for a number too large to carry.
 What a caller does about either is the same: the parts it had do not name a date.
+
+Holding a `DateTime` to the second gives it a smallest step, which it did not have, and that
+settles a decision ADR-0090 recorded as nobody's. `Carrier.MOMENT` was dense because "a date-time
+has no smallest step this language names"; it steps by a second now, so a strict bound on a
+`DateTime` sharpens onto the second beside it and the row beside a line is asked for, as it is on a
+day count. `BoundaryDomain.MOMENT` names that neighbour instead of answering *not derivable*, and
+the counts on the carrier are whole.
+
+`Time` and `Instant` are carriers of nothing, which is the same question read the other way: each
+has a count that would embed — a second of the day, a second from an epoch — and a carrier owes a
+conversion both ways and a spacing of its own, so neither may borrow `MOMENT`'s. Two units in one
+carrier is what `DATE` and `MOMENT` are separate to avoid.
 
 The rule this ADR is named for is the one to apply next time. A reader added to a type is a claim
 that the type is made of what the reader answers, and a claim with no way back is the defect #623
