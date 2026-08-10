@@ -151,7 +151,7 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
 
     @Test
     void aSearchAnswersTheCountItWasAskedFor() {
-        String three = text(call("doc_search", "{\"term\":\"newtype\",\"limit\":3}"));
+        String three = text(call("doc_search", "{\"term\":\"type\",\"limit\":3}"));
 
         assertEquals(3, three.lines().filter(line -> line.contains("\t")).count(),
                 "three hits, whatever the default would have been");

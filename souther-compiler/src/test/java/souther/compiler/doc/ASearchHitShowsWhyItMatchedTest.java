@@ -54,7 +54,9 @@ class ASearchHitShowsWhyItMatchedTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
 
-        assertEquals(0, DocCommand.run(new String[]{"--search", "newtype"}, print, print));
+        // A term that is nobody's name, which is what a list of hits is the answer to: a name is
+        // resolved to the one section it names.
+        assertEquals(0, DocCommand.run(new String[]{"--search", "single-value newtype"}, print, print));
 
         List<String> lines = out.toString(StandardCharsets.UTF_8).lines().toList();
         assertTrue(lines.getFirst().matches("\\S+\t.*"), "a hit is still one tab-separated line: " + lines.getFirst());
@@ -67,7 +69,7 @@ class ASearchHitShowsWhyItMatchedTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream print = new PrintStream(out, true, StandardCharsets.UTF_8);
 
-        DocCommand.run(new String[]{"--search", "invariant"}, print, print);
+        DocCommand.run(new String[]{"--search", "type"}, print, print);
 
         assertTrue(out.toString(StandardCharsets.UTF_8).lines()
                         .filter(l -> l.startsWith("    "))

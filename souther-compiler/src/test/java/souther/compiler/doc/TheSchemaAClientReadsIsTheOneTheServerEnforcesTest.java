@@ -84,7 +84,7 @@ class TheSchemaAClientReadsIsTheOneTheServerEnforcesTest {
     @Test
     void aCountWrittenWithAPointIsReadAsTheCountAndNotMerelyAllowed() {
         String one = serve("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":"
-                + "\"doc_search\",\"arguments\":{\"term\":\"newtype\",\"limit\":1.0}}}")
+                + "\"doc_search\",\"arguments\":{\"term\":\"type\",\"limit\":1.0}}}")
                 .getFirst().get("result").get("content").get(0).get("text").asString();
 
         assertEquals(1, one.lines().filter(line -> line.contains("\t")).count(), one);

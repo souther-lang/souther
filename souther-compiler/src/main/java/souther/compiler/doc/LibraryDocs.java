@@ -75,6 +75,9 @@ public final class LibraryDocs {
     /** Keyed by {@link DocName#canonical}, so a topic is found in whatever case it is asked for.
      *  The topic keeps its own spelling: the name is also the path its text is read from. */
     private final Map<String, Topic> byName;
+    /** The same topics keyed by {@link DocName#asWords}, which is how a search resolves a name.
+     *  The same topics: a name that reaches one of these reaches the other. */
+    private final Map<String, Topic> byWords;
     /**
      * What a search ranks: every file and every part of one, each over its own text.
      *
@@ -86,10 +89,11 @@ public final class LibraryDocs {
     /** Who the text is spelled for, wherever it sends its reader somewhere. */
     private final Caller caller;
 
-    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, List<Topic> ranked,
-            Caller caller) {
+    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, Map<String, Topic> byWords,
+            List<Topic> ranked, Caller caller) {
         this.loader = loader;
         this.byName = byName;
+        this.byWords = byWords;
         this.ranked = ranked;
         this.caller = caller;
     }
@@ -101,7 +105,7 @@ public final class LibraryDocs {
 
     /** The same sets, read as {@code caller} is to be answered. */
     static LibraryDocs on(ClassLoader loader, Caller caller) {
-        Map<String, Topic> byName = new LinkedHashMap<>();
+        Names named = new Names();
         List<Topic> ranked = new ArrayList<>();
         try {
             Enumeration<URL> registries = loader.getResources(ROOT + "sets");
@@ -123,13 +127,13 @@ public final class LibraryDocs {
                         // divide it between them: nothing is counted twice and nothing is left out.
                         Topic whole = new Topic(topic, titleOf(text, file), 0, resource, 0,
                                 text.length(), without(0, text.length(), parts));
-                        register(byName, whole);
+                        named.register(whole);
                         ranked.add(whole);
                         for (Named part : parts) {
                             Topic held = new Topic(part.name(), part.title(), part.level(), resource,
                                     part.from(), part.to(),
                                     without(part.from(), part.to(), inside(part, parts)));
-                            register(byName, held);
+                            named.register(held);
                             ranked.add(held);
                         }
                     }
@@ -138,14 +142,37 @@ public final class LibraryDocs {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new LibraryDocs(loader, byName, List.copyOf(ranked), caller);
+        return new LibraryDocs(loader, named.byName, named.byWords, List.copyOf(ranked), caller);
     }
 
-    private static void register(Map<String, Topic> byName, Topic topic) {
-        Topic taken = byName.put(DocName.canonical(topic.name()), topic);
-        if (taken != null) {
-            throw new IllegalStateException("two shipped topics are asked for by the same name: `"
-                    + taken.name() + "` and `" + topic.name() + "`");
+    /**
+     * The topics read so far, under each fold a lookup uses.
+     *
+     * <p>A topic is registered under both or under neither. A doc set naming two topics that come
+     * together under either fold has published one name for two documents, and which of them a
+     * reader is answered with would be settled by the order its registry happened to list them —
+     * the read path taking the last and a search taking the first. That the names are a jar's to
+     * choose is why it is refused where the jar is read rather than settled quietly here.
+     */
+    private static final class Names {
+
+        private final Map<String, Topic> byName = new LinkedHashMap<>();
+        private final Map<String, Topic> byWords = new LinkedHashMap<>();
+        private final Map<String, String> askedAs = new LinkedHashMap<>();
+
+        void register(Topic topic) {
+            Topic taken = byName.put(DocName.canonical(topic.name()), topic);
+            if (taken != null) {
+                throw new IllegalStateException("two shipped topics are asked for by the same name: `"
+                        + taken.name() + "` and `" + topic.name() + "`");
+            }
+            String words = DocName.asWords(topic.name());
+            String said = askedAs.put(words, topic.name());
+            if (said != null) {
+                throw new IllegalStateException("two shipped topics are the same words: `"
+                        + said + "` and `" + topic.name() + "`");
+            }
+            byWords.put(words, topic);
         }
     }
 
@@ -270,55 +297,67 @@ public final class LibraryDocs {
         return text(topic);
     }
 
+    /**
+     * The topic {@code query} is the name of, written as its words or as its doc set spells it, or
+     * null when it names nothing. The same question {@link #read} answers, asked the way a reader
+     * who has the name says it aloud.
+     */
+    public Topic named(String query) {
+        return DocName.isName(query) ? byWords.get(DocName.asWords(query)) : null;
+    }
+
     /** Every topic whose title or text contains {@code term}, case-insensitively. */
     public List<Topic> search(String term) {
         return rank(term).stream().map(Hit::topic).toList();
     }
 
-    /** A topic the term was found in, scored the same way a specification section is. */
-    public record Hit(Topic topic, boolean titled, int occurrences, String snippet) {}
+    /** A topic the query was found in, scored the same way a specification section is. */
+    public record Hit(Topic topic, boolean titled, int matched, int occurrences, String snippet) {}
 
     /**
-     * The topics that say {@code term}, each with what a caller needs to rank it against a
-     * specification section: whether the title names it, how often it is said, and the line it was
-     * found on.
+     * The topics that say {@code term} as it stands, each with what a caller needs to rank it
+     * against a specification section.
      */
     public List<Hit> rank(String term) {
         if (term == null || term.isBlank()) {
             return List.of();
         }
-        String needle = term.toLowerCase();
+        return rank(List.of(term), Match.ANYWHERE);
+    }
+
+    /**
+     * The topics that say any of {@code terms}: how much of the query each holds, whether its title
+     * or its name is what was asked for, how often it is said, and the line one was found on.
+     *
+     * <p>Scored the way a specification section is, by the same {@link Match}, because the two are
+     * merged into one answer and sorted once. A shipped topic ranked under its own meaning of the
+     * numbers beside it would be placed against sections it was never compared with.
+     */
+    List<Hit> rank(List<String> asked, Match how) {
+        List<String> terms = asked.stream().map(DocName::canonical).toList();
         List<Hit> hits = new ArrayList<>();
         for (Topic topic : ranked) {
-            String body = own(topic);
-            boolean titled = topic.title().toLowerCase().contains(needle)
-                    || topic.name().toLowerCase().contains(needle);
-            int occurrences = count(body.toLowerCase(), needle);
-            if (titled || occurrences > 0) {
-                hits.add(new Hit(topic, titled, occurrences, snippet(topic, term)));
+            Match.Held held = how.held((topic.title() + " " + topic.name()).toLowerCase(),
+                    own(topic).toLowerCase(), terms);
+            if (held.matched() > 0) {
+                hits.add(new Hit(topic, held.named(), held.matched(), held.occurrences(),
+                        snippet(topic, terms, how)));
             }
         }
         return hits;
     }
 
-    private static int count(String haystack, String needle) {
-        if (needle.isEmpty()) {
-            return 0;
-        }
-        int n = 0;
-        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length())) {
-            n++;
-        }
-        return n;
-    }
-
     /** The line of {@code topic} that says {@code term}, cut to a readable width. */
     public String snippet(Topic topic, String term) {
-        String needle = term.toLowerCase();
+        return snippet(topic, List.of(DocName.canonical(term)), Match.ANYWHERE);
+    }
+
+    /** The line of {@code topic} that says one of {@code terms}, cut to a readable width. */
+    private String snippet(Topic topic, List<String> terms, Match how) {
         String line = own(topic).lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
-                .filter(l -> l.toLowerCase().contains(needle))
+                .filter(l -> terms.stream().anyMatch(term -> how.says(l.toLowerCase(), term)))
                 .findFirst()
                 .orElse("");
         return line.length() <= 120 ? line : line.substring(0, 119) + "…";

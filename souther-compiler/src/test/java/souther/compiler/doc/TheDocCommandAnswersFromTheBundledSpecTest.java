@@ -47,11 +47,12 @@ class TheDocCommandAnswersFromTheBundledSpecTest {
 
     @Test
     void searchListsTheSectionsThatSayTheTerm() {
-        Answer answer = run("--search", "newtype");
+        Answer answer = run("--search", "single-value newtype");
 
         assertEquals(0, answer.code());
-        assertTrue(answer.out().lines().anyMatch(l -> l.startsWith("newtype\t")),
-                "the newtype section is among the hits:\n" + answer.out());
+        assertTrue(answer.out().lines().anyMatch(l -> l.startsWith("newtype-comparison\t")),
+                "a term nobody is named after is answered with the sections that say it:\n"
+                        + answer.out());
     }
 
     @Test

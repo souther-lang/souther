@@ -93,6 +93,12 @@ Every diagnostic code the compiler prints is the name of the section explaining 
 the `E2011` in a banner is {{doc:E2011}}. Nothing else has to be read off the banner for the
 lookup to work.
 
+A search asks three things in turn and stops at the first that answers. Whether the term is a name,
+in which case that one document is the answer — the hyphens of a name are its spelling, so
+`an-optional-does-not-stand-in-a-boundary` and `an optional does not stand in a boundary` are the
+same question, and so is a diagnostic code. Whether the documents say the term as it stands, which
+lists them. Whether they say its words, which lists them by how many of the words each one says.
+
 <!-- souther-section: api -->
 ## api
 
