@@ -67,7 +67,7 @@ public final class Partitions {
                                Map<NumericTerm, NumericDomain.Bounds> domains,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
-                               List<GuardThresholds.Guards.Unread> unread) {
+                               List<UnreadRule> unread) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
@@ -101,6 +101,7 @@ public final class Partitions {
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
         java.util.Set<String> stopped = new java.util.LinkedHashSet<>();
+        List<UnreadRule> unread = new ArrayList<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             // One reading per parameter, not one per record met on the way down. A clause on the
             // outer record relates positions at any depth it can name, and rebuilding the reading at
@@ -108,7 +109,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
-                    domains, uncertain, stopped);
+                    domains, uncertain, stopped, unread);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -130,8 +131,18 @@ public final class Partitions {
                 omitted.add(new OmittedAxis(axis.id(), !axis.cuts().isEmpty()));
             }
         }
-        return new Partitioning(kept, omitted, domains, uncertain, undividedIn(kept, stopped),
-                List.of());
+        // A position undivided because a rule about it went unread says that here, without waiting
+        // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
+        // compares it.
+        List<UndividedPosition> undivided = new ArrayList<>();
+        for (UndividedPosition each : undividedIn(kept, stopped)) {
+            UndividedPosition.Reason why = unread.stream()
+                    .filter(one -> one.at().equals(each.at())).map(UnreadRule::why)
+                    .findFirst().orElse(null);
+            undivided.add(why == null ? each : each.because(why));
+        }
+        return new Partitioning(kept, omitted, domains, uncertain, undivided,
+                List.copyOf(unread));
     }
 
     /**
@@ -180,7 +191,7 @@ public final class Partitions {
      */
     public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
                                               Symbols symbols,
-                                              List<GuardThresholds.Guards.Unread> unread) {
+                                              List<UnreadRule> unread) {
         return withThresholds(base, thresholds, symbols, unread, List.of());
     }
 
@@ -195,7 +206,7 @@ public final class Partitions {
      */
     public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
                                               Symbols symbols,
-                                              List<GuardThresholds.Guards.Unread> unread,
+                                              List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled) {
         List<Axis> out = new ArrayList<>();
         for (Axis axis : base.axes()) {
@@ -213,7 +224,7 @@ public final class Partitions {
                 out.add(new Axis(axis.id(), term, axis.type(),
                         singledClasses(points, term, axis.type(), only, symbols),
                         mergedPoints(axis.cuts(), points,
-                                carrierOf(term, axis.type(), symbols)))
+                                Carrier.of(term, axis.type(), symbols)))
                         .excluding(axis.excluded()));
                 continue;
             }
@@ -252,24 +263,33 @@ public final class Partitions {
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
-            Carrier carrier = carrierOf(term, axis.type(), symbols);
+            Carrier carrier = Carrier.of(term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), term, axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
                     merged(axis.cuts(), reachable, carrier)).excluding(axis.excluded()));
         }
+        // Both producers of one kind of evidence. What a body compared and what a type's own rules
+        // bound are read by different readers and answer the same question, so a position either of
+        // them wrote about and neither could turn into a line is named once, whichever wrote it.
+        List<UnreadRule> rules = new ArrayList<>(base.unread());
+        for (UnreadRule each : unread) {
+            if (rules.stream().noneMatch(had -> had.equals(each))) {
+                rules.add(each);
+            }
+        }
         List<UndividedPosition> undivided = new ArrayList<>();
         for (UndividedPosition each : undividedIn(out, java.util.Set.of())) {
             UndividedPosition had = base.undivided().stream()
                     .filter(before -> before.at().equals(each.at())).findFirst().orElse(each);
-            UndividedPosition.Reason stopped = unread.stream()
-                    .filter(one -> one.at().equals(each.at())).map(GuardThresholds.Guards.Unread::why)
+            UndividedPosition.Reason stopped = rules.stream()
+                    .filter(one -> one.at().equals(each.at())).map(UnreadRule::why)
                     .findFirst().orElse(null);
             undivided.add(stopped == null ? had : had.because(stopped));
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undivided, unread);
+                undivided, List.copyOf(rules));
     }
 
     /**
@@ -282,7 +302,7 @@ public final class Partitions {
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
                                                        NumericTerm term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
-        Carrier carrier = carrierOf(term, type, symbols);
+        Carrier carrier = Carrier.of(term, type, symbols);
         TypeName wrapper = type instanceof Type.Ref ref && TypeOps.isSingleValueNewtype(type, symbols)
                 ? ref.name() : null;
         List<BigDecimal> values = new ArrayList<>();
@@ -348,7 +368,7 @@ public final class Partitions {
                 }
             }
             BigDecimal between = Endpoint.valueBetween(within.min(), within.max(),
-                    carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE);
+                    carrier.spacing());
             if (between != null) {
                 inside.add(between);
             }
@@ -358,9 +378,9 @@ public final class Partitions {
                 for (Endpoint end : List.of(within.min(), within.max())) {
                     if (end != null) {
                         inside.add(Endpoint.valueBetween(Endpoint.exclusive(from), end,
-                                carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE));
+                                carrier.spacing()));
                         inside.add(Endpoint.valueBetween(end, Endpoint.exclusive(from),
-                                carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE));
+                                carrier.spacing()));
                     }
                 }
             }
@@ -383,8 +403,11 @@ public final class Partitions {
     }
 
     private static String written(BigDecimal value, Carrier carrier) {
-        return carrier == Carrier.DATE ? Dates.written(value)
-                : value.stripTrailingZeros().toPlainString();
+        return switch (carrier) {
+            case WHOLE, DENSE -> value.stripTrailingZeros().toPlainString();
+            case DATE -> Dates.written(value);
+            case MOMENT -> DateTimes.written(value);
+        };
     }
 
     private static FixtureTemplate standing(BigDecimal value, TypeName wrapper, Carrier carrier) {
@@ -392,6 +415,7 @@ public final class Partitions {
             case DENSE -> FixtureTemplate.decimal(value);
             case WHOLE -> FixtureTemplate.integer(value.longValueExact());
             case DATE -> FixtureTemplate.date(Dates.written(value));
+            case MOMENT -> FixtureTemplate.dateTime(DateTimes.written(value));
         };
         return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
     }
@@ -549,12 +573,17 @@ public final class Partitions {
                              List<Axis> out, Placed placed,
                              Map<NumericTerm, NumericDomain.Bounds> domains,
                              java.util.Set<NumericTerm> uncertain,
-                             java.util.Set<String> stopped) {
+                             java.util.Set<String> stopped, List<UnreadRule> unread) {
         List<PartitionClass> classes = classesOf(type, symbols);
         // Which number this position is measured at, and what its rules leave that number. Asked
         // together because they are one reading: whether a rule bounds the length of a string is how
         // it is known that the length is the number being measured.
         Measured measured = measure(path, type, symbols);
+        for (UnreadRule each : measured.unread()) {
+            if (unread.stream().noneMatch(had -> had.equals(each))) {
+                unread.add(each);
+            }
+        }
         NumericTerm term = measured.term();
         AxisId id = AxisId.of(behavior, term);
         Bounds own = measured.bounds();
@@ -594,15 +623,72 @@ public final class Partitions {
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
             for (Map.Entry<String, Type> field : fields.entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
-                        placed, domains, uncertain, stopped);
+                        placed, domains, uncertain, stopped, unread);
             }
             return;
         }
         out.add(Axis.notDerivable(id, term, type));
     }
 
-    /** A position's number and what its own rules leave it. */
-    private record Measured(NumericTerm term, Bounds bounds) {}
+    /** A position's number, what its own rules leave it, and which of those rules said nothing this
+     * could read. */
+    private record Measured(NumericTerm term, Bounds bounds, List<UnreadRule> unread) {
+
+        Measured(NumericTerm term, Bounds bounds) {
+            this(term, bounds, List.of());
+        }
+    }
+
+    /**
+     * The rules on this position's own type that say where its value stops and that nothing here
+     * turned into an end.
+     *
+     * <p>The invariant's half of what a {@code guard}'s comparison is asked in {@link
+     * GuardThresholds#comparedIn}. Both draw lines (ADR-0090) and both can be written in a form this
+     * does not read, and only one of them was saying so — a bound it dropped left the position
+     * looking like one no rule bounds, which is what the declaration above it denies.
+     *
+     * @param carried what the value is read on, or null where nothing here draws a line on it
+     * @param measure the operation a number is taken by, or null where none is
+     */
+    private static List<UnreadRule> unreadBoundsAt(TermPath path, Type type, Symbols symbols,
+                                                   Carrier carried, ValueName measure) {
+        List<UnreadRule> out = new ArrayList<>();
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
+            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
+                for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
+                    UndividedPosition.Reason why = whyUnread(each, carried, measure);
+                    // Once per position, as a comparison is: what a reader has to lift is the first
+                    // limit in the way, and a second clause behind it says nothing further.
+                    if (why != null && out.isEmpty()) {
+                        out.add(new UnreadRule(path, why));
+                    }
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** What stopped one clause from being an end, or null where nothing did — either because it was
+     * read, or because it is not a rule about where the value stops. */
+    private static UndividedPosition.Reason whyUnread(Ast.Expr clause, Carrier carried,
+                                                      ValueName measure) {
+        if (InvariantBound.statesAnEnd(clause, null)) {
+            if (carried == null) {
+                // The value is ordered — it is compared in the clause — and this reads no line on
+                // what carries it. The carrier, asked of the carrier, as a guard's is.
+                return UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            }
+            return InvariantBound.of(clause, carried.spacing(), OrderedLiteral.on(carried)).isPresent()
+                    ? null : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+        }
+        if (measure != null && InvariantBound.statesAnEnd(clause, measure)) {
+            // A size is a whole number whatever it is a size of, so nothing here is about a carrier.
+            return InvariantBound.ofSize(clause, measure).isPresent() ? null
+                    : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+        }
+        return null;
+    }
 
     /**
      * Which number a position is measured at.
@@ -612,18 +698,20 @@ public final class Partitions {
      * through, and naming its length there would put a term in the report that nobody wrote.
      */
     private static Measured measure(TermPath path, Type type, Symbols symbols) {
-        Type carried = TypeOps.numericBase(type, symbols);
-        if (carried != null) {
-            return new Measured(new NumericTerm.ValueOf(path), boundsOf(type, symbols, carried, null));
-        }
+        Carrier carried = Carrier.ofValue(type, symbols);
         ValueName.Stdlib of = NumericMeasures.takenOf(type, symbols);
+        List<UnreadRule> unread = unreadBoundsAt(path, type, symbols, carried, of);
+        if (carried != null) {
+            return new Measured(new NumericTerm.ValueOf(path),
+                    boundsOf(type, symbols, carried, null), unread);
+        }
         if (of != null) {
-            Bounds sized = boundsOf(type, symbols, Type.INT, of);
+            Bounds sized = boundsOf(type, symbols, Carrier.WHOLE, of);
             if (sized != null && !sized.isEmpty()) {
-                return new Measured(new NumericTerm.SizeOf(of, path), sized);
+                return new Measured(new NumericTerm.SizeOf(of, path), sized, unread);
             }
         }
-        return new Measured(new NumericTerm.ValueOf(path), null);
+        return new Measured(new NumericTerm.ValueOf(path), null, unread);
     }
 
     /** The value a position is inside: what it is called, and what its rules leave each position of
@@ -670,7 +758,7 @@ public final class Partitions {
                         : new End(Endpoint.lower(own.min().at(), projected.min()), own.min().from()),
                 own.max() == null ? null
                         : new End(Endpoint.upper(own.max().at(), projected.max()), own.max().from()),
-                own.decimal());
+                own.carrier());
     }
 
     /**
@@ -834,27 +922,32 @@ public final class Partitions {
      * wearing two names is bounded by rules written on either. Read off the outermost name, an edge
      * that `Minute` drew would be reported as `StartMinute`'s.
      */
-    private record Bounds(End min, End max, boolean decimal) {
+    private record Bounds(End min, End max, Carrier carrier) {
 
         boolean isEmpty() {
             return min == null && max == null;
         }
 
+        /** Whether the values here have no smallest step, which is what decides where a strict bound
+         *  leaves an end. */
+        boolean decimal() {
+            return carrier == Carrier.DENSE;
+        }
     }
 
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
      * the value and not about anything taken of it. */
     private static Bounds boundsOf(Type type, Symbols symbols) {
-        return boundsOf(type, symbols, TypeOps.numericBase(type, symbols), null);
+        return boundsOf(type, symbols, Carrier.ofValue(type, symbols), null);
     }
 
     /**
-     * @param base    the kind of number the clauses are read as
+     * @param carrier what the clauses' values are read on, or null where nothing here reads them
      * @param measure the operation the number is taken by, or null where the number is the value
      *                itself
      */
-    private static Bounds boundsOf(Type type, Symbols symbols, Type base, ValueName measure) {
-        if (base == null) {
+    private static Bounds boundsOf(Type type, Symbols symbols, Carrier carrier, ValueName measure) {
+        if (carrier == null) {
             return null;
         }
         End min = null;
@@ -867,7 +960,8 @@ public final class Partitions {
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                    InvariantBound read = (measure == null ? InvariantBound.of(each, base)
+                    InvariantBound read = (measure == null
+                            ? InvariantBound.of(each, carrier.spacing(), OrderedLiteral.on(carrier))
                             : InvariantBound.ofSize(each, measure)).orElse(null);
                     if (read == null) {
                         continue;
@@ -881,7 +975,7 @@ public final class Partitions {
                 }
             }
         }
-        return new Bounds(min, max, base == Type.DECIMAL);
+        return new Bounds(min, max, carrier);
     }
 
     /** The cuts of a position, each carrying the rule that drew it. */
@@ -898,9 +992,9 @@ public final class Partitions {
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
         cut(byValue, bounds.min(), own == null ? null : own.min(), "min",
-                bounds.decimal() ? Carrier.DENSE : Carrier.WHOLE, within);
+                bounds.carrier(), within);
         cut(byValue, bounds.max(), own == null ? null : own.max(), "max",
-                bounds.decimal() ? Carrier.DENSE : Carrier.WHOLE, within);
+                bounds.carrier(), within);
         return List.copyOf(byValue.values());
     }
 
@@ -970,7 +1064,7 @@ public final class Partitions {
             return List.of();
         }
         if (type == Type.INT || type == Type.DECIMAL) {
-            BigDecimal value = inside(within, type == Type.DECIMAL);
+            BigDecimal value = inside(within, type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
             return value == null ? List.of()
                     : List.of(type == Type.INT ? FixtureTemplate.integer(value.longValueExact())
                             : FixtureTemplate.decimal(value));
@@ -1030,7 +1124,7 @@ public final class Partitions {
         if (counts == null) {
             return 0;
         }
-        Bounds sized = boundsOf(type, symbols, Type.INT, counts);
+        Bounds sized = boundsOf(type, symbols, Carrier.WHOLE, counts);
         if (sized == null || sized.min() == null) {
             return 0;
         }
@@ -1075,7 +1169,7 @@ public final class Partitions {
             return null;
         }
         NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), null);
-        BigDecimal from = inside(range, base == Type.DECIMAL);
+        BigDecimal from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
         if (from == null || base != Type.INT) {
             return from != null && index == 0 ? from : null;
         }
@@ -1131,7 +1225,7 @@ public final class Partitions {
 
     /** A second number of a range, or null where the type has none to give. */
     private static BigDecimal displaced(NumericDomain.Bounds range, boolean whole) {
-        BigDecimal from = inside(range, !whole);
+        BigDecimal from = inside(range, whole ? Carrier.WHOLE : Carrier.DENSE);
         if (from == null) {
             return null;
         }
@@ -1190,10 +1284,9 @@ public final class Partitions {
 
         Bounds own = boundsOf(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
-        BigDecimal held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.decimal());
+        BigDecimal held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
         if (held != null) {
-            candidates.add(own.decimal() ? FixtureTemplate.decimal(held)
-                    : FixtureTemplate.integer(held.longValueExact()));
+            candidates.add(standing(held, null, own.carrier()));
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
@@ -1223,10 +1316,9 @@ public final class Partitions {
 
     /** A number the position holds, or null where it holds none. The ends decide it, so nothing here
      * reads one of them as a number and loses whether the range reaches it. */
-    private static BigDecimal inside(NumericDomain.Bounds within, boolean decimal) {
-        Granularity spacing = decimal ? Granularity.DENSE : Granularity.DISCRETE;
+    private static BigDecimal inside(NumericDomain.Bounds within, Carrier carrier) {
         return within == null ? BigDecimal.ZERO
-                : Endpoint.valueBetween(within.min(), within.max(), spacing);
+                : Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
     }
 
     /**
@@ -1261,8 +1353,7 @@ public final class Partitions {
             return List.of();
         }
         BigDecimal far = bounds.max().value();
-        FixtureTemplate held = FixtureTemplate.newtype(ref.name(), own.decimal()
-                ? FixtureTemplate.decimal(far) : FixtureTemplate.integer(far.longValueExact()));
+        FixtureTemplate held = standing(far, ref.name(), own.carrier());
         // Nothing already on offer: a range whose far edge is the number the base type stands for
         // would otherwise hold the same value twice, once in each tier.
         return representativesOf(type, symbols, within).stream()
@@ -1286,25 +1377,8 @@ public final class Partitions {
             case DENSE -> new ObservedValue.Decimal(value);
             case WHOLE -> new ObservedValue.Integer(value.longValueExact());
             case DATE -> new ObservedValue.Temporal(Dates.written(value));
+            case MOMENT -> new ObservedValue.Temporal(DateTimes.written(value));
         };
-    }
-
-    /** What kind of value a term's numbers stand for. */
-    enum Carrier {
-        /** A whole number: an {@code Int}, and every size. */
-        WHOLE,
-        /** A decimal. */
-        DENSE,
-        /** A day count, standing for a date. */
-        DATE
-    }
-
-    /** Which of the three a term at this position is. */
-    static Carrier carrierOf(NumericTerm term, Type type, Symbols symbols) {
-        if (term instanceof NumericTerm.ValueOf && TypeOps.base(type, symbols) == Type.DATE) {
-            return Carrier.DATE;
-        }
-        return term.decimal(type, symbols) ? Carrier.DENSE : Carrier.WHOLE;
     }
 
     private Partitions() {}

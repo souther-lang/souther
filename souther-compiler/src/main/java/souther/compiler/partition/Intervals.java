@@ -125,9 +125,13 @@ final class Intervals {
         boolean decimal = of.decimal(type, symbols);
         // What the numbers in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
-        Partitions.Carrier carrier = Partitions.carrierOf(of, type, symbols);
+        Carrier carrier = Carrier.of(of, type, symbols);
         java.util.function.Function<BigDecimal, String> written =
-                carrier == Partitions.Carrier.DATE ? Dates::written : BigDecimal::toPlainString;
+                switch (carrier) {
+                    case WHOLE, DENSE -> BigDecimal::toPlainString;
+                    case DATE -> Dates::written;
+                    case MOMENT -> DateTimes::written;
+                };
         souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
                 && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
         List<PartitionClass> classes = new ArrayList<>();
@@ -179,7 +183,7 @@ final class Intervals {
      */
     private static List<FixtureTemplate> standingIn(NumericTerm of, BigDecimal inside, Type type,
                                                     souther.compiler.types.TypeName wrapper,
-                                                    Partitions.Carrier carrier, Symbols symbols) {
+                                                    Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
             return List.of(written(inside, wrapper, carrier));
         }
@@ -196,11 +200,12 @@ final class Intervals {
     }
 
     private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,
-                                           Partitions.Carrier carrier) {
+                                           Carrier carrier) {
         FixtureTemplate literal = switch (carrier) {
             case DENSE -> FixtureTemplate.decimal(value);
             case WHOLE -> FixtureTemplate.integer(value.longValueExact());
             case DATE -> FixtureTemplate.date(Dates.written(value));
+            case MOMENT -> FixtureTemplate.dateTime(DateTimes.written(value));
         };
         return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
     }
