@@ -475,7 +475,7 @@ public final class Elaborator {
         if (narrowGot == null) {
             throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
         }
-        throw CompileException.of(Diagnostic.at(stepArg.pos())
+        throw CompileException.of(Diagnostic.at(answerRegion(stepArg))
                 .say(new HelperMessage.TheStepAnswersAnotherTypeThanTheAccumulator(fnName,
                         Type.show(narrowGot),
                         Type.show(TypeOps.substitute(declaredStep.result(), bind))))
@@ -1496,6 +1496,33 @@ public final class Elaborator {
             case Ast.Apply c -> c.name().region();
             default -> Region.ofWidth(e.pos(), width(e));
         };
+    }
+
+    /**
+     * What a report about the value a function argument answered with underlines.
+     *
+     * <p>A block answers with its body, and the block's own position is where its parameters start —
+     * so a report drawn there names what the block returned while pointing at what takes its
+     * arguments. The bindings written above the answer are stepped over: a {@code let} holds the
+     * value it binds, which is not the value the block answered with.
+     *
+     * <p>Nothing else is stepped over. An {@code if} and a {@code match} have the type their arms
+     * join to, so no one arm supplied it and the construct is what did. An expansion is left alone
+     * for its own reason: its body is the callee's, and a report drawn inside it names a place the
+     * author did not write this value at.
+     *
+     * <p>A function value written where a block goes is eta-expanded into a block by the time this
+     * is asked, and the expansion it answers with is what stops the descent — the expression that
+     * answered is in that function's own declaration, and the argument is as far as this source
+     * goes.
+     */
+    public static Region answerRegion(Ast.Expr fnArg) {
+        return region(fnArg instanceof Ast.Block block ? answering(block.body()) : fnArg);
+    }
+
+    /** {@code body} with the bindings written above its answer stepped over. */
+    private static Ast.Expr answering(Ast.Expr body) {
+        return body instanceof Ast.LetIn li ? answering(li.body()) : body;
     }
 
     public static int width(Ast.Expr e) {

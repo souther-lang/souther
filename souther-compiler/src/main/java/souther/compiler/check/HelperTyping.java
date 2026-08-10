@@ -9,7 +9,6 @@ import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.msg.InvariantMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Region;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 import java.util.ArrayList;
@@ -545,10 +544,12 @@ public final class HelperTyping {
     }
 
     /** The block a combinator was handed answers with the wrong type, in written types on both sides
-     * (`'b?` / `String`), not in the checker's own spelling. */
+     * (`'b?` / `String`), not in the checker's own spelling. It takes the block rather than a
+     * position, so where the report is drawn is decided here from the value being refused and not by
+     * whichever position a caller had to hand. */
     private static CompileException blockReturnMismatch(Ast.FnDef h, String paramName, Type want,
-                                                        Type got, SourcePos pos) {
-        return CompileException.of(Diagnostic.at(pos)
+                                                        Type got, Ast.Expr block) {
+        return CompileException.of(Diagnostic.at(Elaborator.answerRegion(block))
                 .say(new HelperMessage.TheBlockAnswersAnotherType(paramName, h.name(),
                         Type.show(want), Type.show(got)))
                 .build());
@@ -593,12 +594,12 @@ public final class HelperTyping {
                 // one answering with a plain value. Unifying also pins `'b` for the arguments after
                 // this one. A failure is reported as the mismatch it is, in written types.
                 if (TypeOps.unify(want.result(), got, bind, symbols) instanceof Fit.Disagrees) {
-                    throw blockReturnMismatch(h, paramName, want.result(), got, lambda.pos());
+                    throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
                 }
                 return;
             }
             if (!TypeOps.assignable(got, want.result(), symbols)) {
-                throw blockReturnMismatch(h, paramName, want.result(), got, lambda.pos());
+                throw blockReturnMismatch(h, paramName, want.result(), got, lambda);
             }
         } else if (arg instanceof Ast.Var v
                 && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
