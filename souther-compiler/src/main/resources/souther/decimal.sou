@@ -18,17 +18,17 @@ data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOO
 // the order the mathematics writes them in and the policy follows them. The `(scale, mode)` pair
 // therefore sits in front of the subject in one and behind the operands in the other, which is the
 // two rules meeting rather than an accident.
-let divide (dividend: Decimal, divisor: Decimal, scale: Int, mode: RoundingMode)
-    : Decimal | DivisionByZero = intrinsic "decimal.divide"
-let toInt (mode: RoundingMode, d: Decimal) : Int = intrinsic "decimal.toInt"
-let round (scale: Int, mode: RoundingMode, d: Decimal) : Decimal = intrinsic "decimal.round"
+let divide (dividend: Decimal, divisor: Decimal, scale: Int, mode: RoundingMode): Decimal
+    | DivisionByZero = intrinsic "decimal.divide"
+let toInt (mode: RoundingMode, d: Decimal): Int = intrinsic "decimal.toInt"
+let round (scale: Int, mode: RoundingMode, d: Decimal): Decimal = intrinsic "decimal.round"
 
-let add (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.add"
-let subtract (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.subtract"
-let multiply (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.multiply"
+let add (a: Decimal, b: Decimal): Decimal = intrinsic "decimal.add"
+let subtract (a: Decimal, b: Decimal): Decimal = intrinsic "decimal.subtract"
+let multiply (a: Decimal, b: Decimal): Decimal = intrinsic "decimal.multiply"
 
 // compare returns -1, 0, or 1 by numeric value, ignoring scale.
-let compare (a: Decimal, b: Decimal) : Int = intrinsic "decimal.compare"
+let compare (a: Decimal, b: Decimal): Int = intrinsic "decimal.compare"
 
 // `fromInt` widens an Int to a Decimal. It is exact — every Int is a Decimal — so nothing has to be
 // stated and it is an ordinary function. The narrowing back, `Decimal.toInt(mode, d)`, drops a
@@ -38,7 +38,7 @@ let compare (a: Decimal, b: Decimal) : Int = intrinsic "decimal.compare"
 // applied to an amount is written `Decimal.fromInt(税抜) * 税率` — the conversion is visible where the
 // value stops being an amount in yen. This is F#'s position for operators (`n * 0.1m` does not
 // compile; `decimal n * 0.1m` does).
-let fromInt (n: Int) : Decimal = intrinsic "decimal.fromInt"
+let fromInt (n: Int): Decimal = intrinsic "decimal.fromInt"
 
 // The same `Basics` arithmetic `Int` carries, on the same reasoning: `<` and `-` are defined for
 // Decimal, so these are ordinary helpers. `abs` compares against `0.0m`, so a value whose scale
@@ -48,4 +48,5 @@ let fromInt (n: Int) : Decimal = intrinsic "decimal.fromInt"
 let abs (d: Decimal): Decimal = if d < 0.0m then 0.0m - d else d
 let min (a: Decimal, b: Decimal): Decimal = if a < b then a else b
 let max (a: Decimal, b: Decimal): Decimal = if a > b then a else b
-let clamp (lo: Decimal, hi: Decimal, d: Decimal): Decimal = if d < lo then lo else if d > hi then hi else d
+let clamp (lo: Decimal, hi: Decimal, d: Decimal): Decimal =
+    if d < lo then lo else if d > hi then hi else d

@@ -8,10 +8,10 @@ module souther.date
 // Argument order follows F#/Elm ([#pipe]): the date operated on comes last, so
 // `d |> Date.addDays(3)` reads left to right. `daysBetween(from, to)` counts whole days from `from`
 // to `to`, negative when `to` precedes `from`.
-let addDays (days: Int, d: Date) : Date = intrinsic "date.addDays"
-let addMonths (months: Int, d: Date) : Date = intrinsic "date.addMonths"
-let addYears (years: Int, d: Date) : Date = intrinsic "date.addYears"
-let daysBetween (from: Date, to: Date) : Int = intrinsic "date.daysBetween"
+let addDays (days: Int, d: Date): Date = intrinsic "date.addDays"
+let addMonths (months: Int, d: Date): Date = intrinsic "date.addMonths"
+let addYears (years: Int, d: Date): Date = intrinsic "date.addYears"
+let daysBetween (from: Date, to: Date): Int = intrinsic "date.daysBetween"
 
 // The parts of a date. `year` and `day` are Ints in both Elm (`Time.toYear` / `toDay`) and .NET
 // (`DateTime.Year` / `Day`). `month` follows .NET rather than Elm, whose `Month` is a twelve-case
@@ -24,6 +24,6 @@ let daysBetween (from: Date, to: Date) : Int = intrinsic "date.daysBetween"
 // nor .NET ships a month-end function either:
 //     let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
 //     let endOfMonth (d: Date): Date = Date.addDays(0 - 1, Date.addMonths(1, monthStart(d)))
-let year (d: Date) : Int = intrinsic "date.year"
-let month (d: Date) : Int = intrinsic "date.month"
-let day (d: Date) : Int = intrinsic "date.day"
+let year (d: Date): Int = intrinsic "date.year"
+let month (d: Date): Int = intrinsic "date.month"
+let day (d: Date): Int = intrinsic "date.day"

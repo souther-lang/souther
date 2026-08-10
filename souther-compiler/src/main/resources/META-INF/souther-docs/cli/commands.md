@@ -49,6 +49,60 @@ canonical form is what the verdict is taken against, so a failing build says wha
 than only which file did, and nothing has to be formatted a second time locally to read it. A file
 already in canonical form is not mentioned.
 
+### What the canonical form is
+
+There is one form per program and the formatter derives it from the tree, so nothing about the
+layout you write is kept. These are the rules it derives it by, so that what the tool will write can
+be read here rather than reconstructed from having run it.
+
+Lines are at most 100 columns and a nesting level is 4 spaces. A line longer than 100 columns is one
+whose content holds nowhere to break — a long string, a single long name, a nesting deep enough that
+the indent takes the width. That is not an exemption for some constructs: everything that has a
+boundary to break at breaks at it, and a 130-column `unreachable` message survives only because a
+string literal has none.
+
+Where a blank line goes is yours; how big it is is not. Between two top-level items, and between two
+steps of a block, one blank line comes back as one and three come back as one, and none stays none —
+so a run of related one-line declarations stays a run and a body written as paragraphs keeps them.
+Two places are the file's rather than yours and get a blank line whatever you wrote: under a module
+header, and under the last import. Nothing else is kept: a blank line inside a construct, between
+the fields of a `data` or the arms of a `match`, is not a paragraph break and does not survive.
+
+A `data` product body writes each field on a line of its own, opening the line with the `{` for the
+first and with a `,` for the rest, and closing with a `}` at the body's own indent. It is written
+that way whenever it has a field, whether or not it would fit on one line; a body with no fields is
+`{}`.
+
+```
+data Employee =
+    { id: EmployeeId
+    , rank: Rank
+    }
+```
+
+Everything else written between brackets — a record literal, an argument list, a parameter list, a
+type argument list, a tuple, a list literal, the names in `exposing` and `import` — is written on one
+line if it fits and one member to a line if it does not, each line but the last ending with its `,`.
+No trailing `,` is written before the closing bracket in either case.
+
+```
+let e = Employee { id = EmployeeId("e-1"), rank = Staff }
+
+let wide =
+    Employee {
+        id = EmployeeId("an-identifier-long-enough-that-the-literal-does-not-fit-on-one-line"),
+        rank = Staff
+    }
+```
+
+So the two conventions are the constructs' and not the file's: a `data` body opens its lines with
+the comma and everything else closes them with it.
+
+A comment keeps what it was written about. On the line of the code it follows it stays there; on a
+line of its own it goes above what follows it, unless a blank line separates it from that and none
+separates it from the code above, in which case it stays under that code. A comment with nothing
+after it closes whatever holds it.
+
 <!-- souther-section: examples -->
 ## examples
 

@@ -125,9 +125,9 @@ Only behaviors that appear in the spec DSL are behaviors; implementation helpers
 
 Outside-world dependencies — DB, HTTP, files, clock, ID generation — MUST NOT be implemented in the language. These correspond to the `+// depends:+` and `+// side effect:+` notes in the spec DSL. Only the type is declared in the language.
 
-[,text]
+[,souther]
 ----
-behavior findMember : (id: MemberId) -> Member | NoSuchMember    // no let
+behavior findMember : (id: MemberId) -> Member | NoSuchMember // no let
 ----
 
 The implementation is injected from Java. Writing no implementation (`+let+`) is what "provided from outside" means (<<injected-behavior>>). A caller writes that name in its `+depends on+` (<<depends-on>>). The distinction between dependency (only reads the outside) and side effect (changes the outside) is documentation of intent; it does not affect the rules of value composition.
@@ -209,7 +209,7 @@ Three things hold of a module before anything in it is read:
 * [[a-core-name-is-not-taken]]a module MUST NOT take a name the core has — the reserved `+souther+` namespace, or a standard-library qualifier such as `+List+` (<<reserved-namespace>>). A data MUST NOT take a qualifier's name either: the qualifier is the only spelling that reaches the library, so a declaration of that name hides it;
 * [[every-module-reached-is-on-the-path]]every module a compile reaches — imported, named in a qualified reference, or needed by one that is — MUST be among the modules being compiled or on the path, and what it says it declares MUST be there to read.
 
-[,text]
+[,souther]
 ----
 module example.businesstrip
 ----
@@ -222,20 +222,16 @@ omitting it there is a compile error.
 
 Keywords and the standard library are in English, but user-defined identifiers (types, fields, behaviors) MAY use Unicode. Because the spec DSL is written in Japanese, business vocabulary can be used as identifiers directly. Identifiers SHALL be *NFC-normalized* before binding and comparison; in Japanese a precomposed character and a combining sequence can look identical, so without normalization names that look the same would diverge in binding. Source is UTF-8.
 
-[,text]
+[,souther]
 ----
 data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 ----
 
 Public elements are listed with `+exposing+`.
 
-[,text]
+[,souther]
 ----
-module example.businesstrip exposing (
-    TravelRequest,
-    submitTravelRequest,
-    preApprove
-)
+module example.businesstrip exposing ( TravelRequest, submitTravelRequest, preApprove )
 ----
 
 `+exposing+` exposes at type granularity. A public data's `+decoder()+` / `+encoder()+` is always public API (<<jvm-codec>>), so member-level narrowing such as `+TravelRequest.decoder+` is not written — there is nothing to narrow.
@@ -243,11 +239,9 @@ module example.businesstrip exposing (
 
 When an exposed behavior is a `+>->+` composition, its output SHALL be written in `+exposing+` in the form `+name : cases+` (<<declared-composition-output>>). A composition's output is inferred from its stages (<<composition-with-requirements>>), but at the public boundary a signature is required rather than inference, so that the contract used by another module or by Java does not change silently when an upstream stage changes. Omitting it is a compile error (E1605).
 
-[,text]
+[,souther]
 ----
-module example.order exposing (
-    placeOrder : PlacedOrder | OutOfStock
-)
+module example.order exposing ( placeOrder : PlacedOrder | OutOfStock )
 ----
 
 `+exposing+` is the module's interface description: implementations are inferred, only the boundary is stated explicitly.
@@ -301,17 +295,14 @@ Imports SHALL be listed explicitly. Wildcard imports are forbidden.
 
 [[imports-are-used]]An entry on an import list MUST be written bare somewhere below it. What another module declares is reachable qualified whether or not it is imported, so an entry earns its place only by being used under the name it brings in.
 
-[,text]
+[,souther]
 ----
-import example.employee (
-    Employee,
-    EmployeeId
-)
+import example.employee ( Employee, EmployeeId )
 ----
 
 The standard library is imported in the same form: the qualifier — `+List+`, `+Map+`, `+Set+`, `+String+`, `+Bool+`, `+Int+`, `+Decimal+`, `+Date+`, `+DateTime+`, `+Option+` (<<reserved-namespace>>) — as the name, and the functions used listed. Once imported, they MAY be written unqualified (<<stdlib>>).
 
-[,text]
+[,souther]
 ----
 import List ( map, filter, fold )
 import String ( trim, split )
@@ -367,7 +358,7 @@ A type is also reachable through the module that declares it, written as the mod
 
 [[an-imported-name-denotes-one-thing]]A name an `+import+` brings in MUST denote one thing here. Two modules exposing it, an alias already in use, or this module's own declaration of that spelling each leave the reader with a name and no single answer; reaching one of them qualified is what says which. Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
 
-[,text]
+[,souther]
 ----
 data Line =
     { quantity: example.counting.Amount
@@ -381,7 +372,7 @@ Which spelling names a type is not something a check has an opinion about. A bar
 
 `+import ... as+` names a module locally, and the alias may then carry the reference. The alias holds only in the module that writes it, and it MUST be a name nothing else answers to there — not another alias, not a module of this compilation, not a standard-library qualifier.
 
-[,text]
+[,souther]
 ----
 import example.counting as Counting
 import example.pricing as Pricing ( taxRate )
@@ -396,10 +387,11 @@ Both parts of an `+import+` are optional: `+import example.pricing as Pricing+` 
 
 A behavior of another module is named the same way, as a `+>->+` stage and as a `+depends on+`. What the qualifier says is which module the behavior comes from, which is what an `+import+` says, so a qualified stage or requirement needs no import line either.
 
-[,text]
+[,souther]
 ----
 behavior ship = inventory.allocate >-> makeInvoice
-behavior notify : (order: PlacedOrder) -> Notified constructs Notified
+behavior notify : (order: PlacedOrder) -> Notified
+    constructs Notified
     depends on messaging.sendMail
 ----
 
@@ -407,7 +399,7 @@ Unlike a type, a behavior's name is also a member name in what is generated: an 
 
 Two same-named types meet in one module because both values exist there; two same-named behaviors meet because the module chose to call both, which is the module not having named what it is doing. A module that genuinely depends on two of them — the same operation offered by two providers, say — declares two behaviors of its own, under names that tell them apart. Each is an injection target (<<injected-behavior>>), and which upstream behavior goes into each is the Java side's to decide.
 
-[,text]
+[,souther]
 ----
 behavior allocateFromPrimary : (line: Line) -> Allocated | OutOfStock
 behavior allocateFromSecondary : (line: Line) -> Allocated | OutOfStock
@@ -465,7 +457,7 @@ What a text MUST be for the compiler to read it is stated with each construct, a
 
 * Both `+data+` declaration fields and record-literal `+TypeName { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+name: type+`; a literal binds a value, so `+name = value+` (`+:+` = has this type, `+=+` = is defined as this). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>). A clause's name follows the same rule as everything else named with `+=+` — it is defined as that rule, so `+invariant nonEmpty = List.length(value) >= 1+` (<<invariant-clause-name>>).
 * Argument lists and the enumerations in `+constructs+` / `+depends on+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<depends-on>>).
-* Every `+,+`-separated list — declaration and record-literal fields, parameter and argument lists, tuple elements, list literals, and the `+constructs+` / `+depends on+` name lists — MAY carry a single trailing `+,+` before its closing delimiter. It is optional and has no meaning. The sample code in this spec keeps a leading-comma layout instead and writes no trailing comma.
+* Every `+,+`-separated list — declaration and record-literal fields, parameter and argument lists, tuple elements, list literals, and the `+constructs+` / `+depends on+` name lists — MAY carry a single trailing `+,+` before its closing delimiter. It is optional and has no meaning. Where this spec breaks such a list across lines, a `+data+` product body opens each line after the first with its `+,+` (<<product-data>>) and every other list closes each line but the last with its own; neither writes the trailing `+,+`. The convention is the construct's, not the document's.
 * `+|+` is the case separator of a sum and binds more loosely than `+->+`. `+(x: T) -> A | B+` reads as `+(x: T) -> (A | B)+` (the whole output is a sum). Where an anonymous `+|+` is read as a type is the type position's answer (<<a-type-is-written-in-a-type-position>>), and a behavior's parameter refuses one it reads (<<a-parameter-names-one-type>>).
 * `+>->+` is the stage separator of a pipeline: not a binary operator but a flat n-ary sequence. It is associative (<<type-routing>>). Only a behavior name MAY appear in a stage position; parentheses such as `+(f >-> g)+` MUST NOT be written.
 * `+|>+` is the value pipe, binding most loosely and left-associatively. `+a |> f |> g+` reads as `+g(f(a))+`. The left side enters the last argument of the right-hand call and is expanded to a call at parse time (<<pipe>>). This is distinct from the `+>->+` that composes behaviors; it threads the value of an expression.
@@ -588,7 +580,7 @@ The wrapped type must itself be ordered for `+<+` / `+<=+` / `+>+` / `+>=+`; equ
 
 `+Decimal+` ignores scale. `+1.0+` and `+1.00+` are equal.
 
-[,text]
+[,souther]
 ----
 data Amount = Decimal
 // read as 1.00 from a DB column, 1.0 from JSON. Treated as the same amount.
@@ -667,7 +659,7 @@ The only polymorphic types are the stdlib ones (`+Option+`, `+List+`, `+Map+`, `
 
 When the construction of a data with an invariant violates it inside the domain (<<invariant-mvp>>), the computation *aborts*. It returns no value and no case.
 
-[,text]
+[,souther]
 ----
 behavior discount : (d: Quote) -> Discounted
     constructs Discounted
@@ -689,21 +681,24 @@ The mark `+?+` outside a field is written only in the shipped core, as a type va
 
 An optional is *made* in one place: a `+?+` field being given its value (<<optional>>). Writing the type does not make one — `+let p: Option<Int> = None+` is <<e1303>> — and neither does declaring it as a helper's return: a helper answers the optional it read. Where a helper's absence is its own to name, that is a case of the model's own sum.
 
-[,text]
+[,souther]
 ----
-data OrgMember = { manager: OrgMember?, level: Int }
+data OrgMember =
+    { manager: OrgMember?
+    , level: Int
+    }
 
-let firstOver (n: Int, m: OrgMember) : Option<OrgMember> =
+let firstOver (n: Int, m: OrgMember): Option<OrgMember> =
     match m.manager with
         | Some b -> if b.level > n then m.manager else firstOver(n, b)
-        | None -> m.manager             // the absence it read, passed on
+        | None -> m.manager // the absence it read, passed on
 ----
 
 Where the boundary refuses it, what replaces it is a name the model owns. To state "might not be found" as a business result, that is a domain sum (<<unmarked-sum>>); an optional output is reported as itself rather than as a composition that does not fit (<<e1701>>).
 
-[,text]
+[,souther]
 ----
-behavior findMember : (id: MemberId) -> Member | NoSuchMember     // write this
+behavior findMember : (id: MemberId) -> Member | NoSuchMember // write this
 ----
 
 `+Some(T)+` is an exception to the rules of <<sum-data>> (a case is a reference to a named data and cannot carry a payload). Because `+Option+` is built in, users cannot imitate this form. Its contents are taken out with `+match+`; the `+v+` in `+| Some v+` is positionally bound to the wrapped value, not to `+Some+` (<<match>>).
@@ -713,7 +708,7 @@ behavior findMember : (id: MemberId) -> Member | NoSuchMember     // write this
 
 Optionality is expressed with `+?+`.
 
-[,text]
+[,souther]
 ----
 data TravelCompleted =
     { preApprover: EmployeeId?
@@ -761,7 +756,7 @@ A declaration takes the form `+data <Name> = <right-hand side>+`. If the right-h
 
 The spec DSL's `+AND+` maps to a product. A field name is the business role; the type may be specified separately.
 
-[,text]
+[,souther]
 ----
 // spec DSL: data Employee = EmployeeId AND Rank AND ManagerId
 data Employee =
@@ -778,10 +773,16 @@ Role and type may be written separately. In the spec DSL the same concept has a 
 
 Data MAY reference itself (directly or via another data). Structures such as an org chart or a category tree appear routinely in business.
 
-[,text]
+[,souther]
 ----
-data OrgMember = { manager: OrgMember?, name: String }      // the manager is again an OrgMember (the chain ends at None)
-data Department = { children: List<Department>, name: String }   // a tree (a leaf has an empty children list)
+data OrgMember =
+    { manager: OrgMember?
+    , name: String
+    } // the manager is again an OrgMember (the chain ends at None)
+data Department =
+    { children: List<Department>
+    , name: String
+    } // a tree (a leaf has an empty children list)
 ----
 
 The derived codecs follow this self-reference. A nested `+{"name":"a","manager":{"name":"b"}}+` decodes to an `+OrgMember+` whose `+manager+` is again an `+OrgMember+`. Traversing a self-reference *by computation* (climbing the manager chain to the root, counting tree depth) is written with a recursive helper `+let+` (<<fn-declaration>>). `+fold+` folds only a fixed-structure `+List+`, so a self-reference of unbounded depth can be traversed only with helper recursion.
@@ -797,7 +798,7 @@ A self-reference requires a *base case*. A cycle that returns to itself through 
 
 In the spec DSL, a state sharing common items is written as `+data Submitted = TravelRequestCommon AND submittedAt+`, meaning "has all fields of `+TravelRequestCommon+`, plus `+submittedAt+`". Souther expresses this with the `+...+` spread.
 
-[,text]
+[,souther]
 ----
 data TravelRequestCommon =
     { applicant: Employee
@@ -832,19 +833,15 @@ The spec DSL's `+OR+` maps to a sum. *A case MAY reference an already-defined na
 
 [[a-sum-case-is-a-declared-data]]A case MUST be a data that is declared. [[a-sum-does-not-contain-itself]]A sum MUST NOT contain itself, through a case or through a chain of them: a sum's cases are the values it can be, and one of them being the sum is not a value. As in the business-trip model, where each state has its own fields, invariants, and transition behaviors and is bound together by `+OR+`, this structure is represented directly.
 
-[,text]
+[,souther]
 ----
 // spec DSL: data TravelRequest = Drafting OR Submitted OR AwaitingPreApproval OR PreApproved
-data TravelRequest =
-    Drafting
-  | Submitted
-  | AwaitingPreApproval
-  | PreApproved
+data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 ----
 
 Nested sums MAY be written directly.
 
-[,text]
+[,souther]
 ----
 data CostBearer = OwnCost | ClientCost
 data OwnCost = Reimbursement | Advance | CorporateCard
@@ -858,13 +855,23 @@ A case names a data; an inline record MUST NOT be written in a case position. A 
 
 *What holds of every case is a property of the sum.* A sum has no fields of its own, so reading one is an error and the value must be opened with `+match+` — except for a field that *every* case spreads (<<field-spread>>): the sum exposes the fields of a data all of its cases include, and `+d.id+` reads it without opening the value. The same part is spread from the sum into a construction, so `+Filed { ...d, filedOn = on }+` writes at once what a `+match+` arm per case would write alike.
 
-[,text]
+[,souther]
 ----
-data DocumentCommon = { id: String }
-data Draft = { ...DocumentCommon }
-data Sent  = { ...DocumentCommon, at: DateTime }
+data DocumentCommon =
+    { id: String
+    }
+data Draft =
+    { ...DocumentCommon
+    }
+data Sent =
+    { ...DocumentCommon
+    , at: DateTime
+    }
 data Document = Draft | Sent
-data Filed = { ...DocumentCommon, filedOn: Date }
+data Filed =
+    { ...DocumentCommon
+    , filedOn: Date
+    }
 
 let idOf (d: Document): String = d.id
 let file (d: Document, on: Date): Filed = Filed { ...d, filedOn = on }
@@ -881,7 +888,7 @@ A data with no fields is declared with no body. It corresponds to the spec DSL's
 
 [[unit-data-is-written-without-a-body]]A unit data is written without a body. An empty body names a type with one value, which is what a unit data is, so the two spellings would be one declaration written two ways.
 
-[,text]
+[,souther]
 ----
 // spec DSL: data Reimbursement = Unit
 data Reimbursement
@@ -895,13 +902,13 @@ Unit data appear frequently as sum cases (such as `+Staff+` in `+data Rank = Man
 
 A unit written where a module *introduces* a type needs no declaration of its own: the name alone declares it. Three positions introduce a type — a sum's case list (<<sum-data>>), a behavior's output (<<behavior-io>>), and the output declared for a `+>->+` composition, written either on the composition or in `+exposing+` (<<declared-composition-output>>).
 
-[,text]
+[,souther]
 ----
 data CostBearer = OwnCost | ClientCost
 data OwnCost = Reimbursement | Advance | CorporateCard
 // Reimbursement, Advance, CorporateCard and ClientCost are units; nothing else declares them
 
-behavior quote : (c: Cart) -> PricedCart | EmptyCart     // EmptyCart is a unit
+behavior quote : (c: Cart) -> PricedCart | EmptyCart // EmptyCart is a unit
 ----
 
 Everywhere else a type is *referred to*, and a name nothing declares is unknown there and reported: a parameter type, a field's type, `+constructs+`, `+depends on+`, a `+match+` arm, a codec variant, a `+let+`'s declared return type.
@@ -972,7 +979,7 @@ When the right-hand side is a single type rather than a `+{ ... }+` product or a
 
  `+Y+` is written the way a type is written anywhere else: a primitive (`+String+` / `+Int+` / `+Date+`, etc.), a named data, a sum, or a collection (`+List<T>+` / `+Set<T>+` / `+Map<K, V>+`, <<collections>>), including a collection of any of these. `+X+` is a distinct type from `+Y+` (nominally distinguished) with the same (bare) external representation as `+Y+`. The spec DSL's `+data X = Y+` (right-hand side a single name) is written directly.
 
-[,text]
+[,souther]
 ----
 // spec DSL: data EmployeeId = String // not empty
 data EmployeeId = String
@@ -1015,7 +1022,7 @@ A value constraint written as a comment in the spec DSL is made executable as an
 
 [[an-invariant-answers-on-every-path]]An invariant MUST answer on every path through it. It is checked on every construction and at every boundary (<<invariant-mvp>>), so it may not reach an `+unreachable+` and may not reach a `+partial+` helper, which publishes no termination guarantee (<<fn-rules>>).
 
-[,text]
+[,souther]
 ----
 // spec DSL: data Amount = Integer // at least 0, in yen
 data Amount = Int
@@ -1037,7 +1044,7 @@ A clause MAY be given a name, which is what tells it apart from the type's other
 
 [[invariant-clause-name-is-not-underscore]]A clause may not be named `+_+`. `+| _ -> …+` answers the clauses that carry no name (<<attempt-departures>>), so a clause named `+_+` could never be the one it answered. An attempted construction departs by the named clause that did not hold (<<attempted-construction>>), and a decode failure reports the name (<<decoder-error>>).
 
-[,text]
+[,souther]
 ----
 data QuoteLines = List<QuoteLine>
     invariant nonEmpty = List.length(value) >= 1
@@ -1060,26 +1067,30 @@ The clauses are checked in the order they are declared — a `+...+` spread's fi
 
 Allowed: comparison, logical operations, arithmetic, field reference, built-in functions, blocks, and a `+let+` satisfying the three conditions below.
 
-[,text]
+[,souther]
 ----
 let isNonNegative (v: Int) = v >= 0
 
-data Amount = Int  invariant isNonNegative(value)
-data Cart = { items: List<Line> } invariant List.all(x -> isNonNegative(x.quantity), items)
+data Amount = Int
+    invariant isNonNegative(value)
+data Cart =
+    { items: List<Line>
+    }
+    invariant List.all(x -> isNonNegative(x.quantity), items)
 ----
 
 What may be called is a `+let+`, not a behavior (<<fn>>). An invariant is part of what a type is: it travels to an importing module as the source it was written as, together with the helper `+let+`s it names (<<published-modules>>). It names only what travels with it, so a behavior MUST NOT be called from an invariant whatever its requirement set — including one that depends on nothing and is callable from a `+let+` body (<<calling-a-behavior>>). To name a business rule, use a `+let+`.
 
 A value or a helper another module publishes travels with it, so an invariant MAY name one, as a `+let+` body may (<<exposed-values>>). A limit or a format several modules' types are written against is therefore written once, in the module that owns it.
 
-[,text]
+[,souther]
 ----
 module limits exposing ( maxLength )
 
 let maxLength = 20
 ----
 
-[,text]
+[,souther]
 ----
 module Member exposing ( MemberName )
 
@@ -1111,11 +1122,14 @@ The same invariant is handled differently depending on where it breaks.
 * *Decoder (boundary)*: the violation enters a failure (`+Issue+`) of Raoh's `+Result+` (<<decoder-error>>). A value that came from outside was invalid — an *expected result*. Which field broke it can be stated via `+path+` and `+code+`.
 * *behavior (inside the domain)*: it *aborts* (<<algebraic-types>>). A computation among validated values broke a rule — a *model bug*.
 
-[,text]
+[,souther]
 ----
-data Discounted = { amount: Int } invariant amount >= 0
+data Discounted =
+    { amount: Int
+    }
+    invariant amount >= 0
 
-behavior discount : (d: Quote) -> Discounted          // no violation case needed
+behavior discount : (d: Quote) -> Discounted // no violation case needed
     constructs Discounted
 ----
 
@@ -1173,31 +1187,42 @@ let build (rows) = {
 
 A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a behavior answered — is not a term, and a clause needing it is left to the run-time check.
 
-[,text]
+[,souther]
 ----
-data Q = Int invariant value >= 0
-data Held = { q: Q }
+data Q = Int
+    invariant value >= 0
+data Held =
+    { q: Q
+    }
 data M = A | B
-data A = { q: Q }
+data A =
+    { q: Q
+    }
 
 behavior viaMatch : (x: Held, m: M) -> Q
-let viaMatch (x, m) = match m with
-    | A as a -> x.q + a.q             // discharged: `a` carries A's invariant, as `x` does
-    | B -> x.q
+let viaMatch (x, m) =
+    match m with
+        | A as a -> x.q + a.q // discharged: `a` carries A's invariant, as `x` does
+        | B -> x.q
 
 behavior total : (xs: List<Held>) -> Q
-let total (xs) = List.fold((acc, i) -> acc + i.q, Q(0), xs)   // discharged: both are Q
+let total (xs) = List.fold((acc, i) -> acc + i.q, Q(0), xs) // discharged: both are Q
 ----
 
 A binding given a location *is* that location, so `+let c = cart+` makes `+c.quantity+` the term `+cart.quantity+`. A helper is expanded by binding each argument and reading the parameter through that binding (<<invariant-discharge-representation>>), which is why a construction moved into a helper still reads the terms the caller's guards and input types settled. A binding given anything else is a term of its own; where what it was given is arithmetic over terms the procedure names the two are related, and otherwise nothing about it follows.
 
-[,text]
+[,souther]
 ----
-data Qty = Int invariant value >= 1
-data Cart = { quantity: Int } invariant quantity >= 1
+data Qty = Int
+    invariant value >= 1
+data Cart =
+    { quantity: Int
+    }
+    invariant quantity >= 1
 
-let one (c: Cart): Qty = Qty(c.quantity)         // `c` is `cart`, so this is discharged
-behavior toQty : (cart: Cart) -> Qty constructs Qty
+let one (c: Cart): Qty = Qty(c.quantity) // `c` is `cart`, so this is discharged
+behavior toQty : (cart: Cart) -> Qty
+    constructs Qty
 let toQty (cart) = one(cart)
 ----
 
@@ -1273,12 +1298,13 @@ An operation given two containers, or given a container and something to put in 
 
 So a lower bound on any source named above is a lower bound on the result, and a non-empty list appended to any list is non-empty.
 
-[,text]
+[,souther]
 ----
-data Lines = List<Line> invariant List.length(value) >= 1
+data Lines = List<Line>
+    invariant List.length(value) >= 1
 
 behavior joined : (a: Lines, b: List<Line>) -> Lines
-let joined (a, b) = Lines(a.value ++ b)   // discharged: no shorter than `a`
+let joined (a, b) = Lines(a.value ++ b) // discharged: no shorter than `a`
 ----
 
 Nothing is said the other way. A union answers one of what both sides hold, and an insert of something already there adds none, so the result is not the sum of what was read; an upper bound on the sources does not bound it.
@@ -1314,14 +1340,21 @@ This is bounded to a field *copied*. A field the closure computes from others �
 
 `+List.all(p, xs)+` states `+p+` of each element of `+xs+`. Where a standard-library combinator hands its closure an element of `+xs+`, the check reads the relation again there, with the quantifier's own parameter standing for the element the closure was handed.
 
-[,text]
+[,souther]
 ----
-data Qty = Int invariant value >= 1
-data Line = { quantity: Int }
-data Cart = { items: List<Line> } invariant List.all(i -> i.quantity >= 1, items)
+data Qty = Int
+    invariant value >= 1
+data Line =
+    { quantity: Int
+    }
+data Cart =
+    { items: List<Line>
+    }
+    invariant List.all(i -> i.quantity >= 1, items)
 
-behavior toQty : (cart: Cart) -> List<Qty> constructs Qty
-let toQty (cart) = List.map(i -> Qty(i.quantity), cart.items)   // discharged
+behavior toQty : (cart: Cart) -> List<Qty>
+    constructs Qty
+let toQty (cart) = List.map(i -> Qty(i.quantity), cart.items) // discharged
 ----
 
 Both sources of a relation read alike: an input type's invariant clause, and a `+guard+` or `+if+` on the path stating the relation of the same container.
@@ -1378,13 +1411,16 @@ The answer carries the clause's name where it has one (<<invariant-clause-name>>
 
 The check does not cross behaviors: a relation established in one behavior is not assumed in another (<<sequential-composition>>). Inferring such a precondition would be an implicit cross-unit contract, which the language declines — `+depends on+` and an exposed composition's output are always declared, not inferred (<<depends-on>>). The consistent way to carry a relation is to *reify it as a type invariant*, which the seeding then assumes downstream for free.
 
-[,text]
+[,souther]
 ----
-data WithdrawRequest = { balance: Money, amount: Money }
-    invariant amount <= balance                 // the relation lives in the type
+data WithdrawRequest =
+    { balance: Money
+    , amount: Money
+    }
+    invariant amount <= balance // the relation lives in the type
 
 behavior withdraw : (req: WithdrawRequest) -> Money
-let withdraw (req) = req.balance - req.amount   // discharged with no guard here
+let withdraw (req) = req.balance - req.amount // discharged with no guard here
 ----
 
 So a possible-violation warning over the fields of one input data is a prompt to declare their relation as that data's invariant. When a value's validity is guaranteed *outside* the language — a Java-side or injected contract stronger than any type — there is no type to reify onto, and that construction keeps its run-time check.
@@ -1419,7 +1455,7 @@ The default Decoder is derived from a data's shape by the following conventions.
 * Invariants are checked on construction; a violation becomes a failure (`+Issue+`) of Raoh's `+Result+`. Because decode always succeeds or fails, the destination of a violation always exists (<<violation-destination>>).
 * Errors of independent fields are accumulated (Applicative; <<case-propagation>>). Accumulation is handled by Raoh combinators.
 
-[,text]
+[,souther]
 ----
 // a newtype reads from a bare integer (the data X = Y form)
 data Amount = Int
@@ -1442,16 +1478,15 @@ The invariant check on construction and spread (`+...+`) follow the same semanti
 
 The derived Decoder of a sum data reads the discriminator field `+"type"+` and dispatches to the case's derived Decoder. The tag is the case name.
 
-[,text]
+[,souther]
 ----
-data TravelRequest =
-    Drafting | Submitted | AwaitingPreApproval | PreApproved
+data TravelRequest = Drafting | Submitted | AwaitingPreApproval | PreApproved
 // derived Decoder: reads "type" and dispatches "Drafting" -> Drafting, "Submitted" -> Submitted, ...
 ----
 
 A sum every one of whose cases is a unit data (folded to the leaves) is an *enumeration*: it carries nothing but which case it is, so it travels as that case's name — a bare string — and not as an object holding a discriminator alone. This is the form a fieldless enumeration has everywhere else, and it is what lets such a sum key a `+Map+` at the boundary (<<collections>>): a JSON object's key cannot be an object. A name no case answers to fails the decode at that value's path. One field-bearing case is enough to make the sum an object with `+"type"+` again.
 
-[,text]
+[,souther]
 ----
 data Stage = Prospecting | Won | Lost
 // derived Decoder: reads "Prospecting" / "Won" / "Lost"
@@ -1460,9 +1495,9 @@ data Stage = Prospecting | Won | Lost
 
 A nested sum is folded to the leaf case and dispatched.
 
-[,text]
+[,souther]
 ----
-data OwnCost     = Reimbursement | Advance | CorporateCard
+data OwnCost = Reimbursement | Advance | CorporateCard
 data CostBearer = OwnCost | ClientCost
 // derived Decoder: the name is one of "Reimbursement" / "Advance" / "CorporateCard" / "ClientCost"
 // (every case is a unit data, so this one is an enumeration).
@@ -1476,11 +1511,11 @@ A case's contents are decided by the case's shape. A product case lays fields fl
 [#discriminator-field]
 [[a-case-does-not-declare-the-discriminator-field]]Because a product case lays its fields there, a case MUST NOT declare a field named `+"type"+` — the field and the tag would want one key, and whichever was written second would be all that was left. This is a compile error where the case is declared, not a value quietly written over where it is encoded. It holds of a member of a behavior's output union for the same reason (<<union-encoder>>), and of a field a case takes in by spread as much as one it writes. A data that is neither a case nor a union member may have the field: nothing writes a discriminator beside it.
 
-[,text]
+[,souther]
 ----
 data Rank = Manager | Staff
-data Manager = Level   // newtype
-data Staff             // unit
+data Manager = Level // newtype
+data Staff // unit
 // derived: Manager -> {"type":"Manager","value":3}, Staff -> {"type":"Staff"}
 ----
 
@@ -1559,9 +1594,10 @@ The default Encoder is derived by rules symmetric to the Decoder.
 * `+T?+` (Option; <<optional>>): if `+Some(v)+`, write `+v+` at the key; if `+None+`, omit the key. `+None+` is not written and is read back as `+missing key → None+`, so the round-trip law (<<round-trip>>) holds.
 * A sum data tags the discriminator field `+"type"+` with the case name and converts with the case's derived Encoder. A product case lays fields flatly, a unit case writes only the tag, a newtype case puts contents in `+"value"+` (<<sum-discrimination>>). A nested sum writes the leaf case's tag.
 
-[,text]
+[,souther]
 ----
-data Amount = Int  invariant value >= 0
+data Amount = Int
+    invariant value >= 0
 // derived Encoder: Amount -> Int(self.value) (bare integer)
 
 data Submitted =
@@ -1623,16 +1659,19 @@ behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock            
 
 That a type or a term may come to the right of `+=+` is because the DSL writes it that way; it is not a distinction Souther introduced. The same two lines map to Souther as:
 
-[,text]
+[,souther]
 ----
-behavior preApprove : (request: AwaitingPreApproval, approverId: EmployeeId) -> PreApproved | NotAuthorized
-    constructs PreApproved, NotAuthorized          // a type. Implementation is a let or Java injection
+behavior preApprove : (
+    request: AwaitingPreApproval,
+    approverId: EmployeeId
+) -> PreApproved | NotAuthorized
+    constructs PreApproved, NotAuthorized // a type. Implementation is a let or Java injection
 
 behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock
-                                                 // a composition. It is itself the implementation
+// a composition. It is itself the implementation
 
 // spec DSL: // depends: clock
-behavior now : () -> DateTime                // write the type, no let → injected from Java
+behavior now : () -> DateTime // write the type, no let → injected from Java
 ----
 
 Specification and implementation are separated not because `+data+` already does so, but *so that one line of the spec DSL remains as is* (<<non-functional>>). Just as `+invariant+` rides on `+data+`, `+constructs+` rides on `+behavior+`. Both are the part Souther makes executable of what the spec DSL left in comments (<<mapping-principle>>).
@@ -1642,13 +1681,13 @@ Specification and implementation are separated not because `+data+` already does
 
 The spec DSL's input `+AND+` maps to an argument list. A parameter is always written `+name: type+`.
 
-[,text]
+[,souther]
 ----
 // spec DSL: behavior decidePreApproval = EstimatedCost AND Applicant AND CostBearer -> PreApprovalReasons
 behavior decidePreApproval : (
     estimatedCost: Amount,
-    applicant:     Employee,
-    costBearer:    CostBearer
+    applicant: Employee,
+    costBearer: CostBearer
 ) -> List<PreApprovalReason>
 ----
 
@@ -1661,7 +1700,7 @@ Zero arguments is written `+()+` (as in `+now+`). "No argument" and "takes one `
 
 The spec DSL's output `+OR+` maps directly to a bare sum. No success/failure distinction and no marker such as `+error+` is attached. A behavior is a function from input to one of the possible business results.
 
-[,text]
+[,souther]
 ----
 // spec DSL: behavior submitTravelRequest = Drafting -> Submitted OR AwaitingPreApproval
 behavior submitTravelRequest : (request: Drafting) -> Submitted | AwaitingPreApproval
@@ -1670,7 +1709,7 @@ behavior submitTravelRequest : (request: Drafting) -> Submitted | AwaitingPreApp
 // spec DSL: behavior preApprove = AwaitingPreApproval AND ApproverId -> PreApproved OR NotAuthorized
 // NotAuthorized is just data. Not an error, not a Result.
 behavior preApprove : (
-    request:    AwaitingPreApproval,
+    request: AwaitingPreApproval,
     approverId: EmployeeId
 ) -> PreApproved | NotAuthorized
     constructs PreApproved, NotAuthorized
@@ -1678,17 +1717,17 @@ behavior preApprove : (
 
 The commonest shape a model asks for is "the amount, or the reason there is none", and the value it answers with is usually a primitive or a type another module owns. Both are members (<<union-member>>), so the behavior answers with the value itself and no type is declared to hold it.
 
-[,text]
+[,souther]
 ----
 // spec DSL: behavior computeTaxableAmount = Remuneration AND UpliftPay AND SocialInsurance -> Yen OR DeductionsExceedGross
 behavior computeTaxableAmount : (
-    remuneration:    Remuneration,
-    upliftPay:       Yen,
+    remuneration: Remuneration,
+    upliftPay: Yen,
     socialInsurance: Yen
-) -> Yen | DeductionsExceedGross          // Yen is imported; it is the answer, not a wrapper around it
+) -> Yen | DeductionsExceedGross // Yen is imported; it is the answer, not a wrapper around it
     constructs Yen, DeductionsExceedGross
 
-behavior half : (n: Int) -> Int | NoAnswer   // a primitive is a member the same way
+behavior half : (n: Int) -> Int | NoAnswer // a primitive is a member the same way
     constructs NoAnswer
 ----
 
@@ -1698,15 +1737,15 @@ Which case "departs as a failure" is not decided by this behavior alone. When co
 
 An input may be a sum (spec DSL `+(Submitted OR PreApproved) AND ...+`). A behavior's parameter takes a declared name rather than an anonymous one (<<a-parameter-names-one-type>>), so declare the sum as a named data and write that name. The implementation opens the cases with `+match+`.
 
-[,text]
+[,souther]
 ----
 // name (Submitted OR PreApproved)
 data CompletableRequest = Submitted | PreApproved
 
 // spec DSL: behavior completeTravel : (Submitted OR PreApproved) AND ActualCost AND TravelReport -> TravelCompleted OR InvalidActualCost OR NoTravelReport
 behavior completeTravel : (
-    request:      CompletableRequest,
-    actualCost:   Amount,
+    request: CompletableRequest,
+    actualCost: Amount,
     travelReport: String
 ) -> TravelCompleted | InvalidActualCost | NoTravelReport
     constructs TravelCompleted, InvalidActualCost, NoTravelReport
@@ -1724,7 +1763,7 @@ Exact agreement is two obligations, and a declaration can fail either one on its
 * [[constructs-authority-complete]]every data the implementation constructs MUST appear in the clause (<<e1002>>);
 * [[constructs-no-overdeclaration]]every data the clause names MUST actually be constructed (<<e1006>>).
 
-[,text]
+[,souther]
 ----
 behavior applyChange : (input: ChangeEmailRequest) -> Member
     constructs Member
@@ -1744,13 +1783,16 @@ The built-in `+Some+` / `+None+` (<<algebraic-types>>) do not count as data cons
 
 `+constructs+` is not for guarding invariants — that is handled by `+__construct+` and the Decoder, both of which always check on construction (<<invariant-mvp>>). What `+constructs+` handles is *reading the model*: from the declaration, whether a behavior *creates* a new value or merely *passes through* an existing one. This is not visible from the output type.
 
-[,text]
+[,souther]
 ----
-behavior preApprove : (request: AwaitingPreApproval, approverId: EmployeeId) -> PreApproved | NotAuthorized
-    constructs PreApproved, NotAuthorized   // creates new states
+behavior preApprove : (
+    request: AwaitingPreApproval,
+    approverId: EmployeeId
+) -> PreApproved | NotAuthorized
+    constructs PreApproved, NotAuthorized // creates new states
 
 behavior checkCeiling : (a: Amount) -> Amount | OverCeiling
-    constructs OverCeiling                  // Amount returns the input as is; not created
+    constructs OverCeiling // Amount returns the input as is; not created
 ----
 
 Both have `+Amount+` / `+PreApproved+` in the output, but one creates and the other passes through. This distinction does not appear in the output type. Writing it leaves it in the declaration and makes a check against reading and mis-taking. Omit it and it is inferred — write it (opt-in) if you want the reading and the check.
@@ -1809,7 +1851,7 @@ A record literal and a spread both require construction authority (`+constructs+
 
 To apply processing to each element of a list, pass a block as an argument. A block is written `+<args> -> <expr>+`.
 
-[,text]
+[,souther]
 ----
 // spec DSL: data UnvalidatedOrder  = ... AND List<UnvalidatedOrderLine>
 //           data ValidatedOrder = ... AND List<ValidatedOrderLine>
@@ -1831,7 +1873,7 @@ List.all(isValid, reasons)           // pass by name directly. Same thing
 
 A name that names a function *is* that function where a value goes, whoever declared it: a `+let+` of this module, a `+let+` another module published, and a standard-library function alike. `+String.trim+` written where a value goes is a `+(String) -> String+`, and `+String.trim(s)+` is that function applied to `+s+`. So the two lines above are one rule rather than two, and a function reaches every position a block reaches — an argument, a binding, a branch of an `+if+`, an element of a list a `+fold+` walks.
 
-[,text]
+[,souther]
 ----
 let step: (String) -> String = if flag then String.trim else String.uppercase
 let steps: List<(String) -> String> = [String.trim, String.uppercase]
@@ -1884,9 +1926,12 @@ A lambda's `+(a, b) -> ...+` is its parameter list, not a tuple pattern; a singl
 
 A behavior that touches the outside world writes what it depends on in `+depends on+`.
 
-[,text]
+[,souther]
 ----
-behavior preApprove : (request: AwaitingPreApproval, approverId: EmployeeId) -> PreApproved | NotAuthorized
+behavior preApprove : (
+    request: AwaitingPreApproval,
+    approverId: EmployeeId
+) -> PreApproved | NotAuthorized
     depends on now
     constructs PreApproved, NotAuthorized
 ----
@@ -1970,16 +2015,17 @@ A behavior's `+let+` may call a behavior. Which ones it may call is decided by o
 * An *empty* requirement set: call it by name. Nothing is injected and nothing is written in `+depends on+`.
 * A *non-empty* requirement set: write it in `+depends on+` and call it through that name (<<depends-on>>). It arrives already bound, as any requirement does.
 
-[,text]
+[,souther]
 ----
 behavior preApprove : (request: AwaitingPreApproval) -> PreApproved | NotAuthorized
     depends on now
 
 behavior rejectAndNotify : (request: AwaitingPreApproval) -> Notified | NotAuthorized
     depends on preApprove
-let rejectAndNotify (request, preApprove) = match preApprove(request) with
-    | PreApproved as p -> Notified { to = p.applicant }
-    | NotAuthorized as r -> r
+let rejectAndNotify (request, preApprove) =
+    match preApprove(request) with
+        | PreApproved as p -> Notified { to = p.applicant }
+        | NotAuthorized as r -> r
 ----
 
 A call yields the behavior's declared output. Where that output is a sum, the caller opens it with `+match+`, and a case it does not handle is its own to declare in its output. Nothing departs on its own: departure is what `+>->+` does (<<type-routing>>), and a call is not a stage.
@@ -2043,10 +2089,10 @@ A `+let+` is written `+let <name> (<args>) = <body>+`. If a behavior of the same
 
 Parameters go on the left of `+=+`, and a `+let+` written without them defines a *value*. The parameter list, not the shape of the body, is what tells a function from a value. An empty `+()+` is refused, since it would be a second spelling of the value form.
 
-[,text]
+[,souther]
 ----
-let ceiling = Amount(100000)                    // a value
-let isOver (amount: Amount) = amount > ceiling  // a function
+let ceiling = Amount(100000) // a value
+let isOver (amount: Amount) = amount > ceiling // a function
 ----
 
 A value is named where the value it stands for would be written, and it may be spread (`+Drafting { ...standardRequest, estimatedCost = Amount(50000) }+`). A behavior taking nothing is implemented by a value, since the parameter counts agree.
@@ -2071,7 +2117,7 @@ Arguments are the behavior's argument list followed by `+depends on+` in declara
 
 A `+let+` with no corresponding behavior is a *helper*. Not being a domain behavior, it does not pollute the behavior list, cannot be placed in a `+>->+` stage, and does not appear in `+exposing+`. It states its own type, though a parameter whose type its body determines may leave it unwritten (below).
 
-[,text]
+[,souther]
 ----
 let isNonNegative (v: Int) = v >= 0
 let applyAll (xs: List<Int>, p: (Int) -> Bool) = List.all(p, xs)
@@ -2143,7 +2189,7 @@ A `+let+` may implement a behavior only when both are in the *same module*. A be
 
 An implementation is either a same-named `+let+` (<<fn-declaration>>) or a right-hand `+>->+` composition (<<composition>>). A `+>->+` composition behavior has no `+let+` but does have an implementation, so it is not subject to injection. What is injected is only one that wrote a type and no `+let+`.
 
-[,text]
+[,souther]
 ----
 // spec DSL: // depends: clock
 behavior now : () -> DateTime
@@ -2170,7 +2216,7 @@ Which behaviors get a `+let+` and which are injected is not decided mechanically
 
 A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and for each unit data listed in `+constructs+` has a `+protected+` factory that constructs it. Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *any other count* makes it a standalone abstract class with a typed `+apply(A, B, …)+` and no `+Behavior+` supertype. Two or more inputs are more than `+>->+` passes along, and a behavior taking none has nothing to receive, so neither can follow an arrow; both can still be a pipeline's first stage, which receives the pipeline's own arguments (<<sequential-composition>>). A zero-input behavior therefore declares `+apply()+` and is handed nothing — it produces rather than transforms. A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
 
-[,text]
+[,souther]
 ----
 behavior findMember : (id: MemberId) -> Member | NoSuchMember | CorruptStoredData
     constructs NoSuchMember, CorruptStoredData
@@ -2220,16 +2266,16 @@ The exception *type* is agreed between the boundary and the implementation. With
 
 An invariant that a single object cannot decide (schedule overlap, uniqueness) MUST be stated by passing the set needed for the decision as input data, not as a hidden dependency. The side effect of reading existing applications is placed at the workflow boundary (a behavior with no implementation).
 
-[,text]
+[,souther]
 ----
 // spec DSL: behavior checkScheduleOverlap = SameApplicantRequests AND Drafting -> Drafting OR ScheduleOverlap
 data ScheduleOverlap
 
 behavior checkScheduleOverlap : (
     sameApplicantRequests: List<TravelRequest>,
-    request:               Drafting
+    request: Drafting
 ) -> Drafting | ScheduleOverlap
-    constructs ScheduleOverlap        // Drafting returns the input as is; not created
+    constructs ScheduleOverlap // Drafting returns the input as is; not created
 
 // a behavior with no implementation (reads the outside)
 behavior readRequestsOfApplicant : (applicant: EmployeeId) -> List<TravelRequest>
@@ -2247,9 +2293,9 @@ At the destination, whether to write or infer diverges (<<depends-on>>).
 * a simple behavior with a `+let+`: *write* in `+depends on+`; receive it as a `+let+` argument
 * a `+>->+` composition: *infer*; decided by the union of the stages' requirement sets
 
-[,text]
+[,souther]
 ----
-behavior loadAndConvert = findMember >-> toView      // depends on not written
+behavior loadAndConvert = findMember >-> toView // depends on not written
 ----
 
 This requires the implementation of `+findMember+`. Composing several gives a union. A composition is not made to write it, because it is readable from the stage declarations; the spec DSL also attaches no `+// depends:+` to a composition.
@@ -2260,7 +2306,7 @@ The call graph is static at every stage, so the requirement set is decided as a 
 
 This is unchanged by making a `+let+` higher-order.
 
-[,text]
+[,souther]
 ----
 let applyAll (xs: List<MemberId>, p: (MemberId) -> MemberLabel) = List.map(p, xs)
 ----
@@ -2279,7 +2325,7 @@ The requirement set of `+applyAll+` is empty. Whatever `+p+` requires is irrelev
 
 `+>->+` connects behaviors. Of the previous stage's output cases, those the next stage's input type can receive flow to the next stage; the cases it does not receive are carried to the output (departing the mainline).
 
-[,text]
+[,souther]
 ----
 behavior handle = findMember >-> toResponse
 ----
@@ -2288,7 +2334,7 @@ The stage following `+>->+` is single-input (a 1-argument behavior). `+>->+` pas
 
 *The first stage is not restricted.* The first receives the pipeline's own arguments, so any number is fine; the pipeline receives them as is. A behavior subject to injection is a first stage on the same terms as an implemented one (<<java-base-class>>): the pipeline inherits it as a requirement and calls it with those arguments.
 
-[,text]
+[,souther]
 ----
 // spec DSL: behavior reject = AwaitingPreApproval AND RejecterId -> PreApprovalRejected OR NotAuthorized
 //           behavior returnToDraft = PreApprovalRejected -> Drafting
@@ -2336,10 +2382,10 @@ The output sum is treated as an open error row: `+(C | R) | S+` is flattened and
 
 That a case departed the mainline is remembered by the composition, and not forgotten by naming a midpoint.
 
-[,text]
+[,souther]
 ----
-behavior fg = f >-> g          // mainline D, departed C
-behavior x  = fg >-> h         // only mainline D passes to h; C stays departed. x : A -> E | C
+behavior fg = f >-> g // mainline D, departed C
+behavior x = fg >-> h // only mainline D passes to h; C stays departed. x : A -> E | C
 ----
 
 `+fg+` remembers mainline `+D+` and departed `+C+`. In `+fg >-> h+`, only mainline `+D+` passes to `+h+`, and `+C+` stays departed and is carried to the output. So a named-midpoint `+fg >-> h+` is the same `+A -> E | C+` as the one-line `+f >-> g >-> h+`.
@@ -2395,10 +2441,9 @@ An inferred output *changes silently on a distant change* when a stage is a beha
 [#composition-output-agrees-with-inference]
 So a composition *MAY optionally declare its output*. If written, it MUST *exactly match* the inferred output or it is a compile error (E1604). Neither too few (a case appears that is not declared) nor too many (a declared case does not appear) is admitted.
 
-[,text]
+[,souther]
 ----
-behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock
-    -> PlacedOrder | OutOfStock
+behavior placeOrder = validateOrder >-> priceOrder >-> allocateStock -> PlacedOrder | OutOfStock
 ----
 
 `+-> PlacedOrder | OutOfStock+` is the composition's declaration, not the output of the last stage `+allocateStock+`. Because a stage is a behavior reference (name only), the trailing `+->+` reads unambiguously as the composition's. Writing this line makes an error appear here when an upstream stage adds a case, so it does not grow silently downstream.
@@ -2506,7 +2551,7 @@ What a row may name is a property of the value graph, not of one definition's te
 
 A row may also *apply a helper* — the rule the row is about — wherever a fixture value is written: an input, an expected result, a `+with+` value, a `+fake+` table's inputs and outputs, a record field, a list element, a map key or value, and an argument of another helper application. The helper is *run*, as the module that compiled it runs it, and the value it returns is read back into the form a fixture is written in, so what encloses the application is built the one way. Where nothing encloses it — the application is the whole of an expected result, or the whole of a value the row names — the row asserts the value the helper answered with, and which case that is comes from the value rather than from the text. Its arguments are fixtures like any others, so a fixture that breaks the argument type's invariant is <<e1903>>.
 
-[,text]
+[,souther]
 ----
 let taxIncluded (amount: Amount) = Amount(amount.value * 110 / 100)
 
@@ -2549,11 +2594,11 @@ example preApprove
 
 A *function dependency* — one whose result varies with its input — is given by a `+fake+` declaration: an input→output table matched by value equality, defaulting to a `+_+` row or, absent one, a miss error (<<e1909>>). A multi-input injected dependency (<<java-base-class>>) is faked the same way, with the row's inputs matched as a tuple.
 
-[,text]
+[,souther]
 ----
 fake findManager
     | (EmployeeId("e-1")) -> EmployeeId("boss-1")
-    | _               -> EmployeeId("unknown")
+    | _ -> EmployeeId("unknown")
 ----
 
 Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
@@ -2587,13 +2632,13 @@ A `+with dep = value+` is read this way only where `+dep+` takes no input. A fak
 
 Neither side is ranked. A model being migrated onto may run against a stand-in while the real answer is still being harvested, which is written the way a mistake is; what is known is that the two disagree, and where each is written. So it is a warning, and it is said at both statements rather than at one of them.
 
-[,text]
+[,souther]
 ----
 behavior findMember : (id: MemberId) -> Found | Missing
 
 example findMember
     | "a member that is registered" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
-    | "a member that is not"        : (MemberId("m-9")) -> Missing { reason = "no such member" }
+    | "a member that is not" : (MemberId("m-9")) -> Missing { reason = "no such member" }
 ----
 
 How many rows are waiting is what `+souther examples+` reports; it is not a compile warning, because waiting is the normal state of a model being written and a warning on every one of them says nothing.
@@ -2760,10 +2805,11 @@ A reader that took an empty stdout for a refused command reads the exit status i
 [#let]
 === let
 
-[,text]
+[,souther]
 ----
 let normalized = String.trim(input)
-let counted: Map<String, Int> = List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty, keys)
+let counted: Map<String, Int> =
+    List.fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty, keys)
 ----
 
 Reassignment is forbidden. A `+let+` is placed inside a block expression (<<block-expression>>). What follows `+let x = v+` is the scope of that binding, nested at desugaring time.
@@ -2869,14 +2915,16 @@ The `+Some+` of `+Option+` (<<algebraic-types>>) extracts the wrapped value by *
 
 When the contents are a newtype, the constructor-destructuring form nests inside the positional binding: `+| Some(EmployeeId(v)) -> v+` opens the wrapped `+EmployeeId+` and binds `+v+` to its base value, so the `+.value+` on the positional binding is not written. The first written name MUST be the element type — `+Some+` wraps `+EmployeeId+`, so `+Some(EmailAddress(v))+` is a compile error — and each further name opens one more layer, the same rule as `+X(Y(s))+` on a user case. This nesting is allowed only in a pattern; `+Some(...)+` is still not a construction form (<<algebraic-types>>). The short `+| Some v+` (bind the whole contents) stays.
 
-[,text]
+[,souther]
 ----
-data TravelCompleted = { preApprover: EmployeeId? }
+data TravelCompleted =
+    { preApprover: EmployeeId?
+    }
 
 let approverLabel (c: TravelCompleted) =
     match c.preApprover with
-        | Some(EmployeeId(v)) -> v         // v is the base value, no .value
-        | None              -> "None"
+        | Some(EmployeeId(v)) -> v // v is the base value, no .value
+        | None -> "None"
 ----
 
 [#match-covers-every-case]
@@ -3123,9 +3171,9 @@ A single application of a function instantiates each variable its declared signa
 
 A primitive is declared as a core function with a body of `+= intrinsic "key"+`. `+key+` names the JVM operation the backend emits and is *prefixed per type* to make it unique (`+"string.trim"+`, separating `+list.length+` and `+string.length+`).
 
-[,text]
+[,souther]
 ----
-let trim (s: String) : String = intrinsic "string.trim"
+let trim (s: String): String = intrinsic "string.trim"
 ----
 
 An intrinsic MUST declare its return type (it cannot be inferred from `+intrinsic+`). A call is type-checked against the declared signature — that is, `+trim+` is "a built-in function whose signature is placed in core", and this declaration, not a hardcoded compiler table, decides its arguments and return value — and the backend emits the bytecode for `+key+`. It is neither inlined nor lowered. Only the reserved namespace may write it. A user cannot call the JVM directly and only calls blessed functions (<<asymmetric-interop>>).
@@ -3194,7 +3242,7 @@ What is canonical is the *value*; nothing about comparison changes. NFC and not 
 
 `+matches(pattern, s)+` is a whole-string regular-expression match (Java `+Pattern+` flavour, anchored: the *entire* string must match), returning a plain `+Bool+`. It is what states a format-constrained value as an invariant — `+data PostalCode = String invariant String.matches("[0-9]{3}-[0-9]{4}", value)+`. The `+pattern+` MUST evaluate to a string at compile time: it is validated there (compiled once to confirm it is well-formed), so a malformed regex is a compile error rather than a runtime exception. A string literal evaluates to one, and so does a `{plus}{plus}` of literals and of values — a `+let+` with no parameter list (<<fn-declaration>>) — which is how types whose formats share a part hold that part once instead of spelling it out in each of them:
 
-[,text]
+[,souther]
 ----
 let sitePrefix = "001"
 
@@ -3250,7 +3298,7 @@ abs  min  max  clamp
 
 Division makes the rounding scale and mode explicit as arguments. `+Decimal.divide(dividend, divisor, 2, HALF_UP)+` rounds HALF_UP at 2 decimal places. The mode is an ordinary value of the data core declares:
 
-[,text]
+[,souther]
 ----
 data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOOR
 ----
@@ -3437,7 +3485,7 @@ A date is written `+Date("2026-07-25")+` and a date-time `+DateTime("2026-07-25T
 
 A month boundary follows from `+day+` and belongs in the domain:
 
-[,text]
+[,souther]
 ----
 let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
 let endOfMonth (d: Date): Date = Date.addDays(0 - 1, Date.addMonths(1, monthStart(d)))
@@ -4642,7 +4690,7 @@ An anonymous output union takes an imported member (<<union-member>>), and the d
 
 The move for a sum is to translate: match the imported result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's.
 
-[,text]
+[,souther]
 ----
 // allocate is imported and OutOfStock is its departure; CannotAllocate is this module's answer to it
 behavior allocateAndShip : (number: PartNumber) -> ShipmentOrder | CannotShip | CannotAllocate
