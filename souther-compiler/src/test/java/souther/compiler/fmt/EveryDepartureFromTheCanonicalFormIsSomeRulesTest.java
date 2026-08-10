@@ -54,7 +54,21 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
         }
     }
 
+    /**
+     * What the sweep answered, so that the rows and the check that they are all of them are one
+     * sweep. The corpus does not change while the class runs, and a second sweep of it would be the
+     * same few hundred candidates built from the same few thousand lines.
+     */
+    private static List<Departure> swept;
+
     static Stream<Departure> departures() {
+        if (swept == null) {
+            swept = sweep();
+        }
+        return swept.stream();
+    }
+
+    private static List<Departure> sweep() {
         List<Departure> out = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         // Shortest first, and one candidate per shape across the whole corpus. A shape is a shape
@@ -87,7 +101,7 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
                 }
             }
         }
-        return out.stream();
+        return out;
     }
 
     /**
