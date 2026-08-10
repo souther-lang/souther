@@ -1048,8 +1048,16 @@ public final class Backend {
      * jar built before this carries a {@code $Enc} that writes {@code {"value": …}} and a
      * {@code $Dec} that demands it, which this compiler's sum encoder would wrap a second time and
      * its sum decoder would hand the inner value to.
+     *
+     * <p>Version 11 narrows what a string literal may be: it ends on the line it began on, and a
+     * backslash is read only before {@code n}, {@code t}, {@code r}, a quote and another backslash
+     * (spec §string-literal). A published helper's body travels in the jar as source and is read
+     * back by the importing compiler (spec §exposed-values), so what a literal may be is part of
+     * what a compiled module promises. A jar built before this may carry a body this compiler
+     * cannot read — a literal that ran past its line — or one whose backslash the older compiler
+     * dropped in silence and this one refuses.
      */
-    public static final int BOUNDARY_VERSION = 10;
+    public static final int BOUNDARY_VERSION = 11;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Generates a TextMate grammar ({@code souther.tmLanguage.json}) from the language's lexical
@@ -130,16 +131,34 @@ public final class TmLanguageGenerator {
         return m;
     }
 
+    /**
+     * A string literal, ended by its quote or by the line, whichever comes first — the literal does
+     * not span lines, so a missing quote colours one line rather than the rest of the file.
+     *
+     * <p>The escapes come from {@link CstLexer#escapes()}, and a backslash before anything else is
+     * marked as what it is: the compiler refuses it, and an editor that coloured it as an escape
+     * would be promising a compile that does not happen.
+     */
     private static Map<String, Object> strings() {
         Map<String, Object> escape = new LinkedHashMap<>();
         escape.put("name", "constant.character.escape.souther");
-        escape.put("match", "\\\\.");
+        escape.put("match", "\\\\[" + escapeClass() + "]");
+        Map<String, Object> refused = new LinkedHashMap<>();
+        refused.put("name", "invalid.illegal.escape.souther");
+        refused.put("match", "\\\\.");
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("name", "string.quoted.double.souther");
         m.put("begin", "\"");
-        m.put("end", "\"");
-        m.put("patterns", List.of(escape));
+        m.put("end", "\"|$");
+        m.put("patterns", List.of(escape, refused));
         return m;
+    }
+
+    /** The escapes as a character class, sorted for a stable, reproducible file. */
+    private static String escapeClass() {
+        return new TreeSet<>(CstLexer.escapes()).stream()
+                .map(TmLanguageGenerator::regexEscape)
+                .collect(Collectors.joining());
     }
 
     /** A word-boundary alternation over a sorted keyword set (sorted for a stable, reproducible file). */

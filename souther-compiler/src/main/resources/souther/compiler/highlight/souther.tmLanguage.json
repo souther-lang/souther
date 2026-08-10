@@ -34,9 +34,12 @@
     "strings" : {
       "name" : "string.quoted.double.souther",
       "begin" : "\"",
-      "end" : "\"",
+      "end" : "\"|$",
       "patterns" : [ {
         "name" : "constant.character.escape.souther",
+        "match" : "\\\\[\"\\\\nrt]"
+      }, {
+        "name" : "invalid.illegal.escape.souther",
         "match" : "\\\\."
       } ]
     },

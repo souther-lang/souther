@@ -531,6 +531,26 @@ DateTime     // date-time. ISO 8601. java.time.LocalDateTime
 
 An integer literal is written as `+500+` and is `+Int+`. A `+Decimal+` literal takes an `+m+` suffix — `+500m+`, `+1.5m+`, `+0.5m+`. A fractional literal without `+m+`, such as `+1.5+`, is an error. Souther has no binary floating-point type and defaults fractions to `+Decimal+` (exact decimal), so `+Int+` and `+Decimal+` MUST be made explicit at the literal.
 
+[#string-literal]
+==== String literals
+
+A `+String+` literal is written between `+"+` and `+"+`, and it ends on the line it began on. A literal not closed before the end of the line is refused there (<<e2305>>). A newline in a value is written `+\n+`; the language has no multi-line literal form.
+
+A backslash is read before these characters, and before nothing else:
+
+[,text]
+----
+\n   a newline
+\t   a tab
+\r   a carriage return
+\"   a quote, which does not close the literal
+\\   a backslash
+----
+
+A backslash written before anything else is refused (<<e2305>>). It is not read as the character alone: doing that would take a character the author wrote out of the value and say nothing about it, so `+"\d"+` would be the text `+d+`. A regular expression's class is therefore written with the backslash doubled — `+"\\d{3}"+` is the four characters `+\d{3}+` (<<stdlib-string>>).
+
+A literal's value is normalized to Unicode NFC. A source file is text from an editor, which is the other place text arrives from outside — the first being a decoder, which canonicalizes for the same reason (<<decoder>>). Two canonically equivalent forms are the same text by Unicode's definition and different values to a comparison by code units, so a literal left as written would compare unequal to the same text that came in through a boundary. Which form an editor writes is not something the author chose. The folding is NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a full-width one, which is a different claim about the text than "these are the same characters".
+
 [#equality]
 ==== Equality
 
@@ -3182,7 +3202,7 @@ data SiteId = String
     invariant String.matches(sitePrefix ++ "[0-9A-Za-z]{12}", value)
 ----
 
-What is validated is the string the whole expression evaluates to, not the pieces it is written in. At run time the pattern is compiled on first use and cached, not recompiled on each call. A regex backslash class is written with a doubled backslash (`+"\\d{3}"+`), since a string literal drops the backslash of an unknown escape (<<primitives>>). A pattern a run-time value takes part in is therefore not accepted (a future `+Regex+`/`+fromString+` would carry that, returning a case for an invalid pattern); a pattern the compiler can read is what the invariant needs. Regex lives in core rather than a package, since Souther has no package layer. A pathological pattern can backtrack; keep invariant patterns simple.
+What is validated is the string the whole expression evaluates to, not the pieces it is written in. At run time the pattern is compiled on first use and cached, not recompiled on each call. A regex backslash class is written with a doubled backslash (`+"\\d{3}"+`), since `+\d+` is not an escape a string literal reads and a lone backslash before `+d+` is refused (<<string-literal>>). A pattern a run-time value takes part in is therefore not accepted (a future `+Regex+`/`+fromString+` would carry that, returning a case for an invalid pattern); a pattern the compiler can read is what the invariant needs. Regex lives in core rather than a package, since Souther has no package layer. A pathological pattern can backtrack; keep invariant patterns simple.
 
 The middle row is the rest of what Souther's types allow, which have no `+Char+`, `+Maybe+` or `+Float+`. `+split(sep, s)+` splits by a separator into `+List<String>+`, keeping empty pieces (`+split(",", "a,,b")+` is `+["a", "", "b"]+`). `+words(s)+` splits by runs of whitespace, dropping empty pieces. `+join(sep, xs)+` joins with a separator. `+replace(target, replacement, s)+` replaces every occurrence of `+target+`. `+fromInt(n)+` makes an `+Int+` a decimal string. `+concat(xs)+` joins a `+List<String>+` with no separator (equal to `+join("", xs)+`). The primary subject string is last (<<pipe>>). There is no `+Char+` type and no character-mapping operation.
 
@@ -5468,7 +5488,7 @@ A fractional literal is a Decimal and needs the `m` suffix (write `1.5m`); South
 floating-point type.
 ----
 
-Reported while reading the text into tokens, before anything is parsed (<<literal-syntax>>): a string not closed before the end of the line, a fractional literal with no `+m+`, a type variable with no name after `+'+`, a character that begins nothing.
+Reported where a literal is not written in the form its type takes (<<literal-syntax>>). Most of it is answered while the text is read into tokens, before anything is parsed: a string not closed before the end of the line, a backslash written before something that is not an escape (<<string-literal>>), a fractional literal with no `+m+`. One is answered after, where a literal was expected and what stands there cannot be one.
 
 [#e2306]
 === The text is not made of tokens

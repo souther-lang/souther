@@ -1503,7 +1503,12 @@ public final class AstBuilder {
                     case 'r' -> '\r';
                     case '"' -> '"';
                     case '\\' -> '\\';
-                    default -> e;
+                    // The lexer refuses a backslash written before anything else, and a source
+                    // that did not read never reaches here (CstFrontend raises on the first
+                    // error). Reading it as the character alone would take a character the author
+                    // wrote out of the value and say nothing about it.
+                    default -> throw new IllegalStateException(
+                            "an escape the lexer refuses reached the builder: \\" + e);
                 });
             } else {
                 sb.append(c);
