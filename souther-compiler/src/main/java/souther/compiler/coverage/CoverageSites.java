@@ -59,8 +59,9 @@ public final class CoverageSites {
      * <p>Per behavior, because the measurement is per behavior. Two behaviors calling one helper each
      * owe its arms, and a row written for one of them is not a row written for the other.
      *
-     * @param part which arm of the fork — its place among the fork's arms, or a comparison's place in
-     *             the condition it is one of. The origin names the fork, and a fork holds several
+     * @param part which arm of the fork — its place among the fork's arms. Always zero for a
+     *             comparison, whose origin is its own rather than the fork's: a comparison is one
+     *             construct, and what a fork holds several of is arms
      */
     public record Obligation(String behavior, CoverageOrigin origin, int part) {}
 
@@ -349,7 +350,7 @@ public final class CoverageSites {
                     if (then != NO_SITE || els != NO_SITE) {
                         guards.add(new GuardRef(behavior, iff.origin(), then, els,
                                 new SourceRef(sourceId, iff.pos())));
-                        comparisons(iff.cond(), iff.origin(), new int[] {0});
+                        comparisons(iff.cond());
                     }
                 }
                 case Core.Match m -> {
@@ -395,11 +396,11 @@ public final class CoverageSites {
          * built out of and what the reader of lines walks. Anything else is where the condition's
          * operands stop.
          */
-        private void comparisons(Core condition, CoverageOrigin origin, int[] part) {
+        private void comparisons(Core condition) {
             if (condition instanceof Core.Binary binary
                     && (binary.op() == Ast.BinOp.AND || binary.op() == Ast.BinOp.OR)) {
-                comparisons(binary.left(), origin, part);
-                comparisons(binary.right(), origin, part);
+                comparisons(binary.left());
+                comparisons(binary.right());
                 return;
             }
             // Numbered once. A node reached twice is one comparison written once, and a second number
@@ -407,12 +408,18 @@ public final class CoverageSites {
             // and would be reported as one.
             if (condition instanceof Core.Binary comparison
                     && !byComparison.containsKey(comparison)) {
-                // Its place in the condition, counted as the walk meets it. Two copies of one
-                // condition are walked the same way, so the same comparison of each gets the same
-                // number and the line read off it is one line.
+                // Keyed on where the comparison was written and not on the fork testing it. A
+                // condition can be an application of a function parameter, and then the comparison is
+                // the caller's: two predicates written separately are two lines, and one predicate
+                // handed to two calls is one, neither of which the fork can say.
+                if (!comparison.origin().isWritten()) {
+                    throw new IllegalStateException("a comparison with no source wrote it is being "
+                            + "numbered at " + comparison.pos()
+                            + "; a tree rebuilt for an analysis is not the tree that runs");
+                }
                 byComparison.put(comparison,
-                        site(Site.Kind.COMPARISON, comparison.op().toString(), comparison, origin,
-                                part[0]++));
+                        site(Site.Kind.COMPARISON, comparison.op().toString(), comparison,
+                                comparison.origin(), 0));
             }
         }
 

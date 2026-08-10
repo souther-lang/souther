@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
@@ -72,8 +73,10 @@ final class Terms {
         if (e instanceof Core.PreservedCall call && call.args().size() == 2) {
             Ast.BinOp op = DischargeRules.operator(call.operation());
             if (op != null) {
-                return new Core.Binary(op, call.args().get(0), call.args().get(1), call.type(),
-                        call.pos());
+                // Not a comparison any source wrote: a preserved call read as the operator it
+                // stands for. This tree is the discharge reader's, never the tree that runs.
+                return new Core.Binary(op, call.args().get(0), call.args().get(1),
+                        CoverageOrigin.unwritten(), call.type(), call.pos());
             }
         }
         return e;
@@ -723,7 +726,7 @@ final class Terms {
                 Ast.Expr left = asWrittenValue(b.left());
                 Ast.Expr right = asWrittenValue(b.right());
                 yield left == null || right == null ? null
-                        : new Ast.Binary(b.op(), left, right, b.pos(), null);
+                        : new Ast.Binary(b.op(), left, right, b.origin(), b.pos(), null);
             }
             case Core.PreservedCall call -> {
                 List<Ast.Expr> args = new ArrayList<>();

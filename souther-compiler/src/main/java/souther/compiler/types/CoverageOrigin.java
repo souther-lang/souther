@@ -33,6 +33,25 @@ public record CoverageOrigin(String module, int ordinal, int lowered) {
     }
 
     /**
+     * What a comparison rebuilt for an analysis carries, no source having written it.
+     *
+     * <p>The invariant-discharge reader turns a preserved call back into a comparison so it can be
+     * read as one. That tree is not the tree that runs — coverage numbering refuses a preserved call
+     * outright — so nothing here is ever a coverage obligation, and a value that could pass for one
+     * would be worse than a value that cannot.
+     */
+    public static CoverageOrigin unwritten() {
+        return UNWRITTEN;
+    }
+
+    private static final CoverageOrigin UNWRITTEN = new CoverageOrigin("", -1, 0);
+
+    /** Whether a source wrote the construct this names. False only for {@link #unwritten}. */
+    public boolean isWritten() {
+        return ordinal >= 0;
+    }
+
+    /**
      * One of the forks a lowering makes out of this construct, numbered by the part of the construct
      * it came from — a list comprehension's guards by their place in the list.
      *

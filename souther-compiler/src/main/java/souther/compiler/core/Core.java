@@ -62,7 +62,9 @@ public sealed interface Core {
 
     record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
-    record Binary(Ast.BinOp op, Core left, Core right, Type type, SourcePos pos) implements Core {}
+    /** {@code origin} is where the comparison was written; see {@link Ast.Binary}. */
+    record Binary(Ast.BinOp op, Core left, Core right, CoverageOrigin origin, Type type,
+                  SourcePos pos) implements Core {}
 
     /**
      * What a call applies.
@@ -342,7 +344,7 @@ public sealed interface Core {
                 Core left = atExpr.apply(b.left());
                 Core right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.type(), b.pos());
+                        : new Binary(b.op(), left, right, b.origin(), b.type(), b.pos());
             }
             case Call c -> {
                 List<Core> args = each(c.args(), atExpr);

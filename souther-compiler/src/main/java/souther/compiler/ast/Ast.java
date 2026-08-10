@@ -1742,7 +1742,12 @@ public interface Ast {
         }
     }
 
-    record Binary(BinOp op, Expr left, Expr right, SourcePos pos, Region region) implements Expr {}
+    /** {@code origin} is where the comparison was written, which is not always where the fork
+     * testing it was: a condition can be an application of a function parameter, and the predicate
+     * handed to it is the caller's. Carried so that two predicates written separately stay two lines
+     * and one predicate applied twice stays one ({@link CoverageOrigin}). */
+    record Binary(BinOp op, Expr left, Expr right, CoverageOrigin origin, SourcePos pos,
+                  Region region) implements Expr {}
 
 
     enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
@@ -1785,7 +1790,7 @@ public interface Ast {
             case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
-            case Binary x -> new Binary(x.op(), x.left(), x.right(), x.pos(), region);
+            case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
             case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.appliedAs(), x.pos(),
                     region);
             case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
@@ -1827,7 +1832,7 @@ public interface Ast {
                 Expr left = atExpr.apply(b.left());
                 Expr right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.pos(), b.region());
+                        : new Binary(b.op(), left, right, b.origin(), b.pos(), b.region());
             }
             case Apply a -> {
                 Expr function = atExpr.apply(a.function());

@@ -970,7 +970,7 @@ public final class HelperInliner {
             case Ast.Apply rawCall -> expandCall(rawCall);
             case Ast.FieldAccess fa -> fa.withTarget(inline(fa.target()));
             case Ast.Binary bin -> new Ast.Binary(bin.op(), inline(bin.left()), inline(bin.right()),
-                    bin.pos(), bin.region());
+                    bin.origin(), bin.pos(), bin.region());
             case Ast.Neg neg -> new Ast.Neg(inline(neg.operand()), neg.pos(), neg.region());
             case Ast.NewData nd -> newData(nd);
             case Ast.Match m -> {
@@ -1714,7 +1714,7 @@ public final class HelperInliner {
                     call.origin(), call.appliedAs(), renaming.at(call.pos()),
                     renaming.over(call.region()));
             case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), renaming),
-                    rename(bin.right(), renaming), renaming.at(bin.pos()),
+                    rename(bin.right(), renaming), bin.origin(), renaming.at(bin.pos()),
                     renaming.over(bin.region()));
             case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), renaming), renaming.at(neg.pos()),
                     renaming.over(neg.region()));

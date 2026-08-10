@@ -100,8 +100,8 @@ public final class NewtypeDesugar {
             }
             case Ast.Neg neg -> new Ast.Neg(go(neg.operand(), symbols), neg.pos(), neg.region());
             case Ast.Binary bin ->
-                    new Ast.Binary(bin.op(), go(bin.left(), symbols), go(bin.right(), symbols), bin.pos(),
-                            bin.region());
+                    new Ast.Binary(bin.op(), go(bin.left(), symbols), go(bin.right(), symbols),
+                            bin.origin(), bin.pos(), bin.region());
             case Ast.FieldAccess fa -> fa.withTarget(go(fa.target(), symbols));
             case Ast.ListLit lit -> new Ast.ListLit(mapExprs(lit.elements(), symbols), lit.pos(),
                     lit.region());
