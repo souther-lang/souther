@@ -22,6 +22,7 @@ import souther.compiler.observe.Stage;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.Exclusions;
+import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.Generator;
 import souther.compiler.partition.RowClasses;
 import souther.compiler.types.Type;
@@ -925,16 +926,26 @@ public final class Adequacy {
      * edge are different requests, asked with different flags, and a caller that merged them could not
      * take one without the other.
      */
-    public record Filling(Generator.GenerationResult pairs, Generator.GenerationResult boundaries) {
+    public record Filling(Generator.GenerationResult pairs, Generator.GenerationResult boundaries,
+                          List<GapDisposition> gaps) {
 
-        public static final Filling NONE =
-                new Filling(Generator.GenerationResult.NONE, Generator.GenerationResult.NONE);
+        public static final Filling NONE = new Filling(Generator.GenerationResult.NONE,
+                Generator.GenerationResult.NONE, List.of());
 
-        static Filling stopped(souther.compiler.partition.GenerationReason why) {
-            return new Filling(new Generator.GenerationResult(List.of(), List.of(), List.of(why)),
-                    Generator.GenerationResult.NONE);
+        public Filling {
+            gaps = List.copyOf(gaps);
         }
+
     }
+
+    /**
+     * One gap a build refuses, and what the generator can do about it.
+     *
+     * <p>Held as a pair rather than as rows with the gap forgotten, because what an author needs to
+     * read is which part of the shortfall was answered and which was not. A block that printed only
+     * what it managed reads as though it filled everything.
+     */
+    public record GapDisposition(Finding gap, GenerationOutcome outcome) {}
 
     public record Generated(String name) implements Key<Map<String, Filling>> {
 
@@ -965,6 +976,9 @@ public final class Adequacy {
             Map<String, List<BoundaryAssessment>> boundaries =
                     db.ask(new Boundaries(name)).value();
 
+            Map<String, List<Finding>> findings = db.ask(new Findings(name)).value();
+            Map<String, PartitionEvidence> partitions = db.ask(new Coverage(name)).value();
+
             Map<String, Filling> out = new LinkedHashMap<>();
             FixtureReader.Construction building = constructing(db, name, prepared.value(), symbols);
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -975,24 +989,33 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
-                Generator.GenerationResult atEdges = offered(spec.name(),
-                        boundaries == null ? List.of()
-                                : boundaries.getOrDefault(spec.name(), List.of()));
+                List<BoundaryAssessment> edges = boundaries == null ? List.of()
+                        : boundaries.getOrDefault(spec.name(), List.of());
+                Generator.GenerationResult pairs;
                 try {
-                    out.put(spec.name(), new Filling(pairsFor(spec, sig, symbols,
-                            bodies.get(spec.name()), plan,
+                    pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             excluded == null ? Exclusions.NONE
-                                    : excluded.getOrDefault(spec.name(), Exclusions.NONE)),
-                            atEdges));
+                                    : excluded.getOrDefault(spec.name(), Exclusions.NONE));
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
-                    out.put(spec.name(), Filling.stopped(
-                            new souther.compiler.partition.GenerationReason.NothingToBuildAgainst(
-                                    spec.name())));
+                    //
+                    // Caught around the search and not around the answer. A gap's answer is owed
+                    // whatever the search did, and a failure that skipped the walk over the findings
+                    // would take the gaps out of a list that is meant to hold every one of them —
+                    // which is the same defect the list was written against, arriving as control
+                    // flow rather than as a value.
+                    pairs = new Generator.GenerationResult(List.of(), List.of(),
+                            List.of(new souther.compiler.partition.GenerationReason
+                                    .LinkageFailed(spec.name())));
                 }
+                out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
+                        dispositions(findings == null ? List.of()
+                                        : findings.getOrDefault(spec.name(), List.of()),
+                                edges, partitions == null ? null : partitions.get(spec.name()),
+                                pairs, spec)));
             }
             // In the order the module declares them, because the block printed from this is read
             // against the one before it.
@@ -1000,13 +1023,167 @@ public final class Adequacy {
         }
 
         /**
-         * The rows at the edges, read off what the boundary assessment already tried.
+         * What the generator can do about each gap a build refuses, and about every one of them.
+         *
+         * <p>Walked over the findings rather than over the strategies, which is the whole of it. A
+         * walk over the strategies answers for the gaps somebody wrote a strategy for and leaves the
+         * rest unmentioned, and a block that says nothing about a gap it printed two lines above reads
+         * as though it had filled everything.
+         *
+         * <p>Which answer a gap gets is decided by whether a strategy takes gaps of that kind, and
+         * never by what a search came back with. The kinds are listed one at a time so that a kind
+         * added later does not compile until somebody has said which of the three it is.
+         */
+        private static List<GapDisposition> dispositions(List<Finding> findings,
+                                                      List<BoundaryAssessment> edges,
+                                                      PartitionEvidence partition,
+                                                      Generator.GenerationResult pairs,
+                                                      Ast.SpecBehavior spec) {
+            List<GapDisposition> out = new ArrayList<>();
+            for (Finding gap : findings) {
+                if (!gap.isAdequacyGap()) {
+                    continue;
+                }
+                out.add(new GapDisposition(gap, switch (gap.kind()) {
+                    case BOUNDARY_UNMET -> atEdge(gap, edges);
+                    case INPUT_CASE_UNSPECIFIED -> atCase(gap, partition, pairs, spec);
+                    case ARM_UNREACHED -> new GenerationOutcome.NotSupported(
+                            GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM);
+                    case OUTPUT_CASE_UNSPECIFIED -> new GenerationOutcome.NotSupported(
+                            GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE);
+                    // Not gaps a build refuses, and the loop above does not reach them. Listed so
+                    // that the switch stays exhaustive over the kinds rather than over the ones
+                    // thought of here.
+                    case OUTPUT_CASE_UNVERIFIED, AXIS_CLASS_UNCOVERED, PARTITION_NOT_DERIVABLE,
+                            PARTITION_OMITTED ->
+                            throw new IllegalStateException("not a gap a build refuses: " + gap);
+                }));
+            }
+            return out;
+        }
+
+        /**
+         * The edge's own attempt, read off what the assessment already made.
          *
          * <p>Nothing is built here, and nothing is worked out from the verdict either. The attempt
-         * says what happened; this prints it. Reading it back off {@link BoundaryAssessment#writability()}
+         * says what happened; this reads it. Reading it back off {@link BoundaryAssessment#writability()}
          * would lose the case that matters most to an author — an edge the projection proves is
          * writable and the search could not produce a row for — which came out as a verdict of
          * "provable" with nothing said about the row that never appeared.
+         */
+        private static GenerationOutcome atEdge(Finding gap, List<BoundaryAssessment> edges) {
+            String axis = String.valueOf(gap.args().get(0));
+            String value = String.valueOf(gap.args().get(1));
+            String subject = axis + " = " + value;
+            for (BoundaryAssessment each : edges) {
+                if (!each.axis().equals(axis) || !each.value().equals(value)) {
+                    continue;
+                }
+                return switch (each.attempt()) {
+                    case BoundaryAssessment.Attempt.Built built ->
+                            new GenerationOutcome.Generated(List.of(built.row()));
+                    case BoundaryAssessment.Attempt.Unresolved why ->
+                            new GenerationOutcome.CannotGenerate(why.why());
+                    // Carried apart, because the assessment kept them apart. Classes that were not
+                    // there and classes that would not link are two things this saw, and choosing
+                    // one of them to print is this compiler deciding what it observed.
+                    //
+                    // The other two reasons do not reach an unmet edge: a row is already at the
+                    // value, or the line was never measured against the rows, and neither is a gap.
+                    // Where one arrives, the assessment and the finding disagree about the same
+                    // measurement, which is not something about generating a row.
+                    case BoundaryAssessment.Attempt.NotAttempted absent -> switch (absent.reason()) {
+                        case NO_CLASSES -> new GenerationOutcome.CannotGenerate(
+                                new Generator.UnresolvedCombination(List.of(subject),
+                                        Generator.UnresolvedCombination.Reason
+                                                .NOTHING_TO_BUILD_AGAINST));
+                        case LINKAGE_FAILED -> new GenerationOutcome.CannotGenerate(
+                                new Generator.UnresolvedCombination(List.of(subject),
+                                        Generator.UnresolvedCombination.Reason.LINKAGE_FAILED));
+                        case A_ROW_IS_ALREADY_THERE, NOT_MEASURED ->
+                                throw new IllegalStateException("the assessment at " + subject
+                                        + " says " + absent.reason() + ", which is not a gap: "
+                                        + gap);
+                    };
+                };
+            }
+            // The gap was established from an assessment, so one names it. Where the two lists have
+            // come apart, what happened is that these two readings of one measurement disagree, and
+            // that is not a fact about generating a row: answering it as one would turn a pipeline
+            // that contradicts itself into a strategy that tried and failed.
+            throw new IllegalStateException(
+                    "no boundary assessment for the gap at " + subject + ": " + gap);
+        }
+
+        /**
+         * What the axes can do about a case of an input no row applies the behavior to.
+         *
+         * <p>The strategy that would reach it divides the position into classes and writes a row in
+         * each, so it applies exactly where an axis was derived at the position and holds this case
+         * among its classes. Where none was, nothing takes the gap — and that is read off the axes
+         * rather than off an empty row list, which would be the same as calling a search that found
+         * nothing a fact about the model.
+         */
+        private static GenerationOutcome atCase(Finding gap, PartitionEvidence partition,
+                                                Generator.GenerationResult pairs,
+                                                Ast.SpecBehavior spec) {
+            String missing = String.valueOf(gap.args().get(0));
+            int at = ((Number) gap.args().get(1)).intValue() - 1;
+            String parameter = at >= 0 && at < spec.params().size()
+                    ? spec.params().get(at).name() : null;
+            boolean divided = partition != null && parameter != null
+                    && partition.axes().stream().anyMatch(
+                            axis -> axis.path().equals(parameter) && axis.classes().contains(missing));
+            if (!divided) {
+                return new GenerationOutcome.NotSupported(
+                        GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION);
+            }
+            String label = parameter + "=" + missing;
+            List<Generator.GeneratedRow> written = pairs.rows().stream()
+                    .filter(row -> row.classes().contains(label)).toList();
+            if (!written.isEmpty()) {
+                return new GenerationOutcome.Generated(written);
+            }
+            // Asked before the row list is read, because a search with nothing to put a candidate
+            // through wrote nothing at every class, and a reason taken from the empty result it left
+            // would name the one thing that did not happen. Which of the two it was is carried as
+            // the search recorded it.
+            for (souther.compiler.partition.GenerationReason why : pairs.reasons()) {
+                Generator.UnresolvedCombination.Reason said = switch (why) {
+                    case souther.compiler.partition.GenerationReason.NothingToBuildAgainst _ ->
+                            Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST;
+                    case souther.compiler.partition.GenerationReason.LinkageFailed _ ->
+                            Generator.UnresolvedCombination.Reason.LINKAGE_FAILED;
+                    // Reasons about this search rather than about there being nothing to search
+                    // with. They are said in their own words elsewhere and answer nothing here.
+                    case souther.compiler.partition.GenerationReason.PositionWithheld _,
+                            souther.compiler.partition.GenerationReason.SearchLimit _,
+                            souther.compiler.partition.GenerationReason.RowsNotRead _ -> null;
+                };
+                if (said != null) {
+                    return new GenerationOutcome.CannotGenerate(
+                            new Generator.UnresolvedCombination(List.of(label), said));
+                }
+            }
+            return pairs.unresolved().stream()
+                    .filter(left -> left.classes().contains(label))
+                    .<GenerationOutcome>map(GenerationOutcome.CannotGenerate::new)
+                    .findFirst()
+                    // The axis was derived, so a strategy takes this class; it wrote neither a row
+                    // nor a reason. What that leaves is a gap nothing here can account for, and the
+                    // one thing not to do is name a cause from the shape of the emptiness.
+                    .orElseGet(() -> new GenerationOutcome.CannotGenerate(
+                            new Generator.UnresolvedCombination(List.of(label),
+                                    Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED)));
+        }
+
+        /**
+         * What the edge strategy composed, read off what the boundary assessment already tried.
+         *
+         * <p>Its own answer and not the dispositions': a line is measured against the rows, and a
+         * behavior no row names has no gap at any of its lines while every one of them is still a
+         * row worth offering. Keying what is offered on what a build refuses would leave a model
+         * with no rows at all — the one an author most wants rows for — with nothing.
          */
         private static Generator.GenerationResult offered(String behavior,
                                                           List<BoundaryAssessment> boundaries) {
@@ -1029,11 +1206,14 @@ public final class Adequacy {
                     // thing as the reason beside it — nothing could be built against — and that is
                     // what is said.
                     case BoundaryAssessment.Attempt.NotAttempted absent -> {
-                        if (absent.reason() == BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED
-                                || absent.reason()
-                                        == BoundaryAssessment.Attempt.Reason.NO_CLASSES) {
-                            stopped.add(new souther.compiler.partition.GenerationReason
-                                    .NothingToBuildAgainst(behavior));
+                        switch (absent.reason()) {
+                            case NO_CLASSES -> stopped.add(
+                                    new souther.compiler.partition.GenerationReason
+                                            .NothingToBuildAgainst(behavior));
+                            case LINKAGE_FAILED -> stopped.add(
+                                    new souther.compiler.partition.GenerationReason
+                                            .LinkageFailed(behavior));
+                            case A_ROW_IS_ALREADY_THERE, NOT_MEASURED -> { }
                         }
                     }
                 }

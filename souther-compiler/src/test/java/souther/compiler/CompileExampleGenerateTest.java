@@ -58,7 +58,11 @@ class CompileExampleGenerateTest {
     }
 
     private static List<String> inputs(Generator.GenerationResult result) {
-        return result.rows().stream()
+        return inputs(result.rows());
+    }
+
+    private static List<String> inputs(List<Generator.GeneratedRow> rows) {
+        return rows.stream()
                 .map(r -> String.join(", ",
                         r.inputs().stream().map(i -> i.text()).toList()))
                 .toList();

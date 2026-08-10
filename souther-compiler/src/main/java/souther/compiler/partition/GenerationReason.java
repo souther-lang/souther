@@ -47,13 +47,22 @@ public sealed interface GenerationReason {
     record SearchLimit(String behavior, int combinations) implements GenerationReason {}
 
     /**
-     * Nothing could be built to try, so the generation never began.
+     * The module's classes were not there to put a candidate through.
      *
-     * <p>Two things arrive here and they are not the same fact. One is the classes refusing to
-     * link, which a {@code LinkageError} says and whose cause it does not. The other is their not
-     * being there at all. What both establish is that there was nothing to put a candidate through,
-     * and that is as far as the name goes — the difference changes nothing an author would do,
-     * since neither leaves a row to offer.
+     * <p>Which is not the classes refusing to link — that is {@link LinkageFailed}, and it is what
+     * happened where they were built and could not be reached. Neither leaves a row to offer, and
+     * that is the only thing they have in common; a sentence saying the classes were not there,
+     * printed where they were, states something that did not happen.
      */
     record NothingToBuildAgainst(String behavior) implements GenerationReason {}
+
+    /**
+     * The generated classes would not link, so the decoders could not be reached.
+     *
+     * <p>What the JVM raised is a {@code LinkageError}, and which of its causes it was is not
+     * something this can tell. What it does say is that there were classes: the difference from
+     * {@link NothingToBuildAgainst} is recorded where the attempt was made, and losing it here would
+     * be this compiler choosing which of two things it saw to report.
+     */
+    record LinkageFailed(String behavior) implements GenerationReason {}
 }

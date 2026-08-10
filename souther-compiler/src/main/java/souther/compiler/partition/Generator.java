@@ -110,7 +110,21 @@ public final class Generator {
             /** Every value tried was refused at construction. */
             ALL_CANDIDATES_REJECTED,
             /** The search stopped before it got here. */
-            SEARCH_LIMIT
+            SEARCH_LIMIT,
+            /** The module's classes were not there to build a candidate against. */
+            NOTHING_TO_BUILD_AGAINST,
+            /** The generated classes would not link, so the decoders could not be reached. Told
+             * apart from the one above it because they were there, which is not what that says. */
+            LINKAGE_FAILED,
+            /**
+             * A strategy that takes this class produced neither a row nor a reason for it.
+             *
+             * <p>Which is this compiler failing to say, and not something established about the
+             * class. Named rather than guessed at: the alternative is to write down whichever cause
+             * seemed likely when the branch was added, and a reason read off an empty result outlives
+             * whatever made it plausible.
+             */
+            NO_REASON_RECORDED
         }
 
         public UnresolvedCombination {
