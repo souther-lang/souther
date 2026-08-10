@@ -346,27 +346,27 @@ public final class CallElaborator {
         return switch (call.denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
-            case ValueName.Behavior _ -> CompileException.of(Diagnostic.at(call.name().region())
+            case ValueName.Behavior _ -> CompileException.of(Diagnostic.at(call.appliedAt())
                             .hint(new BehaviorMessage.WhatReachesABehavior(call.written()))
                             .say(new BehaviorMessage.ABehaviorCannotBeCalledFromHere(call.written())).build());
             // A type applied to an argument is a construction, and every place a construction is
             // allowed rewrites it before the check reads it. Reaching here means it was written
             // somewhere no rewrite covers, so say what it is rather than what it is not.
             case ValueName.OfType named -> CompileException.of(Diagnostic
-                            .at(call.name().region()).say(new DataMessage.AConstructionCannotBeWrittenHere(named.name())).build());
+                            .at(call.appliedAt()).say(new DataMessage.AConstructionCannotBeWrittenHere(named.name())).build());
             // A binding applied to arguments, whose type here is not a function. Either it is not one
             // — a value applied as though it were — or it has no type yet, which is what an inference
             // probe sees when it types a body before the binding it asks about has one and reads the
             // report to find out. The same sentence answers both: at the point of the report, this
             // name is not a function here.
             case ValueName.Local _ -> CompileException.of(Diagnostic
-                            .at(call.name().region()).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
+                            .at(call.appliedAt()).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
             // A name the language itself gives (`None`), applied. `Some`/`None` applications are
             // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
             case ValueName.Builtin b -> CompileException.of(Diagnostic
-                            .at(call.name().region()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
+                            .at(call.appliedAt()).say(new NameMessage.ANameTheLanguageGivesIsNotAFunction(b.name())).build());
             // thrown out at the top of typeOfCall, before any of the work above
             case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
             case null -> unelaborated("nothing", call);
@@ -450,7 +450,7 @@ public final class CallElaborator {
                 throw stepError;
             }
             Diagnostic.Builder b = Diagnostic
-                    .at(Elaborator.region(args.get(seed)));
+                    .at(args.get(seed).reportedAt());
             if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
                 b.secondary(stepError.diagnostic().region(), new NameMessage.TheAccumulatorsTypeStaysUnknown());
             }
@@ -489,7 +489,7 @@ public final class CallElaborator {
         // still accepted.
         if (entry != null && entry.declaration().params().isEmpty()) {
             throw CompileException.of(Diagnostic
-                            .at(call.name().region())
+                            .at(call.appliedAt())
                             .hint(new NameMessage.WriteItOnItsOwn(call.written())).say(new NameMessage.ItIsNotAFunctionHere(call.written())).build());
         }
         // A shipped kernel behaves like a built-in: check the call against the declared signature
@@ -500,7 +500,7 @@ public final class CallElaborator {
             Prelude.Signature intrinsic = entry.signature();
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(Diagnostic
-                                .at(call.name().region())
+                                .at(call.appliedAt())
                                 .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(intrinsic.params().size()), String.valueOf(args.size()))).build());
             }
             Applied applied = applySignature(call,
@@ -538,7 +538,7 @@ public final class CallElaborator {
                 if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
                         throw CompileException.of(Diagnostic
-                                        .at(call.name().region())
+                                        .at(call.appliedAt())
                                         .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(fn.params().size()), String.valueOf(args.size()))).build());
                     }
                     yield applySignature(call, fn, ca, expected, env, ctx).result();
@@ -550,7 +550,7 @@ public final class CallElaborator {
                 // what is wrong with it is that it is not a function, which the report below says.
                 if (call.reachedAs() instanceof ReachName.OfLibrary) {
                     throw CompileException.of(Diagnostic
-                                    .at(call.name().region()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
+                                    .at(call.appliedAt()).say(new NameMessage.NotAStandardLibraryFunction(call.written())).build());
                 }
                 // A helper another module declares is expanded where it is called, or — where it
                 // recurses — bound as a signature and answered above. Reaching here it is neither,
@@ -660,16 +660,16 @@ public final class CallElaborator {
             }
             if (position == null || BottomInfer.isBottom(position)) {
                 throw CompileException.of(Diagnostic
-                                .at(call.name().region())
+                                .at(call.appliedAt())
                                 .hint(new TypeMessage.AnnotateThePositionTheCallFeeds()).say(new TypeMessage.OverTheEmptyListTheSeedDecides(call.written())).build());
             }
             throw CompileException.of(Diagnostic
-                            .at(call.name().region())
+                            .at(call.appliedAt())
                             
                             .hint(new TypeMessage.ANewtypeIsBuiltFromTheResult(call.written())).say(new TypeMessage.ItAnswersANumberAndThisPositionNeedsAnother(call.written(), Type.show(position))).build());
         }
         throw CompileException.of(Diagnostic
-                        .at(call.name().region())
+                        .at(call.appliedAt())
                         
                         .hint(new TypeMessage.MapToTheNumericFieldFirst(call.written())).say(new DeclarationMessage.ItNeedsANumericElement(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))).build());
     }
@@ -697,9 +697,9 @@ public final class CallElaborator {
         boolean isDate = "Date".equals(call.reaches());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(Diagnostic
-                            .at(call.name().region()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
+                            .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
-        parseTemporal(call.written(), lit.value(), Elaborator.region(lit));
+        parseTemporal(call.written(), lit.value(), lit.reportedAt());
         return isDate ? Type.DATE : Type.DATETIME;
     }
 
@@ -721,7 +721,7 @@ public final class CallElaborator {
     static void arity(Ast.Apply call, int n) {
         if (call.args().size() != n) {
             throw CompileException.of(Diagnostic
-                            .at(call.name().region())
+                            .at(call.appliedAt())
                             .say(new DeclarationMessage.AppliedToAnotherNumberOfArguments(call.written(), String.valueOf(n),
                                     String.valueOf(call.args().size()))).build());
         }

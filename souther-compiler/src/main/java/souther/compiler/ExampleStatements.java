@@ -10,6 +10,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.evaluate.DepthLimitExceeded;
 import souther.compiler.evaluate.EvaluationContext;
@@ -602,7 +603,14 @@ public final class ExampleStatements {
      * underlines the wrong columns and can run past the end of the line.
      */
     private Statement said(SourceRef at, Ast.Expr written, Answered asserted) {
-        return new Statement(at, souther.compiler.check.Elaborator.width(written), shown(asserted));
+        return new Statement(at, marker(written), shown(asserted));
+    }
+
+    /** How many columns the marker under a written expression covers: the ones it was written over,
+     *  and one where it was written nowhere or runs past the line it started on. */
+    private static int marker(Ast.Expr written) {
+        Region region = written.region();
+        return region == null ? 1 : region.sourceSpan();
     }
 
     /** What an answer says, from what was already read. Rendering from the text again would build

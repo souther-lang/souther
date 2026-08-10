@@ -35,8 +35,8 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // List.length : (List<'a>) -> Int — the argument decides 'a, and the result is not a variable
         Ast.Expr call = new Ast.Apply("List.length", new ValueName.Stdlib("List", "length"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "length")),
-                List.of(new Ast.ListLit(List.of(new Ast.IntLit(1, POS)), POS)),
-                ConstructionOrigin.own(), POS);
+                List.of(new Ast.ListLit(List.of(new Ast.IntLit(1, POS, null)), POS, null)),
+                ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none()).preserving(KEPT));
@@ -55,11 +55,11 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // answered.
         Ast.Binders binders = new Ast.Binders(new BindingOwner.OfValue("demo", "test"));
         Ast.Block step = new Ast.Block(List.of(binders.binder("x", POS)),
-                new Ast.ListLit(List.of(new Ast.IntLit(1, POS)), POS), POS);
+                new Ast.ListLit(List.of(new Ast.IntLit(1, POS, null)), POS, null), POS, null);
         Ast.Expr call = new Ast.Apply("List.flatMap", new ValueName.Stdlib("List", "flatMap"),
                 new ReachName.OfLibrary(new ValueName.Stdlib("List", "flatMap")),
-                List.of(step, new Ast.ListLit(List.of(new Ast.IntLit(2, POS)), POS)),
-                ConstructionOrigin.own(), POS);
+                List.of(step, new Ast.ListLit(List.of(new Ast.IntLit(2, POS, null)), POS, null)),
+                ConstructionOrigin.own(), POS, null);
 
         Core typed = Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none()).preserving(KEPT));
@@ -90,8 +90,8 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         // nothing could be derived from leaving it standing, so it is expanded — and a tree that
         // still holds one is this compiler having failed to do that
         Ast.Expr call = new Ast.Apply("half", new ValueName.Helper("demo", "half"),
-                new ReachName.Bare("half"), List.of(new Ast.IntLit(1, POS)),
-                ConstructionOrigin.own(), POS);
+                new ReachName.Bare("half"), List.of(new Ast.IntLit(1, POS, null)),
+                ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> Elaborator.elaborate(call, Scope.NONE,
                 CheckContext.of(Symbols.none()).preserving(KEPT)));

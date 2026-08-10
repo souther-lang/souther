@@ -152,7 +152,7 @@ public final class HelperNames {
             case Ast.Apply call when foreign(call.denotes(), which) ->
                     new Ast.Apply(qualifiedName(call.denotes()), call.denotes(),
                             ofModule(call.denotes()), call.args(), call.origin(),
-                            call.pos());
+                            call.pos(), call.region());
             case Ast.Var v -> qualified(v, which);
             default -> rebuilt;
         };
@@ -161,8 +161,8 @@ public final class HelperNames {
     /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
     private static Ast.Var qualified(Ast.Var name, Predicate<ValueName.Helper> which) {
         return foreign(name.denotes(), which)
-                ? new Ast.Var(qualifiedName(name.denotes()), name.denotes(),
-                        ofModule(name.denotes()), name.pos())
+                ? Ast.Var.respelled(qualifiedName(name.denotes()), name.denotes(),
+                        ofModule(name.denotes()), name.pos(), name.region())
                 : name;
     }
 
@@ -191,7 +191,7 @@ public final class HelperNames {
                     : new Ast.Given(g.declaredType(), value, g.applied(), g.arrivesAs()));
         }
         return any ? new Ast.Expansion(ex.callee(), ex.application(), ex.bound(), given,
-                ex.declaredReturn(), ex.body(), ex.pos()) : e;
+                ex.declaredReturn(), ex.body(), ex.pos(), ex.region()) : e;
     }
 
     /** Whether {@code denotes} is a helper {@code which} accepts. */

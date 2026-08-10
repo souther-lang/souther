@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
@@ -32,6 +34,10 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     /** Nothing generated is anywhere, and a fixture built here is never quoted back at a source. */
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
 
+    /** And nothing generated was written over anything: a row is text this builds, not text anyone
+     *  typed, so there is no stretch of any file to underline. */
+    private static final Region NO_SOURCE = null;
+
     public FixtureTemplate {
         if (text == null || text.isBlank()) {
             throw new IllegalArgumentException("a fixture template is written text");
@@ -39,17 +45,17 @@ public record FixtureTemplate(String text, Ast.Expr value) {
     }
 
     public static FixtureTemplate integer(long value) {
-        Ast.Expr magnitude = new Ast.IntLit(Math.abs(value), NOWHERE);
+        Ast.Expr magnitude = new Ast.IntLit(Math.abs(value), NOWHERE, NO_SOURCE);
         return new FixtureTemplate(Long.toString(value),
-                value < 0 ? new Ast.Neg(magnitude, NOWHERE) : magnitude);
+                value < 0 ? new Ast.Neg(magnitude, NOWHERE, NO_SOURCE) : magnitude);
     }
 
     public static FixtureTemplate decimal(BigDecimal value) {
         String written = value.stripTrailingZeros().toPlainString();
         BigDecimal magnitude = value.abs();
-        Ast.Expr literal = new Ast.DecimalLit(magnitude, NOWHERE);
+        Ast.Expr literal = new Ast.DecimalLit(magnitude, NOWHERE, NO_SOURCE);
         return new FixtureTemplate(written + "m",
-                value.signum() < 0 ? new Ast.Neg(literal, NOWHERE) : literal);
+                value.signum() < 0 ? new Ast.Neg(literal, NOWHERE, NO_SOURCE) : literal);
     }
 
     /**
@@ -72,42 +78,45 @@ public record FixtureTemplate(String text, Ast.Expr value) {
                 default -> written.append(c);
             }
         }
-        return new FixtureTemplate(written.append('"').toString(), new Ast.StringLit(value, NOWHERE));
+        return new FixtureTemplate(written.append('"').toString(), new Ast.StringLit(value, NOWHERE, NO_SOURCE));
     }
 
     public static FixtureTemplate bool(boolean value) {
-        return new FixtureTemplate(Boolean.toString(value), new Ast.BoolLit(value, NOWHERE));
+        return new FixtureTemplate(Boolean.toString(value), new Ast.BoolLit(value, NOWHERE, NO_SOURCE));
     }
 
     /** A date, written the way a row writes one: the constructor applied to an ISO 8601 string. */
     public static FixtureTemplate date(String iso) {
         return new FixtureTemplate("Date(\"" + iso + "\")",
-                new Ast.Apply("Date", List.of(new Ast.StringLit(iso, NOWHERE)), NOWHERE));
+                new Ast.Apply("Date", List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
+                        NOWHERE, NO_SOURCE));
     }
 
     public static FixtureTemplate dateTime(String iso) {
         return new FixtureTemplate("DateTime(\"" + iso + "\")",
-                new Ast.Apply("DateTime", List.of(new Ast.StringLit(iso, NOWHERE)), NOWHERE));
+                new Ast.Apply("DateTime", List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
+                        NOWHERE, NO_SOURCE));
     }
 
     /** The absent optional, which the language names rather than any module. */
     public static FixtureTemplate none() {
         return new FixtureTemplate("None",
-                new Ast.Var("None", new ValueName.Builtin("None"), new ReachName.Bare("None"),
-                        NOWHERE));
+                new Ast.Var(WrittenName.synthetic("None", NOWHERE),
+                        new ValueName.Builtin("None"), new ReachName.Bare("None")));
     }
 
     /** A case that carries nothing: naming it is constructing it. */
     public static FixtureTemplate unitCase(TypeName type) {
-        return new FixtureTemplate(type.name(), new Ast.Var(type.name(),
-                new ValueName.OfType(type.name(), type, ConstructionOrigin.own()),
-                new ReachName.Bare(type.name()), NOWHERE));
+        return new FixtureTemplate(type.name(),
+                new Ast.Var(WrittenName.synthetic(type.name(), NOWHERE),
+                        new ValueName.OfType(type.name(), type, ConstructionOrigin.own()),
+                        new ReachName.Bare(type.name())));
     }
 
     /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */
     public static FixtureTemplate newtype(TypeName type, FixtureTemplate inner) {
         return new FixtureTemplate(type.name() + "(" + inner.text() + ")",
-                new Ast.Apply(type.name(), List.of(inner.value()), NOWHERE));
+                new Ast.Apply(type.name(), List.of(inner.value()), NOWHERE, NO_SOURCE));
     }
 
     /** No elements. A list, a set and a map are all written this way in a fixture: what the position
@@ -131,13 +140,13 @@ public record FixtureTemplate(String text, Ast.Expr value) {
             written.add(each.text());
         }
         return new FixtureTemplate("[" + String.join(", ", written) + "]",
-                new Ast.ListLit(List.copyOf(values), NOWHERE));
+                new Ast.ListLit(List.copyOf(values), NOWHERE, NO_SOURCE));
     }
 
     /** One entry of a map: the pair a fixture writes a key and its value as. */
     public static FixtureTemplate entry(FixtureTemplate key, FixtureTemplate value) {
         return new FixtureTemplate("(" + key.text() + ", " + value.text() + ")",
-                new Ast.Tuple(List.of(key.value(), value.value()), NOWHERE));
+                new Ast.Tuple(List.of(key.value(), value.value()), NOWHERE, NO_SOURCE));
     }
 
     /** A record, field by field, in the order the fields were declared. */
@@ -150,6 +159,6 @@ public record FixtureTemplate(String text, Ast.Expr value) {
         }
         return new FixtureTemplate(type.name() + " { " + String.join(", ", written) + " }",
                 new Ast.NewData(Ast.Name.resolved(type, NOWHERE), inits, List.of(),
-                        ConstructionOrigin.own(), NOWHERE));
+                        ConstructionOrigin.own(), NOWHERE, NO_SOURCE));
     }
 }

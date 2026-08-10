@@ -12,7 +12,6 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.AttemptMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
@@ -142,8 +141,7 @@ public final class Elaborator {
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
                     throw CompileException.of(Diagnostic
-                                    .at(new Region(neg.pos(), region(neg.operand()).end()))
-                                    
+                                    .at(neg.reportedAt())
                                     .say(new TypeMessage.UnaryMinusNeedsANumber(Type.show(t))).build());
                 }
                 yield new Core.Neg(operand, t, neg.pos());
@@ -245,7 +243,7 @@ public final class Elaborator {
                 }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(Diagnostic
-                                    .at(built.name().region())
+                                    .at(built.name().reportedAt())
                                     .say(new DataMessage.ItCannotBeConstructedHere(built.name().quoted())).build());
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
@@ -283,15 +281,17 @@ public final class Elaborator {
                 }
                 throw CompileException.of(Diagnostic
                                 .at(iff.pos(), 2)
-                                .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())), new TypeMessage.TheThenBranchProduces(Type.show(tt)))
-                                .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())), new TypeMessage.TheElseBranchProduces(Type.show(et)))
+                                .secondary(iff.then().reportedAt(),
+                                        new TypeMessage.TheThenBranchProduces(Type.show(tt)))
+                                .secondary(iff.els().reportedAt(),
+                                        new TypeMessage.TheElseBranchProduces(Type.show(et)))
                                 .hint(new TypeMessage.MakeBothBranchesProduceOneType())
                                 .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
             }
             case Ast.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
                 if (!(built instanceof Core.NewData construct)) {
-                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                    throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
                             .say(new AttemptMessage.ThisIsNotAConstruction())
                             .hint(new AttemptMessage.WriteTheConstructionWhoseInvariantDecides())
                             .build());
@@ -300,7 +300,7 @@ public final class Elaborator {
                 // and the else value could never be reached. Reported rather than compiled into a
                 // branch that is not one — the same call a unit data's forbidden invariant makes.
                 if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
-                    throw CompileException.of(Diagnostic.at(region(ic.construct()))
+                    throw CompileException.of(Diagnostic.at(ic.construct().reportedAt())
                             .say(new AttemptMessage.TheTypeDeclaresNoInvariant(
                                     construct.typeName().name()))
                             .hint(new AttemptMessage.ConstructItDirectlyOrGiveItAnInvariant(
@@ -323,8 +323,10 @@ public final class Elaborator {
                     if (next == null) {
                         throw CompileException.of(Diagnostic
                                         .at(ic.pos(), 2)
-                                        .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())), new TypeMessage.TheThenBranchProduces(Type.show(then.type())))
-                                        .secondary(Region.ofWidth(arm.body().pos(), width(arm.body())), new TypeMessage.TheElseBranchProduces(Type.show(body.type())))
+                                        .secondary(ic.then().reportedAt(),
+                                                new TypeMessage.TheThenBranchProduces(Type.show(then.type())))
+                                        .secondary(arm.body().reportedAt(),
+                                                new TypeMessage.TheElseBranchProduces(Type.show(body.type())))
                                         .hint(new TypeMessage.MakeBothBranchesProduceOneType())
                                         .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
                     }
@@ -405,7 +407,7 @@ public final class Elaborator {
                 }
             }
             Diagnostic.Builder d = Diagnostic
-                    .at(fa.name().region());
+                    .at(fa.name().reportedAt());
             if (!without.isEmpty()) {
                 d = d.hint(new ModuleMessage.TheseCasesHaveNoSuchField(fa.field(), String.join(", ", without)));
             } else if (target instanceof Type.Ref) {
@@ -417,7 +419,7 @@ public final class Elaborator {
             throw CompileException.of(d.say(new ModuleMessage.CannotReadAFieldOnASum(fa.field(), Type.show(target))).build());
         }
         throw CompileException.of(Diagnostic
-                        .at(fa.name().region()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
+                        .at(fa.name().reportedAt()).say(new DeclarationMessage.CannotReadAFieldOnThisValue(fa.field())).build());
     }
 
     /**
@@ -1271,8 +1273,7 @@ public final class Elaborator {
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec §sum-data)
             throw CompileException.of(Diagnostic
-                            .at(region(e))
-                            
+                            .at(e.reportedAt())
                             .diff(Type.show(actual, expected), Type.show(expected, actual))
                             .hint(new TypeMessage.AdjustTheValueOrThePosition())
                             .say(new TypeMessage.ItDoesNotHaveTheTypeItNeedsHere(what)).build());
@@ -1321,10 +1322,10 @@ public final class Elaborator {
         };
         if (denotes != null) {
             return CompileException.of(Diagnostic
-                            .at(v.written().region()).say(new DeclarationMessage.ItCannotBeHeldAsAValueHere(v.name(), denotes)).build());
+                            .at(v.written().reportedAt()).say(new DeclarationMessage.ItCannotBeHeldAsAValueHere(v.name(), denotes)).build());
         }
         return CompileException.of(Diagnostic
-                        .at(v.written().region())
+                        .at(v.written().reportedAt())
                         
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))
                         .say(new NameMessage.NoValueOfThatNameInScope(v.name())).build());
@@ -1415,35 +1416,4 @@ public final class Elaborator {
         }
     }
 
-    /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source
-     * text is known, otherwise 1. The renderer underlines this many columns from the node's start. */
-    /**
-     * The characters an expression occupies, as far as a report needs to underline it.
-     *
-     * <p>A name answers with where it is written, which is not what {@link #width} would measure: a
-     * decomposed spelling is wider than the name it denotes, and a qualified one is as far apart as
-     * the source spells it. Everything else is measured from its start, there being nothing else to
-     * measure it by.
-     */
-    public static Region region(Ast.Expr e) {
-        return switch (e) {
-            case Ast.Var v -> v.written().region();
-            case Ast.FieldAccess fa -> fa.name().region();
-            case Ast.Apply c -> c.name().region();
-            default -> Region.ofWidth(e.pos(), width(e));
-        };
-    }
-
-    public static int width(Ast.Expr e) {
-        return switch (e) {
-            case Ast.Var v -> v.name().length();
-            case Ast.StringLit s -> s.value().length() + 2;
-            case Ast.IntLit i -> Long.toString(i.value()).length();
-            case Ast.BoolLit b -> b.value() ? 4 : 5;
-            case Ast.DecimalLit d -> d.value().toPlainString().length() + 1;
-            case Ast.FieldAccess fa -> fa.field().length();
-            case Ast.Apply c -> c.written().length();
-            default -> 1;
-        };
-    }
 }

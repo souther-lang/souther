@@ -210,7 +210,7 @@ final class JvmLimits {
         Limit limit = exceeded.limit();
         String name = written.canonical();
         String measured = String.valueOf(exceeded.measured());
-        Diagnostic.Builder said = Diagnostic.at(written.region());
+        Diagnostic.Builder said = Diagnostic.at(written.reportedAt());
         return switch (limit) {
             case CODE_SIZE -> CompileException.of(said
                     .say(new DeclarationMessage.AMethodIsLargerThanTheJvmHolds(name,
@@ -235,7 +235,7 @@ final class JvmLimits {
         String name = written.canonical();
         String has = String.valueOf(needed);
         String holds = String.valueOf(limit);
-        return CompileException.of(Diagnostic.at(written.region())
+        return CompileException.of(Diagnostic.at(written.reportedAt())
                 .say(switch (what) {
                     case DATA -> new DeclarationMessage.ADataNeedsMoreSlotsThanAConstructorHolds(
                             name, has, holds);

@@ -936,7 +936,7 @@ public final class Output {
                 for (Ast.FnDef value : parsed.module().fns()) {
                     boolean fresh = taken.add(value.name());
                     if (!fresh && id.equals(sourceId)) {
-                        reports.add(Report.of(Diagnostic.at(value.written().region())
+                        reports.add(Report.of(Diagnostic.at(value.written().reportedAt())
                                 .say(new ExampleMessage.TheNameIsAlreadyDeclared(value.name(), name))
                                 .build()));
                     }

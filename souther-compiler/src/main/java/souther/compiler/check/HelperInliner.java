@@ -15,6 +15,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayDeque;
@@ -538,11 +539,12 @@ public final class HelperInliner {
         }
         List<Ast.Expr> args = new ArrayList<>(call.args());
         for (int supplied : rewrite.supplied()) {
-            args.add(new Ast.IntLit(supplied, call.pos()));
+            // an argument the rewrite supplies, which no one wrote
+            args.add(new Ast.IntLit(supplied, call.pos(), null));
         }
         return new Ast.Apply(rewrite.target().qualified(), rewrite.target(),
                 new ReachName.OfLibrary(rewrite.target()), args, ConstructionOrigin.own(),
-                call.pos());
+                call.pos(), call.region());
     }
 
     /** Inlines a recursive helper's own body, expanding the non-recursive helper calls it makes while
@@ -954,26 +956,32 @@ public final class HelperInliner {
                 // quoting the binding would name `$fn0`, which is nowhere in the source. The two are
                 // separate slots: the binding is in the callee position, the spelling beside it.
                 yield inline(new Ast.LetIn(f, raw.function(), null, false, null,
-                        new Ast.Apply(new Ast.Var(f.name(), new ValueName.Local(f.name(), f.id()),
-                                new ReachName.Bare(f.name()), raw.pos()),
-                                raw.args(), raw.origin(), spelling(raw.function()), raw.pos()),
-                        raw.pos()));
+                        new Ast.Apply(Ast.Var.respelled(f.name(),
+                                new ValueName.Local(f.name(), f.id()),
+                                new ReachName.Bare(f.name()), raw.function().pos(),
+                                raw.function().region()),
+                                raw.args(), raw.origin(), spelling(raw.function()), raw.pos(),
+                                raw.region()),
+                        raw.pos(), raw.region()));
             }
             case Ast.Apply rawCall -> expandCall(rawCall);
-            case Ast.FieldAccess fa -> new Ast.FieldAccess(inline(fa.target()), fa.field(), fa.pos());
-            case Ast.Binary bin -> new Ast.Binary(bin.op(), inline(bin.left()), inline(bin.right()), bin.pos());
-            case Ast.Neg neg -> new Ast.Neg(inline(neg.operand()), neg.pos());
+            case Ast.FieldAccess fa -> fa.withTarget(inline(fa.target()));
+            case Ast.Binary bin -> new Ast.Binary(bin.op(), inline(bin.left()), inline(bin.right()),
+                    bin.pos(), bin.region());
+            case Ast.Neg neg -> new Ast.Neg(inline(neg.operand()), neg.pos(), neg.region());
             case Ast.NewData nd -> newData(nd);
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {
                     cases.add(new Ast.Case(c.caseTypes(), c.binding(), inline(c.body()), c.unwrapAsserts(), c.pos()));
                 }
-                yield new Ast.Match(inline(m.scrutinee()), cases, m.pos());
+                yield new Ast.Match(inline(m.scrutinee()), cases, m.pos(), m.region());
             }
-            case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()), iff.pos());
+            case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()),
+                    iff.pos(), iff.region());
             case Ast.IfConstructed ic -> new Ast.IfConstructed(inline(ic.construct()), ic.binder(),
-                    inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.pos());
+                    inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.pos(),
+                    ic.region());
             // Already expanded. Its body may still hold calls of its own — a helper whose callee was
             // not in the table when this ran the first time — so it is walked like any other.
             case Ast.Expansion ex -> {
@@ -987,7 +995,7 @@ public final class HelperInliner {
                             g.arrivesAs()));
                 }
                 yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
-                        ex.declaredReturn(), inline(ex.body()), ex.pos());
+                        ex.declaredReturn(), inline(ex.body()), ex.pos(), ex.region());
             }
             case Ast.LetIn li -> {
                 // What the value turns out to be is what decides this, so it is worked out first: a
@@ -1005,12 +1013,12 @@ public final class HelperInliner {
                     writing.scopedLambdas().remove(alias);
                     yield references(aliasBody, alias)
                             ? new Ast.LetIn(li.binder(), value, li.declaredType(), li.annotated(),
-                                    li.opens(), aliasBody, li.pos())
+                                    li.opens(), aliasBody, li.pos(), li.region())
                             : aliasBody;
                 }
                 if (!(value instanceof Ast.Block lambda)) {
                     yield new Ast.LetIn(li.binder(), value, li.declaredType(), li.annotated(),
-                            li.opens(), inline(li.body()), li.pos());
+                            li.opens(), inline(li.body()), li.pos(), li.region());
                 }
                 // a function bound to a local: registered under that binding, so each application of
                 // it in the body expands inline (β-reduction) exactly as a named helper does. Its
@@ -1035,14 +1043,17 @@ public final class HelperInliner {
                 // reports an escaping block sees it.
                 yield references(body, bound)
                         ? new Ast.LetIn(li.binder(), lambda, li.declaredType(), li.annotated(),
-                                li.opens(), body, li.pos())
+                                li.opens(), body, li.pos(), li.region())
                         : body;
             }
-            case Ast.ListLit lit -> new Ast.ListLit(inlineList(lit.elements()), lit.pos());
-            case Ast.Tuple tup -> new Ast.Tuple(inlineList(tup.elements()), tup.pos());
-            case Ast.TupleGet tg -> new Ast.TupleGet(inline(tg.tuple()), tg.index(), tg.arity(), tg.pos());
-            case Ast.ListComp comp -> new Ast.ListComp(inline(comp.element()), inlineList(comp.guards()), comp.pos());
-            case Ast.Block block -> new Ast.Block(block.params(), inline(block.body()), block.pos());
+            case Ast.ListLit lit -> new Ast.ListLit(inlineList(lit.elements()), lit.pos(), lit.region());
+            case Ast.Tuple tup -> new Ast.Tuple(inlineList(tup.elements()), tup.pos(), tup.region());
+            case Ast.TupleGet tg -> new Ast.TupleGet(inline(tg.tuple()), tg.index(), tg.arity(), tg.pos(),
+                    tg.region());
+            case Ast.ListComp comp -> new Ast.ListComp(inline(comp.element()), inlineList(comp.guards()),
+                    comp.pos(), comp.region());
+            case Ast.Block block -> new Ast.Block(block.params(), inline(block.body()), block.pos(),
+                    block.region());
             case Ast.IntLit _ -> e;
             case Ast.DecimalLit _ -> e;
             case Ast.StringLit _ -> e;
@@ -1084,7 +1095,8 @@ public final class HelperInliner {
         // takes nothing. The value is substituted and the arguments are applied to it.
         if (helper.params().isEmpty() && !args.isEmpty()
                 && call.function() instanceof Ast.Var named) {
-            return inline(new Ast.Apply(valueOf(named), args, call.origin(), call.pos()));
+            return inline(new Ast.Apply(valueOf(named), args, call.origin(), call.pos(),
+                    call.region()));
         }
         if (args.size() != helper.params().size()) {
             throw wrongArity(call, helper, args.size());
@@ -1107,7 +1119,8 @@ public final class HelperInliner {
         // a prelude helper's body is stamped with the call site, so errors inside it point at
         // the user's call, not at the shipped source of souther.*
         Renaming renaming = new Renaming(arguments.subst(), new Copy(helper.writtenBody(), ours),
-                keepsItsPositions(call) ? null : call.pos());
+                keepsItsPositions(call) ? null : call.pos(),
+                keepsItsPositions(call) ? null : call.region());
         Ast.Expr body = inline(rename(helper.writtenBody(), renaming));   // expand nested helpers too
         List<Ast.Bound> bound = new ArrayList<>(arguments.bound());
         // A scoped lambda the body still names was passed rather than applied, so nothing
@@ -1120,7 +1133,7 @@ public final class HelperInliner {
         });
         arguments.unreduced().keySet().forEach(writing.scopedLambdas()::remove);
         return new Ast.Expansion(call.denotes(), mine, bound, arguments.given(),
-                instantiated(helper.declaredReturn(), applied), body, call.pos());
+                instantiated(helper.declaredReturn(), applied), body, call.pos(), call.region());
     }
 
     /**
@@ -1142,7 +1155,7 @@ public final class HelperInliner {
                             String.valueOf(helper.params().size())))
                     .build());
         }
-        return CompileException.of(Diagnostic.at(call.name().region())
+        return CompileException.of(Diagnostic.at(call.appliedAt())
                 .say(new HelperMessage.CalledWithAnotherNumberOfArguments(helper.name(),
                         String.valueOf(helper.params().size()), String.valueOf(given)))
                 .build());
@@ -1281,10 +1294,12 @@ public final class HelperInliner {
             params.add(p);
             args.add(Ast.Var.local(p, function.pos()));
         }
+        // The block and the application in it are this pass's: what the author wrote there is a
+        // name, and these are the parameters and the call it stands for.
         return new Ast.Block(params,
                 new Ast.Apply(function.name(), function.denotes(), function.reachedAs(), args,
-                        ConstructionOrigin.own(), function.pos()),
-                function.pos());
+                        ConstructionOrigin.own(), function.pos(), null),
+                function.pos(), null);
     }
 
     /**
@@ -1392,10 +1407,11 @@ public final class HelperInliner {
      * literal spells. */
     private static Ast.Expr literal(Object constant, SourcePos pos) {
         return switch (constant) {
-            case Long i -> new Ast.IntLit(i, pos);
-            case java.math.BigDecimal d -> new Ast.DecimalLit(d, pos);
-            case String s -> new Ast.StringLit(s, pos);
-            case Boolean b -> new Ast.BoolLit(b, pos);
+            // A value the fold arrived at, which no run of characters in the file spells.
+            case Long i -> new Ast.IntLit(i, pos, null);
+            case java.math.BigDecimal d -> new Ast.DecimalLit(d, pos, null);
+            case String s -> new Ast.StringLit(s, pos, null);
+            case Boolean b -> new Ast.BoolLit(b, pos, null);
             default -> null;
         };
     }
@@ -1462,9 +1478,11 @@ public final class HelperInliner {
             spreads.add(Ast.Var.local(name, spread.pos()));
         }
         Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
-                nd.origin(), nd.pos());
+                nd.origin(), nd.pos(), nd.region());
+        // The bindings a spread of a value becomes stand where the construction stands.
         for (int i = bound.size() - 1; i >= 0; i--) {
-            built = new Ast.LetIn(bound.get(i), values.get(i), null, false, null, built, nd.pos());
+            built = new Ast.LetIn(bound.get(i), values.get(i), null, false, null, built, nd.pos(),
+                    nd.region());
         }
         return built;
     }
@@ -1480,7 +1498,7 @@ public final class HelperInliner {
     private List<Ast.FieldInit> inlineInits(List<Ast.FieldInit> inits) {
         List<Ast.FieldInit> out = new ArrayList<>();
         for (Ast.FieldInit i : inits) {
-            out.add(new Ast.FieldInit(i.name(), inline(i.value()), i.pos()));
+            out.add(i.withValue(inline(i.value())));
         }
         return out;
     }
@@ -1583,7 +1601,8 @@ public final class HelperInliner {
      * <p>The three are fixed for the whole copy and none of them changes as the walk descends, so they
      * travel together rather than as three parameters threaded through every node kind.
      */
-    private record Renaming(Map<BindingId, Substituted> subst, Copy copy, SourcePos at) {
+    private record Renaming(Map<BindingId, Substituted> subst, Copy copy, SourcePos at,
+                            Region over) {
 
         /** What {@code denotes} stands for in this copy, or null where nothing does — an inner binder
          * that happens to spell a parameter's name is a different binding with a different id, so a
@@ -1604,6 +1623,24 @@ public final class HelperInliner {
          */
         SourcePos at(SourcePos own) {
             return at != null ? at : own;
+        }
+
+        /** Whether this copy is being stamped with the call site rather than keeping its own. */
+        boolean stamps() {
+            return at != null;
+        }
+
+        /**
+         * The stretch of source a rebuilt node is written over: the call's where the copy is stamped
+         * with it, and otherwise the node's own.
+         *
+         * <p>The same rule as {@link #at}, over the same nodes, because a copy stamped with the call
+         * site is written where the call is — all of it, not one point of it. A node that took the
+         * call's position and kept the callee's extent would say a report is about characters of one
+         * file at a line of another.
+         */
+        Region over(Region own) {
+            return at != null ? over : own;
         }
     }
 
@@ -1658,27 +1695,38 @@ public final class HelperInliner {
     private Ast.Expr rename(Ast.Expr e, Renaming renaming) {
         return switch (e) {
             case Ast.Var v -> renameVar(v, renaming);
-            case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), renaming), fa.field(), renaming.at(fa.pos()));
+            case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), renaming), fa.name(),
+                    renaming.at(fa.pos()), renaming.over(fa.region()));
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Ast.Var` held here, so it goes through the arm above and is substituted
             // exactly as a read of it would be — the position cannot ask a different question.
             case Ast.Apply call -> new Ast.Apply(
                     rename(call.function(), renaming),
                     renameList(call.args(), renaming),
-                    call.origin(), call.appliedAs(), renaming.at(call.pos()));
-            case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), renaming), rename(bin.right(), renaming), renaming.at(bin.pos()));
-            case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), renaming), renaming.at(neg.pos()));
+                    call.origin(), call.appliedAs(), renaming.at(call.pos()),
+                    renaming.over(call.region()));
+            case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), renaming),
+                    rename(bin.right(), renaming), renaming.at(bin.pos()),
+                    renaming.over(bin.region()));
+            case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), renaming), renaming.at(neg.pos()),
+                    renaming.over(neg.region()));
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
                 for (Ast.FieldInit i : nd.inits()) {
-                    inits.add(new Ast.FieldInit(i.name(), rename(i.value(), renaming), renaming.at(i.pos())));
+                    // A copy stamped with the call site is being read against the caller's file,
+                    // so the field's occurrence — which is in the callee's — does not come with it.
+                    Ast.Expr filled = rename(i.value(), renaming);
+                    inits.add(renaming.stamps()
+                            ? new Ast.FieldInit(i.name(), filled, renaming.at(i.pos()))
+                            : i.withValue(filled));
                 }
                 // `..param` copies the renamed binding: a name slot asks what a name asks
                 List<Ast.Var> spreads = new ArrayList<>();
                 for (Ast.Var s : nd.spreads()) {
                     spreads.add(renameVar(s, renaming));
                 }
-                yield new Ast.NewData(nd.typeName(), inits, spreads, nd.origin(), renaming.at(nd.pos()));
+                yield new Ast.NewData(nd.typeName(), inits, spreads, nd.origin(), renaming.at(nd.pos()),
+                        renaming.over(nd.region()));
             }
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
@@ -1688,21 +1736,24 @@ public final class HelperInliner {
                             rename(c.body(), renaming),
                             c.unwrapAsserts(), renaming.at(c.pos())));
                 }
-                yield new Ast.Match(rename(m.scrutinee(), renaming), cases, renaming.at(m.pos()));
+                yield new Ast.Match(rename(m.scrutinee(), renaming), cases, renaming.at(m.pos()),
+                        renaming.over(m.region()));
             }
-            case Ast.If iff -> new Ast.If(rename(iff.cond(), renaming), rename(iff.then(), renaming), rename(iff.els(), renaming), renaming.at(iff.pos()));
+            case Ast.If iff -> new Ast.If(rename(iff.cond(), renaming), rename(iff.then(), renaming),
+                    rename(iff.els(), renaming), renaming.at(iff.pos()),
+                    renaming.over(iff.region()));
             // the success binder has its own BindingId, so a reference to it is not a candidate for
             // substitution, and neither the construction nor the else value can reach it
             case Ast.IfConstructed ic -> new Ast.IfConstructed(
                     rename(ic.construct(), renaming), renaming.copy().of(ic.binder()),
                     rename(ic.then(), renaming),
                     Ast.mapArms(ic.els(), body -> rename(body, renaming)),
-                    renaming.at(ic.pos()));
+                    renaming.at(ic.pos()), renaming.over(ic.region()));
             case Ast.LetIn li -> {
                 Ast.Expr value = rename(li.value(), renaming);
                 Ast.Expr body = rename(li.body(), renaming);
                 yield new Ast.LetIn(renaming.copy().of(li.binder()), value, li.declaredType(), li.annotated(),
-                        li.opens(), body, renaming.at(li.pos()));
+                        li.opens(), body, renaming.at(li.pos()), renaming.over(li.region()));
             }
             // A body already expanded once, being copied into another caller. The signature comes
             // along as it stands: what its variables stand for is settled while each copy is typed,
@@ -1722,12 +1773,17 @@ public final class HelperInliner {
                 }
                 yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
                         ex.declaredReturn(), rename(ex.body(), renaming),
-                        renaming.at(ex.pos()));
+                        renaming.at(ex.pos()), renaming.over(ex.region()));
             }
-            case Ast.ListLit lit -> new Ast.ListLit(renameList(lit.elements(), renaming), renaming.at(lit.pos()));
-            case Ast.Tuple tup -> new Ast.Tuple(renameList(tup.elements(), renaming), renaming.at(tup.pos()));
-            case Ast.TupleGet tg -> new Ast.TupleGet(rename(tg.tuple(), renaming), tg.index(), tg.arity(), renaming.at(tg.pos()));
-            case Ast.ListComp comp -> new Ast.ListComp(rename(comp.element(), renaming), renameList(comp.guards(), renaming), renaming.at(comp.pos()));
+            case Ast.ListLit lit -> new Ast.ListLit(renameList(lit.elements(), renaming),
+                    renaming.at(lit.pos()), renaming.over(lit.region()));
+            case Ast.Tuple tup -> new Ast.Tuple(renameList(tup.elements(), renaming),
+                    renaming.at(tup.pos()), renaming.over(tup.region()));
+            case Ast.TupleGet tg -> new Ast.TupleGet(rename(tg.tuple(), renaming), tg.index(), tg.arity(),
+                    renaming.at(tg.pos()), renaming.over(tg.region()));
+            case Ast.ListComp comp -> new Ast.ListComp(rename(comp.element(), renaming),
+                    renameList(comp.guards(), renaming), renaming.at(comp.pos()),
+                    renaming.over(comp.region()));
             case Ast.Block block -> {
                 List<Ast.Binder> params = new ArrayList<>();
                 for (Ast.Binder p : block.params()) {
@@ -1735,7 +1791,7 @@ public final class HelperInliner {
                 }
                 yield new Ast.Block(params,
                         rename(block.body(), renaming),
-                        renaming.at(block.pos()));
+                        renaming.at(block.pos()), renaming.over(block.region()));
             }
             case Ast.IntLit _ -> e;
             case Ast.DecimalLit _ -> e;

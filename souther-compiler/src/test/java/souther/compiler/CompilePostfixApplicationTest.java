@@ -307,10 +307,10 @@ class CompilePostfixApplicationTest {
     @Test
     void anApplicationSaysWhetherItAppliesAName() {
         SourcePos at = new SourcePos(1, 1);
-        Ast.Apply named = new Ast.Apply("List.map", java.util.List.of(), at);
+        Ast.Apply named = new Ast.Apply("List.map", java.util.List.of(), at, null);
         Ast.Apply nameless = new Ast.Apply(new Ast.Block(java.util.List.of(),
-                new Ast.IntLit(1, at), at), java.util.List.of(),
-                souther.compiler.types.ConstructionOrigin.own(), at);
+                new Ast.IntLit(1, at, null), at, null), java.util.List.of(),
+                souther.compiler.types.ConstructionOrigin.own(), at, null);
 
         assertTrue(named.appliesAName());
         assertEquals("List.map", named.written());
@@ -333,7 +333,7 @@ class CompilePostfixApplicationTest {
         BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
         Ast.Apply lowered = new Ast.Apply(
                 new Ast.Var("$fn0", new ValueName.Local("$fn0", id), new ReachName.Bare("$fn0"), at),
-                java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at);
+                java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at, null);
 
         assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");
         assertEquals("$fn0", lowered.reaches(), "a table is looked up with the binding");

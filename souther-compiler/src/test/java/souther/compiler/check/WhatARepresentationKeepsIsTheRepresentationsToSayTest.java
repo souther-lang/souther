@@ -58,8 +58,8 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
     @Test
     void aKeptCallAppliedToTheWrongNumberOfArgumentsIsSaidAsThat() {
         Ast.Expr twoArgs = new Ast.Apply("List.map", MAP, new ReachName.OfLibrary(MAP),
-                List.of(new Ast.IntLit(1, POS), new Ast.IntLit(2, POS)),
-                ConstructionOrigin.own(), POS);
+                List.of(new Ast.IntLit(1, POS, null), new Ast.IntLit(2, POS, null)),
+                ConstructionOrigin.own(), POS, null);
 
         assertThrows(RuntimeException.class, () -> elaborate(twoArgs, keeping(MAP, SIGNATURE)));
     }
@@ -87,7 +87,7 @@ class WhatARepresentationKeepsIsTheRepresentationsToSayTest {
 
     private static Ast.Expr callTo(ValueName.Stdlib operation) {
         return new Ast.Apply(operation.qualified(), operation, new ReachName.OfLibrary(operation),
-                List.of(new Ast.IntLit(1, POS)), ConstructionOrigin.own(), POS);
+                List.of(new Ast.IntLit(1, POS, null)), ConstructionOrigin.own(), POS, null);
     }
 
     private static Preserved keeping(ValueName operation, Type.FnOf signature) {

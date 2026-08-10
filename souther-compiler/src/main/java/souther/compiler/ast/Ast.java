@@ -1,5 +1,6 @@
 package souther.compiler.ast;
 
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -887,6 +888,19 @@ public interface Ast {
         public SourcePos pos() {
             return written.pos();
         }
+
+        /**
+         * The same initialiser over a rewritten value.
+         *
+         * <p>The field's occurrence is the author's and survives a rewrite of what fills it. Naming
+         * the field again — which every rewrite that took {@link #name()} and a position did — puts a
+         * spelling where an occurrence was, and what is lost is the only record of where the author
+         * wrote it: a report about the field then underlines as many characters as the name has,
+         * starting where it starts, which is the same thing until it is not.
+         */
+        public FieldInit withValue(Expr rewritten) {
+            return rewritten == value ? this : new FieldInit(written, rewritten);
+        }
     }
 
     // --- encoders ---
@@ -978,7 +992,48 @@ public interface Ast {
     sealed interface Expr extends Ast
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Expansion, Block,
-                    Tuple, TupleGet, Unreachable {}
+                    Tuple, TupleGet, Unreachable {
+
+        /**
+         * The stretch of source this expression was written over, or null where no one wrote it.
+         *
+         * <p>Not {@link #pos()}, and not derivable from it. A position is where a report about this
+         * node is anchored, and an anchor is chosen for the node it is about: a binary operation is
+         * anchored at its operator and a field read at its field, because that is where a complaint
+         * about either belongs. Neither is where the expression begins, so a region built from an
+         * anchor and a width starts inside what the author wrote however the width is arrived at.
+         *
+         * <p>Read off the tree the parser built and carried from there. Working it out later means
+         * measuring the node — its name's length, its value's length, the token kinds it is made of
+         * — and a measurement is a claim about the value rather than about the file. The two agree
+         * until the source spells something the value does not keep: an escape, a decomposed
+         * spelling, a leading zero, a pair of parentheses.
+         *
+         * <p>Null rather than a zero-width region at the anchor. A node a lowering minted was
+         * written nowhere, and a report about it has nothing to underline — which is a different
+         * answer from underlining no characters at a place the author's cursor could be.
+         */
+        Region region();
+
+        /**
+         * Where a report about this expression points: the characters it was written over, or the
+         * point it is anchored at where no one wrote it.
+         *
+         * <p>The choice between two answers already held, and not a third answer worked out from
+         * either. A node a lowering minted has somewhere a complaint about it belongs and nothing to
+         * underline, and that is what a point is — a place with no characters claimed at it, which
+         * the renderer draws as the one caret it draws for anything it cannot measure.
+         *
+         * <p>Null only where the node has neither, which is a report with nowhere to point.
+         */
+        default Region reportedAt() {
+            Region written = region();
+            if (written != null) {
+                return written;
+            }
+            return pos() == null ? null : Region.point(pos());
+        }
+    }
 
     /**
      * {@code unreachable "reason"} — the point the model says cannot arise (spec §match).
@@ -988,7 +1043,7 @@ public interface Ast {
      * rather than an expression so that the compiler and a reader both have it without running the
      * model; at run time it is the message the abort carries.
      */
-    record Unreachable(String reason, SourcePos pos) implements Expr {}
+    record Unreachable(String reason, SourcePos pos, Region region) implements Expr {}
 
     /**
      * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec §blocks).
@@ -997,17 +1052,17 @@ public interface Ast {
      * field, or bound by {@code let}. The parser only accepts one in an argument position, and
      * because it cannot escape, the backend inlines it rather than building a closure.
      */
-    record Block(List<Binder> params, Expr body, SourcePos pos) implements Expr {
+    record Block(List<Binder> params, Expr body, SourcePos pos, Region region) implements Expr {
 
         /** A block whose parameters are names no one wrote — what a desugaring builds. A block the
          * author wrote is built from binders of its own, because its parameters are written one by
          * one and the block's own position is where the first of them starts at best. */
-        public static Block desugared(List<String> params, Expr body, SourcePos pos) {
+        public static Block desugared(List<String> params, Expr body, SourcePos pos, Region region) {
             List<Binder> binders = new ArrayList<>();
             for (String p : params) {
                 binders.add(Binder.desugared(p, pos));
             }
-            return new Block(binders, body, pos);
+            return new Block(binders, body, pos, region);
         }
 
         /** How the parameters were written, in order. */
@@ -1033,28 +1088,29 @@ public interface Ast {
      * the call-site check already cover it.
      */
     record LetIn(Binder binder, Expr value, RetType declaredType, boolean annotated, Name opens,
-                 Expr body, SourcePos pos) implements Expr {
+                 Expr body, SourcePos pos, Region region) implements Expr {
         /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
-        public LetIn(Binder binder, Expr value, Expr body, SourcePos pos) {
-            this(binder, value, null, false, null, body, pos);
+        public LetIn(Binder binder, Expr value, Expr body, SourcePos pos, Region region) {
+            this(binder, value, null, false, null, body, pos, region);
         }
 
         /** A binding for a name no one wrote: what a desugaring holds a value in. A binding the
          * source wrote is built from a binder of its own, because a {@code let} statement starts at
          * its keyword and the name it binds is somewhere after it. */
-        public LetIn(String name, Expr value, Expr body, SourcePos pos) {
-            this(Binder.desugared(name, pos), value, null, false, null, body, pos);
+        public LetIn(String name, Expr value, Expr body, SourcePos pos, Region region) {
+            this(Binder.desugared(name, pos), value, null, false, null, body, pos, region);
         }
 
         /** A binding carrying an inlined helper parameter's declared type. */
-        public LetIn(Binder binder, Expr value, RetType declaredType, Expr body, SourcePos pos) {
-            this(binder, value, declaredType, false, null, body, pos);
+        public LetIn(Binder binder, Expr value, RetType declaredType, Expr body, SourcePos pos,
+                     Region region) {
+            this(binder, value, declaredType, false, null, body, pos, region);
         }
 
         /** {@code let x: T = value} — a binding the source annotated. */
         public static LetIn annotated(Binder binder, Expr value, RetType type, Expr body,
-                                      SourcePos pos) {
-            return new LetIn(binder, value, type, true, null, body, pos);
+                                      SourcePos pos, Region region) {
+            return new LetIn(binder, value, type, true, null, body, pos, region);
         }
 
         public String name() {
@@ -1067,8 +1123,10 @@ public interface Ast {
          * the exhaustiveness pass, which knows the scrutinee's cases; a binding has no such pass
          * behind it, so the name is carried here for the checker to hold against the value's type.
          */
-        public static LetIn opening(String name, Expr value, Name opens, Expr body, SourcePos pos) {
-            return new LetIn(Binder.desugared(name, pos), value, null, false, opens, body, pos);
+        public static LetIn opening(String name, Expr value, Name opens, Expr body, SourcePos pos,
+                                    Region region) {
+            return new LetIn(Binder.desugared(name, pos), value, null, false, opens, body, pos,
+                    region);
         }
 
         /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
@@ -1101,7 +1159,7 @@ public interface Ast {
      */
     record Expansion(ValueName callee, BindingOwner application, List<Bound> bound,
                      List<Given> given, RetType declaredReturn, Expr body,
-                     SourcePos pos) implements Expr {
+                     SourcePos pos, Region region) implements Expr {
 
         /**
          * The same expansion as the nested bindings it writes — for a reader whose question is only
@@ -1117,7 +1175,7 @@ public interface Ast {
             Expr out = body;
             for (int i = bound.size() - 1; i >= 0; i--) {
                 Bound b = bound.get(i);
-                out = new LetIn(b.binder(), b.value(), b.declaredType(), out, pos);
+                out = new LetIn(b.binder(), b.value(), b.declaredType(), out, pos, region);
             }
             return out;
         }
@@ -1152,23 +1210,23 @@ public interface Ast {
     record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type). */
-    record ListLit(List<Expr> elements, SourcePos pos) implements Expr {}
+    record ListLit(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
 
     /** A guard-only comprehension {@code [element | guard, ...]}: the element is included when
      * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation). */
-    record ListComp(Expr element, List<Expr> guards, SourcePos pos) implements Expr {}
+    record ListComp(Expr element, List<Expr> guards, SourcePos pos, Region region) implements Expr {}
 
     /** A tuple {@code (e1, e2, ...)} of two or more values (ADR-0036), an expression-level value
      * that never crosses the data/behavior boundary. Opened with a {@code let (x, y) = t} destructure. */
-    record Tuple(List<Expr> elements, SourcePos pos) implements Expr {}
+    record Tuple(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
 
     /** Reads the {@code index}-th element of a tuple; what a {@code let (x, y) = t} destructure lowers
      * a field read to. Not written in source — the parser produces it from a tuple pattern. {@code arity}
      * is the pattern's name count, so the checker rejects a tuple of a different size (ADR-0036). */
-    record TupleGet(Expr tuple, int index, int arity, SourcePos pos) implements Expr {}
+    record TupleGet(Expr tuple, int index, int arity, SourcePos pos, Region region) implements Expr {}
 
     /** {@code if cond then a else b} — both branches must have the same type (spec §if). */
-    record If(Expr cond, Expr then, Expr els, SourcePos pos) implements Expr {}
+    record If(Expr cond, Expr then, Expr els, SourcePos pos, Region region) implements Expr {}
 
     /**
      * {@code if T(v) as x then a else b} — an attempted construction, and what
@@ -1188,12 +1246,13 @@ public interface Ast {
      * That it is one, and that its type carries an invariant to attempt, are checked once the names
      * are resolved.
      */
-    record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els, SourcePos pos)
-            implements Expr {
+    record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els, SourcePos pos,
+                         Region region) implements Expr {
 
         /** The attempt whose failure is not told apart: one arm, naming no clause. */
-        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els, SourcePos pos) {
-            this(construct, binder, then, List.of(ElseArm.any(els)), pos);
+        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els, SourcePos pos,
+                             Region region) {
+            this(construct, binder, then, List.of(ElseArm.any(els)), pos, region);
         }
 
         /** The same, as the parser read it. */
@@ -1232,7 +1291,7 @@ public interface Ast {
     }
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. */
-    record Match(Expr scrutinee, List<Case> cases, SourcePos pos) implements Expr {}
+    record Match(Expr scrutinee, List<Case> cases, SourcePos pos, Region region) implements Expr {}
 
     /**
      * One {@code match} case: {@code case A | B ... [as x] -> body} (spec §match). {@code caseTypes}
@@ -1277,29 +1336,29 @@ public interface Ast {
      * dropping it and turning a carried construction back into the reader's own.
      */
     record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
-                   ConstructionOrigin origin, SourcePos pos) implements Expr {
+                   ConstructionOrigin origin, SourcePos pos, Region region) implements Expr {
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
         public NewData publishedBy(String module) {
-            return new NewData(typeName, inits, spreads, origin.publishedIn(module), pos);
+            return new NewData(typeName, inits, spreads, origin.publishedIn(module), pos, region);
         }
 
         /** The same construction, carried into a body by a value that body named. */
         public NewData carriedByValue() {
-            return new NewData(typeName, inits, spreads, origin.carriedByValue(), pos);
+            return new NewData(typeName, inits, spreads, origin.carriedByValue(), pos, region);
         }
     }
 
-    record IntLit(long value, SourcePos pos) implements Expr {}
+    record IntLit(long value, SourcePos pos, Region region) implements Expr {}
 
-    record DecimalLit(java.math.BigDecimal value, SourcePos pos) implements Expr {}
+    record DecimalLit(java.math.BigDecimal value, SourcePos pos, Region region) implements Expr {}
 
     /** Unary minus {@code -operand} on an Int or Decimal (spec §an-operator-takes-the-types-it-is-defined-for). */
-    record Neg(Expr operand, SourcePos pos) implements Expr {}
+    record Neg(Expr operand, SourcePos pos, Region region) implements Expr {}
 
-    record StringLit(String value, SourcePos pos) implements Expr {}
+    record StringLit(String value, SourcePos pos, Region region) implements Expr {}
 
-    record BoolLit(boolean value, SourcePos pos) implements Expr {}
+    record BoolLit(boolean value, SourcePos pos, Region region) implements Expr {}
 
     /**
      * A name used as a value — the one representation the surface AST has for one. {@code written}
@@ -1327,7 +1386,8 @@ public interface Ast {
      * {@link ValueName.Unresolved}, so a reader downstream never has a spelling to match and never
      * repeats the report.
      */
-    record Var(WrittenName written, ValueName denotes, ReachName reachedAs) implements Expr {
+    record Var(WrittenName written, ValueName denotes, ReachName reachedAs,
+               Region region) implements Expr {
 
         /**
          * A name that has been resolved has both answers or neither.
@@ -1337,11 +1397,21 @@ public interface Ast {
          * denotation across and dropped the reach name would leave a reference that resolves to a
          * declaration and reaches nothing, and the first reader of it would read the spelling
          * instead — which is what this pair was separated out to stop.
+         *
+         * <p>The region is the expression's and the name's is {@code written}'s, and they part
+         * company only where the author wrapped the name in something the tree does not keep:
+         * {@code (price)} is one expression written over nine characters and one name written over
+         * five. So the one has to hold the other. A region that did not would be a claim that the
+         * name is written somewhere this expression is not, which no source can produce.
          */
         public Var {
             if (denotes != null && reachedAs == null) {
                 throw new IllegalArgumentException("`" + written.canonical() + "` denotes " + denotes
                         + " and says nothing about how this module reaches it");
+            }
+            if (!Region.encloses(region, written.region())) {
+                throw new IllegalArgumentException("`" + written.canonical()
+                        + "` is written outside the expression it is");
             }
         }
 
@@ -1349,6 +1419,12 @@ public interface Ast {
          * module reaches it. */
         public Var(String spelling, SourcePos pos) {
             this(WrittenName.of(spelling, pos), null, null);
+        }
+
+        /** A name standing as an expression over exactly the characters that spell it — every one
+         * but a name the author parenthesized. */
+        public Var(WrittenName written, ValueName denotes, ReachName reachedAs) {
+            this(written, denotes, reachedAs, written.region());
         }
 
         /**
@@ -1361,6 +1437,20 @@ public interface Ast {
          */
         public Var(String spelling, ValueName denotes, ReachName reachedAs, SourcePos pos) {
             this(WrittenName.of(spelling, pos), denotes, reachedAs);
+        }
+
+        /**
+         * A name a pass wrote in place of one the author wrote, standing where that one stood.
+         *
+         * <p>{@code spelling} is the pass's — a helper qualified by the module that declares it, so
+         * that a body carried out of its module goes on reaching the same declaration. The
+         * characters at {@code pos} spell what the author put there, which is not this, so the name
+         * is written nowhere and only the expression has a place: the region is the one the name it
+         * replaced was read over.
+         */
+        public static Var respelled(String spelling, ValueName denotes, ReachName reachedAs,
+                                    SourcePos pos, Region region) {
+            return new Var(WrittenName.synthetic(spelling, pos), denotes, reachedAs, region);
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1453,14 +1543,24 @@ public interface Ast {
 
     /**
      * {@code target.field} — a field taken off a value, or (until {@code Resolve} folds it) a member
-     * taken off a namespace. {@code name} is the field's own occurrence; {@code pos} is where the
-     * access starts, which is where its target does.
+     * taken off a namespace. {@code name} is the field's own occurrence, and {@code pos} is where
+     * that occurrence is: a report about a field read is about the field, so it is anchored there
+     * and not where the read begins. Where it begins is {@code region}'s to say, and the two differ
+     * by however the target was written.
      */
-    record FieldAccess(Expr target, WrittenName name, SourcePos pos) implements Expr {
+    record FieldAccess(Expr target, WrittenName name, SourcePos pos, Region region) implements Expr {
 
-        /** An access a pass wrote: the field is named but written nowhere. */
+        /** An access a pass wrote: the field is named but written nowhere, so there is nothing for a
+         * report to underline. */
         public FieldAccess(Expr target, String field, SourcePos pos) {
-            this(target, WrittenName.synthetic(field, pos), pos);
+            this(target, WrittenName.synthetic(field, pos), pos, null);
+        }
+
+        /** The same access over a rewritten target. The field's occurrence and the stretch of source
+         * the read was written over are the author's and survive a rewrite of what it reads from —
+         * naming the field again here would put a spelling where an occurrence was. */
+        public FieldAccess withTarget(Expr rewritten) {
+            return rewritten == target ? this : new FieldAccess(rewritten, name, pos, region);
         }
 
         /** The field this reads. */
@@ -1479,24 +1579,25 @@ public interface Ast {
      * binding, or the type a newtype construction wraps — answered once during resolution.
      */
     record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, String appliedAs,
-                 SourcePos pos) implements Expr {
+                 SourcePos pos, Region region) implements Expr {
 
         /** Applying whatever {@code function} is, with nothing standing in for what the source
          * wrote — every application but one a lowering rewrote. */
-        public Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos) {
-            this(function, args, origin, null, pos);
+        public Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos,
+                     Region region) {
+            this(function, args, origin, null, pos, region);
         }
 
         /** Applying a name, as the parser read it, before resolution has said what the name denotes. */
-        public Apply(String fn, List<Expr> args, SourcePos pos) {
-            this(new Var(fn, pos), args, ConstructionOrigin.own(), pos);
+        public Apply(String fn, List<Expr> args, SourcePos pos, Region region) {
+            this(new Var(fn, pos), args, ConstructionOrigin.own(), pos, region);
         }
 
         /** Applying a name a pass already knows the meaning of, and knows how the body it is
          * writing into reaches. */
         public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
-                     ConstructionOrigin origin, SourcePos pos) {
-            this(new Var(fn, denotes, reachedAs, pos), args, origin, pos);
+                     ConstructionOrigin origin, SourcePos pos, Region region) {
+            this(new Var(fn, denotes, reachedAs, pos), args, origin, pos, region);
         }
 
         /** Whether what this applies is a name. A reader that wants the name itself matches on
@@ -1538,6 +1639,19 @@ public interface Ast {
         }
 
         /**
+         * Where a report about what this applies points: the characters the callee was written over.
+         *
+         * <p>Not {@link #name()}'s. The name is what a report quotes, and where a lowering replaced
+         * what was written with a binding it introduced ({@link #appliedAs}) that name is written
+         * nowhere — while the characters the binding stands for are still there, being whatever the
+         * author applied. Asking the callee gets those; asking the name gets a point at best.
+         */
+        public Region appliedAt() {
+            Region written = function.reportedAt();
+            return written != null ? written : name().reportedAt();
+        }
+
+        /**
          * The name of the declaration this application reaches, or the empty spelling where it
          * reaches none — what a table keyed by a declaration's name is looked up with.
          *
@@ -1572,18 +1686,18 @@ public interface Ast {
          * where its constructions would otherwise stand, and it is what has to say where it came
          * from. */
         public Apply carriedByValue() {
-            return new Apply(function, args, origin.carriedByValue(), appliedAs, pos);
+            return new Apply(function, args, origin.carriedByValue(), appliedAs, pos, region);
         }
 
         /** The same application over rewritten arguments — a pass that touches only the arguments
          *  says so here rather than listing the slots it is not changing, which is how
          *  {@link #appliedAs} would be dropped by a rewrite that has no opinion about it. */
         public Apply withArgs(List<Expr> args) {
-            return new Apply(function, args, origin, appliedAs, pos);
+            return new Apply(function, args, origin, appliedAs, pos, region);
         }
     }
 
-    record Binary(BinOp op, Expr left, Expr right, SourcePos pos) implements Expr {}
+    record Binary(BinOp op, Expr left, Expr right, SourcePos pos, Region region) implements Expr {}
 
 
     enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
@@ -1604,6 +1718,49 @@ public interface Ast {
      * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
      * stops the build here, which is the one place it has to be accounted for.
      */
+    /**
+     * {@code e} written over {@code region} instead of whatever it says now — for the one caller
+     * that knows a wider stretch of source than the node it is holding.
+     *
+     * <p>A form the parser reduces away is still characters in the file. {@code (a + 100)} leaves an
+     * {@code Ast.Binary} because the parentheses say nothing the tree needs to keep, and they are
+     * nine characters the author wrote as that argument all the same. A report that underlined seven
+     * of them would be pointing at an expression the reader has to work out is the one it means.
+     *
+     * <p>The reduction is the frontend's and so is this: nowhere downstream is there anything left
+     * saying the parentheses were ever there.
+     */
+    public static Expr withRegion(Expr e, Region region) {
+        return switch (e) {
+            case IntLit x -> new IntLit(x.value(), x.pos(), region);
+            case DecimalLit x -> new DecimalLit(x.value(), x.pos(), region);
+            case StringLit x -> new StringLit(x.value(), x.pos(), region);
+            case BoolLit x -> new BoolLit(x.value(), x.pos(), region);
+            case Var x -> new Var(x.written(), x.denotes(), x.reachedAs(), region);
+            case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
+            case Neg x -> new Neg(x.operand(), x.pos(), region);
+            case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
+            case Binary x -> new Binary(x.op(), x.left(), x.right(), x.pos(), region);
+            case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.appliedAs(), x.pos(),
+                    region);
+            case If x -> new If(x.cond(), x.then(), x.els(), x.pos(), region);
+            case IfConstructed x ->
+                    new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.pos(), region);
+            case LetIn x -> new LetIn(x.binder(), x.value(), x.declaredType(), x.annotated(),
+                    x.opens(), x.body(), x.pos(), region);
+            case Expansion x -> new Expansion(x.callee(), x.application(), x.bound(), x.given(),
+                    x.declaredReturn(), x.body(), x.pos(), region);
+            case Block x -> new Block(x.params(), x.body(), x.pos(), region);
+            case ListLit x -> new ListLit(x.elements(), x.pos(), region);
+            case ListComp x -> new ListComp(x.element(), x.guards(), x.pos(), region);
+            case Tuple x -> new Tuple(x.elements(), x.pos(), region);
+            case TupleGet x -> new TupleGet(x.tuple(), x.index(), x.arity(), x.pos(), region);
+            case NewData x ->
+                    new NewData(x.typeName(), x.inits(), x.spreads(), x.origin(), x.pos(), region);
+            case Match x -> new Match(x.scrutinee(), x.cases(), x.pos(), region);
+        };
+    }
+
     private static Expr atSlots(Expr e, UnaryOperator<Expr> atExpr, UnaryOperator<Var> atName) {
         return switch (e) {
             case IntLit x -> x;
@@ -1614,30 +1771,30 @@ public interface Ast {
             case Unreachable x -> x;
             case Neg n -> {
                 Expr operand = atExpr.apply(n.operand());
-                yield operand == n.operand() ? n : new Neg(operand, n.pos());
+                yield operand == n.operand() ? n : new Neg(operand, n.pos(), n.region());
             }
             case FieldAccess fa -> {
                 Expr target = atExpr.apply(fa.target());
-                yield target == fa.target() ? fa : new FieldAccess(target, fa.field(), fa.pos());
+                yield fa.withTarget(target);
             }
             case Binary b -> {
                 Expr left = atExpr.apply(b.left());
                 Expr right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.pos());
+                        : new Binary(b.op(), left, right, b.pos(), b.region());
             }
             case Apply a -> {
                 Expr function = atExpr.apply(a.function());
                 List<Expr> args = each(a.args(), atExpr);
                 yield function == a.function() && args == a.args() ? a
-                        : new Apply(function, args, a.origin(), a.appliedAs(), a.pos());
+                        : new Apply(function, args, a.origin(), a.appliedAs(), a.pos(), a.region());
             }
             case If iff -> {
                 Expr cond = atExpr.apply(iff.cond());
                 Expr then = atExpr.apply(iff.then());
                 Expr els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
-                        : new If(cond, then, els, iff.pos());
+                        : new If(cond, then, els, iff.pos(), iff.region());
             }
             case IfConstructed ic -> {
                 Expr construct = atExpr.apply(ic.construct());
@@ -1647,14 +1804,14 @@ public interface Ast {
                     return body == arm.body() ? arm : arm.with(body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
-                        : new IfConstructed(construct, ic.binder(), then, els, ic.pos());
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.pos(), ic.region());
             }
             case LetIn li -> {
                 Expr value = atExpr.apply(li.value());
                 Expr body = atExpr.apply(li.body());
                 yield value == li.value() && body == li.body() ? li
                         : new LetIn(li.binder(), value, li.declaredType(), li.annotated(),
-                                li.opens(), body, li.pos());
+                                li.opens(), body, li.pos(), li.region());
             }
             // `given` is not a slot. What stands there is caller code that is also inside `body`,
             // wherever the callee applies it, so a walk that took both would read one lambda twice —
@@ -1669,30 +1826,30 @@ public interface Ast {
                 Expr body = atExpr.apply(ex.body());
                 yield bound == ex.bound() && body == ex.body() ? ex
                         : new Expansion(ex.callee(), ex.application(), bound, ex.given(),
-                                ex.declaredReturn(), body, ex.pos());
+                                ex.declaredReturn(), body, ex.pos(), ex.region());
             }
             case Block bl -> {
                 Expr body = atExpr.apply(bl.body());
-                yield body == bl.body() ? bl : new Block(bl.params(), body, bl.pos());
+                yield body == bl.body() ? bl : new Block(bl.params(), body, bl.pos(), bl.region());
             }
             case ListLit l -> {
                 List<Expr> elements = each(l.elements(), atExpr);
-                yield elements == l.elements() ? l : new ListLit(elements, l.pos());
+                yield elements == l.elements() ? l : new ListLit(elements, l.pos(), l.region());
             }
             case ListComp comp -> {
                 Expr element = atExpr.apply(comp.element());
                 List<Expr> guards = each(comp.guards(), atExpr);
                 yield element == comp.element() && guards == comp.guards() ? comp
-                        : new ListComp(element, guards, comp.pos());
+                        : new ListComp(element, guards, comp.pos(), comp.region());
             }
             case Tuple tup -> {
                 List<Expr> elements = each(tup.elements(), atExpr);
-                yield elements == tup.elements() ? tup : new Tuple(elements, tup.pos());
+                yield elements == tup.elements() ? tup : new Tuple(elements, tup.pos(), tup.region());
             }
             case TupleGet tg -> {
                 Expr tuple = atExpr.apply(tg.tuple());
                 yield tuple == tg.tuple() ? tg
-                        : new TupleGet(tuple, tg.index(), tg.arity(), tg.pos());
+                        : new TupleGet(tuple, tg.index(), tg.arity(), tg.pos(), tg.region());
             }
             case NewData nd -> {
                 // the spreads first: `..base` is written before the fields that replace what it
@@ -1700,10 +1857,10 @@ public interface Ast {
                 List<Var> spreads = each(nd.spreads(), atName);
                 List<FieldInit> inits = each(nd.inits(), i -> {
                     Expr value = atExpr.apply(i.value());
-                    return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
+                    return i.withValue(value);
                 });
                 yield spreads == nd.spreads() && inits == nd.inits() ? nd
-                        : new NewData(nd.typeName(), inits, spreads, nd.origin(), nd.pos());
+                        : new NewData(nd.typeName(), inits, spreads, nd.origin(), nd.pos(), nd.region());
             }
             case Match m -> {
                 Expr scrutinee = atExpr.apply(m.scrutinee());
@@ -1713,7 +1870,7 @@ public interface Ast {
                             : new Case(c.caseTypes(), c.binding(), body, c.unwrapAsserts(), c.pos());
                 });
                 yield scrutinee == m.scrutinee() && cases == m.cases() ? m
-                        : new Match(scrutinee, cases, m.pos());
+                        : new Match(scrutinee, cases, m.pos(), m.region());
             }
         };
     }

@@ -270,7 +270,7 @@ public final class Names {
          */
         Ast.Var required(Ast.Var ref, String by) {
             return behavior(ref, (name, candidates) -> Report.raised(Diagnostic
-                            .at(name.written().region())
+                            .at(name.written().reportedAt())
                             .suggestion(Suggest.candidate(name.name(), candidates))
                             .hint(new DeclarationMessage.DeclareItHereOrImportIt(name.name())).say(new DeclarationMessage.DependsOnNamesNoSuchBehavior(by, name.name())).build()));
         }
@@ -351,7 +351,7 @@ public final class Names {
             WrittenName written = ref.written();
             String name = written.canonical();
             return Report.raised(Diagnostic
-                            .at(written.region())
+                            .at(written.reportedAt())
                             .suggestion(Suggest.candidate(name, candidates)).say(new NameMessage.NoBehaviorOfThatNameInThisPipeline(written.quoted())).build());
         }
 
@@ -813,7 +813,7 @@ public final class Names {
                         continue;
                     }
                     reports.add(Report.of(Diagnostic.say(new ModuleMessage.ImportedButNeverUsedUnderThisName(imported.written().quoted()))
-                            .at(imported.written().region())
+                            .at(imported.written().reportedAt())
                             
                             .hint(new ModuleMessage.TakeItOffTheImportList())
                             .build()));
