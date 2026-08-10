@@ -58,15 +58,33 @@ public final class Deviations {
         return new Report(out, settles(source, canonical.text()));
     }
 
-    /** Every family's answer about one source. */
+    /**
+     * Every family's answer about one source.
+     *
+     * <p>A family that cannot answer is left out rather than allowed to end the report. Three of
+     * them hold the two token streams side by side, which the canonicalization that rewrites a
+     * definition's lambda makes impossible — and a source that writes one is an ordinary source,
+     * not a broken one. What the rest of them can say is still worth saying, and
+     * {@link Report#whole} is what tells a reader that it is not all of it.
+     */
     private static List<Witness> all(String source, Formatter.CanonicalForm canonical) {
-        List<Witness> out = new ArrayList<>(Witnesses.spacing(source, canonical));
-        out.addAll(Witnesses.separation(source, canonical));
-        out.addAll(Witnesses.indentation(source, canonical));
-        out.addAll(Witnesses.forced(source, canonical));
-        out.addAll(Witnesses.conditional(source, canonical));
-        out.addAll(Witnesses.comments(source, canonical));
+        List<Witness> out = new ArrayList<>();
+        List<Family> families = List.of(Witnesses::spacing, Witnesses::separation,
+                Witnesses::indentation, Witnesses::forced, Witnesses::conditional,
+                Witnesses::comments);
+        for (Family family : families) {
+            try {
+                out.addAll(family.of(source, canonical));
+            } catch (IllegalStateException _) {
+                // this family cannot say anything about this source
+            }
+        }
         return out;
+    }
+
+    /** What one family has against a source. */
+    private interface Family {
+        List<Witness> of(String source, Formatter.CanonicalForm canonical);
     }
 
     /**
@@ -83,7 +101,12 @@ public final class Deviations {
             if (witnesses.isEmpty()) {
                 break;
             }
-            String next = Repair.repair(text, form, witnesses);
+            String next;
+            try {
+                next = Repair.repair(text, form, witnesses);
+            } catch (RuntimeException _) {
+                return false;   // two expectations over one stretch, or one that cannot be written
+            }
             if (next.equals(text)) {
                 break;
             }
@@ -103,6 +126,8 @@ public final class Deviations {
                     "a comment at the end of a line is written one space after the code";
             case Witness.CommentAbove _ ->
                     "a comment on a line of its own is written above the line it owns";
+            case Witness.CommentCarrier _ ->
+                    "a comment is carried by the construct it was written against";
         };
     }
 
@@ -115,6 +140,7 @@ public final class Deviations {
             case Witness.Conditional c -> c.canonicalIsWhole() ? "on one line" : "down the page";
             case Witness.TrailingComment t -> quoted(t.canonical());
             case Witness.CommentAbove a -> lineBreaks(a.canonical());
+            case Witness.CommentCarrier _ -> "somewhere else";
         };
     }
 
@@ -128,6 +154,7 @@ public final class Deviations {
             case Witness.Conditional c -> c.sourceIsWhole() ? "on one line" : "down the page";
             case Witness.TrailingComment t -> quoted(t.source());
             case Witness.CommentAbove a -> lineBreaks(a.source());
+            case Witness.CommentCarrier _ -> "here";
         };
     }
 

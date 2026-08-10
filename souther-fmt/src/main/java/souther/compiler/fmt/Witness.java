@@ -133,6 +133,17 @@ sealed interface Witness {
     record CommentAbove(Comment unit, int canonical, int source) implements Witness {}
 
     /**
+     * A comment the canonical form writes somewhere else: which adjacency of the code it stands in
+     * there, and which it stands in in the source.
+     *
+     * <p>Which construct carries a comment is a decision, and it is taken over the places the
+     * canonical form has rather than over the source's tree — where the two differ, a comment can
+     * only be filed against something that is written. So this says where it went, and the two
+     * numbers are adjacencies of the code both texts share.
+     */
+    record CommentCarrier(Comment unit, int canonical, int source) implements Witness {}
+
+    /**
      * A forced-layout rule's unit: one boundary the canonical form breaks whatever the width, and
      * the obligation it breaks it for.
      *

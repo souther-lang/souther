@@ -229,9 +229,21 @@ final class Witnesses {
                     "the source holds " + had.size() + " comments and its canonical form "
                             + writes.size() + "; the two cannot be held side by side");
         }
+        List<SyntaxToken> hadCode = code(CstParser.parse(source).root());
+        List<SyntaxToken> writesCode = code(CstParser.parse(text).root());
+        boolean aligned = hadCode.size() == writesCode.size();
         List<Witness> out = new ArrayList<>();
         for (int i = 0; i < had.size(); i++) {
             Witness.Comment unit = new Witness.Comment(had.get(i).start());
+            if (aligned) {
+                int wroteAt = follows(writesCode, writes.get(i).start());
+                int hasAt = follows(hadCode, had.get(i).start());
+                if (wroteAt != hasAt) {
+                    out.add(new Witness.CommentCarrier(unit, wroteAt, hasAt));
+                    continue;   // what stands beside it is asked where it is written, not where
+                                // the source happened to leave it
+                }
+            }
             String hadBefore = before(source, had.get(i));
             String writesBefore = before(text, writes.get(i));
             if (writesBefore.indexOf('\n') < 0 && hadBefore.indexOf('\n') < 0
@@ -247,6 +259,17 @@ final class Witnesses {
             }
         }
         return out;
+    }
+
+    /** Which code token a comment stands after, as its index, or -1 where none is in front of it. */
+    private static int follows(List<SyntaxToken> tokens, int at) {
+        int found = -1;
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.get(i).end() <= at) {
+                found = i;
+            }
+        }
+        return found;
     }
 
     /** What stands between a comment and the code before it, back to the line it starts on. */

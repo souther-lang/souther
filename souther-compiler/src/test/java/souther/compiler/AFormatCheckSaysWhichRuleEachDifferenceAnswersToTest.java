@@ -99,19 +99,19 @@ class AFormatCheckSaysWhichRuleEachDifferenceAnswersToTest {
     }
 
     /**
-     * And a difference no rule accounts for is said and shown. Which construct carries a comment is
-     * a decision no rule here has been written for, so a source that put one above a field the
-     * canonical form writes on another line differs in a way none of them names — and a reader told
-     * only what is named would take the file for fixed.
+     * And a difference no rule accounts for is said and shown.
+     *
+     * <p>A definition whose right-hand side is a lambda is written with its parameters on the left,
+     * which writes tokens the source has not — so the rules that hold the two token streams side by
+     * side cannot answer about it, and what the others say is not all of it. A reader told only what
+     * is named would take the file for fixed.
      */
     @Test
     void aDifferenceNoRuleAccountsForIsSaidAndShown() throws Exception {
         Path file = source("m.sou", """
-                module billing exposing ( Note )
+                module billing exposing ( f )
 
-                data Note = {
-                    // what the body holds
-                    body: String, size: Int }
+                let f = (x) -> x
                 """);
 
         Said said = run("fmt", file.toString(), "--check");

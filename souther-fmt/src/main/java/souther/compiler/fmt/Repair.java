@@ -97,6 +97,7 @@ final class Repair {
             case Witness.TrailingComment t -> List.of(new Edit(
                     t.unit().at() - t.source().length(), t.unit().at(), t.canonical()));
             case Witness.CommentAbove a -> List.of(under(source, a));
+            case Witness.CommentCarrier c -> moved(source, canonical, c);
         };
     }
 
@@ -204,6 +205,32 @@ final class Repair {
             to--;
         }
         return new Edit(from, to, "\n".repeat(witness.canonical()));
+    }
+
+    /**
+     * The two stretches a comment moves between: the one it is written in and the one it is written
+     * in in the canonical form.
+     *
+     * <p>Both are written as the canonical form has them, which is what moves it — the comment is
+     * in one of the two there and in the other here, and writing each stretch as the canonical form
+     * has it leaves it in exactly one. A comment is not cut out and pasted: the stretches say what
+     * they hold, and the comment is part of what they hold.
+     */
+    private static List<Edit> moved(String source, Formatter.CanonicalForm canonical,
+            Witness.CommentCarrier witness) {
+        String text = canonical.layout().text();
+        List<SyntaxToken> had = Witnesses.code(CstParser.parse(source).root());
+        List<SyntaxToken> writes = Witnesses.code(CstParser.parse(text).root());
+        List<Edit> out = new ArrayList<>();
+        for (int i : new int[] {witness.canonical(), witness.source()}) {
+            if (i < 0 || i + 1 >= writes.size()) {
+                continue;
+            }
+            out.add(new Edit(had.get(i).end(), had.get(i + 1).start(),
+                    text.substring(writes.get(i).end(), writes.get(i + 1).start())));
+        }
+        out.sort(Comparator.comparingInt(Edit::from));
+        return out;
     }
 
     /** What the canonical form writes between the two tokens of a boundary. */
