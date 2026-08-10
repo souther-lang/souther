@@ -126,6 +126,16 @@ public sealed interface ParseMessage extends Message {
     @Code(DiagnosticCode.E2305)
     record AStringLiteralIsNotClosed() implements ParseMessage, Reported {}
 
+    /**
+     * A backslash written before something the language does not read as an escape.
+     *
+     * <p>Refused rather than read as the character alone: dropping the backslash would take a
+     * character the author wrote out of the value and say nothing, so a mistyped `\d` would become
+     * `d` and a pattern would be run against text nobody wrote.
+     */
+    @Code(DiagnosticCode.E2305)
+    record AnEscapeIsNotOneTheLanguageReads(String escaped) implements ParseMessage, Reported {}
+
     @Code(DiagnosticCode.E2306)
     record AnUnexpectedCharacter(String character) implements ParseMessage, Reported {}
 

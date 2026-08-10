@@ -3,9 +3,11 @@ package souther.compiler.cst;
 import souther.compiler.diag.msg.ParseMessage;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A trivia-preserving, non-throwing lexer. It turns source into a flat stream of {@link GreenToken}s
@@ -47,6 +49,21 @@ public final class CstLexer {
     /** The reserved keywords, the single source of truth a syntax-highlighter grammar derives from. */
     public static Set<String> keywords() {
         return KEYWORDS.keySet();
+    }
+
+    /** The characters a backslash may be written before. */
+    private static final String ESCAPES = "ntr\"\\";
+
+    /**
+     * The characters a backslash may be written before, each as it is written.
+     *
+     * <p>The same list the scan refuses by, so a highlighter marking what the compiler refuses reads
+     * this rather than restating it. Two lists would disagree the first time one of them moved, and
+     * the editor would colour as an escape what a compile then rejects.
+     */
+    public static Set<String> escapes() {
+        return ESCAPES.chars().mapToObj(c -> String.valueOf((char) c))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /** The lexer's result: the token stream (trivia and a trailing {@code EOF} included) and any
@@ -151,22 +168,40 @@ public final class CstLexer {
         emit(SyntaxKind.INT_LIT, start);
     }
 
+    /**
+     * A string literal, which ends on the line it began on.
+     *
+     * <p>A newline closes nothing: a literal whose quote is missing is one line's mistake, and a
+     * scan that ran past the line would take the rest of the file into it and report the loss
+     * wherever it finally stopped. Written this way the reader is told where the quote is missing.
+     * A newline in a value is written {@code \n}.
+     */
     private void string(int start) {
         pos++;   // opening quote
-        while (pos < src.length() && src.charAt(pos) != '"') {
-            if (src.charAt(pos) == '\\' && pos + 1 < src.length()) {
-                pos += 2;   // skip the escaped character
+        while (pos < src.length() && src.charAt(pos) != '"' && !endsTheLine(src.charAt(pos))) {
+            if (src.charAt(pos) == '\\' && pos + 1 < src.length() && !endsTheLine(src.charAt(pos + 1))) {
+                char escaped = src.charAt(pos + 1);
+                if (ESCAPES.indexOf(escaped) < 0) {
+                    errors.add(CstError.of(pos, 2,
+                            new ParseMessage.AnEscapeIsNotOneTheLanguageReads(String.valueOf(escaped))));
+                }
+                pos += 2;   // the backslash and what it was written before
             } else {
                 pos++;
             }
         }
-        if (pos >= src.length()) {
+        if (pos >= src.length() || endsTheLine(src.charAt(pos))) {
             errors.add(CstError.of(start, pos - start, new ParseMessage.AStringLiteralIsNotClosed()));
-            emit(SyntaxKind.STRING_LIT, start);   // covers to EOF, keeping the tree lossless
+            emit(SyntaxKind.STRING_LIT, start);   // stops at the line, keeping the tree lossless
             return;
         }
         pos++;   // closing quote
         emit(SyntaxKind.STRING_LIT, start);
+    }
+
+    /** Whether {@code c} ends the line, either spelling of it. */
+    private static boolean endsTheLine(char c) {
+        return c == '\n' || c == '\r';
     }
 
     /** A type variable {@code 'a}. Only the core writes these; the parser gates their use. */
