@@ -129,6 +129,33 @@ behavior judge : (
     | EscalatedToTheManager
 ```
 
+A `guard` reads the same way and gives way in the same order. Where it fits, it is one line. Where
+it does not, the `else` opens a line under it — the departure is what the guard is for, and left to
+the condition's own breaking it ends up at the end of whichever continuation line the last conjunct
+took. The condition breaks after that, and only where it does not fit the line the `guard` left it.
+
+```
+    guard List.length(rows) >= 1 else NoRows
+
+    guard List.allDistinctBy(x -> x, rows) && List.length(rows) >= 1 && Foo.baaaaaaaar(rows)
+        else NoRows
+
+    guard List.allDistinctBy(x -> x, rows)
+        && List.length(rows) >= 1
+        && List.length(rows) < 100
+        && Foo.bar(rows)
+        else NoRows
+```
+
+A `guard` whose departures are named clauses is written the other way round, because there is no one
+departure to break off: the `else` ends the guard's own line and the clauses go under it.
+
+```
+    guard Lines(rows) as items else
+        | nonEmpty -> NoRows
+        | unique -> DuplicateProduct
+```
+
 A comment keeps what it was written about. On the line of the code it follows it stays there; on a
 line of its own it goes above what follows it, unless a blank line separates it from that and none
 separates it from the code above, in which case it stays under that code. A comment with nothing
