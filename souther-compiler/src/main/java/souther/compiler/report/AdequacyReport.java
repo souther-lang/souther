@@ -590,6 +590,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             b -> whyNoBoundary(b.coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
+        // Named, and not only counted. The line is one somebody should still write; what is missing
+        // is a way for this build to see that they did, and an author who cannot tell which edge that
+        // is has been told a number and no work.
+        for (BoundaryAssessment b : partition.boundaries()) {
+            if (b.coverage() instanceof BoundaryAssessment.Coverage.NotMeasured absent
+                    && absent.reason() == BoundaryAssessment.Coverage.Reason.NO_ARM_WITNESSES_IT) {
+                out.append(String.format("      · not measurable: %s = %s (%s)%n",
+                        b.axis(), b.value(), b.origin()));
+            }
+        }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
             out.append(String.format("      · no row is at %s = %s (%s)%n",
                     f.args().get(0), f.args().get(1), f.args().get(2)));
@@ -738,6 +748,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARMS_NOT_ASKED -> "the arms were not asked for";
             case ARMS_UNREADABLE -> "the arms could not be measured";
             case NO_ROWS -> "no row names this behavior";
+            case NO_ARM_WITNESSES_IT ->
+                    "no arm of the guard shows the comparison ran at this value";
         };
     }
 

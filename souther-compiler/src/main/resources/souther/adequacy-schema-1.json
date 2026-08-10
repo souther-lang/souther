@@ -192,8 +192,8 @@
               },
               "status": { "$ref": "#/$defs/status" },
               "reason": {
-                "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a guard's line only, which is met by reaching the comparison rather than by writing the value; an invariant's line is met by writing it and is never waiting on the arms.",
-                "enum": ["arms_not_asked", "arms_unreadable", "no_rows"]
+                "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked`, `arms_unreadable` and `no_arm_witnesses_it` belong to a guard's line only, which is met by reaching the comparison rather than by writing the value; an invariant's line is met by writing it and is never waiting on the arms. `no_arm_witnesses_it` is the comparison sitting inside a condition whose arms do not separate the rows that reached it from the rows that did not — the second operand of an `&&` on the side where it is false — so the line is owed and this build cannot see it met.",
+                "enum": ["arms_not_asked", "arms_unreadable", "no_rows", "no_arm_witnesses_it"]
               }
             }
           }

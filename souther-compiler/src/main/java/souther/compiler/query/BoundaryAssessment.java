@@ -60,7 +60,18 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
              *  comparison. Never a reason for an invariant's line. */
             ARMS_UNREADABLE(MeasurementStatus.NOT_MEASURED),
             /** No row names this behavior. */
-            NO_ROWS(MeasurementStatus.NOT_MEASURED);
+            NO_ROWS(MeasurementStatus.NOT_MEASURED),
+            /**
+             * No arm of the guard separates the rows that reached the comparison from the rows that
+             * did not.
+             *
+             * <p>The second operand of a {@code &&} has this on the side where it is false: the arm
+             * a row there lands in is the one every other way of failing the condition lands in too.
+             * Never a reason for an invariant's line, and never a claim that the line is not owed —
+             * a row at it is still a row somebody should write, and this build has no way to see
+             * that they did.
+             */
+            NO_ARM_WITNESSES_IT(MeasurementStatus.NOT_MEASURED);
 
             private final MeasurementStatus status;
 

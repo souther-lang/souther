@@ -71,12 +71,12 @@ public final class GuardThresholds {
                              List<String> parameters, Symbols symbols, List<Threshold> out,
                              List<GuardEdge> edges, List<TermPath> unread) {
         if (e instanceof Core.If iff) {
-            TermPath made = read(behavior, iff, plan, parameters, symbols, out, edges);
+            List<TermPath> made = read(behavior, iff, plan, parameters, symbols, out, edges);
             // Every position this condition compares, less the one a line was drawn on. What is left
             // is a rule the model states here and this did not read, which is the one thing that
             // keeps a later reader from taking an empty list for a model that says nothing.
             for (TermPath compared : comparedIn(iff.cond(), parameters, symbols)) {
-                if (!compared.equals(made) && !unread.contains(compared)) {
+                if (!made.contains(compared) && !unread.contains(compared)) {
                     unread.add(compared);
                 }
             }
@@ -124,13 +124,80 @@ public final class GuardThresholds {
         };
     }
 
-    /** The position a line was drawn on here, or null where none was. */
-    private static TermPath read(String behavior, Core.If iff, CoverageSites.Plan plan,
-                                 List<String> parameters, Symbols symbols, List<Threshold> out,
-                                 List<GuardEdge> edges) {
-        if (!(iff.cond() instanceof Core.Binary comparison)) {
-            return null;
+    /**
+     * The positions a line was drawn on here.
+     *
+     * <p>One condition can hold several. {@code A && B} is two comparisons and two lines, and which
+     * arm stands as evidence for each is not the same answer — so each is read with the witness its
+     * place in the condition leaves it, and the arms are numbered once for the {@code if} they both
+     * belong to.
+     */
+    private static List<TermPath> read(String behavior, Core.If iff, CoverageSites.Plan plan,
+                                       List<String> parameters, Symbols symbols,
+                                       List<Threshold> out, List<GuardEdge> edges) {
+        List<TermPath> made = new ArrayList<>();
+        for (Placed each : comparisonsIn(iff.cond())) {
+            TermPath here = readOne(behavior, iff, each, plan, parameters, symbols, out, edges);
+            if (here != null) {
+                made.add(here);
+            }
         }
+        return made;
+    }
+
+    /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
+    private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
+
+    /**
+     * The comparisons a condition is made of, each with what its place leaves as evidence.
+     *
+     * <p>The leftmost is always evaluated, whatever the condition is made of. Past that it depends on
+     * what combines them: under a condition that is nothing but {@code &&}, reaching the arm where
+     * the whole thing held proves every operand was evaluated and true; under nothing but
+     * {@code ||}, the arm where it did not hold does. A condition mixing the two leaves neither arm
+     * separating the rows that reached a comparison from the rows that did not, and that is said
+     * rather than guessed at — the line is still the model's, and only the evidence is missing.
+     */
+    private static List<Placed> comparisonsIn(Core condition) {
+        List<Core> leaves = new ArrayList<>();
+        List<Ast.BinOp> combining = new ArrayList<>();
+        flatten(condition, leaves, combining);
+        OriginRef.GuardOrigin.Witness past = combining.isEmpty()
+                ? OriginRef.GuardOrigin.Witness.BOTH
+                : combining.stream().allMatch(op -> op == Ast.BinOp.AND)
+                        ? OriginRef.GuardOrigin.Witness.THEN
+                        : combining.stream().allMatch(op -> op == Ast.BinOp.OR)
+                                ? OriginRef.GuardOrigin.Witness.ELSE
+                                : OriginRef.GuardOrigin.Witness.NEITHER;
+        List<Placed> out = new ArrayList<>();
+        for (int i = 0; i < leaves.size(); i++) {
+            if (leaves.get(i) instanceof Core.Binary binary && !combines(binary.op())) {
+                out.add(new Placed(binary, i == 0 ? OriginRef.GuardOrigin.Witness.BOTH : past));
+            }
+        }
+        return out;
+    }
+
+    /** The operands of a condition, left to right, and the operators holding them together. */
+    private static void flatten(Core e, List<Core> leaves, List<Ast.BinOp> combining) {
+        if (e instanceof Core.Binary binary && combines(binary.op())) {
+            combining.add(binary.op());
+            flatten(binary.left(), leaves, combining);
+            flatten(binary.right(), leaves, combining);
+            return;
+        }
+        leaves.add(e);
+    }
+
+    private static boolean combines(Ast.BinOp op) {
+        return op == Ast.BinOp.AND || op == Ast.BinOp.OR;
+    }
+
+    /** The position a line was drawn on by one comparison, or null where none was. */
+    private static TermPath readOne(String behavior, Core.If iff, Placed placed,
+                                    CoverageSites.Plan plan, List<String> parameters,
+                                    Symbols symbols, List<Threshold> out, List<GuardEdge> edges) {
+        Core.Binary comparison = placed.comparison();
         Ast.BinOp op = comparison.op();
         NumericTerm term = termOf(comparison.left(), parameters, symbols);
         BigDecimal value = constantOf(comparison.right());
@@ -155,14 +222,23 @@ public final class GuardThresholds {
         if (guard == null) {
             return null;   // no site for this `if`: nothing could answer for it
         }
+        // True at the line's own value for the operators that include it, which is not the same
+        // question as which class the value falls in: `x <= c` and `x > c` agree about the second.
+        boolean holds = op == Ast.BinOp.LE || op == Ast.BinOp.GE;
         out.add(new Threshold(term, value, below,
                 new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
-                        below)));
+                        below, placed.witness(), holds)));
         // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
         // and `x > c` agree about the first and take opposite halves, so the arms are read off the
         // operator here, where it is still known, and not recovered from the threshold later.
-        int then = guard.siteIndexThen();
-        int otherwise = guard.siteIndexElse();
+        // An arm that does not witness this comparison is not one of its edges either: what reaches
+        // it is decided by the rest of the condition as much as by this line.
+        int then = placed.witness() == OriginRef.GuardOrigin.Witness.ELSE
+                || placed.witness() == OriginRef.GuardOrigin.Witness.NEITHER
+                        ? CoverageSites.NO_SITE : guard.siteIndexThen();
+        int otherwise = placed.witness() == OriginRef.GuardOrigin.Witness.THEN
+                || placed.witness() == OriginRef.GuardOrigin.Witness.NEITHER
+                        ? CoverageSites.NO_SITE : guard.siteIndexElse();
         switch (op) {
             case LE -> {
                 edge(edges, guard, then, term, value, true, true);

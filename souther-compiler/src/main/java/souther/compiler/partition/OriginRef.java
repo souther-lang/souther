@@ -44,9 +44,48 @@ public sealed interface OriginRef {
      * @param valueBelongsBelow which side of the line the cut value itself is on. It decides which
      *                          neighbour is the other class's edge: {@code <= 3000} leaves 3001 over
      *                          there, {@code < 3000} leaves 2999.
+     * @param witness           which arms of the {@code if} prove this comparison was evaluated.
+     *                          Both, where the comparison is the whole condition. Under {@code A &&
+     *                          B} only {@code then} proves the second operand ran, and under
+     *                          {@code A || B} only {@code else} does — so a row that landed in the
+     *                          other arm has shown nothing about this line, however its value reads
+     * @param holdsAtTheValue   whether the comparison is true at the line's own value, which is what
+     *                          says which side of it a row would have to be on to reach a witnessing
+     *                          arm. Not derivable from {@code valueBelongsBelow}: {@code x <= c} and
+     *                          {@code x > c} agree about the class the value is in and disagree here
      */
     record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, SourceRef at,
-                       boolean valueBelongsBelow) implements OriginRef {}
+                       boolean valueBelongsBelow, Witness witness, boolean holdsAtTheValue)
+            implements OriginRef {
+
+        /** Which arms prove the comparison ran. */
+        public enum Witness {
+            /** Reaching either arm proves it: the comparison is on the leftmost spine. */
+            BOTH,
+            /** Only the arm the whole condition is true on, which is a conjunction. */
+            THEN,
+            /** Only the arm it is false on, which is a disjunction. */
+            ELSE,
+            /**
+             * Neither, which a condition mixing {@code &&} and {@code ||} leaves.
+             *
+             * <p>Not a claim that no row reaches the comparison — rows reach it all the time. It is
+             * that no arm of this {@code if} separates the rows that did from the rows that did not,
+             * so nothing this build records can tell them apart.
+             */
+            NEITHER
+        }
+
+        /** Whether an arm could witness a row written at a value the comparison is {@code true} at. */
+        public boolean witnessedWhereItHolds(boolean holds) {
+            return switch (witness) {
+                case BOTH -> true;
+                case THEN -> holds;
+                case ELSE -> !holds;
+                case NEITHER -> false;
+            };
+        }
+    }
 
     /**
      * A bound one rule put there and another took in.

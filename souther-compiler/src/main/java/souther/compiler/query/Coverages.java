@@ -357,6 +357,12 @@ final class Coverages {
             BoundaryObligation obligation, Axis axis, List<String> parameters,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
+        // Asked before the rows are, because no row could answer it. Reading the rows first would
+        // report "no row is at this value" about a value no row can be seen to be at.
+        if (!obligation.witnessed()) {
+            return new BoundaryAssessment.Coverage.NotMeasured(
+                    BoundaryAssessment.Coverage.Reason.NO_ARM_WITNESSES_IT);
+        }
         boolean guard = obligation.origin() instanceof OriginRef.GuardOrigin;
         BoundaryAssessment.Coverage.Reason absent = guard
                 ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen())

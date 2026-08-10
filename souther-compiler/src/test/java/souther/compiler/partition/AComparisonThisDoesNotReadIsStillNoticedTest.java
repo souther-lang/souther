@@ -79,19 +79,13 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
         assertEquals(List.of(), guards.unread());
     }
 
-    /** The one inside a conjunction, which nothing reads today. */
+    /** A comparison inside a conjunction is read, so it is not one this did not read. */
     @Test
-    void aComparisonInsideAConjunctionIsNamed() {
+    void aComparisonInsideAConjunctionIsReadRatherThanNamed() {
         GuardThresholds.Guards guards = read("n.value >= 1 && n.value <= 5");
 
-        assertEquals(List.of(), guards.thresholds(), "still no line, which is the state of play");
-        assertEquals(List.of(TermPath.of("n")), guards.unread());
-    }
-
-    /** And inside a disjunction, which is the same silence. */
-    @Test
-    void aComparisonInsideADisjunctionIsNamed() {
-        assertEquals(List.of(TermPath.of("n")), read("n.value < 1 || n.value > 5").unread());
+        assertEquals(2, guards.thresholds().size(), guards.thresholds().toString());
+        assertEquals(List.of(), guards.unread());
     }
 
     /**
@@ -121,6 +115,6 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void aPositionIsNamedOnceRatherThanPerComparison() {
         assertEquals(List.of(TermPath.of("n")),
-                read("n.value >= 1 && n.value <= 5 && n.value /= 3").unread());
+                read("n.value == 1 || n.value /= 3").unread());
     }
 }

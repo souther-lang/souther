@@ -196,8 +196,13 @@ class ThresholdNormalizationTest {
                         then Answer { n = 1 } else Answer { n = 2 }
                 """, "check");
 
-        assertEquals(List.of(), compound.thresholds(),
-                "nothing is read out of a condition whose parts may not be evaluated");
+        // The line is the model's wherever in the condition it is written. What the condition
+        // decides is not whether it is a line but which arm stands as evidence for it: `urgent` is
+        // evaluated on the way to either arm, and the comparison behind it only on the way to the
+        // one where the whole condition held.
+        assertEquals(1, compound.thresholds().size(), compound.thresholds().toString());
+        assertEquals(OriginRef.GuardOrigin.Witness.THEN,
+                ((OriginRef.GuardOrigin) compound.thresholds().get(0).origin()).witness());
     }
 
     @Test
