@@ -189,6 +189,25 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                 guard x < 2.0m else No
                 Ok }
 
+            data TwoDecimals = Decimal
+                invariant value >= 0.0m && value <= 1.0m
+            data TwoMoments = DateTime
+                invariant value >= DateTime("2026-08-01T00:00:00.000000000")
+                    && value <= DateTime("2026-08-01T00:00:00.000000001")
+
+            behavior singledDense : (x: TwoDecimals) -> Verdict
+                constructs Ok, No
+            let singledDense (x) = { guard x.value == 0.0m else Ok
+                guard x.value == 1.0m else No
+                Ok }
+
+            behavior singledMoment : (x: TwoMoments) -> Verdict
+                constructs Ok, No
+            let singledMoment (x) = {
+                guard x.value == DateTime("2026-08-01T00:00:00.000000000") else Ok
+                guard x.value == DateTime("2026-08-01T00:00:00.000000001") else No
+                Ok }
+
             behavior openOnBothSidesMoment : (x: DateTime) -> Verdict
                 constructs Ok, No
             let openOnBothSidesMoment (x) = {
@@ -327,6 +346,39 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         assertFalse(moment.contains(
                         "< x < 2026-08-01T00:00:00.000000002 x x = 2026-08-01T00:00:00.000000002"),
                 "and no row is offered for that class carrying the value at its far end: " + moment);
+    }
+
+    /**
+     * And the class of everything a body singled out is offered a value that is none of them.
+     *
+     * <p>The same question an interval asks, reached by the other reader. An equality names a value
+     * rather than a place to cut, so what is left over is a class too, and the value that stands for
+     * it has to be one the position holds and not one of the values it excludes. Over two decimals
+     * there is one between them; over two adjacent moments the number between them is written back
+     * as one of the two, so the class has nothing to offer and says so.
+     *
+     * <p>Reachable because this branch taught the reader to see a date-time constant at all: before
+     * it, an equality against one was not read and there was no such class.
+     */
+    @Test
+    void theClassOfEverythingElseIsOfferedAValueThatIsNoneOfThem() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+
+        String dense = souther.compiler.report.GeneratedRows.of(
+                compilation, "example.matrix", "singledDense", true);
+        assertTrue(dense.contains("\"x=/= 0, 1\" : (TwoDecimals(0.5m))"),
+                "a decimal lies between the two singled out: " + dense);
+
+        String moment = souther.compiler.report.GeneratedRows.of(
+                compilation, "example.matrix", "singledMoment", true);
+        assertTrue(moment.contains("no row for `x=/= 2026-08-01T00:00:00,"
+                        + " 2026-08-01T00:00:00.000000001`"),
+                "the position holds nothing but the two singled out: " + moment);
+        assertFalse(moment.contains("=/= 2026-08-01T00:00:00,"
+                        + " 2026-08-01T00:00:00.000000001 x x = "),
+                "and neither of them is offered under that class's name: " + moment);
     }
 
     /** What the measures answered for each named behavior. */

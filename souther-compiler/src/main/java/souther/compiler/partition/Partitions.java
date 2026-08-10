@@ -393,7 +393,12 @@ public final class Partitions {
             tried.addAll(stepped);
             tried.addAll(inside);
         }
-        for (BigDecimal each : tried) {
+        for (BigDecimal candidate : tried) {
+            // On the carrier's grid before it is asked anything, because what is asked is about the
+            // value and the candidate is a count. Halfway between two adjacent moments is neither of
+            // them as a number and is one of them once written, so a class of everything else was
+            // offered one of the values it exists to exclude.
+            BigDecimal each = candidate == null ? null : carrier.onTheGrid(candidate);
             if (each != null && (within == null || within.admits(each))
                     && values.stream().noneMatch(v -> v.compareTo(each) == 0)) {
                 return each;
