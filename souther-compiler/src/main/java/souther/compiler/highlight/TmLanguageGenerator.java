@@ -2,10 +2,12 @@ package souther.compiler.highlight;
 
 import souther.compiler.Prelude;
 import souther.compiler.cst.CstLexer;
+import souther.compiler.editor.EditorSymbols;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +19,9 @@ import java.util.stream.Collectors;
  * Generates a TextMate grammar ({@code souther.tmLanguage.json}) from the language's lexical
  * vocabulary, so the editor highlighting and GitHub Linguist rendering stay in step with the lexer.
  * The keyword list comes from {@link CstLexer#keywords()} — the single source of truth — and a test
- * asserts every keyword is categorised here, so adding one to the lexer forces a grammar update.
+ * asserts every keyword is categorised here, so adding one to the lexer forces a grammar update. The
+ * symbols come from {@link EditorSymbols}, which the language server reads too, so what an editor
+ * paints as an operator is decided once for both.
  *
  * <p>A regex grammar deliberately stops at what the token stream can classify (keywords, operators,
  * literals, comments, stdlib qualifiers). Distinguishing a type name from a value — which in Souther
@@ -59,16 +63,15 @@ public final class TmLanguageGenerator {
     private static final List<String> QUALIFIERS =
             Prelude.qualifiers().stream().sorted().toList();
 
-    /** The operators, longest first so a prefix (e.g. {@code >}) never masks a longer form ({@code >->}).
-     *
-     * <p>This is the editor's own classification and not one the compiler holds: the grammar paints
-     * {@code ...}, {@code =} and {@code ?} as operators where the specification's inventory calls them
-     * delimiters. What is held against the kinds is only that every symbol the language writes is
-     * accounted for — here, or as punctuation the grammar leaves alone — so that a form the language
-     * drops cannot go on being painted. */
-    static final List<String> OPERATORS =
-            List.of(">->", "|>", "...", "->", "++", "==", "/=", "<=", ">=", "&&", "||",
-                    "+", "-", "*", "/", "=", "<", ">", "|", "?");
+    /** The operators as {@link EditorSymbols} classifies them, spelled by their kinds, longest first
+     *  so a prefix ({@code >}) never masks a longer form ({@code >->}). Sorting by length is what
+     *  makes that true rather than the order they are written in, since a prefix is shorter than what
+     *  it is a prefix of. */
+    static final List<String> OPERATORS = EditorSymbols.operators().stream()
+            .map(kind -> kind.fixedSpelling().orElseThrow())
+            .sorted(Comparator.comparingInt(String::length).reversed()
+                    .thenComparing(Comparator.naturalOrder()))
+            .toList();
 
     private TmLanguageGenerator() {
     }

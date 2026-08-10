@@ -1,0 +1,38 @@
+// A program that writes every symbol an editor paints as an operator, so that what the server
+// emits is checked against a source rather than against a copy of the list it was built from. It is
+// parsed and not compiled: what each symbol has to do here is reach the classifier through the node
+// the parser puts it in.
+module example.operators
+import String ( trim )
+
+data Count = Int
+    invariant value >= 0
+
+data Shape = Round | Square
+
+data Item =
+    { name: String
+    , count: Count
+    , note: String?
+    }
+
+behavior rename : (i: Item) -> Item constructs Item
+let rename (i) = Item { ...i, name = i.name ++ "-2" }
+
+behavior tidy : (i: Item) -> Item constructs Item
+let tidy (i) = Item { ...i, name = i.name |> trim }
+
+behavior renameThenTidy = rename >-> tidy
+
+behavior score : (i: Item) -> Int
+let score (i) = {
+    let n = i.count.value
+    let scaled = n * 2 + 1 - 3 / 4
+    guard scaled /= 0 else 0
+    if scaled >= 0 && scaled < 100 || scaled == 7 then
+        scaled
+    else if scaled > 100 && scaled <= 200 then
+        100
+    else
+        0
+}
