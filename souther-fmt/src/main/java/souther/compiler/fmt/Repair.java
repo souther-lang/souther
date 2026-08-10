@@ -1,6 +1,7 @@
 package souther.compiler.fmt;
 
 import souther.compiler.cst.CstParser;
+import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 
 import java.util.ArrayList;
@@ -92,9 +93,11 @@ final class Repair {
             case Witness.BetweenTwoTokens b -> List.of(spacing(source, b));
             case Witness.Separation s -> List.of(separation(source, canonical, s));
             case Witness.Indentation i -> indentation(source, canonical, i);
-            case Witness.Forced f -> f.unit().adjacency() < 0
-                    ? List.of(ending(source, canonical))
-                    : gaps(source, canonical, List.of(f.unit().adjacency()));
+            case Witness.Forced f -> switch (f.unit().adjacency()) {
+                case -1 -> List.of(ending(source, canonical));
+                case -2 -> List.of(aboveTheLastComment(source, canonical));
+                default -> gaps(source, canonical, List.of(f.unit().adjacency()));
+            };
             case Witness.Conditional c -> gaps(source, canonical, opportunitiesOf(canonical, c));
             case Witness.TrailingComment t -> List.of(new Edit(
                     t.unit().at() - t.source().length(), t.unit().at(), t.canonical()));
@@ -219,17 +222,44 @@ final class Repair {
      */
     private static Edit ending(String source, Formatter.CanonicalForm canonical) {
         String text = canonical.layout().text();
-        List<SyntaxToken> had = Witnesses.code(CstParser.parse(source).root());
-        List<SyntaxToken> writes = Witnesses.code(CstParser.parse(text).root());
-        if (had.isEmpty() || writes.isEmpty()) {
+        int from = lastWritten(source);
+        int wrote = lastWritten(text);
+        if (from < 0 || wrote < 0) {
             return new Edit(source.length(), source.length(), "");
         }
-        int from = had.get(had.size() - 1).end();
-        int wrote = writes.get(writes.size() - 1).end();
-        if (source.substring(from).contains("//") || text.substring(wrote).contains("//")) {
-            return new Edit(from, from, "");   // a comment ends the file, and it is not this rule's
-        }
         return new Edit(from, source.length(), text.substring(wrote));
+    }
+
+    /** What the canonical form writes between its last code token and the comment after it. */
+    private static Edit aboveTheLastComment(String source, Formatter.CanonicalForm canonical) {
+        String text = canonical.layout().text();
+        String has = Witnesses.aboveTheLastComment(source);
+        String wrote = Witnesses.aboveTheLastComment(text);
+        List<SyntaxToken> code = Witnesses.code(CstParser.parse(source).root());
+        int from = code.isEmpty() ? 0 : code.get(code.size() - 1).end();
+        return new Edit(from, from + has.length(), wrote);
+    }
+
+    /**
+     * Where the last thing a text writes ends: its last code token, or the comment after it.
+     *
+     * <p>A comment can be the last thing in a file, and the file still ends with one newline. Taken
+     * from the last code token alone, the stretch this rule writes would hold that comment and
+     * either write over it or be left alone for holding one — and the file's own break would again
+     * be a rule with a witness and nothing written for it.
+     */
+    private static int lastWritten(String text) {
+        SyntaxNode root = CstParser.parse(text).root();
+        List<SyntaxToken> code = Witnesses.code(root);
+        List<SyntaxToken> comments = Witnesses.comments(root);
+        int at = -1;
+        if (!code.isEmpty()) {
+            at = code.get(code.size() - 1).end();
+        }
+        if (!comments.isEmpty()) {
+            at = Math.max(at, comments.get(comments.size() - 1).end());
+        }
+        return at;
     }
 
     /**

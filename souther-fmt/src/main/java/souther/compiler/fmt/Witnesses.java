@@ -273,7 +273,7 @@ final class Witnesses {
                     && !hadBefore.equals(writesBefore)) {
                 out.add(new Witness.TrailingComment(unit, writesBefore, hadBefore));
             }
-            if (writesBefore.indexOf('\n') >= 0) {
+            if (writesBefore.indexOf('\n') >= 0 && !endsTheFile(text, writes.get(i))) {
                 int wrote = newlines(after(text, writes.get(i)));
                 int has = newlines(after(source, had.get(i)));
                 if (wrote != has) {
@@ -293,6 +293,17 @@ final class Witnesses {
             }
         }
         return found;
+    }
+
+    /**
+     * Whether nothing is written after a comment.
+     *
+     * <p>Such a comment is written above nothing, so what stands under it is not the distance this
+     * rule answers about — it is the end of the file, and how a file ends is the file's own rule.
+     * Answered here as well, the two would both write the same newline.
+     */
+    private static boolean endsTheFile(String text, SyntaxToken comment) {
+        return text.substring(comment.end()).isBlank();
     }
 
     /** What stands between a comment and the code before it, back to the line it starts on. */
@@ -444,6 +455,7 @@ final class Witnesses {
      */
     static List<Witness> forced(String source, Formatter.CanonicalForm canonical) {
         Layout layout = canonical.layout();
+        String text = layout.text();
         List<SyntaxToken> had = code(CstParser.parse(source).root());
         List<SyntaxToken> writes = code(CstParser.parse(layout.text()).root());
         if (had.size() != writes.size()) {
@@ -461,12 +473,22 @@ final class Witnesses {
                 continue;
             }
             if (writes.isEmpty() || n.offset() >= writes.get(writes.size() - 1).end()) {
-                // past the last token: the break that ends the file, and what the source has for it
-                // is whether it ends with a newline and with one
-                int ends = trailingNewlines(source);
-                if (ends != 1) {
-                    out.add(new Witness.Forced(new Witness.ForcedBoundary(-1, f.obligation()),
-                            1, ends));
+                // Past the last token there are two boundaries where a comment ends the file: the
+                // one in front of it, and the file's own after it. They are two rules and they are
+                // held against two stretches, or the same newline would be answered for twice.
+                if (f.obligation() == Obligation.A_FILE_ENDS_WITH_ONE_NEWLINE) {
+                    int ends = trailingNewlines(source);
+                    if (ends != 1) {
+                        out.add(new Witness.Forced(new Witness.ForcedBoundary(-1, f.obligation()),
+                                1, ends));
+                    }
+                } else {
+                    int wrote = newlines(aboveTheLastComment(text));
+                    int has = newlines(aboveTheLastComment(source));
+                    if (wrote != has) {
+                        out.add(new Witness.Forced(new Witness.ForcedBoundary(-2, f.obligation()),
+                                wrote, has));
+                    }
                 }
                 continue;
             }
@@ -475,7 +497,6 @@ final class Witnesses {
                 at.computeIfAbsent(i, _ -> new ArrayList<>()).add(f.obligation());
             }
         }
-        String text = layout.text();
         for (Map.Entry<Integer, List<Obligation>> e : at.entrySet()) {
             int i = e.getKey();
             if (e.getValue().contains(Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS)) {
@@ -492,6 +513,20 @@ final class Witnesses {
             }
         }
         return out;
+    }
+
+    /** What stands between a text's last code token and the comment written after it, or nothing
+     *  where no comment is. */
+    static String aboveTheLastComment(String text) {
+        SyntaxNode root = CstParser.parse(text).root();
+        List<SyntaxToken> code = code(root);
+        List<SyntaxToken> comments = comments(root);
+        if (code.isEmpty() || comments.isEmpty()) {
+            return "";
+        }
+        int from = code.get(code.size() - 1).end();
+        SyntaxToken last = comments.get(comments.size() - 1);
+        return last.start() < from ? "" : text.substring(from, last.start());
     }
 
     /** How many lines a text ends with, counted from its last code. */
