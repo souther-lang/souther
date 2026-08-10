@@ -30,7 +30,7 @@ final class Repair {
     }
 
     /** One stretch of the source, and what the canonical form has instead. */
-    private record Edit(int from, int to, String text) {}
+    record Edit(int from, int to, String text) {}
 
     /**
      * {@code source} with the expectations of {@code witnesses} written into it.
@@ -43,15 +43,7 @@ final class Repair {
             List<Witness> witnesses) {
         List<Edit> edits = new ArrayList<>();
         for (Witness w : witnesses) {
-            switch (w) {
-                case Witness.BetweenTwoTokens b -> edits.add(spacing(source, b));
-                case Witness.Separation s -> edits.add(separation(source, canonical, s));
-                case Witness.Indentation i -> edits.addAll(indentation(source, canonical, i));
-                case Witness.Forced f -> edits.addAll(gaps(source, canonical,
-                        List.of(f.unit().adjacency())));
-                case Witness.Conditional c -> edits.addAll(gaps(source, canonical,
-                        opportunitiesOf(canonical, c)));
-            }
+            edits.addAll(of(source, canonical, w));
         }
         edits.sort(Comparator.comparingInt(Edit::from)
                 .thenComparing(Comparator.comparingInt(Edit::to).reversed()));
@@ -87,6 +79,28 @@ final class Repair {
             at = e.to();
         }
         return out.append(source.substring(at)).toString();
+    }
+
+    /**
+     * The stretches of the source one witness is about, in the order they are written.
+     *
+     * <p>Empty where what it is about is written around a comment, which the rules about comments
+     * have to say before anything can be written there.
+     */
+    static List<Edit> of(String source, Formatter.CanonicalForm canonical, Witness w) {
+        return switch (w) {
+            case Witness.BetweenTwoTokens b -> List.of(spacing(source, b));
+            case Witness.Separation s -> List.of(separation(source, canonical, s));
+            case Witness.Indentation i -> indentation(source, canonical, i);
+            case Witness.Forced f -> gaps(source, canonical, List.of(f.unit().adjacency()));
+            case Witness.Conditional c -> gaps(source, canonical, opportunitiesOf(canonical, c));
+        };
+    }
+
+    /** Where in the source a witness lands, or -1 where nothing of it is written there. */
+    static int where(String source, Formatter.CanonicalForm canonical, Witness w) {
+        List<Edit> edits = of(source, canonical, w);
+        return edits.isEmpty() ? -1 : edits.get(0).from();
     }
 
     /**

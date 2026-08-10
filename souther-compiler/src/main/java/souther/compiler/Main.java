@@ -17,6 +17,7 @@ import souther.compiler.doc.ApiCommand;
 import souther.compiler.doc.DocCommand;
 import souther.compiler.doc.JapiCommand;
 import souther.compiler.doc.McpServer;
+import souther.compiler.fmt.Deviations;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -558,8 +559,25 @@ public final class Main {
                     unformatted = true;
                     // Here, where both texts are still in hand. Nothing is kept for the end: what the
                     // run has to remember about a file it has judged is that one of them differed.
-                    System.out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
-                            source, formatted));
+                    //
+                    // What is printed is the decisions and not the diff. A diff says which lines
+                    // are not the canonical form's; a reader who wants to write the canonical form
+                    // by hand needs to know which rule each of them answers to.
+                    Deviations.Report report = Deviations.of(source);
+                    for (Deviations.Deviation d : report.deviations()) {
+                        System.out.println(file + ":" + d.line() + ":" + d.column() + ": "
+                                + d.rule());
+                        System.out.println("    the canonical form: " + d.canonical()
+                                + "; this source: " + d.source());
+                    }
+                    if (!report.whole()) {
+                        // Said rather than left out, and shown. A list that named what it can and
+                        // stopped reads as a file with these deviations and no others, and a
+                        // reader still has to see the rest of what differs.
+                        System.out.println(file + ": and more that no rule accounts for yet:");
+                        System.out.print(UnifiedDiff.of(file.toString(), file + " (formatted)",
+                                source, formatted));
+                    }
                 }
             } else if (write) {
                 if (!formatted.equals(source)) {
