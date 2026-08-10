@@ -193,4 +193,19 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                                 UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
                 read("p: Pair", "p.x < p.y + 1").unread());
     }
+
+    /**
+     * A position whose carrier is fine, against a right-hand side this does not read.
+     *
+     * <p>`+1 + 2+` is not a form a threshold is read out of, and that is the whole of what stopped
+     * the line. Nothing is wrong with `+p.x+`: it is an `+Int+`, a carrier lines are drawn on all
+     * through this file. Read off the side that did name a position, the answer becomes the carrier
+     * and sends a reader after a domain that is already there.
+     */
+    @Test
+    void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
+        assertEquals(List.of(new GuardThresholds.Guards.Unread(TermPath.of("p").then("x"),
+                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
+                read("p: Pair", "p.x < 1 + 2").unread());
+    }
 }

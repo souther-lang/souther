@@ -183,8 +183,10 @@ public final class GuardThresholds {
      *
      * <p>Three different things, and a reader told one sentence for all of them cannot tell which
      * limit is theirs to wait on. A comparison between two positions asks for a class that is about
-     * both, which a partition of one position is not; one against a value this carries no line on
-     * asks for a carrier; what is left is an expression the terms do not name.
+     * both, which a partition of one position is not. One on a carrier nothing draws a line on asks
+     * for that carrier. What is left is a form this does not read — the position inside an
+     * expression the terms do not name, or a threshold written as something other than a constant —
+     * and each of the three is a different piece of work.
      */
     private static UndividedPosition.Reason why(Core.Binary comparison, List<String> parameters,
                                                 Symbols symbols) {
@@ -198,11 +200,17 @@ public final class GuardThresholds {
             return UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
         }
         Core named = leftNames ? comparison.left() : comparison.right();
-        // A position the terms do name, against a value they carry no line on — against one they do
-        // not name, which is an expression rather than a carrier.
-        return termOf(named, parameters, symbols) != null
-                ? UndividedPosition.Reason.UNSUPPORTED_DOMAIN
-                : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+        if (termOf(named, parameters, symbols) == null) {
+            return UndividedPosition.Reason.UNSUPPORTED_SYNTAX;   // the position is inside something
+        }
+        // The carrier, asked of the carrier. `at < DateTime(...)` stops because nothing draws a line
+        // on a date-time; `p.x < 1 + 2` stops because the other side is not a form a threshold is
+        // read out of, and `p.x` is an `Int` — a carrier lines are drawn on all through the file.
+        // Reading this off the side that did name a position calls the second one a carrier problem
+        // and sends an author after a domain that is already there.
+        return orderable(named.type(), symbols)
+                ? UndividedPosition.Reason.UNSUPPORTED_SYNTAX
+                : UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
     }
 
     private static List<TermPath> mentionedIn(Core e, List<String> parameters, Symbols symbols) {
