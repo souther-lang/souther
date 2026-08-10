@@ -2853,7 +2853,9 @@ A threshold says where one class ends and the next begins. A `+guard+` compares 
 
 A position whose values no rule measures still has no classes. A `+String+` nothing says anything about is *not derivable* and is named by the position, not by a length nobody wrote a rule about.
 
-Only a comparison written as the whole of a `+guard+`'s condition is read. In `+kind == Domestic && cost <= 100000+` the arm is reached without `+cost+` having been compared at all, so taking the arm as evidence about `+cost+` would be wrong; a condition built from `+&&+`, `+||+` or `+!+` therefore contributes no threshold.
+A comparison is read wherever in a condition it is written. `+kind == Domestic && cost <= 100000+` draws a line at 100000 as much as the comparison written on its own does: which position the model divides is not a question about the shape of the condition around it.
+
+What the condition does decide is which arm stands as evidence that the comparison was evaluated. `+&&+` and `+||+` evaluate left to right and stop as soon as the answer is settled, so under `+A && B+` reaching either arm shows `+A+` ran and only the arm where the whole condition held shows `+B+` did; under `+A || B+` it is the arm where it did not hold. A condition mixing the two leaves neither arm separating the rows that reached a comparison from the rows that did not. A line no arm can witness on the side a row would have to be written is still a line the rows are owed, and is reported as one nothing measured rather than as one nothing drew.
 
 [[what-a-position-admits]]*What a position admits is not what its type admits.* A field's type says which values exist of that type; the record holding it may state a rule relating that field to another, and what the position admits is that rule read at this field. `+data WorkInterval = { startsAt: MinuteOfDay, endsAt: MinuteOfDay } invariant startsAt < endsAt+` over minutes of a day running to 1440 leaves `+startsAt+` stopping at 1439 and `+endsAt+` starting at 1: a `+startsAt+` of 1440 would want an `+endsAt+` the day has no room for, and no row can be written at it.
 
