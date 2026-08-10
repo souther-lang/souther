@@ -599,6 +599,29 @@ final class BodyGen {
          * So it can go at the head of any arm without the arm's own emission having to know it is
          * there, and a measuring build and a shipping build differ by these calls and by nothing else.
          */
+        /**
+         * Records that this comparison produced a value, where it is one a guard's condition is made
+         * of.
+         *
+         * <p>After the value and not before it. What a boundary is met by is the comparison having
+         * answered, and an operand can abort on the way — {@code x /= 0 && 100 / x > 1} is why the
+         * operators stop when the answer is settled in the first place. A probe in front of the
+         * emission would record a comparison that never produced anything as one that did.
+         *
+         * <p>Absent is ordinary here, unlike an arm's: what has a site is every comparison of a
+         * condition this plan instruments, and the emitter walks comparisons everywhere else too.
+         */
+        private void comparisonProbe(Core.Binary comparison) {
+            if (!armsAreCounted || !ctx.measuring()) {
+                return;
+            }
+            ctx.comparisonSiteOf(comparison).ifPresent(site -> {
+                ctx.emitted(site);
+                code.loadConstant(site);
+                code.invokestatic(CD_Probe, "hit", MTD_Probe_hit);
+            });
+        }
+
         private void probe(Core node, int arm) {
             if (!armsAreCounted || !ctx.measuring()) {
                 return;
@@ -726,7 +749,10 @@ final class BodyGen {
                 case Core.ListLit lit -> listLit(lit);
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
-                case Core.Binary bin -> binary(bin);
+                case Core.Binary bin -> {
+                    binary(bin);
+                    comparisonProbe(bin);
+                }
                 case Core.NewData nd -> newData(nd);
                 case Core.Match m -> match(m, expected);
                 case Core.Call c -> call(c, expected);

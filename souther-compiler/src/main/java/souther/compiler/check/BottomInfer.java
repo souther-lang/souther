@@ -4,8 +4,6 @@ import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -162,18 +160,15 @@ public final class BottomInfer {
         return isBottom(t) ? Type.EMPTY_LIST : t;
     }
 
-    /** The common element type of two list positions — {@link TypeOps#join}, reported as a list
-     * element rather than as a branch: identical types collapse, two data-like types widen to the
-     * union of their cases (so {@code [High] ++ [LowRole]} is a list of both), and a list of each
-     * widens the same way one level in. */
-    static Type unifyElem(Type a, Type b, SourcePos pos) {
-        Type joined = TypeOps.join(a, b);
-        if (joined != null) {
-            return joined;
-        }
-        throw CompileException.of(Diagnostic
-                        .at(pos)
-                        .hint(new TypeMessage.OneElementIsOneAndAnotherIsAnother(Type.show(a), Type.show(b)))
-                        .say(new TypeMessage.TheElementsDoNotAllHaveOneType()).build());
+    /** The common element type of two list positions — {@link TypeOps#join}: identical types
+     * collapse, two data-like types widen to the union of their cases (so {@code [High] ++ [LowRole]}
+     * is a list of both), and a list of each widens the same way one level in. Null where they do not
+     * join.
+     *
+     * <p>It answers rather than reports. What a refusal has to say differs by where the two types
+     * came from — a list literal joins an element against an accumulator, {@code ++} joins two
+     * written operands' element types — and neither is readable here. */
+    static Type unifyElem(Type a, Type b) {
+        return TypeOps.join(a, b);
     }
 }

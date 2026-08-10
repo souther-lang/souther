@@ -31,12 +31,13 @@ import java.util.List;
  * the line at a hundred thousand went unread, and the position came back as one the model divides
  * no way — two tokens from the comparison that divides it.
  *
- * <p>What the condition does decide is which arm stands as evidence that a comparison was
- * evaluated. Under {@code A && B} an overseas request takes the else arm without {@code cost}
- * having been compared, so that arm proves nothing about the second operand; the arm where the
- * whole condition held proves both. That is carried per comparison as a {@link OriginRef
- * .GuardOrigin.Witness}, and an edge no arm can witness is reported as one nothing measured rather
- * than dropped — the line is the model's either way.
+ * <p>Whether a comparison ran is not something the arms answer. A condition stops as soon as it is
+ * settled, so under {@code A && B} an overseas request takes the else arm without {@code cost} having
+ * been compared — and so does a request whose cost was compared and found too high. Each comparison
+ * carries the site its own value is recorded at, which is what a line is measured against. What the
+ * shape of the condition does decide is which arm a row that reached the comparison can be in, and
+ * that is a question about the classes either side of the line: it is carried as a {@link OriginRef
+ * .GuardOrigin.Witness} and read by {@link GuardEdge}.
  *
  * <p>Three readers are kept apart here and are easy to run together. Which comparisons exist is
  * {@link #comparisonsIn}; which positions a comparison names at all is {@link #mentioned}; which
@@ -120,11 +121,9 @@ public final class GuardThresholds {
     /**
      * Every position a condition compares, however the condition is written.
      *
-     * <p>Names them and no more. What a comparison inside a conjunction would need before it could be
-     * a line is which arm witnesses it having been evaluated, and that is not answered here — a
-     * threshold recorded without it is an obligation nobody can discharge. So this establishes only
-     * that the model draws something at this position, which is exactly what {@code not derivable}
-     * would otherwise deny.
+     * <p>Names them and no more. Whether a line can be drawn on one is {@link #termOf}'s narrower
+     * question, and this establishes only that the model draws something at this position — which is
+     * exactly what {@code not derivable} would otherwise deny.
      */
     private static List<Guards.Unread> comparedIn(Core e, List<Core> read, List<String> parameters,
                                                   Symbols symbols) {
@@ -368,6 +367,10 @@ public final class GuardThresholds {
         if (guard == null) {
             return null;   // no site for this `if`: nothing could answer for it
         }
+        // The plan numbered every comparison of an instrumented condition before anything read a line
+        // off one, so this is here. Required rather than looked up leniently: a line whose comparison
+        // has no site is this reader and the plan disagreeing about what a condition is made of.
+        int site = plan.requireComparisonSiteOf(comparison);
         if (below == null) {
             // An equality singles the value out instead. Recorded as that rather than as a place to
             // cut, because the values either side of it are not a distinction the model has drawn.
@@ -375,7 +378,8 @@ public final class GuardThresholds {
                 return null;
             }
             singled.add(new Guards.Singled(term, value,
-                    new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
+                    new OriginRef.GuardOrigin(guard, site,
+                            new SourceRef(guard.at().sourceId(), iff.pos()),
                             true, placed.witness(), op == Ast.BinOp.EQ, true)));
             return term.path();
         }
@@ -383,7 +387,8 @@ public final class GuardThresholds {
         // question as which class the value falls in: `x <= c` and `x > c` agree about the second.
         boolean holds = op == Ast.BinOp.LE || op == Ast.BinOp.GE;
         out.add(new Threshold(term, value, below,
-                new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
+                new OriginRef.GuardOrigin(guard, site,
+                        new SourceRef(guard.at().sourceId(), iff.pos()),
                         below, placed.witness(), holds)));
         // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
         // and `x > c` agree about the first and take opposite halves, so the arms are read off the

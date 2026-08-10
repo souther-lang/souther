@@ -322,14 +322,15 @@ public final class Elaborator {
                     arms.add(new Core.ElseArm(arm.clause(), body));
                     Type next = TypeOps.join(joined, body.type());
                     if (next == null) {
-                        throw CompileException.of(Diagnostic
-                                        .at(ic.pos(), 2)
-                                        .secondary(ic.then().reportedAt(),
-                                                new TypeMessage.TheThenBranchProduces(Type.show(then.type())))
-                                        .secondary(arm.body().reportedAt(),
-                                                new TypeMessage.TheElseBranchProduces(Type.show(body.type())))
+                        // An `else` answering per clause folds its arms, so what this arm conflicts
+                        // with is the join of the branches before it and not the `then` branch's
+                        // type — labelling `then` with it named a type the join was not refused at
+                        // and left the arms between them out of the report altogether.
+                        throw CompileException.of(Diagnostic.at(arm.body().reportedAt())
+                                        .say(new TypeMessage.ThisBranchAndThePrecedingOnes(
+                                                Type.show(body.type()), Type.show(joined)))
                                         .hint(new TypeMessage.MakeBothBranchesProduceOneType())
-                                        .say(new TypeMessage.TheBranchesOfThisIfDisagree()).build());
+                                        .build());
                     }
                     joined = next;
                 }
@@ -349,7 +350,24 @@ public final class Elaborator {
                 for (Ast.Expr el : lit.elements()) {
                     Core c = elaborate(el, env, ctx, want);
                     elements.add(c);
-                    elem = elem == null ? c.type() : BottomInfer.unifyElem(elem, c.type(), lit.pos());
+                    if (elem == null) {
+                        elem = c.type();
+                        continue;
+                    }
+                    Type joined = BottomInfer.unifyElem(elem, c.type());
+                    if (joined == null) {
+                        // The element is where the join was refused and is pointed at. What it
+                        // conflicts with is `elem`, the join of the elements before it — one
+                        // element's type only when one has been read, which is a fact about how
+                        // long the list is rather than about where the type came from. It is said
+                        // instead, so `[1, "x", 2]` and `[1, 2, "x"]` are reported the one way.
+                        throw CompileException.of(Diagnostic.at(el.reportedAt())
+                                .say(new TypeMessage.ThisElementAndThePrecedingOnes(
+                                        Type.show(c.type()), Type.show(elem)))
+                                .hint(new TypeMessage.MakeEveryElementTheSameType())
+                                .build());
+                    }
+                    elem = joined;
                 }
                 yield new Core.ListLit(elements, Type.list(elem), lit.pos());
             }

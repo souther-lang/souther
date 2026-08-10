@@ -437,15 +437,16 @@ public final class Backend {
             }
         }
         out.putAll(b.ctx.synthClasses());   // escaping lambdas compiled to Fn classes (spec §blocks)
-        // Every arm the plan counted has to be in the bytecode, or the ones that are missing come back
-        // as arms no row goes through. A body the emitter walks without counting its arms is the way
-        // that happens, and it is silent at the site — so it is caught here, where the two can be
-        // compared.
+        // Every site the plan numbered has to be in the bytecode. A missing arm comes back as an arm
+        // no row goes through and a missing comparison as a line no row reached, and both read as the
+        // model being short of rows rather than the measurement being short of probes. A body the
+        // emitter walks without counting is how that happens, and it is silent at the site — so it is
+        // caught here, where the plan and what was emitted can be compared.
         List<Integer> missed = b.ctx.plannedButNotEmitted();
         if (!missed.isEmpty()) {
-            throw new IllegalStateException("the plan counted " + missed.size()
-                    + " arm(s) that nothing emitted: " + missed
-                    + "; a body was walked without counting its arms");
+            throw new IllegalStateException("the plan numbered " + missed.size()
+                    + " site(s) that nothing emitted: " + missed
+                    + "; a body was walked without counting what it holds");
         }
         return out;
     }

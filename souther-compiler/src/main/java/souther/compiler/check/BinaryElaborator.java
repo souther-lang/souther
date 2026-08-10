@@ -123,8 +123,19 @@ public final class BinaryElaborator {
                                     
                                     .say(new TypeMessage.JoinsTwoListsOrTwoStrings(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
-                yield new Core.Binary(bin.op(), left, right,
-                        Type.list(BottomInfer.unifyElem(lo.element(), ro.element(), bin.pos())), bin.pos());
+                Type element = BottomInfer.unifyElem(lo.element(), ro.element());
+                if (element == null) {
+                    // Both sides are written operands, one level in from what is compared: the
+                    // element types have no source of their own, but the lists holding them do, so
+                    // each is labelled where it is written and the message names neither.
+                    throw CompileException.of(Diagnostic
+                                    .at(bin.pos(), 2)
+                                    .secondary(bin.left().reportedAt(), new TypeMessage.ThisListHoldsElementsOf(Type.show(lo.element(), ro.element())))
+                                    .secondary(bin.right().reportedAt(), new TypeMessage.ThisListHoldsElementsOf(Type.show(ro.element(), lo.element())))
+                                    .hint(new TypeMessage.MakeEveryElementTheSameType())
+                                    .say(new TypeMessage.TheTwoListsHoldDifferentElements()).build());
+                }
+                yield new Core.Binary(bin.op(), left, right, Type.list(element), bin.pos());
             }
             case EQ, NE -> {
                 Type lt = left.type();

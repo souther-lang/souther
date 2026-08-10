@@ -3,10 +3,16 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -17,11 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * comparison in front of it and used to get neither. Nothing about the model differs, so nothing
  * about what the rows owe should.
  *
- * <p>What does differ is what an arm proves. Under {@code A && B}, reaching either arm proves
- * {@code A} was evaluated and only the {@code then} arm proves {@code B} was — so a row landing where
- * {@code B} is false has shown nothing about {@code B}, and the edge on that side is one the sites
- * this build has cannot decide. That is a fact about the instrumentation, and it is said as one
- * rather than by leaving the edge out.
+ * <p>Both sides of the line are owed, including the one a row reaches by making the comparison false.
+ * Under {@code A && B} that row lands in {@code else}, where a row that never got to {@code B} lands
+ * too — so the arms do not decide it and the comparison is observed where it runs instead.
  */
 class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
 
@@ -91,17 +95,31 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
     }
 
     /**
-     * The edge on the other side is not owed as though a row could show it.
+     * And so is the edge on the other side, which is the one a conjunction used to lose.
      *
      * <p>A row at 100001 takes the {@code else} arm, which under a conjunction is also where a row
-     * taking it for the other comparison's sake lands. Nothing separates them, so no row establishes
-     * this edge and asking for one is asking for work nobody can finish.
+     * taking it for the other comparison's sake lands. The arms do not separate them; the site at the
+     * comparison does, so the edge is owed the same as the one beside it.
      */
     @Test
-    void theEdgeNoArmWitnessesIsSaidToBeUnmeasurable() {
-        String block = blockOf("inAConjunction");
+    void theEdgeOnTheOtherSideIsOwedTheSame() {
+        assertEquals(new BoundaryAssessment.Coverage.Missed(),
+                coverageAt("inAConjunction", "inAConjunction/r.cost", "100001"));
+    }
 
-        assertFalse(block.contains("no row is at inAConjunction/r.cost = 100001"), block);
-        assertTrue(block.contains("100001"), block);
+    /** What the rows established about one line of one behavior. */
+    private static BoundaryAssessment.Coverage coverageAt(String behavior, String axis,
+                                                          String value) {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, List<BoundaryAssessment>> boundaries =
+                compilation.db().ask(new Adequacy.Boundaries("example.repro")).value();
+        assertNotNull(boundaries, "the model under test compiles");
+        return boundaries.get(behavior).stream()
+                .filter(line -> line.axis().equals(axis) && line.value().equals(value))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no line at " + axis + " = " + value))
+                .coverage();
     }
 }

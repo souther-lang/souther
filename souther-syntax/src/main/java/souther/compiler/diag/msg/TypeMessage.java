@@ -23,16 +23,32 @@ public sealed interface TypeMessage extends Message {
     @Code(DiagnosticCode.E1208)
     record TheBranchesOfThisIfDisagree() implements TypeMessage, Reported {}
 
+    /** An `else` arm the branches were not joinable at, against the join of the branches before it.
+     * An `else` answering per clause folds its arms, so the second type is an accumulator. */
+    @Code(DiagnosticCode.E1208)
+    record ThisBranchAndThePrecedingOnes(String branch, String preceding)
+            implements TypeMessage, Reported {}
+
     record TheThenBranchProduces(String type) implements TypeMessage, Supporting {}
 
     record TheElseBranchProduces(String type) implements TypeMessage, Supporting {}
 
     record MakeBothBranchesProduceOneType() implements TypeMessage, Supporting {}
 
+    /** An element a list's elements were not joinable at, against the join of the ones before it.
+     * The second type is an accumulator and no element's own, so it is said rather than pointed at. */
     @Code(DiagnosticCode.E1318)
-    record TheElementsDoNotAllHaveOneType() implements TypeMessage, Reported {}
+    record ThisElementAndThePrecedingOnes(String element, String preceding)
+            implements TypeMessage, Reported {}
 
-    record OneElementIsOneAndAnotherIsAnother(String one, String other) implements TypeMessage, Supporting {}
+    /** Two lists `++` joins whose element types do not. Both are operands, so both carry a region
+     * and the message names neither. */
+    @Code(DiagnosticCode.E1318)
+    record TheTwoListsHoldDifferentElements() implements TypeMessage, Reported {}
+
+    record ThisListHoldsElementsOf(String element) implements TypeMessage, Supporting {}
+
+    record MakeEveryElementTheSameType() implements TypeMessage, Supporting {}
 
     @Code(DiagnosticCode.E1314)
     record AFieldsMapCannotBeKeyedByThat(String field, String key) implements TypeMessage, Reported {}
