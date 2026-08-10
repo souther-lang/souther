@@ -17,8 +17,10 @@ import java.util.Set;
  *
  * @param axes         one entry per position the model divides
  * @param boundaries   one entry per rule that drew a line, per side of it
- * @param notDerivable positions the model does not divide, named so a report can say what it could
- *                     not measure rather than passing over it
+ * @param notDerivable positions no class came back for, each saying whether the model divides them
+ *                     no way at all or this could not read what it divides them by. Both used to be
+ *                     one list of paths, and the sentence written from it claimed the first about
+ *                     both
  * @param omitted      positions dropped for being past the axis limit, with what dropping each
  *                     one cost — a position that was carrying a boundary leaves the rows there
  *                     unmeasured rather than covered
@@ -29,7 +31,8 @@ import java.util.Set;
  *                     everything else a module could not read happens where that list is built
  */
 public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
-                                PairSpace pairs, List<String> notDerivable,
+                                PairSpace pairs,
+                                List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
 

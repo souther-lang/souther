@@ -1297,8 +1297,17 @@ public final class Adequacy {
         OUTPUT_CASE_UNVERIFIED(null, false),
         /** A class of an axis no row is in. */
         AXIS_CLASS_UNCOVERED(null, false),
-        /** A position the model draws no line through, which is a fact about the model. */
+        /**
+         * A position the model draws no line through.
+         *
+         * <p>A fact about the model, and only said where the derivation ran to the end and found
+         * nothing. A position this could not read is {@link #PARTITION_NOT_READ}: the two were one
+         * finding, and the sentence this one prints was told to authors whose own body compared the
+         * position two lines above.
+         */
         PARTITION_NOT_DERIVABLE(null, false),
+        /** A position something is written about that this did not read, with what stopped it. */
+        PARTITION_NOT_READ(null, false),
         /** A position left out because the axis limit was reached. */
         PARTITION_OMITTED(null, false);
 
@@ -1461,15 +1470,31 @@ public final class Adequacy {
                             List.of(boundary.axis(), boundary.value(), boundary.origin())));
                 }
             }
-            for (String position : partition.notDerivable()) {
-                out.add(new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
-                        MeasurementStatus.COMPLETE, behavior.pos(), List.of(position)));
+            for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {  // NOPMD
+                out.add(position.why() instanceof souther.compiler.partition.UndividedPosition.Why
+                                .CannotDerive stopped
+                        ? new Finding(Kind.PARTITION_NOT_READ, behavior.name(),
+                                // Not measured, because nothing here established anything either
+                                // way about this position.
+                                MeasurementStatus.NOT_MEASURED, behavior.pos(),
+                                List.of(position.at().toString(), said(stopped.reason())))
+                        : new Finding(Kind.PARTITION_NOT_DERIVABLE, behavior.name(),
+                                MeasurementStatus.COMPLETE, behavior.pos(),
+                                List.of(position.at().toString())));
             }
             for (souther.compiler.partition.Partitions.OmittedAxis dropped : partition.omitted()) {
                 out.add(new Finding(Kind.PARTITION_OMITTED, behavior.name(),
                         MeasurementStatus.COMPLETE, behavior.pos(),
                         List.of(dropped.axis().toString())));
             }
+        }
+
+        /** What stopped a derivation, in the words a report writes it in. */
+        private static String said(souther.compiler.partition.UndividedPosition.Reason reason) {
+            return switch (reason) {
+                case UNSUPPORTED_SYNTAX -> "a comparison here is written in a form this does not read";
+                case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
+            };
         }
 
         /** An arm no row goes through, at the arm and not at the declaration: what to do about it is

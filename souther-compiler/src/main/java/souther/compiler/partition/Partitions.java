@@ -65,12 +65,14 @@ public final class Partitions {
      */
     public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
                                Map<NumericTerm, NumericDomain.Bounds> domains,
-                               java.util.Set<NumericTerm> uncertain) {
+                               java.util.Set<NumericTerm> uncertain,
+                               List<UndividedPosition> undivided) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
             domains = Map.copyOf(domains);
             uncertain = java.util.Set.copyOf(uncertain);
+            undivided = List.copyOf(undivided);
         }
 
         /** Whether an edge of this term is a value some row could carry.
@@ -96,6 +98,7 @@ public final class Partitions {
         List<Axis> found = new ArrayList<>();
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
+        java.util.Set<String> stopped = new java.util.LinkedHashSet<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             // One reading per parameter, not one per record met on the way down. A clause on the
             // outer record relates positions at any depth it can name, and rebuilding the reading at
@@ -103,7 +106,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
-                    domains, uncertain);
+                    domains, uncertain, stopped);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -125,7 +128,30 @@ public final class Partitions {
                 omitted.add(new OmittedAxis(axis.id(), !axis.cuts().isEmpty()));
             }
         }
-        return new Partitioning(kept, omitted, domains, uncertain);
+        return new Partitioning(kept, omitted, domains, uncertain, undividedIn(kept, stopped));
+    }
+
+    /**
+     * The positions with no classes, each saying which of the two it is.
+     *
+     * <p>Derived from the axes rather than recorded beside them, so that a position measured after a
+     * threshold arrives leaves this list by the same rule it entered it. {@code stopped} names the
+     * ones the walk did not finish, which is the one thing the axes cannot say for themselves: an
+     * axis that was never descended into looks exactly like one there was nothing under.
+     */
+    private static List<UndividedPosition> undividedIn(List<Axis> axes,
+                                                       java.util.Set<String> stopped) {
+        List<UndividedPosition> out = new ArrayList<>();
+        for (Axis axis : axes) {
+            if (axis.measurable()) {
+                continue;
+            }
+            out.add(stopped.contains(axis.path().toString())
+                    ? UndividedPosition.cannotDerive(axis.path(),
+                            UndividedPosition.Reason.DEPTH_LIMIT)
+                    : UndividedPosition.absent(axis.path()));
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -138,6 +164,19 @@ public final class Partitions {
      */
     public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
                                               Symbols symbols) {
+        return withThresholds(base, thresholds, symbols, List.of());
+    }
+
+    /**
+     * The same, told which positions a comparison names that nothing turned into a line.
+     *
+     * <p>A position left undivided is not thereby a position the model divides no way. What this
+     * takes in is the other half of that: the body compared it, and the form the comparison is
+     * written in is one no reader here takes apart. Carried rather than re-derived, because the only
+     * place that knows is the reader that gave up.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols, List<TermPath> unread) {
         List<Axis> out = new ArrayList<>();
         for (Axis axis : base.axes()) {
             NumericTerm declared = axis.term();
@@ -186,7 +225,15 @@ public final class Partitions {
                     classes.isEmpty() ? axis.classes() : classes,
                     merged(axis.cuts(), reachable, decimal)).excluding(axis.excluded()));
         }
-        return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain());
+        List<UndividedPosition> undivided = new ArrayList<>();
+        for (UndividedPosition each : undividedIn(out, java.util.Set.of())) {
+            UndividedPosition had = base.undivided().stream()
+                    .filter(before -> before.at().equals(each.at())).findFirst().orElse(each);
+            undivided.add(unread.contains(each.at())
+                    ? had.because(UndividedPosition.Reason.UNSUPPORTED_SYNTAX) : had);
+        }
+        return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
+                undivided);
     }
 
     /**
@@ -324,7 +371,8 @@ public final class Partitions {
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
                              List<Axis> out, Placed placed,
                              Map<NumericTerm, NumericDomain.Bounds> domains,
-                             java.util.Set<NumericTerm> uncertain) {
+                             java.util.Set<NumericTerm> uncertain,
+                             java.util.Set<String> stopped) {
         List<PartitionClass> classes = classesOf(type, symbols);
         // Which number this position is measured at, and what its rules leave that number. Asked
         // together because they are one reading: whether a rule bounds the length of a string is how
@@ -362,10 +410,14 @@ public final class Partitions {
             return;
         }
         Map<String, Type> fields = productFields(type, symbols);
+        if (!fields.isEmpty() && depth >= MAX_DEPTH) {
+            // A record this never went into. What is under it may divide, and nothing here looked.
+            stopped.add(path.toString());
+        }
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
             for (Map.Entry<String, Type> field : fields.entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
-                        placed, domains, uncertain);
+                        placed, domains, uncertain, stopped);
             }
             return;
         }
@@ -513,7 +565,8 @@ public final class Partitions {
                     some.isEmpty()
                             ? PartitionClass.ungeneratable("Some", "Some",
                                     Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
-                                    "no value of " + option.element() + " can be written")
+                                    "nothing here composed a value of "
+                                            + Type.show(option.element()))
                             : PartitionClass.of("Some", "Some",
                                     Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
                                     () -> some));
@@ -546,14 +599,14 @@ public final class Partitions {
             List<FixtureTemplate> inner = insideTheNewtype(leaf, symbols);
             return inner.isEmpty()
                     ? PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
-                            "no value of what `" + leaf.name() + "` wraps can be written")
+                            "nothing here composed a value of what `" + leaf.name() + "` wraps")
                     : PartitionClass.of(leaf.name(), leaf.name(), is,
                             () -> inner.stream().map(t -> FixtureTemplate.newtype(leaf, t)).toList());
         }
-        // A record case is written field by field, which is the generator's composition and not a
-        // value this position can hand over on its own.
-        return PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
-                "`" + leaf.name() + "` is a record, whose fields are composed rather than named here");
+        // A record case is written field by field, which is the generator's composition. So the class
+        // names the constructor and the generator does the composing — the same walk every other
+        // record goes through, rules between the fields and all.
+        return PartitionClass.composed(leaf.name(), leaf.name(), is, leaf);
     }
 
     // --- reading an invariant's bounds -------------------------------------------------------------
@@ -767,7 +820,9 @@ public final class Partitions {
         }
         List<PartitionClass> classes = classesOf(type, symbols);
         for (PartitionClass each : classes) {
-            if (each.generatable()) {
+            // Values, not a class that could produce one. A class whose values are composed has none
+            // to hand over here, and returning its empty list would say the type has no values.
+            if (each.generatable() && !each.representatives().candidates().isEmpty()) {
                 return each.representatives().candidates();
             }
         }

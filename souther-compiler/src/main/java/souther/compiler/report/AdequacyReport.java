@@ -605,6 +605,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
             out.append(String.format("      · not derivable: %s%n", f.args().get(0)));
         }
+        // Said apart from the line above it, which is the whole of what this pair is for: one names
+        // a position the model divides no way, and this one a position nobody has established
+        // anything about.
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_READ)) {
+            out.append(String.format("      · not read: %s (%s)%n",
+                    f.args().get(0), f.args().get(1)));
+        }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      · omitted: %s (axis limit)%n", f.args().get(0)));
         }
@@ -877,7 +884,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         pairs.put("unknown", partition.pairs().unknown());
         pairs.put("truncated", partition.pairs().truncated());
         measured(pairs, partition.pairs().status(), partition.pairs().reason());
-        partition.notDerivable().forEach(out.putArray("notDerivable")::add);
+        // Both arrays either way. An absent one and an empty one read the same to a person and not
+        // to a reader that checks whether the field is there, and this document's shape is what the
+        // schema is written against.
+        ArrayNode undivided = out.putArray("notDerivable");
+        ArrayNode unread = out.putArray("notRead");
+        partition.notDerivable().forEach(each -> {
+            if (each.isAbsent()) {
+                undivided.add(each.at().toString());
+            } else {
+                unread.add(each.at().toString());
+            }
+        });
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
     }

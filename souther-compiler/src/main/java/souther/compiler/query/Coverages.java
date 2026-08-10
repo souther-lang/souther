@@ -51,9 +51,10 @@ final class Coverages {
         if (body == null) {
             return partitioning;
         }
-        return Partitions.withThresholds(partitioning,
-                GuardThresholds.of(behavior.name(), body, plan, parameters, symbols).thresholds(),
-                symbols);
+        GuardThresholds.Guards guards =
+                GuardThresholds.of(behavior.name(), body, plan, parameters, symbols);
+        return Partitions.withThresholds(partitioning, guards.thresholds(), symbols,
+                guards.unread());
     }
 
     /**
@@ -72,15 +73,13 @@ final class Coverages {
                 partitioningOf(behavior, sig, symbols, body, plan, excluded);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
-        List<String> notDerivable = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
         Readings readings = Readings.of(rows, parameters, partitioning.axes(),
                 observed.someRowsUnseen());
         for (Axis axis : partitioning.axes()) {
             if (!axis.measurable()) {
-                notDerivable.add(axis.path().toString());
-                continue;
+                continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
                 axes.add(coverageOf(axis, readings, excluded));
@@ -89,7 +88,7 @@ final class Coverages {
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
                 PartitionEvidence.Bounded.of(boundaries), pairsOf(divided, readings),
-                notDerivable, partitioning.omitted(),
+                partitioning.undivided(), partitioning.omitted(),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }

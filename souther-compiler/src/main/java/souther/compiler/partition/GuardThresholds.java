@@ -43,13 +43,15 @@ public final class GuardThresholds {
      * recover from {@link Threshold} which side of the line each arm takes — which a threshold does not
      * say and cannot be made to say (see {@link GuardEdge}).
      */
-    public record Guards(List<Threshold> thresholds, List<GuardEdge> edges) {
+    public record Guards(List<Threshold> thresholds, List<GuardEdge> edges,
+                         List<TermPath> unread) {
 
-        public static final Guards NONE = new Guards(List.of(), List.of());
+        public static final Guards NONE = new Guards(List.of(), List.of(), List.of());
 
         public Guards {
             thresholds = List.copyOf(thresholds);
             edges = List.copyOf(edges);
+            unread = List.copyOf(unread);
         }
     }
 
@@ -60,27 +62,74 @@ public final class GuardThresholds {
                             List<String> parameters, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<GuardEdge> edges = new ArrayList<>();
-        walk(behavior, body, plan, parameters, symbols, found, edges);
-        return new Guards(found, edges);
+        List<TermPath> unread = new ArrayList<>();
+        walk(behavior, body, plan, parameters, symbols, found, edges, unread);
+        return new Guards(found, edges, unread);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              List<String> parameters, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges) {
+                             List<GuardEdge> edges, List<TermPath> unread) {
         if (e instanceof Core.If iff) {
-            read(behavior, iff, plan, parameters, symbols, out, edges);
+            TermPath made = read(behavior, iff, plan, parameters, symbols, out, edges);
+            // Every position this condition compares, less the one a line was drawn on. What is left
+            // is a rule the model states here and this did not read, which is the one thing that
+            // keeps a later reader from taking an empty list for a model that says nothing.
+            for (TermPath compared : comparedIn(iff.cond(), parameters, symbols)) {
+                if (!compared.equals(made) && !unread.contains(compared)) {
+                    unread.add(compared);
+                }
+            }
         }
         // A match case's body and an attempted construction's departure are expression slots, so the
         // generic walk reaches them; only the arms themselves are not children, and this walk does not
         // number arms.
-        Core.forEachChild(e, child -> walk(behavior, child, plan, parameters, symbols, out, edges));
+        Core.forEachChild(e,
+                child -> walk(behavior, child, plan, parameters, symbols, out, edges, unread));
     }
 
-    private static void read(String behavior, Core.If iff, CoverageSites.Plan plan,
-                             List<String> parameters, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges) {
+    /**
+     * Every position a condition compares, however the condition is written.
+     *
+     * <p>Names them and no more. What a comparison inside a conjunction would need before it could be
+     * a line is which arm witnesses it having been evaluated, and that is not answered here — a
+     * threshold recorded without it is an obligation nobody can discharge. So this establishes only
+     * that the model draws something at this position, which is exactly what {@code not derivable}
+     * would otherwise deny.
+     */
+    private static List<TermPath> comparedIn(Core e, List<String> parameters, Symbols symbols) {
+        List<TermPath> out = new ArrayList<>();
+        compared(e, parameters, symbols, out);
+        return out;
+    }
+
+    private static void compared(Core e, List<String> parameters, Symbols symbols,
+                                 List<TermPath> out) {
+        if (e instanceof Core.Binary binary && orders(binary.op())) {
+            for (Core side : List.of(binary.left(), binary.right())) {
+                NumericTerm named = termOf(side, parameters, symbols);
+                if (named != null && !out.contains(named.path())) {
+                    out.add(named.path());
+                }
+            }
+        }
+        Core.forEachChild(e, child -> compared(child, parameters, symbols, out));
+    }
+
+    /** Whether an operator is one that compares two values rather than combining two conditions. */
+    private static boolean orders(Ast.BinOp op) {
+        return switch (op) {
+            case EQ, NE, LT, LE, GT, GE -> true;
+            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
+    }
+
+    /** The position a line was drawn on here, or null where none was. */
+    private static TermPath read(String behavior, Core.If iff, CoverageSites.Plan plan,
+                                 List<String> parameters, Symbols symbols, List<Threshold> out,
+                                 List<GuardEdge> edges) {
         if (!(iff.cond() instanceof Core.Binary comparison)) {
-            return;
+            return null;
         }
         Ast.BinOp op = comparison.op();
         NumericTerm term = termOf(comparison.left(), parameters, symbols);
@@ -92,7 +141,7 @@ public final class GuardThresholds {
             op = mirrored(op);
         }
         if (term == null || value == null) {
-            return;
+            return null;
         }
         Boolean below = switch (op) {
             case LE, GT -> Boolean.TRUE;    // the value itself is on the low side
@@ -100,11 +149,11 @@ public final class GuardThresholds {
             default -> null;                // EQ / NE do not order the values, so they draw no cut
         };
         if (below == null) {
-            return;
+            return null;
         }
         CoverageSites.GuardRef guard = guardOf(plan, iff);
         if (guard == null) {
-            return;   // no site for this `if`: nothing could answer for it
+            return null;   // no site for this `if`: nothing could answer for it
         }
         out.add(new Threshold(term, value, below,
                 new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
@@ -133,6 +182,7 @@ public final class GuardThresholds {
             }
             default -> { }
         }
+        return term.path();
     }
 
     /** One arm's edge, where that arm has a probe. An arm answering nothing has none, and it is owed

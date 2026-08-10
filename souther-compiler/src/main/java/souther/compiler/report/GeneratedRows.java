@@ -244,7 +244,7 @@ public final class GeneratedRows {
         }
         for (Generator.UnresolvedCombination each : left) {
             say(out, said, String.format("// no row for `%s` in `%s`: %s%n",
-                    each.subject(), behavior, why(each.reason())));
+                    each.subject(), behavior, saidOf(each)));
         }
         // Every gap, and not only the ones a strategy took. A gap printed in the report and left out
         // of this block is one an author is told nothing about, while the rows above it read as
@@ -254,7 +254,7 @@ public final class GeneratedRows {
                 case GenerationOutcome.Generated _ -> { }
                 case GenerationOutcome.CannotGenerate cannot -> say(out, said,
                         String.format("// no row for `%s` in `%s`: %s%n", cannot.why().subject(),
-                                behavior, why(cannot.why().reason())));
+                                behavior, saidOf(cannot.why())));
                 // Told apart from the one above it in its own words. A strategy that tried and
                 // composed nothing and a gap nothing takes are different pieces of news: the first
                 // says a row may still be writable by hand, the second says no run of this will
@@ -334,6 +334,18 @@ public final class GeneratedRows {
                     PARTITION_OMITTED ->
                     throw new IllegalStateException("not a gap a build refuses: " + gap);
         };
+    }
+
+    /**
+     * What to print about a combination nothing was written for: what the class said about itself
+     * where it said anything, and the category of the answer otherwise.
+     *
+     * <p>The category is what a reader acts on and the sentence is which case of it this was. A
+     * class that recorded why nothing was composed for it knows something the category does not,
+     * and printing the category over it loses the one part an author can do anything with.
+     */
+    private static String saidOf(Generator.UnresolvedCombination left) {
+        return left.said().orElseGet(() -> why(left.reason()));
     }
 
     private static String why(Generator.UnresolvedCombination.Reason reason) {

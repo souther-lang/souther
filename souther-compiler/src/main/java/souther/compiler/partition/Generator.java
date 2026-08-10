@@ -30,9 +30,11 @@ import java.util.TreeSet;
  * assertion nobody made.
  *
  * <p>What it reports is not only the rows. A combination it could produce nothing for is said out loud,
- * with which of the three things happened — no value can be written for one of its classes, every value
- * it tried was refused at construction, or the search stopped before deciding. A generator that returned
- * only the rows it managed would read as though the rest were covered.
+ * with which of the four things happened — one of its classes has no values at all, nothing here
+ * composed one of the values it has, every value tried was refused at construction, or the search
+ * stopped before deciding. A generator that returned only the rows it managed would read as though the
+ * rest were covered, and one that gave the same answer to all four would send an author looking for a
+ * value that does not exist while a row they could write in a line went unwritten.
  */
 public final class Generator {
 
@@ -87,8 +89,14 @@ public final class Generator {
      * <p>{@code ALL_CANDIDATES_REJECTED} is not a proof that the combination is impossible. It says
      * every value this tried was refused, which is a fact about the values tried; another value of the
      * same classes may well build. Nothing here writes into {@code provenInfeasible} for that reason.
+     *
+     * @param said what the class said about itself where it said anything, in its own words. Kept
+     *             beside the reason rather than folded into it: the reason is the category a reader
+     *             acts on, and this is the sentence that says which case of it this was. Folded into
+     *             {@code detail} it would be printed where the subject goes.
      */
-    public record UnresolvedCombination(List<String> classes, Reason reason, String detail) {
+    public record UnresolvedCombination(List<String> classes, Reason reason, String detail,
+                                        Optional<String> said) {
 
         public enum Reason {
             /** One of the classes has no value that can be written for it. */
@@ -129,10 +137,15 @@ public final class Generator {
 
         public UnresolvedCombination {
             classes = List.copyOf(classes);
+            said = said == null ? Optional.empty() : said;
+        }
+
+        public UnresolvedCombination(List<String> classes, Reason reason, String detail) {
+            this(classes, reason, detail, Optional.empty());
         }
 
         public UnresolvedCombination(List<String> classes, Reason reason) {
-            this(classes, reason, null);
+            this(classes, reason, null, Optional.empty());
         }
 
         /**
@@ -266,7 +279,7 @@ public final class Generator {
                 pairs.remove(seed);
                 singles.remove(seed);
                 unresolved.add(new UnresolvedCombination(labels(axes, seed), built.reason(),
-                        built.detail()));
+                        built.detail(), built.said()));
             }
         }
         return new GenerationResult(rows, unresolved, reasons);
@@ -324,7 +337,7 @@ public final class Generator {
             Map<String, List<FixtureTemplate>> here =
                     TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
                             ? Map.of(axis.path().toString(), edge.values()) : Map.of();
-            Outcome tried = valueAt(subject, p, here, settled, check);
+            Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
             if (tried.value() == null) {
                 // Where the refusal is of the values this edge offered, what the edge held back
                 // outranks it: values that were never built were not among the ones refused.
@@ -537,7 +550,17 @@ public final class Generator {
 
     // --- turning classes into a row -------------------------------------------------------------
 
-    private record Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail) {}
+    private record Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail,
+                           Optional<String> said) {
+
+        static Attempt of(GeneratedRow row) {
+            return new Attempt(row, null, null, Optional.empty());
+        }
+
+        static Attempt no(UnresolvedCombination.Reason reason, String detail) {
+            return new Attempt(null, reason, detail, Optional.empty());
+        }
+    }
 
     /**
      * One assignment of classes, built into the values a row would carry.
@@ -558,24 +581,41 @@ public final class Generator {
      */
     private static Attempt build(Subject subject, List<Axis> axes, int[] where, CandidateCheck check) {
         Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
+        Map<String, souther.compiler.types.TypeName> shapes = new LinkedHashMap<>();
         for (int i = 0; i < axes.size(); i++) {
-            List<FixtureTemplate> candidates =
-                    axes.get(i).classes().get(where[i]).representatives().candidates();
+            PartitionClass here = axes.get(i).classes().get(where[i]);
+            List<FixtureTemplate> candidates = here.representatives().candidates();
+            if (candidates.isEmpty() && here.shape().isPresent()) {
+                // Not a value but which value: the walk below builds one of this shape at this
+                // position, field by field, the way it builds every other record.
+                shapes.put(axes.get(i).path().toString(), here.shape().get());
+                continue;
+            }
             if (candidates.isEmpty()) {
-                return new Attempt(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
-                        label(axes.get(i), where[i]));
+                // What the class said about itself, where it said anything. A class that recorded why
+                // nothing was produced for it knows something this does not, and the two answers are
+                // not the same claim: one is that the position has no values, and the other is that
+                // this did not compose one of the values it has. Read as the first, a case somebody
+                // can write in one line is reported as a row that does not exist.
+                String at = label(axes.get(i), where[i]);
+                return here.generationFailure()
+                        .map(why -> new Attempt(null,
+                                UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
+                                Optional.of(why)))
+                        .orElseGet(() -> Attempt.no(
+                                UnresolvedCombination.Reason.NO_REPRESENTATIVE, at));
             }
             decided.put(axes.get(i).path().toString(), candidates);
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            Outcome tried = valueFor(subject, p, axes, decided, check);
+            Outcome tried = valueFor(subject, p, axes, decided, shapes, check);
             if (tried.value() == null) {
-                return new Attempt(null, tried.reason(), tried.detail());
+                return Attempt.no(tried.reason(), tried.detail());
             }
             inputs.add(tried.value());
         }
-        return new Attempt(new GeneratedRow(labels(axes, where), inputs), null, null);
+        return Attempt.of(new GeneratedRow(labels(axes, where), inputs));
     }
 
     /**
@@ -589,6 +629,7 @@ public final class Generator {
      */
     private static Outcome valueFor(Subject subject, int p, List<Axis> axes,
                                     Map<String, List<FixtureTemplate>> decided,
+                                    Map<String, souther.compiler.types.TypeName> shapes,
                                     CandidateCheck check) {
         TermPath at = TermPath.of(subject.parameters().get(p));
         Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
@@ -598,7 +639,7 @@ public final class Generator {
                 here.put(axis.path().toString(), decided.get(axis.path().toString()));
             }
         }
-        return valueAt(subject, p, here, settledIn(here), check);
+        return valueAt(subject, p, here, settledIn(here), shapes, check);
     }
 
     /**
@@ -639,14 +680,16 @@ public final class Generator {
     private static Outcome valueAt(Subject subject, int p,
                                    Map<String, List<FixtureTemplate>> decided,
                                    Map<String, BigDecimal> settled,
+                                   Map<String, souther.compiler.types.TypeName> shapes,
                                    CandidateCheck check) {
         Choices choices = choicesOf(subject.types().get(p),
-                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided, settled);
+                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided, settled,
+                shapes);
         if (choices.missingAt() != null) {
             return new Outcome(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
                     choices.missingAt());
         }
-        Outcome product = walk(subject, p, choices, check);
+        Outcome product = walk(subject, p, choices, shapes, check);
         if (product.value() != null) {
             return product;
         }
@@ -654,7 +697,7 @@ public final class Generator {
         // two of them was satisfied only where the lists happened to already hold a pair that does.
         // Asked again choosing one position at a time, each from what is left once the ones before it
         // are asserted, which is the only way `a < b` is met in general.
-        Outcome conditioned = conditioned(subject, p, decided, settled, check);
+        Outcome conditioned = conditioned(subject, p, decided, settled, shapes, check);
         if (conditioned.value() != null) {
             return conditioned;
         }
@@ -670,16 +713,17 @@ public final class Generator {
         // the rules allow was offered. A position that read a count past what a row is built to carry,
         // or that has more pairings than are built at once, held something back, and saying so is the
         // difference between a fact about the model and a fact about this.
-        UnresolvedCombination.Reason held = heldBack(subject, p, decided);
+        UnresolvedCombination.Reason held = heldBack(subject, p, decided, shapes);
         return held == null ? product : new Outcome(null, held, null);
     }
 
     /** Why a position of this parameter offered less than its rules allow, or null where none did. */
     private static UnresolvedCombination.Reason heldBack(Subject subject, int p,
-                                                         Map<String, List<FixtureTemplate>> decided) {
+                                                         Map<String, List<FixtureTemplate>> decided,
+                                                         Map<String, souther.compiler.types.TypeName> shapes) {
         List<Position> found = new ArrayList<>();
         positionsUnder(subject.types().get(p), TermPath.of(subject.parameters().get(p)),
-                subject.symbols(), 0, found, decided.keySet());
+                subject.symbols(), 0, found, decided.keySet(), shapes);
         UnresolvedCombination.Reason held = null;
         for (Position each : found) {
             UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols());
@@ -709,11 +753,13 @@ public final class Generator {
      */
     private static Outcome conditioned(Subject subject, int p,
                                        Map<String, List<FixtureTemplate>> decided,
-                                       Map<String, BigDecimal> settled, CandidateCheck check) {
+                                       Map<String, BigDecimal> settled,
+                                       Map<String, souther.compiler.types.TypeName> shapes,
+                                       CandidateCheck check) {
         Type type = subject.types().get(p);
         TermPath at = TermPath.of(subject.parameters().get(p));
         List<Position> found = new ArrayList<>();
-        positionsUnder(type, at, subject.symbols(), 0, found, decided.keySet());
+        positionsUnder(type, at, subject.symbols(), 0, found, decided.keySet(), shapes);
         // What the caller fixed goes first, so that everything chosen after it is chosen beside it.
         // A class stands for one value and a boundary is one value, and neither is worth deciding
         // after the positions whose range it settles.
@@ -722,7 +768,7 @@ public final class Generator {
         positions.addAll(found.stream().filter(each -> !decided.containsKey(each.path())).toList());
         Budget budget = new Budget();
         FixtureTemplate built = descend(subject, p, positions, 0, new LinkedHashMap<>(),
-                new LinkedHashMap<>(settled), decided, check, budget);
+                new LinkedHashMap<>(settled), decided, shapes, check, budget);
         if (built != null) {
             return new Outcome(built, null, null);
         }
@@ -775,13 +821,14 @@ public final class Generator {
                                            Map<String, FixtureTemplate> chosen,
                                            Map<String, BigDecimal> settled,
                                            Map<String, List<FixtureTemplate>> decided,
+                                           Map<String, souther.compiler.types.TypeName> shapes,
                                            CandidateCheck check, Budget budget) {
         if (index == positions.size()) {
             if (!budget.spend()) {
                 return null;
             }
             FixtureTemplate whole = compose(subject.types().get(p),
-                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0);
+                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0, shapes);
             return whole != null && check.refuse(p, whole).isEmpty() ? whole : null;
         }
         Position position = positions.get(index);
@@ -792,7 +839,7 @@ public final class Generator {
                 settled.put(position.path(), number);
             }
             FixtureTemplate found = descend(subject, p, positions, index + 1, chosen, settled,
-                    decided, check, budget);
+                    decided, shapes, check, budget);
             if (found != null) {
                 return found;
             }
@@ -828,18 +875,20 @@ public final class Generator {
     /** The positions under one parameter, in the order they are composed. The same rule
      * {@link #choicesUnder} walks, so that the two agree about where a row chooses anything. */
     private static void positionsUnder(Type type, TermPath at, Symbols symbols, int depth,
-                                       List<Position> out, java.util.Set<String> decided) {
+                                       List<Position> out, java.util.Set<String> decided,
+                                       Map<String, souther.compiler.types.TypeName> shapes) {
         if (decided.contains(at.toString())) {
             out.add(new Position(at.toString(), type));
             return;
         }
+        type = shaped(type, at, shapes);
         if (depth < MAX_DEPTH && type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
             Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
             if (!fields.isEmpty()) {
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
                     positionsUnder(field.getValue(), at.then(field.getKey()), symbols,
-                            depth + 1, out, decided);
+                            depth + 1, out, decided, shapes);
                 }
                 return;
             }
@@ -896,7 +945,8 @@ public final class Generator {
      */
     private static Choices choicesOf(Type type, TermPath at, Symbols symbols,
                                      Map<String, List<FixtureTemplate>> decided,
-                                     Map<String, BigDecimal> settled) {
+                                     Map<String, BigDecimal> settled,
+                                     Map<String, souther.compiler.types.TypeName> shapes) {
         List<String> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
         // A position the caller fixed holds nothing back: it was given the value it is to take.
@@ -908,7 +958,7 @@ public final class Generator {
         FieldDomains left = type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
                 ? FieldDomains.of(ref.name(), data, symbols, under(at, settled)) : FieldDomains.NONE;
-        String missing = choicesUnder(type, at, symbols, 0, paths, values, reserves, left, at);
+        String missing = choicesUnder(type, at, symbols, 0, paths, values, reserves, left, at, shapes);
         return missing != null ? Choices.missing(missing)
                 : new Choices(paths, values, reserves, null);
     }
@@ -934,17 +984,19 @@ public final class Generator {
     private static String choicesUnder(Type type, TermPath at, Symbols symbols, int depth,
                                        List<String> paths, List<List<FixtureTemplate>> values,
                                        List<List<FixtureTemplate>> reserves,
-                                       FieldDomains left, TermPath root) {
+                                       FieldDomains left, TermPath root,
+                                       Map<String, souther.compiler.types.TypeName> shapes) {
         if (paths.contains(at.toString())) {
             return null;   // an axis decides here
         }
+        type = shaped(type, at, shapes);
         if (depth < MAX_DEPTH && type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
             Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
             if (!fields.isEmpty()) {
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
                     String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
-                            depth + 1, paths, values, reserves, left, root);
+                            depth + 1, paths, values, reserves, left, root, shapes);
                     if (missing != null) {
                         return missing;
                     }
@@ -967,6 +1019,20 @@ public final class Generator {
         return null;
     }
 
+    /**
+     * The type a value is built at, which is the declared one unless a class named a constructor.
+     *
+     * <p>Only what is being built moves. The position's declared type is still the sum, and the axis
+     * still says so — a class of it saying which case a witness takes is not the position becoming
+     * that case, and reading the two as one would have a later reader believe the model declares
+     * something it does not.
+     */
+    private static Type shaped(Type type, TermPath at,
+                               Map<String, souther.compiler.types.TypeName> shapes) {
+        souther.compiler.types.TypeName named = shapes.get(at.toString());
+        return named == null ? type : Type.ref(named);
+    }
+
     /** What came of trying the assignments for one parameter: its value, or why there is none. */
     private record Outcome(FixtureTemplate value, UnresolvedCombination.Reason reason,
                            String detail) {}
@@ -985,8 +1051,10 @@ public final class Generator {
      * wider set of choices is a longer walk to every assignment in it, and a widening meant for one
      * position would otherwise take rows away from the rest.
      */
-    private static Outcome walk(Subject subject, int p, Choices choices, CandidateCheck check) {
-        Outcome tried = over(subject, p, choices.at(), choices.values(), check);
+    private static Outcome walk(Subject subject, int p, Choices choices,
+                                Map<String, souther.compiler.types.TypeName> shapes,
+                                CandidateCheck check) {
+        Outcome tried = over(subject, p, choices.at(), choices.values(), shapes, check);
         // Only where the ordinary assignments ran out. A search that stopped at the bound has not
         // tried them all, and starting a wider one in front of the ones it never reached would spend
         // what is left on assignments further from what the model says the row is about, while the
@@ -995,13 +1063,15 @@ public final class Generator {
                 || tried.reason() != UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED) {
             return tried;
         }
-        return over(subject, p, choices.at(), choices.widened(), check);
+        return over(subject, p, choices.at(), choices.widened(), shapes, check);
     }
 
     /** One pass over one set of choices, from the assignment where every position takes its first
      * value outward. */
     private static Outcome over(Subject subject, int p, List<String> at,
-                                List<List<FixtureTemplate>> values, CandidateCheck check) {
+                                List<List<FixtureTemplate>> values,
+                                Map<String, souther.compiler.types.TypeName> shapes,
+                                CandidateCheck check) {
         int positions = at.size();
         ArrayDeque<int[]> next = new ArrayDeque<>();
         Set<String> seen = new LinkedHashSet<>();
@@ -1018,7 +1088,7 @@ public final class Generator {
                 chosen.put(at.get(i), values.get(i).get(assignment[i]));
             }
             FixtureTemplate built = compose(subject.types().get(p),
-                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0);
+                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0, shapes);
             if (built != null && check.refuse(p, built).isEmpty()) {
                 return new Outcome(built, null, null);
             }
@@ -1045,11 +1115,13 @@ public final class Generator {
     /** The value at one position: what the assignment chose there, or a record built out of its
      * fields. Null only where the walk that collected the choices and this one disagree. */
     private static FixtureTemplate compose(Type type, TermPath at, Map<String, FixtureTemplate> chosen,
-                                           Symbols symbols, int depth) {
+                                           Symbols symbols, int depth,
+                                           Map<String, souther.compiler.types.TypeName> shapes) {
         FixtureTemplate here = chosen.get(at.toString());
         if (here != null) {
             return here;
         }
+        type = shaped(type, at, shapes);
         if (depth < MAX_DEPTH && type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
             Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
@@ -1057,7 +1129,7 @@ public final class Generator {
                 Map<String, FixtureTemplate> built = new LinkedHashMap<>();
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
                     FixtureTemplate value = compose(field.getValue(), at.then(field.getKey()), chosen,
-                            symbols, depth + 1);
+                            symbols, depth + 1, shapes);
                     if (value == null) {
                         return null;
                     }
