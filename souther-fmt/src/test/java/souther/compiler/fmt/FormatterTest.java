@@ -31,9 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FormatterTest {
 
     static Stream<Path> corpus() throws IOException {
-        // A root that is skipped for not being there takes its sources out of the sweep and leaves
-        // the rows that remain passing, so a missing one is said instead.
-        List<Path> roots = List.of(Path.of("src", "main", "resources", "souther"));
+        // The bundled prelude, named where the compiler keeps it rather than where this module
+        // happens to stand. A root that is skipped for not being there takes its sources out of the
+        // sweep and leaves the rows that remain passing, so a missing one is said instead.
+        List<Path> roots = List.of(
+                Path.of("..", "souther-compiler", "src", "main", "resources", "souther"));
         List<Path> sources = new ArrayList<>();
         for (Path root : roots) {
             if (!Files.isDirectory(root)) {

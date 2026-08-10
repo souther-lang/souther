@@ -24,8 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CstParserRoundTripTest {
 
     static Stream<Path> exampleSources() throws IOException {
+        // The bundled prelude — the hardest corpus. It is the compiler's resource, named where it
+        // is rather than where this module happens to stand, so the sweep is over the same sources
+        // wherever the check that reads them is written.
         List<Path> roots = List.of(
-                Path.of("src", "main", "resources", "souther"));   // the bundled prelude — the hardest corpus
+                Path.of("..", "souther-compiler", "src", "main", "resources", "souther"));
         List<Path> sources = new ArrayList<>();
         for (Path root : roots) {
             if (!Files.isDirectory(root)) {
