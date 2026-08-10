@@ -32,8 +32,10 @@ public enum SyntaxKind {
     IDENT, INT_LIT, DECIMAL_LIT, STRING_LIT, TYPEVAR,
 
     // --- punctuation ---
+    // `_` is punctuation and not a name: it carries a name on (`foo_bar`) and begins none, so where
+    // it stands alone it is the discard the language writes and has a token of its own.
     LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT, SPREAD, ASSIGN, PIPE,
-    ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS,
+    ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, UNDERSCORE,
 
     // --- operators ---
     EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH,
@@ -169,7 +171,7 @@ public enum SyntaxKind {
                  ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
                  MATCH_KW, WITH_KW, UNREACHABLE_KW,
                  LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT, SPREAD,
-                 ASSIGN, PIPE, ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS,
+                 ASSIGN, PIPE, ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, UNDERSCORE,
                  EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH -> Lexis.FIXED_TOKEN;
 
             case SOURCE_FILE, MODULE_HEADER, EXPOSING_CLAUSE, EXPOSED_ENTRY, IMPORT_DECL,
@@ -229,6 +231,7 @@ public enum SyntaxKind {
             case VPIPE -> "|>";
             case QUESTION -> "?";
             case PLUSPLUS -> "++";
+            case UNDERSCORE -> "_";
             case EQ -> "==";
             case NE -> "/=";
             case LT -> "<";
@@ -268,6 +271,20 @@ public enum SyntaxKind {
      * locale-neutral and shown as that spelling in backticks ({@code `:`}); a category (a name, a
      * literal, end of input) is language-dependent and returned as a {@link Localizable}, localized
      * when the message is rendered. */
+
+    /**
+     * Whether a token of this kind stands where a name stands.
+     *
+     * <p>{@code _} is not a name — a name may not begin with one — but it is written where one
+     * would be: a binding pattern, a departure arm, a fake table's default row. Every reader that
+     * walks a node for the name it was written with reads this rather than asking for {@code IDENT},
+     * because each of them asking separately is how the discard would go missing from one of them:
+     * the builder would lose the arm, or the formatter would leave it out of what it writes back.
+     */
+    public boolean standsWhereANameStands() {
+        return this == IDENT || this == UNDERSCORE;
+    }
+
     public Object display() {
         Optional<String> spelled = fixedSpelling();
         if (spelled.isPresent()) {

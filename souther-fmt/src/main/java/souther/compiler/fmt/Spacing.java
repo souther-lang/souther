@@ -119,7 +119,14 @@ final class Spacing {
             SyntaxKind.DECIMAL_LIT, SyntaxKind.STRING_LIT, SyntaxKind.TRUE_KW, SyntaxKind.FALSE_KW);
 
     private static SyntaxKind asWritten(SyntaxKind kind) {
-        return WRITTEN_VALUES.contains(kind) ? SyntaxKind.INT_LIT : kind;
+        if (WRITTEN_VALUES.contains(kind)) {
+            return SyntaxKind.INT_LIT;
+        }
+        // The discard stands where a name stands — a pattern, an arm, a fake's default row — and
+        // the canonical form writes it exactly as it writes a name there. Read under the name, so
+        // that the answer for `| _ ->` is the answer for `| C ->` rather than six rows saying again
+        // what those rows say.
+        return kind == SyntaxKind.UNDERSCORE ? SyntaxKind.IDENT : kind;
     }
 
     /**

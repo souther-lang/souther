@@ -33,7 +33,9 @@ public final class EditorSymbols {
         return Optional.ofNullable(switch (kind) {
             case SPREAD, ASSIGN, PIPE, ARROW, PIPEFWD, VPIPE, QUESTION, PLUSPLUS, EQ, NE, LT, LE,
                  GT, GE, AND, OR, PLUS, MINUS, STAR, SLASH -> EditorSymbolClass.OPERATOR;
-            case LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT ->
+            // `_` is here with the brackets and the commas: it stands where a name stands, and a
+            // name is left in the colour of the text too.
+            case LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COLON, COMMA, DOT, UNDERSCORE ->
                     EditorSymbolClass.PUNCTUATION;
             default -> null;
         });

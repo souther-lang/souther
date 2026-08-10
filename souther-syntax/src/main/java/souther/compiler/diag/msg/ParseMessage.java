@@ -139,6 +139,39 @@ public sealed interface ParseMessage extends Message {
     @Code(DiagnosticCode.E2306)
     record AnUnexpectedCharacter(String character) implements ParseMessage, Reported {}
 
+    /**
+     * A name written beginning with {@code _}.
+     *
+     * <p>An underscore carries a name on and begins none, so {@code foo_bar} is a name and
+     * {@code _foo} is not. Refused rather than read as the discard followed by a name, which would
+     * make one written word into two the author did not write.
+     */
+    @Code(DiagnosticCode.E2306)
+    record ANameDoesNotBeginWithAnUnderscore(String written) implements ParseMessage, Reported {}
+
+    /**
+     * A {@code $} in the source.
+     *
+     * <p>It is not a character a name is written with, and it is the mark the compiler spells its
+     * own names by — the classes and locals it generates beside the ones the author declares. The
+     * two sets of names have to be disjoint, so the character that separates them is refused where
+     * a name is written rather than left to collide.
+     */
+    @Code(DiagnosticCode.E2306)
+    record ADollarIsNotWrittenInAName() implements ParseMessage, Reported {}
+
+    /**
+     * A source with no {@code module} header, named after something that is not a name.
+     *
+     * <p>A name written in a source file was read as one by the scan. The name a header-less source
+     * is given was read by nothing — it is a file's stem, or what an embedding passed in — and it
+     * becomes the module's name all the same, so it is held to the same rule here. Without this a
+     * module could be called what no module may declare itself.
+     */
+    @Code(DiagnosticCode.E2301)
+    record ASourceIsNamedAfterSomethingThatIsNotAName(String given)
+            implements ParseMessage, Reported {}
+
     /** `Some(v)` opens a wrapped newtype, and binding the whole value is written without parens. */
     @Code(DiagnosticCode.E2303)
     record SomeParensOpenAWrappedNewtype(String newtype) implements ParseMessage, Reported {}

@@ -67,7 +67,7 @@ class InvariantCapabilitiesTest {
                 module m.a
                 data Kind = String
                     invariant match value with
-                        | _ -> true
+                        | Anything -> true
                 """, "Kind");
         assertEquals(ClauseDischarge.Kind.RUNTIME_ONLY, clauses.get(0).kind());
         assertTrue(clauses.get(0).reason().isPresent(), "there is more than one way to be outside");

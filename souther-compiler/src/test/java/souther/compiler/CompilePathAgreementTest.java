@@ -96,7 +96,7 @@ class CompilePathAgreementTest {
 
                         behavior total : (i: In) -> Out constructs Out
                         let total (i) = {
-                            let (seed, _unused) = (0, 0)
+                            let (seed, _) = (0, 0)
                             Out { total = fold((acc, x) -> acc + x, seed, i.xs) }
                         }
                         """),

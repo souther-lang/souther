@@ -50,8 +50,9 @@ class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
             TRUE_KW, FALSE_KW, RPAREN, RBRACKET, RBRACE);
     private static final Set<SyntaxKind> TYPE_FIRST = of(IDENT, TYPEVAR, LPAREN);
     private static final Set<SyntaxKind> TYPE_LAST = of(IDENT, TYPEVAR, RPAREN, GT, QUESTION);
-    private static final Set<SyntaxKind> PAT_FIRST = of(IDENT, LPAREN, LBRACE);
-    private static final Set<SyntaxKind> PAT_LAST = of(IDENT, RPAREN, RBRACE);
+    // A pattern may be the discard, so it stands at either end of one like a name.
+    private static final Set<SyntaxKind> PAT_FIRST = of(IDENT, UNDERSCORE, LPAREN, LBRACE);
+    private static final Set<SyntaxKind> PAT_LAST = of(IDENT, UNDERSCORE, RPAREN, RBRACE);
     private static final Set<SyntaxKind> OPS = of(EQ, NE, LT, LE, GT, GE, AND, OR, PLUS, MINUS,
             STAR, SLASH, PLUSPLUS);
 
@@ -200,7 +201,7 @@ class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
             new Face(SUM_BODY, of(IDENT), of(PIPE)),
             new Face(SUM_BODY, of(PIPE), of(IDENT)),
             new Face(INVARIANT_CLAUSE, of(INVARIANT_KW), EXPR_FIRST),
-            new Face(INVARIANT_CLAUSE, of(IDENT), of(ASSIGN)),
+            new Face(INVARIANT_CLAUSE, of(IDENT, UNDERSCORE), of(ASSIGN)),
             new Face(INVARIANT_CLAUSE, of(ASSIGN), EXPR_FIRST),
             new Face(BEHAVIOR_DEF, of(BEHAVIOR_KW), of(IDENT)),
             new Face(BEHAVIOR_DEF, of(IDENT), of(COLON, ASSIGN)),
@@ -218,8 +219,8 @@ class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
             new Face(INTRINSIC_BODY, of(IDENT), of(STRING_LIT)),
             new Face(GUARD_STMT, of(AS_KW), of(IDENT)),
             new Face(IF_EXPR, of(AS_KW), of(IDENT)),
-            new Face(ELSE_ARM, of(PIPE), of(IDENT)),
-            new Face(ELSE_ARM, of(IDENT), of(ARROW)),
+            new Face(ELSE_ARM, of(PIPE), of(IDENT, UNDERSCORE)),
+            new Face(ELSE_ARM, of(IDENT, UNDERSCORE), of(ARROW)),
             new Face(ELSE_ARM, of(ARROW), EXPR_FIRST),
             new Face(EXAMPLES_FILE_HEADER, of(IDENT), of(IDENT)),
             new Face(EXAMPLE_DEF, of(IDENT), of(IDENT)),
@@ -235,8 +236,8 @@ class TheRuleAnswersEveryBoundaryTheGrammarCanBuildTest {
             new Face(WITH_BINDING, of(IDENT), of(ASSIGN)),
             new Face(WITH_BINDING, of(ASSIGN), EXPR_FIRST),
             new Face(FAKE_DEF, of(IDENT), of(IDENT)),
-            new Face(FAKE_DEF, of(PIPE), of(LPAREN, IDENT)),
-            new Face(FAKE_ROW, of(RPAREN, IDENT), of(ARROW)),
+            new Face(FAKE_DEF, of(PIPE), of(LPAREN, UNDERSCORE)),
+            new Face(FAKE_ROW, of(RPAREN, UNDERSCORE), of(ARROW)),
             new Face(FAKE_ROW, of(ARROW), EXPR_FIRST),
             new Face(QUALIFIED_NAME, of(IDENT), of(DOT)),
             new Face(QUALIFIED_NAME, of(DOT), of(IDENT)));

@@ -92,6 +92,16 @@ public final class AstBuilder {
             name = qualifiedNameText(h.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
             pos = pos(h);
         } else if (defaultModuleName != null) {
+            // The name written in a header was read by the scan and is a name by that. This one was
+            // read by nothing — a file's stem, or what an embedding handed in — so it is held to
+            // the alphabet here, where it becomes the module's name.
+            for (String part : defaultModuleName.split("\\.", -1)) {
+                if (!souther.compiler.cst.IdentifierAlphabet.isName(part)) {
+                    throw error(pos(file),
+                            new ParseMessage.ASourceIsNamedAfterSomethingThatIsNotAName(
+                                    defaultModuleName));
+                }
+            }
             name = defaultModuleName;
             pos = pos(file);
         } else {
@@ -1404,12 +1414,13 @@ public final class AstBuilder {
     private List<SyntaxToken> identTokens(SyntaxNode n) {
         List<SyntaxToken> out = new ArrayList<>();
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 out.add(t);
             }
         }
         return out;
     }
+
 
     /** The name a top-level declaration declares: the first identifier in it. This is how the
      * builder names a {@code data}, a {@code behavior} and a {@code let}, and how the declaration's
@@ -1438,7 +1449,7 @@ public final class AstBuilder {
     /** The token that spells what a top-level declaration declares. */
     static SyntaxToken firstIdentToken(SyntaxNode n) {
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 return t;
             }
         }
@@ -1448,7 +1459,7 @@ public final class AstBuilder {
     private SyntaxToken lastIdentToken(SyntaxNode n) {
         SyntaxToken last = null;
         for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+            if (e instanceof SyntaxToken t && t.kind().standsWhereANameStands()) {
                 last = t;
             }
         }
