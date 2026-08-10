@@ -94,9 +94,15 @@ public interface BoundaryDomain {
         public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
             BigDecimal from = dayOf(low);
             BigDecimal to = dayOf(high);
-            return from == null || to == null ? Optional.empty()
-                    : Optional.of(new ObservedValue.Temporal(Dates.written(
-                            from.add(to.subtract(from).divide(BigDecimal.valueOf(2))))));
+            if (from == null || to == null) {
+                return Optional.empty();
+            }
+            // Whole days, the way `INT` meets whole numbers. The count is what carries a date and it
+            // is not a decimal: two days apart by one have a midpoint and it is one of them, where
+            // dividing over a wider carrier would name half a day and no calendar has one.
+            BigDecimal between = from.add(to.subtract(from)
+                    .divide(BigDecimal.valueOf(2), 0, java.math.RoundingMode.DOWN));
+            return Optional.of(new ObservedValue.Temporal(Dates.written(between)));
         }
 
         private Optional<ObservedValue> stepped(ObservedValue value, int by) {

@@ -294,14 +294,14 @@ public final class Partitions {
                     "= " + written(value, carrier), holding(term, at -> at.compareTo(value) == 0),
                     RepresentativeSource.of(standing(value, wrapper, carrier))));
         }
-        BigDecimal other = otherThan(values, within);
+        BigDecimal other = otherThan(values, within, carrier);
         String label = "/= " + String.join(", ",
                 values.stream().map(each -> written(each, carrier)).toList());
         classes.add(other == null
                 ? PartitionClass.ungeneratable(term + "/" + label, label,
                         holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
-                        "nothing here writes a value this position holds other than the ones singled"
-                                + " out")
+                        "nothing here composed a value of this position other than the ones"
+                                + " singled out")
                 : PartitionClass.of(term + "/" + label, label,
                         holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
                         RepresentativeSource.of(standing(other, wrapper, carrier))));
@@ -318,14 +318,62 @@ public final class Partitions {
         };
     }
 
-    /** A number the position holds that is none of {@code values}, or null where it holds no other. */
-    private static BigDecimal otherThan(List<BigDecimal> values, NumericDomain.Bounds within) {
+    /**
+     * A number the position holds that is none of {@code values}, or null where this found none.
+     *
+     * <p>Where the values step, the one beside a singled-out value is the nearest thing to it and is
+     * tried first. Over a dense carrier there is no step to take: a value bounded to `+[0, 1]+` and
+     * singled out at `+0.5+` steps to `+1.5+` and `+-0.5+`, both outside, and neither says anything
+     * about whether the class has values — it holds `+0+`, `+1+` and everything between. So the ends
+     * of what the position admits are asked, and a value between them, before any step is.
+     *
+     * <p>Null is this having found none and never the class being empty. Nothing here enumerates a
+     * dense range, so what a caller may say about an empty answer is that it composed nothing.
+     */
+    private static BigDecimal otherThan(List<BigDecimal> values, NumericDomain.Bounds within,
+                                        Carrier carrier) {
+        List<BigDecimal> stepped = new ArrayList<>();
         for (BigDecimal from : values) {
-            for (BigDecimal stepped : List.of(from.add(BigDecimal.ONE), from.subtract(BigDecimal.ONE))) {
-                if ((within == null || within.admits(stepped))
-                        && values.stream().noneMatch(v -> v.compareTo(stepped) == 0)) {
-                    return stepped;
+            stepped.add(from.add(BigDecimal.ONE));
+            stepped.add(from.subtract(BigDecimal.ONE));
+        }
+        List<BigDecimal> inside = new ArrayList<>();
+        if (within != null) {
+            for (Endpoint end : List.of(within.min(), within.max())) {
+                if (end != null && end.inclusive()) {
+                    inside.add(end.value());
                 }
+            }
+            BigDecimal between = Endpoint.valueBetween(within.min(), within.max(),
+                    carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE);
+            if (between != null) {
+                inside.add(between);
+            }
+            // Between the value singled out and each end, which is where a dense range still has
+            // room once the ends themselves are singled out too.
+            for (BigDecimal from : values) {
+                for (Endpoint end : List.of(within.min(), within.max())) {
+                    if (end != null) {
+                        inside.add(Endpoint.valueBetween(Endpoint.exclusive(from), end,
+                                carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE));
+                        inside.add(Endpoint.valueBetween(end, Endpoint.exclusive(from),
+                                carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE));
+                    }
+                }
+            }
+        }
+        List<BigDecimal> tried = new ArrayList<>();
+        if (carrier == Carrier.DENSE) {
+            tried.addAll(inside);
+            tried.addAll(stepped);
+        } else {
+            tried.addAll(stepped);
+            tried.addAll(inside);
+        }
+        for (BigDecimal each : tried) {
+            if (each != null && (within == null || within.admits(each))
+                    && values.stream().noneMatch(v -> v.compareTo(each) == 0)) {
+                return each;
             }
         }
         return null;

@@ -5,6 +5,11 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
+
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,6 +61,25 @@ class AnEqualityDividesTheValuesInTwoTest {
                 | "the last try" : (3) -> GiveUp
             """;
 
+    private static final String BOUNDED_DECIMAL = """
+            module example.ratio
+
+            data A
+            data B
+
+            data Ratio = Decimal
+                invariant lo = value >= 0m
+                invariant hi = value <= 1m
+
+            behavior pick : (x: Ratio) -> A | B
+                constructs A, B
+
+            let pick (x) = if x.value == 0.5m then A else B
+
+            example pick
+                | "at the half" : (Ratio(0.5m)) -> A
+            """;
+
     private static String reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
@@ -93,6 +117,31 @@ class AnEqualityDividesTheValuesInTwoTest {
         String human = reportOf(MODEL);
 
         assertTrue(human.contains("boundary    1/1"), human);
+    }
+
+    /**
+     * The complement of a value in a bounded range has values, and stepping by one does not find them.
+     *
+     * <p>`0.5` in `[0, 1]` steps to `1.5` and `-0.5`, both outside. Neither is the answer to whether
+     * the class has values — `0`, `0.1` and `1` are all in it — and a class reported as one nothing
+     * can write a value for is the mistake this issue is about, one field over.
+     */
+    @Test
+    void theComplementOfADecimalHasValuesTheStepDoesNotReach() {
+        String block = generatedFor(BOUNDED_DECIMAL);
+
+        assertFalse(block.contains("other than the ones singled out"), block);
+        assertTrue(block.contains("example pick"), block);
+    }
+
+    private static String generatedFor(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, Adequacy.Filling> all = compilation.db()
+                .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
+        assertNotNull(all, "the model under test compiles");
+        return GeneratedRows.of("example.ratio", all, false);
     }
 
     /** An ordering comparison beside it is a distinction the model does draw, and is kept. */

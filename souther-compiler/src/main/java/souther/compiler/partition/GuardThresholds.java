@@ -186,49 +186,77 @@ public final class GuardThresholds {
     private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
 
     /**
-     * The comparisons a condition is made of, each with what its place leaves as evidence.
+     * The comparisons a condition is made of, each with what its own place leaves as evidence.
      *
-     * <p>The leftmost is always evaluated, whatever the condition is made of. Past that it depends on
-     * what combines them: under a condition that is nothing but {@code &&}, reaching the arm where
-     * the whole thing held proves every operand was evaluated and true; under nothing but
-     * {@code ||}, the arm where it did not hold does. A condition mixing the two leaves neither arm
-     * separating the rows that reached a comparison from the rows that did not, and that is said
-     * rather than guessed at — the line is still the model's, and only the evidence is missing.
+     * <p>Asked per comparison and not per condition. A condition that is nothing but {@code &&}
+     * settles it for every operand at once, and so does one that is nothing but {@code ||}; a
+     * condition made of both does not. In {@code A && (B || C)} the arm where the whole thing held
+     * proves {@code A} was true and so proves {@code B} ran, while {@code C} ran only where
+     * {@code B} was false — which is a difference between two operands of one condition, and a
+     * single verdict over the whole cannot hold it.
+     *
+     * <p>Two facts are carried down, and they are not the same one. Whether this subtree is
+     * evaluated at all on a given arm, and whether reaching that arm forces the subtree's own value
+     * — because it is the second that says whether the operand to its left was true, which is what
+     * decides whether the operand to its right ran.
      */
     private static List<Placed> comparisonsIn(Core condition) {
-        List<Core> leaves = new ArrayList<>();
-        List<Ast.BinOp> combining = new ArrayList<>();
-        flatten(condition, leaves, combining);
-        OriginRef.GuardOrigin.Witness past = combining.isEmpty()
-                ? OriginRef.GuardOrigin.Witness.BOTH
-                : combining.stream().allMatch(op -> op == Ast.BinOp.AND)
-                        ? OriginRef.GuardOrigin.Witness.THEN
-                        : combining.stream().allMatch(op -> op == Ast.BinOp.OR)
-                                ? OriginRef.GuardOrigin.Witness.ELSE
-                                : OriginRef.GuardOrigin.Witness.NEITHER;
         List<Placed> out = new ArrayList<>();
-        for (int i = 0; i < leaves.size(); i++) {
-            if (leaves.get(i) instanceof Core.Binary binary && !combines(binary.op())) {
-                out.add(new Placed(binary, i == 0 ? OriginRef.GuardOrigin.Witness.BOTH : past));
-            }
-        }
+        // At the top there is nothing above to have stopped the condition, and the arm taken is the
+        // condition's own value.
+        placed(condition, new Reached(true, true, true, true), out);
         return out;
     }
 
-    /** The operands of a condition, left to right, and the operators holding them together. */
-    private static void flatten(Core e, List<Core> leaves, List<Ast.BinOp> combining) {
-        if (e instanceof Core.Binary binary && combines(binary.op())) {
-            combining.add(binary.op());
-            flatten(binary.left(), leaves, combining);
-            flatten(binary.right(), leaves, combining);
-            return;
+    /**
+     * What reaching each arm of the enclosing {@code if} says about one subtree of its condition.
+     *
+     * @param onThen    whether reaching the {@code then} arm implies this subtree was evaluated
+     * @param onElse    the same for {@code else}
+     * @param trueThen  whether reaching {@code then} implies this subtree's own value was true
+     * @param falseElse whether reaching {@code else} implies its own value was false
+     */
+    private record Reached(boolean onThen, boolean onElse, boolean trueThen, boolean falseElse) {
+
+        OriginRef.GuardOrigin.Witness witness() {
+            if (onThen && onElse) {
+                return OriginRef.GuardOrigin.Witness.BOTH;
+            }
+            if (onThen) {
+                return OriginRef.GuardOrigin.Witness.THEN;
+            }
+            return onElse ? OriginRef.GuardOrigin.Witness.ELSE
+                    : OriginRef.GuardOrigin.Witness.NEITHER;
         }
-        leaves.add(e);
     }
 
     private static boolean combines(Ast.BinOp op) {
         return op == Ast.BinOp.AND || op == Ast.BinOp.OR;
     }
+
+    private static void placed(Core e, Reached reached, List<Placed> out) {
+        if (e instanceof Core.Binary binary && combines(binary.op())) {
+            boolean and = binary.op() == Ast.BinOp.AND;
+            // A conjunction's value being true makes both its operands true; a disjunction's being
+            // false makes both false. Neither says anything the other way round.
+            Reached left = new Reached(reached.onThen(), reached.onElse(),
+                    and && reached.trueThen(), !and && reached.falseElse());
+            // The right operand runs where the left settled nothing — which is where the left was
+            // true under `&&` and false under `||`, and that is what the left's own forced value
+            // above says.
+            Reached right = new Reached(
+                    and && reached.onThen() && reached.trueThen(),
+                    !and && reached.onElse() && reached.falseElse(),
+                    and && reached.trueThen(), !and && reached.falseElse());
+            placed(binary.left(), left, out);
+            placed(binary.right(), right, out);
+            return;
+        }
+        if (e instanceof Core.Binary comparison && !combines(comparison.op())) {
+            out.add(new Placed(comparison, reached.witness()));
+        }
+    }
+
 
     /** The position a line was drawn on by one comparison, or null where none was. */
     private static TermPath readOne(String behavior, Core.If iff, Placed placed,
