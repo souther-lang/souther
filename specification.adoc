@@ -2658,7 +2658,7 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 [#example-target-is-evaluable]
 The target MUST be something this module can run: a behavior with a `+let+` implementation, or a `+>->+` composition of them. A helper `+let+` is not one.
 
-[[example-fixtures-are-buildable]]Every fixture a row writes MUST build — each input against its parameter type and the expected result against the output type — through that type's derived Decoder and its invariant. The expectation is built before the behavior is applied.
+[[example-fixtures-are-buildable]]Every fixture a row writes MUST build against the type of the position it supplies — each input against its parameter type, the expected result against the output type, and each `+with+` value or `+fake+` output against the type the dependency it stands in for answers with (<<example-fakes>>) — through that type's derived Decoder and its invariant. The expectation is built before the behavior is applied.
 
 A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) has nothing to run, so its rows are *recorded* rather than evaluated (<<example-pending>>). A target that is not a behavior at all — a helper `+let+` of that name — is <<e1902>>. A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
@@ -2719,7 +2719,7 @@ When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior pro
 [#example-fakes]
 === Faking a dependency
 
-[[example-dependency-has-a-usable-fake]]Every dependency required to evaluate a row MUST have a usable fake: one supplied, by a `+with+` on the row or a `+fake+` table, and one whose fixture builds.
+[[example-dependency-has-a-usable-fake]]Every dependency required to evaluate a row MUST have a usable fake: one supplied, by a `+with+` on the row or a `+fake+` table, and one whose fixture builds as a value of what that dependency answers with.
 
 [[fake-answers-the-inputs-it-is-asked]]A `+fake+` table MUST answer every input it is asked for, by listing it or by carrying a `+_+` default row.
 
@@ -2727,12 +2727,13 @@ When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior pro
 
 To evaluate a behavior that `+depends on+` an injected dependency (<<depends-on>>), the example supplies a fake for it. Best is to need none: an outside-world value written as an *input* rather than an injected behavior keeps the behavior example-able with no fake (<<purity>>). When a dependency stays injected, a fake stands in, scoped to the example and never shipped (no run-time class is produced).
 
-A *value dependency* — one whose faked result is a constant — is given on the row with `+with+`:
+A *value dependency* — one whose faked result is a constant — is given on the row with `+with+`. Its value is a fixture and is written like one: as a value of the type the dependency answers with (<<example-fixtures-are-buildable>>).
 
 [,text]
 ----
 example preApprove
-    | (AwaitingPreApproval { ... }, EmployeeId("boss-1")) with now = "2026-07-20T09:00" -> PreApproved
+    | (AwaitingPreApproval { ... }, EmployeeId("boss-1"))
+        with now = DateTime("2026-07-20T09:00") -> PreApproved
 ----
 
 A *function dependency* — one whose result varies with its input — is given by a `+fake+` declaration: an input→output table matched by value equality, defaulting to a `+_+` row or, absent one, a miss error (<<e1909>>). A multi-input injected dependency (<<java-base-class>>) is faked the same way, with the row's inputs matched as a tuple.
@@ -5120,7 +5121,7 @@ Emitted when an `+example+` names something this module declares that is not a b
 Input #1 of `submitTravelRequest` could not be built: value must be >= 0
 ----
 
-Emitted when a fixture a row writes cannot be built: an input against the parameter type, or the expected result against the output type — a wrong arity, an unsupported form, a value that breaks the type's invariant, or a function the example cannot run (<<example-evaluable>>). The expected result is built before the behavior is applied, so a row whose expectation cannot be built is reported here rather than as a mismatch (<<e1905>>) against a value nothing built.
+Emitted when a fixture of the row itself cannot be built: an input against the parameter type, or the expected result against the output type — a wrong arity, an unsupported form, a value that breaks the type's invariant, or a function the example cannot run (<<example-evaluable>>). The expected result is built before the behavior is applied, so a row whose expectation cannot be built is reported here rather than as a mismatch (<<e1905>>) against a value nothing built. A fixture standing in for a dependency is that dependency's, and is <<e1908>>.
 
 [#e1904]
 === Expected arm is not a result case
@@ -5177,6 +5178,8 @@ Hint: Add `with now = ...` on the row, or a `fake now` table.
 ----
 
 Emitted when an example targets a behavior whose `+depends on+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>). A dependency that *is* faked but whose fake cannot be built — a `+with+` value, or a row of its `+fake+` table — is reported under the same code and says that instead, naming the dependency once: the fake is supplied, and what failed is the fixture.
+
+Not being a value of what the dependency answers with is one of the ways it fails, and is said here rather than at the row: a stand-in is the dependency's answer while the row runs, so a value of another type is not an answer the row can disagree with (<<e1905>>). It is refused before the behavior is applied, so no row reaches the model holding one.
 
 The two are quoted where each is written. A `+with+` is written on a row, so the row it is written on is where its value not building is said; a `+fake+` table is written on its own, so that is where a row of it not building is said — once for the table, whether or not any row reads it (<<example-fakes>>).
 
