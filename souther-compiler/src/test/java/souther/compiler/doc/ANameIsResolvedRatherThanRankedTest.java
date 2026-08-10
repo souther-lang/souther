@@ -149,7 +149,7 @@ class ANameIsResolvedRatherThanRankedTest {
         // `somelib/guide-notes` and `somelib/guide/notes` are two names to read by and one name to
         // resolve, so one of the two documents is unreachable by name however this settled it.
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> shipping("guide.md", """
+                () -> shipping("somelib", "guide.md", """
                         # A guide
 
                         <!-- souther-section: notes -->
@@ -169,19 +169,42 @@ class ANameIsResolvedRatherThanRankedTest {
                 refused.getMessage());
     }
 
-    /** A jar shipping one doc set of the given {@code file, text} pairs. */
-    private LibraryDocs shipping(String... files) {
+    @Test
+    void andSoIsASpecificationNameAShippedTopicWouldAnswerForToo() {
+        // `cli-commands` and `cli/commands` are one name to resolve and two documents to read, and
+        // neither document can see the other's names: whichever corpus the search asked first would
+        // win, and the other would publish a name nothing reaches.
+        SpecDocument spec = SpecDocument.of("""
+                = A Specification
+
+                [#cli-commands]
+                == The commands
+
+                What the command line takes.
+                """);
+        LibraryDocs shipped = shipping("cli", "commands.md", "# Commands\n\nWhat this library takes.\n");
+
+        IllegalStateException refused = assertThrows(IllegalStateException.class,
+                () -> new Documents(spec, shipped));
+
+        assertTrue(refused.getMessage().contains("cli-commands")
+                        && refused.getMessage().contains("cli/commands"),
+                "and says which two names came together: " + refused.getMessage());
+    }
+
+    /** A jar shipping the doc set {@code set} with the given {@code file, text} pairs. */
+    private LibraryDocs shipping(String set, String... files) {
         try {
             Path jar = Files.createTempDirectory("docset").resolve("somelib-1.0.jar");
             try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
                 out.putNextEntry(new JarEntry("META-INF/souther-docs/sets"));
-                out.write("somelib\n".getBytes(StandardCharsets.UTF_8));
-                out.putNextEntry(new JarEntry("META-INF/souther-docs/somelib/index"));
+                out.write((set + "\n").getBytes(StandardCharsets.UTF_8));
+                out.putNextEntry(new JarEntry("META-INF/souther-docs/" + set + "/index"));
                 for (int i = 0; i < files.length; i += 2) {
                     out.write((files[i] + "\n").getBytes(StandardCharsets.UTF_8));
                 }
                 for (int i = 0; i < files.length; i += 2) {
-                    out.putNextEntry(new JarEntry("META-INF/souther-docs/somelib/" + files[i]));
+                    out.putNextEntry(new JarEntry("META-INF/souther-docs/" + set + "/" + files[i]));
                     out.write(files[i + 1].getBytes(StandardCharsets.UTF_8));
                 }
             }

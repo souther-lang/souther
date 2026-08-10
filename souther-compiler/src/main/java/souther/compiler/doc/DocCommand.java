@@ -42,8 +42,12 @@ public final class DocCommand {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, Caller caller, ClassLoader loader) {
-        SpecDocument spec = SpecDocument.bundled(caller);
-        LibraryDocs shipped = LibraryDocs.on(loader, caller);
+        // Taken together, because the names they publish are one name space and a name resolving
+        // against it is what a search asks first. Which document a name reaches is settled by the
+        // two of them being held at once, not by the order this reads them.
+        Documents documents = Documents.on(caller, loader);
+        SpecDocument spec = documents.spec();
+        LibraryDocs shipped = documents.shipped();
         if (args.length == 0) {
             for (SpecDocument.Section s : spec.sections()) {
                 out.println(s.anchor() + "\t" + "  ".repeat(s.level() - 2) + s.title());
