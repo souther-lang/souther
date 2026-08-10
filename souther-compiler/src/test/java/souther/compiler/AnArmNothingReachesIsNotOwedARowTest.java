@@ -243,8 +243,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     private static CoverageSites.Site arm(int index) {
         return new CoverageSites.Site("classify", CoverageSites.Site.Kind.THEN, "then", null,
                 index, index,
-                new CoverageSites.Obligation("classify", CoverageOrigin.written("t", index), 0),
-                "f" + index);
+                new CoverageSites.Obligation("classify", CoverageOrigin.written("t", index), 0));
     }
 
     /** A reachability that proves arm 0 unreachable: nothing at or above 50 is a value of [0, 10]. */

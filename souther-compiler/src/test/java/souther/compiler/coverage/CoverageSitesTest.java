@@ -16,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Numbering the arms of a body, before anything is measured with them.
@@ -383,21 +382,19 @@ class CoverageSitesTest {
         assertEquals(labels(planOf(MODEL)), without, "and it is the same on a second walk");
     }
 
-    @Test
-    void anArmsFingerprintIgnoresWhereItIsWritten() {
-        String moved = MODEL.replace("module example.leave\n",
-                "module example.leave\n\n// a comment that pushes everything down\n");
-
-        assertEquals(planOf(MODEL).sites().stream().map(CoverageSites.Site::fingerprint).toList(),
-                planOf(moved).sites().stream().map(CoverageSites.Site::fingerprint).toList());
-    }
-
     /**
-     * The known limit of a content fingerprint: two arms made of the same thing share one. Recorded
-     * here so that whatever matches one run against another later does not assume otherwise.
+     * What a row is owed for is where a fork was written, and two arms made of the same thing were
+     * written in two places.
+     *
+     * <p>This used to be asked of a content hash, which answered the other way: two arms with the
+     * same shape and label shared one, and the hash was kept out of identity for that reason. The
+     * question is not the same question. A hash asks whether two arms are alike, which is a fact
+     * about what they are made of and cannot tell an arm the author wrote twice from an arm a helper
+     * wrote once and two callers copied. What a measure needs is which one the author wrote, and
+     * only where it was written says that.
      */
     @Test
-    void twoArmsMadeOfTheSameThingShareAFingerprint() {
+    void twoArmsMadeOfTheSameThingAreStillTwoObligations() {
         CoverageSites.Plan plan = planOf("""
                 module example.same
 
@@ -420,11 +417,11 @@ class CoverageSitesTest {
                                      | No  -> Score(0)
                 """);
 
-        List<String> inner = plan.sites().stream()
+        List<CoverageSites.Obligation> inner = plan.sites().stream()
                 .filter(s -> s.label().equals("case Yes"))
-                .map(CoverageSites.Site::fingerprint).toList();
-        assertTrue(inner.size() > inner.stream().distinct().count(),
-                "two arms with the same shape and label collide, which is why index is identity here");
+                .map(CoverageSites.Site::obligation).toList();
+        assertEquals(inner.size(), inner.stream().distinct().count(),
+                "the two inner `case Yes` arms are two arms the author wrote");
     }
 
     private static Core unwrap(Core body) {

@@ -6,7 +6,6 @@ import souther.compiler.diag.SourceRef;
 import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeName;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -73,11 +72,9 @@ public final class CoverageSites {
      *                    analysis proves things about this one
      * @param ordinal     where it comes in its behavior, for display
      * @param obligation  what a row would be owed for, which several occurrences share
-     * @param fingerprint what the arm is made of, ignoring where it is written. Not identity: two
-     *                    structurally identical arms in one behavior have the same one
      */
     public record Site(String behavior, Kind kind, String label, SourceRef at,
-                       int index, int ordinal, Obligation obligation, String fingerprint) {
+                       int index, int ordinal, Obligation obligation) {
 
         public enum Kind {
             /** The arm an {@code if} takes when its condition holds. */
@@ -252,7 +249,7 @@ public final class CoverageSites {
         private int armOf(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part,
                           Core arm, boolean reachable) {
             return reachable && NormalReturn.of(arm)
-                    ? site(kind, label, owner, origin, part, arm) : NO_SITE;
+                    ? site(kind, label, owner, origin, part) : NO_SITE;
         }
 
         /**
@@ -285,12 +282,10 @@ public final class CoverageSites {
          * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
-        private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part,
-                         Core arm) {
+        private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part) {
             int index = sites.size();
             sites.add(new Site(behavior, kind, label, new SourceRef(sourceId, owner.pos()),
-                    index, ordinal++, new Obligation(behavior, origin, part),
-                    Fingerprint.of(kind, label, arm)));
+                    index, ordinal++, new Obligation(behavior, origin, part)));
             return index;
         }
 
@@ -417,7 +412,7 @@ public final class CoverageSites {
                 // number and the line read off it is one line.
                 byComparison.put(comparison,
                         site(Site.Kind.COMPARISON, comparison.op().toString(), comparison, origin,
-                                part[0]++, comparison));
+                                part[0]++));
             }
         }
 
@@ -429,94 +424,6 @@ public final class CoverageSites {
         private static String label(Core.ElseArm arm) {
             return arm.clause().map(c -> "else " + c).orElse("else");
         }
-    }
-
-    /**
-     * What an arm is made of, said without saying where it is.
-     *
-     * <p>Positions are left out so that adding a line above an arm does not change it; the arm's own
-     * shape is what is hashed. That leaves two arms with identical bodies in one behavior sharing a
-     * fingerprint, which is why nothing here treats it as identity.
-     */
-    private static final class Fingerprint {
-
-        static String of(Site.Kind kind, String label, Core arm) {
-            StringBuilder out = new StringBuilder(kind.name()).append('/').append(label).append('/');
-            shape(arm, out);
-            return hex(out.toString());
-        }
-
-        private static void shape(Core e, StringBuilder out) {
-            out.append(e.getClass().getSimpleName()).append('(');
-            switch (e) {
-                case Core.Int i -> out.append(i.value());
-                case Core.Decimal d -> out.append(d.value());
-                case Core.Str s -> out.append(s.value().length());
-                case Core.Bool b -> out.append(b.value());
-                case Core.Read r -> out.append(r.name());
-                case Core.UnitValue u -> out.append(u.data());
-                case Core.FieldAccess fa -> {
-                    out.append(fa.field()).append(',');
-                    shape(fa.target(), out);
-                }
-                case Core.Binary b -> {
-                    out.append(b.op()).append(',');
-                    shape(b.left(), out);
-                    shape(b.right(), out);
-                }
-                case Core.Call c -> {
-                    out.append(c.fn()).append(',');
-                    c.args().forEach(a -> shape(a, out));
-                }
-                case Core.Apply a -> {
-                    out.append(a.fn().name()).append(',');
-                    a.args().forEach(x -> shape(x, out));
-                }
-                case Core.NewData nd -> {
-                    out.append(nd.typeName()).append(',');
-                    nd.inits().forEach(i -> {
-                        out.append(i.name()).append('=');
-                        shape(i.value(), out);
-                    });
-                }
-                case Core.Match m -> {
-                    shape(m.scrutinee(), out);
-                    m.cases().forEach(c -> {
-                        out.append(c.caseTypes()).append(':');
-                        shape(c.body(), out);
-                    });
-                }
-                case Core.If iff -> {
-                    shape(iff.cond(), out);
-                    shape(iff.then(), out);
-                    shape(iff.els(), out);
-                }
-                case Core.IfConstructed ic -> {
-                    shape(ic.construct(), out);
-                    shape(ic.then(), out);
-                    ic.els().forEach(arm -> shape(arm.body(), out));
-                }
-                case Core.Unreachable u -> out.append(u.reason());
-                default -> Core.forEachChild(e, child -> shape(child, out));
-            }
-            out.append(')');
-        }
-
-        private static String hex(String of) {
-            try {
-                byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
-                        .digest(of.getBytes(StandardCharsets.UTF_8));
-                StringBuilder out = new StringBuilder();
-                for (int i = 0; i < 6; i++) {
-                    out.append(String.format("%02x", digest[i]));
-                }
-                return out.toString();
-            } catch (java.security.NoSuchAlgorithmException e) {
-                throw new IllegalStateException("SHA-256 is required of every JVM", e);
-            }
-        }
-
-        private Fingerprint() {}
     }
 
     private CoverageSites() {}
