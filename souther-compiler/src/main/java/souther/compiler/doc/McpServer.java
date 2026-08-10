@@ -257,11 +257,47 @@ public final class McpServer {
         }
     }
 
+    /**
+     * One run of this server, and the documents it answers from.
+     *
+     * <p>The set belongs to the session rather than to a request. The specification and the shipped
+     * doc sets do not move while a process is up, so a server that reads them for each question it
+     * is asked reads the same 486KB of AsciiDoc again for each question.
+     *
+     * <p>It is read on the first question that wants it rather than when the session opens. A
+     * session asked only what this server can do never reads a document, and a doc set that refuses
+     * to be read — two documents answering for one name — fails the call that wanted it rather than
+     * the server: a tool that blows up is that call's failure, which is what the tool dispatch
+     * below is written to hold and what building this up front would have taken away from it.
+     */
+    private static final class Session {
+
+        private final ClassLoader loader;
+        private Documents documents;
+
+        private Session(ClassLoader loader) {
+            this.loader = loader;
+        }
+
+        private Documents documents() {
+            if (documents == null) {
+                documents = Documents.on(Caller.MCP, loader);
+            }
+            return documents;
+        }
+    }
+
     private McpServer() {}
 
     public static int serve(InputStream in, OutputStream out) {
+        return serve(in, out, McpServer.class.getClassLoader());
+    }
+
+    /** The same, over the doc sets {@code loader} carries. */
+    static int serve(InputStream in, OutputStream out, ClassLoader loader) {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         PrintWriter writer = new PrintWriter(out, true, StandardCharsets.UTF_8);
+        Session session = new Session(loader);
         try {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -279,7 +315,7 @@ public final class McpServer {
                 if (id == null) {
                     continue; // A notification expects silence, whatever its method.
                 }
-                writer.println(JSON.writeValueAsString(respond(request, id)));
+                writer.println(JSON.writeValueAsString(respond(request, id, session)));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -287,7 +323,7 @@ public final class McpServer {
         return 0;
     }
 
-    private static ObjectNode respond(JsonNode request, JsonNode id) {
+    private static ObjectNode respond(JsonNode request, JsonNode id, Session session) {
         String method = request.get("method") == null ? "" : request.get("method").asString();
         return switch (method) {
             case "initialize" -> result(id, initializeResult(request.get("params")));
@@ -301,7 +337,7 @@ public final class McpServer {
                     yield error(id, -32602, invalid);
                 }
                 try {
-                    yield result(id, call(request.get("params")));
+                    yield result(id, call(request.get("params"), session));
                 } catch (RuntimeException e) {
                     yield result(id, failed(e.getClass().getSimpleName()
                             + (e.getMessage() == null ? "" : ": " + e.getMessage())));
@@ -415,7 +451,7 @@ public final class McpServer {
      * <p>The command is told it is answering an MCP client, so that what it offers next is a tool
      * call rather than a shell command the caller has no way to run.
      */
-    private static ObjectNode call(JsonNode params) {
+    private static ObjectNode call(JsonNode params, Session session) {
         String tool = params == null || params.get("name") == null ? "" : params.get("name").asString();
         JsonNode arguments = params == null ? null : params.get("arguments");
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
@@ -427,12 +463,12 @@ public final class McpServer {
                         ? new String[]{"--search", argument(arguments, "term")}
                         : new String[]{"--search", argument(arguments, "term"),
                                 "--limit", String.valueOf(limit.asInt())};
-                yield DocCommand.run(args, stream, stream, Caller.MCP);
+                yield DocCommand.run(args, stream, stream, session.documents());
             }
             case "doc_read" -> {
                 String name = argument(arguments, "name");
                 yield DocCommand.run(name.isEmpty() ? new String[]{} : new String[]{name},
-                        stream, stream, Caller.MCP);
+                        stream, stream, session.documents());
             }
             case "stdlib_api" -> {
                 String name = argument(arguments, "name");

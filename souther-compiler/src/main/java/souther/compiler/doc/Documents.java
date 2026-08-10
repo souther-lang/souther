@@ -17,11 +17,18 @@ package souther.compiler.doc;
  */
 final class Documents {
 
+    private final Caller caller;
     private final SpecDocument spec;
     private final LibraryDocs shipped;
 
-    /** The two of them, refusing a name they would both answer for. */
-    Documents(SpecDocument spec, LibraryDocs shipped) {
+    /**
+     * The two of them, refusing a name they would both answer for.
+     *
+     * <p>The caller is held here rather than passed beside this. Both documents are spelled for a
+     * caller when they are read, so a set is already one caller's, and a reader handed the set and
+     * told a different caller would be offered what it cannot do.
+     */
+    Documents(Caller caller, SpecDocument spec, LibraryDocs shipped) {
         // One way round is every collision: a key both hold is a spec name, so asking the shipped
         // topics for each of the specification's names is asking about all of them.
         for (String name : spec.names()) {
@@ -31,13 +38,25 @@ final class Documents {
                         + " same words: `" + name + "` and `" + topic.name() + "`");
             }
         }
+        this.caller = caller;
         this.spec = spec;
         this.shipped = shipped;
     }
 
-    /** The bundled specification and everything {@code loader} carries, answered as {@code caller}. */
+    /**
+     * The bundled specification and everything {@code loader} carries, answered as {@code caller}.
+     *
+     * <p>This reads the specification and every shipped doc set, which is what a set costs to make
+     * and is why one is made for as long as it will be asked from rather than for each question.
+     * Nothing it is built from moves while a process runs.
+     */
     static Documents on(Caller caller, ClassLoader loader) {
-        return new Documents(SpecDocument.bundled(caller), LibraryDocs.on(loader, caller));
+        return new Documents(caller, SpecDocument.bundled(caller), LibraryDocs.on(loader, caller));
+    }
+
+    /** Who these were read for, and who is to be offered what they can do next. */
+    Caller caller() {
+        return caller;
     }
 
     SpecDocument spec() {

@@ -185,7 +185,7 @@ class ANameIsResolvedRatherThanRankedTest {
         LibraryDocs shipped = shipping("cli", "commands.md", "# Commands\n\nWhat this library takes.\n");
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
-                () -> new Documents(spec, shipped));
+                () -> new Documents(Caller.CLI, spec, shipped));
 
         assertTrue(refused.getMessage().contains("cli-commands")
                         && refused.getMessage().contains("cli/commands"),

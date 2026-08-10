@@ -1,12 +1,22 @@
 package souther.compiler.doc;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayInputStream;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +25,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,9 +40,55 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * handed a document in pieces has been handed the document only if none of it was dropped between
  * them and none of it was said twice.
  */
+@Timeout(120)
 class ALongAnswerArrivesInPartsThatJoinBackUpTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /**
+     * One session, held open for the whole of this class.
+     *
+     * <p>A client asks a long answer for its parts one after another, each request carrying the
+     * cursor the last one answered with, and it asks them of a session it already has. Opening one
+     * per request would be a client this protocol does not have, and would put the reading of the
+     * documents — which is what answering costs — inside the walk being measured here.
+     *
+     * <p>Requests and responses are one for one and in order, so writing a line and reading a line
+     * is the whole of the exchange.
+     */
+    private static PrintWriter SESSION;
+    private static BufferedReader ANSWERS;
+    private static Thread SERVER;
+
+    /** How many requests this session has been sent, which is where a request's id comes from. */
+    private static int asked;
+
+    /**
+     * The documents the checks that do not go through the protocol read, held for the same reason
+     * the session is: what is under test is how an answer is cut, not what it costs to find one.
+     */
+    private static Documents DOCUMENTS;
+
+    @BeforeAll
+    static void openTheSession() throws IOException {
+        DOCUMENTS = Documents.on(Caller.MCP,
+                ALongAnswerArrivesInPartsThatJoinBackUpTest.class.getClassLoader());
+        PipedOutputStream toServer = new PipedOutputStream();
+        PipedInputStream serverReads = new PipedInputStream(toServer, 1 << 16);
+        PipedInputStream fromServer = new PipedInputStream(1 << 20);
+        PipedOutputStream serverWrites = new PipedOutputStream(fromServer);
+        SESSION = new PrintWriter(new OutputStreamWriter(toServer, StandardCharsets.UTF_8), true);
+        ANSWERS = new BufferedReader(new InputStreamReader(fromServer, StandardCharsets.UTF_8));
+        SERVER = new Thread(() -> McpServer.serve(serverReads, serverWrites), "mcp-session");
+        SERVER.setDaemon(true);
+        SERVER.start();
+    }
+
+    @AfterAll
+    static void closeTheSession() throws InterruptedException {
+        SESSION.close();   // the server's reader sees the end of the stream and the loop returns
+        SERVER.join(10_000);
+    }
 
     /** What a part that is not the last one ends with, and the cursor that carries it on. */
     private static final Pattern CARRIES_ON = carriesOn("doc_read");
@@ -256,7 +313,7 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     private String printed(String name) {
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
         PrintStream stream = new PrintStream(captured, true, StandardCharsets.UTF_8);
-        DocCommand.run(new String[]{name}, stream, stream, Caller.MCP);
+        DocCommand.run(new String[]{name}, stream, stream, DOCUMENTS);
         return captured.toString(StandardCharsets.UTF_8);
     }
 
@@ -273,20 +330,23 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     }
 
     private JsonNode called(String tool, String arguments) {
-        ByteArrayInputStream in = new ByteArrayInputStream(
-                ("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\""
-                        + tool + "\",\"arguments\":" + arguments + "}}\n")
-                        .getBytes(StandardCharsets.UTF_8));
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        McpServer.serve(in, out);
-        return JSON.readTree(out.toString(StandardCharsets.UTF_8).strip());
+        SESSION.println("{\"jsonrpc\":\"2.0\",\"id\":" + (++asked)
+                + ",\"method\":\"tools/call\",\"params\":{\"name\":\""
+                + tool + "\",\"arguments\":" + arguments + "}}");
+        try {
+            String answered = ANSWERS.readLine();
+            assertNotNull(answered, "the session ended before it answered");
+            return JSON.readTree(answered);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     @Test
     void everyLongAnswerThereIsJoinsBackUp() {
         ByteArrayOutputStream listed = new ByteArrayOutputStream();
         DocCommand.run(new String[]{}, new PrintStream(listed, true, StandardCharsets.UTF_8),
-                new PrintStream(listed, true, StandardCharsets.UTF_8), Caller.MCP);
+                new PrintStream(listed, true, StandardCharsets.UTF_8), DOCUMENTS);
 
         List<String> cut = new ArrayList<>();
         for (String line : listed.toString(StandardCharsets.UTF_8).split("\n")) {
