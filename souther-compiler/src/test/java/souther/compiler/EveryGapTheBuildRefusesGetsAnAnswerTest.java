@@ -268,13 +268,19 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
 
     // --- classes that were not there, and classes that would not link -----------------------------
 
-    private static String saidAbout(souther.compiler.partition.GenerationReason why) {
+    private static String saidAbout(souther.compiler.partition.GenerationReason why,
+                                    souther.compiler.partition.GenerationReason alsoAtTheEdges) {
         return GeneratedRows.of("example.kind",
-                Map.of("pick", new Adequacy.Filling(
-                        new souther.compiler.partition.Generator.GenerationResult(
-                                List.of(), List.of(), List.of(why)),
-                        souther.compiler.partition.Generator.GenerationResult.NONE, List.of())),
+                Map.of("pick", new Adequacy.Filling(stopped(why), stopped(alsoAtTheEdges),
+                        List.of())),
                 true);
+    }
+
+    private static souther.compiler.partition.Generator.GenerationResult stopped(
+            souther.compiler.partition.GenerationReason why) {
+        return why == null ? souther.compiler.partition.Generator.GenerationResult.NONE
+                : new souther.compiler.partition.Generator.GenerationResult(
+                        List.of(), List.of(), List.of(why));
     }
 
     /**
@@ -287,14 +293,30 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
     @Test
     void classesThatWouldNotLinkAreNotClassesThatWereNotThere() {
         String linked = saidAbout(
-                new souther.compiler.partition.GenerationReason.LinkageFailed("pick"));
+                new souther.compiler.partition.GenerationReason.LinkageFailed("pick"), null);
         String absent = saidAbout(
-                new souther.compiler.partition.GenerationReason.NothingToBuildAgainst("pick"));
+                new souther.compiler.partition.GenerationReason.NothingToBuildAgainst("pick"), null);
 
         assertFalse(linked.isBlank(), "the one it met is said");
         assertFalse(absent.isBlank(), "and so is the other");
         assertNotEquals(absent, linked,
                 "two reasons reported in one sentence are one reason:\n" + linked);
+    }
+
+    /**
+     * One reason both searches stopped for is said once.
+     *
+     * <p>Nothing to put a candidate through stops the pair search and the edges alike, and the two
+     * results carry it separately. Printed from each, a reader is told twice that generation stopped
+     * and reads two things having gone wrong.
+     */
+    @Test
+    void oneReasonBothSearchesStoppedForIsSaidOnce() {
+        souther.compiler.partition.GenerationReason why =
+                new souther.compiler.partition.GenerationReason.LinkageFailed("pick");
+
+        assertEquals(saidAbout(why, null), saidAbout(why, why),
+                "the second search stopping for the reason the first did adds nothing to say");
     }
 
     @Test

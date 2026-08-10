@@ -269,7 +269,10 @@ public final class GeneratedRows {
             stopped.addAll(filling.boundaries().reasons());
         }
         for (GenerationReason why : stopped) {
-            out.append(switch (why) {
+            // Through the same set the lines above went through. Two searches of one behavior stop
+            // for one reason — nothing built to put a candidate through stops both — and a reader
+            // told that twice reads two things having gone wrong.
+            lines(out, said, switch (why) {
                 case GenerationReason.PositionWithheld withheld -> String.format(
                         "// no rows offered at `%s`: a row's value there could not be read, so a"
                                 + " row written for it may be one that is already here%n",
@@ -297,6 +300,13 @@ public final class GeneratedRows {
                     yield lines.toString();
                 }
             });
+        }
+    }
+
+    /** Each line of what a reason came to, and each of them once. */
+    private static void lines(StringBuilder out, Set<String> said, String written) {
+        for (String line : written.lines().toList()) {
+            say(out, said, line + System.lineSeparator());
         }
     }
 
