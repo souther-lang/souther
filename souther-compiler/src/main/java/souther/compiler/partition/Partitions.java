@@ -500,8 +500,7 @@ public final class Partitions {
             for (OriginRef origin : cut.origins()) {
                 if (reachable) {
                     out.add(new BoundaryObligation(axis.id(), origin,
-                            BoundaryObligation.BoundarySide.AT, cut.value(),
-                            witnessed(origin, true)));
+                            BoundaryObligation.BoundarySide.AT, cut.value()));
                 }
                 // A line that singles a value out has no neighbour to ask for: the values either
                 // side of it are one class, so a row over there is a row the class's own already is.
@@ -515,38 +514,17 @@ public final class Partitions {
                         domain.successor(cut.value()).filter(next -> holds(within, next))
                                 .ifPresent(next -> out.add(new BoundaryObligation(
                                         axis.id(), origin,
-                                        BoundaryObligation.BoundarySide.ABOVE, next,
-                                        witnessed(origin, false))));
+                                        BoundaryObligation.BoundarySide.ABOVE, next)));
                     } else {
                         domain.predecessor(cut.value()).filter(before -> holds(within, before))
                                 .ifPresent(before -> out.add(new BoundaryObligation(
                                         axis.id(), origin,
-                                        BoundaryObligation.BoundarySide.BELOW, before,
-                                        witnessed(origin, false))));
+                                        BoundaryObligation.BoundarySide.BELOW, before)));
                     }
                 }
             }
         }
         return List.copyOf(out);
-    }
-
-    /**
-     * Whether an arm could stand as evidence for a row written at this obligation's value.
-     *
-     * <p>An invariant's line needs no arm: writing the value is how it is met. A guard's needs the
-     * arm that proves its comparison ran, and which arm that is depends on where the comparison sits
-     * in the condition — so what is asked is whether the arm on this side of the line is one of
-     * them.
-     *
-     * @param atTheValue whether this obligation is the line's own value rather than its neighbour,
-     *                   which is what decides whether the comparison holds where the row would sit
-     */
-    private static boolean witnessed(OriginRef origin, boolean atTheValue) {
-        if (!(origin instanceof OriginRef.GuardOrigin guard)) {
-            return true;
-        }
-        return guard.witnessedWhereItHolds(
-                atTheValue == guard.holdsAtTheValue());
     }
 
     /** Whether a value invented one step off a line is one the position can hold. */

@@ -149,6 +149,17 @@ final class CodegenContext {
         return arms;
     }
 
+    /**
+     * Where this comparison's value is recorded, or empty where it is not one of a guard's condition.
+     *
+     * <p>Not the loud lookup {@link #probesOf} is. An arm the plan does not hold is a plan made from
+     * other nodes; a comparison it does not hold is any comparison written outside a condition, which
+     * is most of them.
+     */
+    java.util.OptionalInt comparisonSiteOf(souther.compiler.core.Core comparison) {
+        return coverage.comparisonSiteOf(comparison);
+    }
+
     /** Records that one planned arm was emitted. */
     void emitted(int site) {
         emittedSites.add(site);

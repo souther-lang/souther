@@ -84,8 +84,9 @@ class ProbedBytecodeTest {
      * The arms a run takes, read off a run.
      *
      * <p>Three inputs, each going a different way through the two guards. Each has to come back with a
-     * different set, and between them they have to reach every arm the plan counted — which is what
-     * makes this about the arms and not about three calls that happened to return.
+     * different set, and between them they have to reach every site the plan numbered — the arms and
+     * the comparisons of the guards' conditions — which is what makes this about what was recorded
+     * and not about three calls that happened to return.
      */
     @Test
     void aRunRecordsTheArmsItTook() {
@@ -105,7 +106,7 @@ class ProbedBytecodeTest {
         between.addAll(cheap);
         between.addAll(dear);
         assertEquals(plan.sites().size(), between.size(),
-                "between them the three rows reach every arm the plan counted");
+                "between them the three rows reach every site the plan numbered");
     }
 
     /** A hit belongs to the thread that made it. Rows are evaluated on their own workers, and a set
