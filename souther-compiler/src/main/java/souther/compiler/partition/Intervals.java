@@ -56,9 +56,9 @@ final class Intervals {
             return c < 0 || (c == 0 && loInclusive && hiInclusive);
         }
 
-        String label() {
-            String low = lo == null ? "" : (loInclusive ? lo.toPlainString() + " <= " : lo.toPlainString() + " < ");
-            String high = hi == null ? "" : (hiInclusive ? " <= " + hi.toPlainString() : " < " + hi.toPlainString());
+        String label(java.util.function.Function<BigDecimal, String> written) {
+            String low = lo == null ? "" : (loInclusive ? written.apply(lo) + " <= " : written.apply(lo) + " < ");
+            String high = hi == null ? "" : (hiInclusive ? " <= " + written.apply(hi) : " < " + written.apply(hi));
             if (lo == null && hi == null) {
                 return "any";
             }
@@ -123,11 +123,16 @@ final class Intervals {
     static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
                                           Symbols symbols) {
         boolean decimal = of.decimal(type, symbols);
+        // What the numbers in a label stand for. A day count is a carrier and never a name for the
+        // line, so the class an author reads is spelled in dates where the position holds them.
+        Partitions.Carrier carrier = Partitions.carrierOf(of, type, symbols);
+        java.util.function.Function<BigDecimal, String> written =
+                carrier == Partitions.Carrier.DATE ? Dates::written : BigDecimal::toPlainString;
         souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
                 && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
-            String id = of + "/" + range.label();
+            String id = of + "/" + range.label(written);
             BigDecimal inside = representative(range, decimal);
             Classifier is = v -> switch (of.read(v)) {
                 case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
@@ -136,15 +141,15 @@ final class Intervals {
                 case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
             };
             if (inside == null) {
-                classes.add(PartitionClass.ungeneratable(id, range.label(), is,
+                classes.add(PartitionClass.ungeneratable(id, range.label(written), is,
                         "no value of this range can be written without a smallest step"));
                 continue;
             }
-            List<FixtureTemplate> values = standingIn(of, inside, type, wrapper, decimal, symbols);
+            List<FixtureTemplate> values = standingIn(of, inside, type, wrapper, carrier, symbols);
             classes.add(values.isEmpty()
-                    ? PartitionClass.ungeneratable(id, range.label(), is,
+                    ? PartitionClass.ungeneratable(id, range.label(written), is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
-                    : PartitionClass.of(id, range.label(), is,
+                    : PartitionClass.of(id, range.label(written), is,
                             RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
         }
         return List.copyOf(classes);
@@ -174,9 +179,9 @@ final class Intervals {
      */
     private static List<FixtureTemplate> standingIn(NumericTerm of, BigDecimal inside, Type type,
                                                     souther.compiler.types.TypeName wrapper,
-                                                    boolean decimal, Symbols symbols) {
+                                                    Partitions.Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
-            return List.of(written(inside, wrapper, decimal));
+            return List.of(written(inside, wrapper, carrier));
         }
         if (inside.stripTrailingZeros().scale() > 0
                 || inside.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
@@ -191,9 +196,12 @@ final class Intervals {
     }
 
     private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,
-                                           boolean decimal) {
-        FixtureTemplate literal = decimal ? FixtureTemplate.decimal(value)
-                : FixtureTemplate.integer(value.longValueExact());
+                                           Partitions.Carrier carrier) {
+        FixtureTemplate literal = switch (carrier) {
+            case DENSE -> FixtureTemplate.decimal(value);
+            case WHOLE -> FixtureTemplate.integer(value.longValueExact());
+            case DATE -> FixtureTemplate.date(Dates.written(value));
+        };
         return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
     }
 

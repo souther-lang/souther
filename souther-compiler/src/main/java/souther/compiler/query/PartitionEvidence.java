@@ -17,8 +17,10 @@ import java.util.Set;
  *
  * @param axes         one entry per position the model divides
  * @param boundaries   one entry per rule that drew a line, per side of it
- * @param notDerivable positions the model does not divide, named so a report can say what it could
- *                     not measure rather than passing over it
+ * @param notDerivable positions no class came back for, each saying whether the model divides them
+ *                     no way at all or this could not read what it divides them by. Both used to be
+ *                     one list of paths, and the sentence written from it claimed the first about
+ *                     both
  * @param omitted      positions dropped for being past the axis limit, with what dropping each
  *                     one cost — a position that was carrying a boundary leaves the rows there
  *                     unmeasured rather than covered
@@ -29,7 +31,9 @@ import java.util.Set;
  *                     everything else a module could not read happens where that list is built
  */
 public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
-                                PairSpace pairs, List<String> notDerivable,
+                                PairSpace pairs,
+                                List<souther.compiler.partition.UndividedPosition> notDerivable,
+                                List<souther.compiler.partition.GuardThresholds.Guards.Unread> unread,
                                 List<Partitions.OmittedAxis> omitted,
                                 List<Incompleteness> whyUnclassified) {
 
@@ -42,10 +46,11 @@ public record PartitionEvidence(Partitioned partitioned, Bounded bounded,
      * in it open for a measurement that was never anybody's to make.
      */
     public static final PartitionEvidence NONE = new PartitionEvidence(Partitioned.absent(),
-            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of());
+            Bounded.absent(), PairSpace.NONE, List.of(), List.of(), List.of(), List.of());
 
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
+        unread = List.copyOf(unread);
         omitted = List.copyOf(omitted);
         whyUnclassified = List.copyOf(whyUnclassified);
     }

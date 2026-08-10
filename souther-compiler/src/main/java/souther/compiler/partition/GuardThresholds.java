@@ -22,16 +22,26 @@ import java.util.List;
  * thousand" is not in any type — it is the comparison the behavior makes — and it is the line the
  * rows have to be written on both sides of.
  *
- * <p><b>Only a condition that is itself a comparison is read.</b> Nothing recurses into {@code &&},
- * {@code ||} or {@code !}. The reason is short-circuiting: in
+ * <p><b>A comparison is read wherever in a condition it is written</b> (spec
+ * §a-boundary-is-drawn-on-a-term). Which position the model divides is not a question about the
+ * shape of the condition around the comparison, and it was answered as though it were: in
  *
  * <pre>if kind == Domestic &amp;&amp; cost &lt;= 100000</pre>
  *
- * an overseas request takes the else arm without {@code cost} ever being compared, so a row that
- * lands there is not a boundary test of {@code cost} and counting it as one would report a boundary
- * covered that nothing exercised. Reading compound conditions needs a probe on each comparison rather
- * than on each arm, which is a larger change than this one; until then the restriction is stated and
- * the thresholds inside a compound condition are simply not read.
+ * the line at a hundred thousand went unread, and the position came back as one the model divides
+ * no way — two tokens from the comparison that divides it.
+ *
+ * <p>What the condition does decide is which arm stands as evidence that a comparison was
+ * evaluated. Under {@code A && B} an overseas request takes the else arm without {@code cost}
+ * having been compared, so that arm proves nothing about the second operand; the arm where the
+ * whole condition held proves both. That is carried per comparison as a {@link OriginRef
+ * .GuardOrigin.Witness}, and an edge no arm can witness is reported as one nothing measured rather
+ * than dropped — the line is the model's either way.
+ *
+ * <p>Three readers are kept apart here and are easy to run together. Which comparisons exist is
+ * {@link #comparisonsIn}; which positions a comparison names at all is {@link #mentioned}; which
+ * number a line can be drawn on is {@link #termOf}. The last is the narrowest, and asking it the
+ * first two questions is how a position a body compares became a position nothing compares.
  */
 public final class GuardThresholds {
 
@@ -43,13 +53,30 @@ public final class GuardThresholds {
      * recover from {@link Threshold} which side of the line each arm takes — which a threshold does not
      * say and cannot be made to say (see {@link GuardEdge}).
      */
-    public record Guards(List<Threshold> thresholds, List<GuardEdge> edges) {
+    public record Guards(List<Threshold> thresholds, List<GuardEdge> edges,
+                         List<Unread> unread, List<Singled> singled) {
 
-        public static final Guards NONE = new Guards(List.of(), List.of());
+        public static final Guards NONE =
+                new Guards(List.of(), List.of(), List.of(), List.of());
+
+        /**
+         * A value a body singles out rather than orders.
+         *
+         * <p>Apart from a {@link Threshold}, which says where one range ends and the next begins. An
+         * equality says nothing about ranges: what it distinguishes is the value from every other
+         * value, and reading it as a place to cut would put a distinction between the two sides into
+         * a partition the model never drew.
+         */
+        public record Singled(NumericTerm term, BigDecimal value, OriginRef.GuardOrigin origin) {}
+
+        /** A position a comparison names that this did not turn into a line, and what stopped it. */
+        public record Unread(TermPath at, UndividedPosition.Reason why) {}
 
         public Guards {
             thresholds = List.copyOf(thresholds);
             edges = List.copyOf(edges);
+            unread = List.copyOf(unread);
+            singled = List.copyOf(singled);
         }
     }
 
@@ -60,28 +87,266 @@ public final class GuardThresholds {
                             List<String> parameters, Symbols symbols) {
         List<Threshold> found = new ArrayList<>();
         List<GuardEdge> edges = new ArrayList<>();
-        walk(behavior, body, plan, parameters, symbols, found, edges);
-        return new Guards(found, edges);
+        List<Guards.Unread> unread = new ArrayList<>();
+        List<Guards.Singled> singled = new ArrayList<>();
+        walk(behavior, body, plan, parameters, symbols, found, edges, unread, singled);
+        return new Guards(found, edges, unread, singled);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              List<String> parameters, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges) {
+                             List<GuardEdge> edges, List<Guards.Unread> unread,
+                             List<Guards.Singled> singled) {
         if (e instanceof Core.If iff) {
-            read(behavior, iff, plan, parameters, symbols, out, edges);
+            List<Core> read = read(behavior, iff, plan, parameters, symbols, out, edges, singled);
+            // Every comparison this condition holds that nothing turned into a line — asked of the
+            // comparisons and not of the positions. One position carries more than one statement,
+            // and a line read at it says nothing about the rest: kept per position, a threshold on
+            // `x` swallowed the comparison beside it that nothing could read, which is "a result
+            // exists, so the reading is complete".
+            for (Guards.Unread compared : comparedIn(iff.cond(), read, parameters, symbols)) {
+                if (unread.stream().noneMatch(had -> had.equals(compared))) {
+                    unread.add(compared);
+                }
+            }
         }
         // A match case's body and an attempted construction's departure are expression slots, so the
         // generic walk reaches them; only the arms themselves are not children, and this walk does not
         // number arms.
-        Core.forEachChild(e, child -> walk(behavior, child, plan, parameters, symbols, out, edges));
+        Core.forEachChild(e, child ->
+                walk(behavior, child, plan, parameters, symbols, out, edges, unread, singled));
     }
 
-    private static void read(String behavior, Core.If iff, CoverageSites.Plan plan,
-                             List<String> parameters, Symbols symbols, List<Threshold> out,
-                             List<GuardEdge> edges) {
-        if (!(iff.cond() instanceof Core.Binary comparison)) {
+    /**
+     * Every position a condition compares, however the condition is written.
+     *
+     * <p>Names them and no more. What a comparison inside a conjunction would need before it could be
+     * a line is which arm witnesses it having been evaluated, and that is not answered here — a
+     * threshold recorded without it is an obligation nobody can discharge. So this establishes only
+     * that the model draws something at this position, which is exactly what {@code not derivable}
+     * would otherwise deny.
+     */
+    private static List<Guards.Unread> comparedIn(Core e, List<Core> read, List<String> parameters,
+                                                  Symbols symbols) {
+        List<Guards.Unread> out = new ArrayList<>();
+        compared(e, read, parameters, symbols, out);
+        return out;
+    }
+
+    private static void compared(Core e, List<Core> read, List<String> parameters, Symbols symbols,
+                                 List<Guards.Unread> out) {
+        // By the comparison it is, and not by what it was about: two comparisons at one position are
+        // two statements, and this one having been read is no answer about the other.
+        if (e instanceof Core.Binary comparison && orders(comparison.op())
+                && read.stream().anyMatch(each -> each == comparison)) {
             return;
         }
+        if (e instanceof Core.Binary binary && orders(binary.op())) {
+            List<TermPath> named = new ArrayList<>();
+            mentioned(binary.left(), parameters, symbols, named);
+            mentioned(binary.right(), parameters, symbols, named);
+            UndividedPosition.Reason why = why(binary, parameters, symbols);
+            for (TermPath each : named) {
+                if (out.stream().noneMatch(had -> had.at().equals(each))) {
+                    out.add(new Guards.Unread(each, why));
+                }
+            }
+        }
+        Core.forEachChild(e, child -> compared(child, read, parameters, symbols, out));
+    }
+
+    /**
+     * Every position an expression names, however it is written.
+     *
+     * <p>Weaker than {@link #termOf} on purpose, and asked instead of it. That one answers whether a
+     * line can be drawn — it wants a number the terms name — and this one answers whether the model
+     * says anything about a position at all. Sharing a reader between the two turns an expression
+     * the derivation does not model into a position nothing compares: {@code p.x + 1 < 10} named no
+     * position, and came back as one the model divides no way two tokens from a comparison about it.
+     */
+    private static void mentioned(Core e, List<String> parameters, Symbols symbols,
+                                  List<TermPath> out) {
+        if (!(e instanceof Core.PreservedCall)) {
+            TermPath here = pathOf(e, parameters, symbols);
+            if (here != null) {
+                if (!out.contains(here)) {
+                    out.add(here);
+                }
+                return;   // what is under it is the same position, named once
+            }
+        }
+        Core.forEachChild(e, child -> mentioned(child, parameters, symbols, out));
+    }
+
+    /**
+     * What would have to change before this comparison could be a line.
+     *
+     * <p>Three different things, and a reader told one sentence for all of them cannot tell which
+     * limit is theirs to wait on. A comparison between two positions asks for a class that is about
+     * both, which a partition of one position is not. One on a carrier nothing draws a line on asks
+     * for that carrier. What is left is a form this does not read — the position inside an
+     * expression the terms do not name, or a threshold written as something other than a constant —
+     * and each of the three is a different piece of work.
+     */
+    private static UndividedPosition.Reason why(Core.Binary comparison, List<String> parameters,
+                                                Symbols symbols) {
+        boolean leftNames = !mentionedIn(comparison.left(), parameters, symbols).isEmpty();
+        boolean rightNames = !mentionedIn(comparison.right(), parameters, symbols).isEmpty();
+        // Which limit stopped this is asked of what the sides name, not of how far the derivation
+        // got. Two positions against each other is a rule about both of them and a class here is a
+        // set of values of one — and that is as true of `x < y + 1` as of `x < y`, where reading it
+        // off the derivation loses the second position entirely and answers with the carrier.
+        if (leftNames && rightNames) {
+            return UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+        }
+        Core named = leftNames ? comparison.left() : comparison.right();
+        if (termOf(named, parameters, symbols) == null) {
+            return UndividedPosition.Reason.UNSUPPORTED_SYNTAX;   // the position is inside something
+        }
+        // The carrier, asked of the carrier. `at < DateTime(...)` stops because nothing draws a line
+        // on a date-time; `p.x < 1 + 2` stops because the other side is not a form a threshold is
+        // read out of, and `p.x` is an `Int` — a carrier lines are drawn on all through the file.
+        // Reading this off the side that did name a position calls the second one a carrier problem
+        // and sends an author after a domain that is already there.
+        return orderable(named.type(), symbols)
+                ? UndividedPosition.Reason.UNSUPPORTED_SYNTAX
+                : UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+    }
+
+    private static List<TermPath> mentionedIn(Core e, List<String> parameters, Symbols symbols) {
+        List<TermPath> out = new ArrayList<>();
+        mentioned(e, parameters, symbols, out);
+        return out;
+    }
+
+    /** Whether an operator is one that compares two values rather than combining two conditions. */
+    private static boolean orders(Ast.BinOp op) {
+        return switch (op) {
+            case EQ, NE, LT, LE, GT, GE -> true;
+            case AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
+    }
+
+    /**
+     * The positions a line was drawn on here.
+     *
+     * <p>One condition can hold several. {@code A && B} is two comparisons and two lines, and which
+     * arm stands as evidence for each is not the same answer — so each is read with the witness its
+     * place in the condition leaves it, and the arms are numbered once for the {@code if} they both
+     * belong to.
+     */
+    private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
+                                   List<String> parameters, Symbols symbols,
+                                   List<Threshold> out, List<GuardEdge> edges,
+                                   List<Guards.Singled> singled) {
+        // The comparisons a line came of, and not the positions they were about. A position carries
+        // more than one statement and reading one of them settles nothing about the others.
+        List<Core> made = new ArrayList<>();
+        for (Placed each : comparisonsIn(iff.cond())) {
+            TermPath here =
+                    readOne(behavior, iff, each, plan, parameters, symbols, out, edges, singled);
+            if (here != null) {
+                made.add(each.comparison());
+            }
+        }
+        return made;
+    }
+
+    /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
+    private record Placed(Core.Binary comparison, OriginRef.GuardOrigin.Witness witness) {}
+
+    /**
+     * The comparisons a condition is made of, each with what its own place leaves as evidence.
+     *
+     * <p>Asked per comparison and not per condition. A condition that is nothing but {@code &&}
+     * settles it for every operand at once, and so does one that is nothing but {@code ||}; a
+     * condition made of both does not. In {@code A && (B || C)} the arm where the whole thing held
+     * proves {@code A} was true and so proves {@code B} ran, while {@code C} ran only where
+     * {@code B} was false — which is a difference between two operands of one condition, and a
+     * single verdict over the whole cannot hold it.
+     *
+     * <p>Two facts are carried down, and they are not the same one. Whether this subtree is
+     * evaluated at all on a given arm, and whether reaching that arm forces the subtree's own value
+     * — because it is the second that says whether the operand to its left was true, which is what
+     * decides whether the operand to its right ran.
+     */
+    private static List<Placed> comparisonsIn(Core condition) {
+        List<Placed> out = new ArrayList<>();
+        // At the top there is nothing above to have stopped the condition, and the arm taken is the
+        // condition's own value.
+        placed(condition, new Reached(true, true, true, true), out);
+        return out;
+    }
+
+    /**
+     * What reaching each arm of the enclosing {@code if} says about one subtree of its condition.
+     *
+     * <p>Four answers and not six, on a premise worth stating rather than leaving to be rediscovered.
+     * A subtree can be forced true only where the whole condition is true and forced false only where
+     * it is false — {@code &&} passes a true value down to both operands, {@code ||} passes a false
+     * one, and neither passes anything the other way. So "false on {@code then}" and "true on
+     * {@code else}" are unreachable and are not carried.
+     *
+     * <p>What makes that hold is that a condition is built from {@code &&} and {@code ||} and
+     * nothing else. There is no negation operator: {@code Bool.not} is a helper, inlined to an
+     * {@code if} whose condition is the comparison itself, so it never stands between a comparison
+     * and the arms this is about. An operator that inverted a value inside a condition would break
+     * the premise and want the other two answers, and would find this comment rather than a wrong
+     * result.
+     *
+     * @param onThen    whether reaching the {@code then} arm implies this subtree was evaluated
+     * @param onElse    the same for {@code else}
+     * @param trueThen  whether reaching {@code then} implies this subtree's own value was true
+     * @param falseElse whether reaching {@code else} implies its own value was false
+     */
+    private record Reached(boolean onThen, boolean onElse, boolean trueThen, boolean falseElse) {
+
+        OriginRef.GuardOrigin.Witness witness() {
+            if (onThen && onElse) {
+                return OriginRef.GuardOrigin.Witness.BOTH;
+            }
+            if (onThen) {
+                return OriginRef.GuardOrigin.Witness.THEN;
+            }
+            return onElse ? OriginRef.GuardOrigin.Witness.ELSE
+                    : OriginRef.GuardOrigin.Witness.NEITHER;
+        }
+    }
+
+    private static boolean combines(Ast.BinOp op) {
+        return op == Ast.BinOp.AND || op == Ast.BinOp.OR;
+    }
+
+    private static void placed(Core e, Reached reached, List<Placed> out) {
+        if (e instanceof Core.Binary binary && combines(binary.op())) {
+            boolean and = binary.op() == Ast.BinOp.AND;
+            // A conjunction's value being true makes both its operands true; a disjunction's being
+            // false makes both false. Neither says anything the other way round.
+            Reached left = new Reached(reached.onThen(), reached.onElse(),
+                    and && reached.trueThen(), !and && reached.falseElse());
+            // The right operand runs where the left settled nothing — which is where the left was
+            // true under `&&` and false under `||`, and that is what the left's own forced value
+            // above says.
+            Reached right = new Reached(
+                    and && reached.onThen() && reached.trueThen(),
+                    !and && reached.onElse() && reached.falseElse(),
+                    and && reached.trueThen(), !and && reached.falseElse());
+            placed(binary.left(), left, out);
+            placed(binary.right(), right, out);
+            return;
+        }
+        if (e instanceof Core.Binary comparison && !combines(comparison.op())) {
+            out.add(new Placed(comparison, reached.witness()));
+        }
+    }
+
+
+    /** The position a line was drawn on by one comparison, or null where none was. */
+    private static TermPath readOne(String behavior, Core.If iff, Placed placed,
+                                    CoverageSites.Plan plan, List<String> parameters,
+                                    Symbols symbols, List<Threshold> out, List<GuardEdge> edges,
+                                    List<Guards.Singled> singled) {
+        Core.Binary comparison = placed.comparison();
         Ast.BinOp op = comparison.op();
         NumericTerm term = termOf(comparison.left(), parameters, symbols);
         BigDecimal value = constantOf(comparison.right());
@@ -92,28 +357,45 @@ public final class GuardThresholds {
             op = mirrored(op);
         }
         if (term == null || value == null) {
-            return;
+            return null;
         }
         Boolean below = switch (op) {
             case LE, GT -> Boolean.TRUE;    // the value itself is on the low side
             case LT, GE -> Boolean.FALSE;   // and here it is on the high side
-            default -> null;                // EQ / NE do not order the values, so they draw no cut
+            default -> null;                // EQ / NE do not order the values, so they cut nothing
         };
-        if (below == null) {
-            return;
-        }
         CoverageSites.GuardRef guard = guardOf(plan, iff);
         if (guard == null) {
-            return;   // no site for this `if`: nothing could answer for it
+            return null;   // no site for this `if`: nothing could answer for it
         }
+        if (below == null) {
+            // An equality singles the value out instead. Recorded as that rather than as a place to
+            // cut, because the values either side of it are not a distinction the model has drawn.
+            if (op != Ast.BinOp.EQ && op != Ast.BinOp.NE) {
+                return null;
+            }
+            singled.add(new Guards.Singled(term, value,
+                    new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
+                            true, placed.witness(), op == Ast.BinOp.EQ, true)));
+            return term.path();
+        }
+        // True at the line's own value for the operators that include it, which is not the same
+        // question as which class the value falls in: `x <= c` and `x > c` agree about the second.
+        boolean holds = op == Ast.BinOp.LE || op == Ast.BinOp.GE;
         out.add(new Threshold(term, value, below,
                 new OriginRef.GuardOrigin(guard, new SourceRef(guard.at().sourceId(), iff.pos()),
-                        below)));
+                        below, placed.witness(), holds)));
         // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
         // and `x > c` agree about the first and take opposite halves, so the arms are read off the
         // operator here, where it is still known, and not recovered from the threshold later.
-        int then = guard.siteIndexThen();
-        int otherwise = guard.siteIndexElse();
+        // An arm that does not witness this comparison is not one of its edges either: what reaches
+        // it is decided by the rest of the condition as much as by this line.
+        int then = placed.witness() == OriginRef.GuardOrigin.Witness.ELSE
+                || placed.witness() == OriginRef.GuardOrigin.Witness.NEITHER
+                        ? CoverageSites.NO_SITE : guard.siteIndexThen();
+        int otherwise = placed.witness() == OriginRef.GuardOrigin.Witness.THEN
+                || placed.witness() == OriginRef.GuardOrigin.Witness.NEITHER
+                        ? CoverageSites.NO_SITE : guard.siteIndexElse();
         switch (op) {
             case LE -> {
                 edge(edges, guard, then, term, value, true, true);
@@ -133,6 +415,7 @@ public final class GuardThresholds {
             }
             default -> { }
         }
+        return term.path();
     }
 
     /** One arm's edge, where that arm has a probe. An arm answering nothing has none, and it is owed
@@ -221,6 +504,10 @@ public final class GuardThresholds {
             // A newtype written around a constant is that constant at this location.
             case Core.NewData nd when nd.inits().size() == 1 && nd.spreads().isEmpty() ->
                     constantOf(nd.inits().get(0).value());
+            // A date written the way a model writes one. Read by what the construction answers with
+            // rather than by the name in front of it, so a date reaches this however it is spelled.
+            case Core.Call call when call.type() == Type.DATE && call.args().size() == 1
+                    && call.args().get(0) instanceof Core.Str iso -> Dates.dayOf(iso.value());
             case null, default -> null;
         };
     }
@@ -238,7 +525,7 @@ public final class GuardThresholds {
     /** Whether a type is one whose values a threshold can order. */
     static boolean orderable(Type type, Symbols symbols) {
         Type base = TypeOps.base(type, symbols);
-        return base == Type.INT || base == Type.DECIMAL;
+        return base == Type.INT || base == Type.DECIMAL || base == Type.DATE;
     }
 
     private GuardThresholds() {}

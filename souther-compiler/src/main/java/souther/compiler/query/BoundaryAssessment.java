@@ -60,7 +60,18 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
              *  comparison. Never a reason for an invariant's line. */
             ARMS_UNREADABLE(MeasurementStatus.NOT_MEASURED),
             /** No row names this behavior. */
-            NO_ROWS(MeasurementStatus.NOT_MEASURED);
+            NO_ROWS(MeasurementStatus.NOT_MEASURED),
+            /**
+             * No arm of the guard separates the rows that reached the comparison from the rows that
+             * did not.
+             *
+             * <p>The second operand of a {@code &&} has this on the side where it is false: the arm
+             * a row there lands in is the one every other way of failing the condition lands in too.
+             * Never a reason for an invariant's line, and never a claim that the line is not owed —
+             * a row at it is still a row somebody should write, and this build has no way to see
+             * that they did.
+             */
+            NO_ARM_WITNESSES_IT(MeasurementStatus.NOT_MEASURED);
 
             private final MeasurementStatus status;
 
@@ -206,6 +217,11 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
 
     /** The value as an author would write it, not as a record prints itself. */
     public String value() {
+        // A date is written as one. What the ranges hold is the day it counts to, and a report that
+        // printed the count would name a line at a number nobody wrote.
+        if (obligation.value() instanceof ObservedValue.Temporal date) {
+            return date.iso();
+        }
         BigDecimal number = numberOf(obligation.value());
         return number == null ? String.valueOf(obligation.value())
                 : number.stripTrailingZeros().toPlainString();
@@ -224,13 +240,9 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
     }
 
     /** A newtype and the number it wraps are the same value here, which is how a row writes it and how
-     * the boundary was read. */
+     * the boundary was read. Asked of the term's own reader, so that this and the measure cannot
+     * disagree about what a value's number is. */
     private static BigDecimal numberOf(ObservedValue value) {
-        return switch (value) {
-            case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value();
-            case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
-            case null, default -> null;
-        };
+        return souther.compiler.partition.NumericTerm.numberOf(value);
     }
 }

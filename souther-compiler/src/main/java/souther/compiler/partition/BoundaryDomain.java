@@ -73,6 +73,50 @@ public interface BoundaryDomain {
         }
     };
 
+    /**
+     * Souther's {@code Date}: a whole number of days, so both neighbours exist.
+     *
+     * <p>The neighbour of a date is a date. What steps is the day it counts to, and what comes back
+     * is written the way a model writes one — a report and a row show the date, never the count.
+     */
+    BoundaryDomain DATE = new BoundaryDomain() {
+        @Override
+        public Optional<ObservedValue> successor(ObservedValue value) {
+            return stepped(value, 1);
+        }
+
+        @Override
+        public Optional<ObservedValue> predecessor(ObservedValue value) {
+            return stepped(value, -1);
+        }
+
+        @Override
+        public Optional<ObservedValue> midpoint(ObservedValue low, ObservedValue high) {
+            BigDecimal from = dayOf(low);
+            BigDecimal to = dayOf(high);
+            if (from == null || to == null) {
+                return Optional.empty();
+            }
+            // Whole days, the way `INT` meets whole numbers. The count is what carries a date and it
+            // is not a decimal: two days apart by one have a midpoint and it is one of them, where
+            // dividing over a wider carrier would name half a day and no calendar has one.
+            BigDecimal between = from.add(to.subtract(from)
+                    .divide(BigDecimal.valueOf(2), 0, java.math.RoundingMode.DOWN));
+            return Optional.of(new ObservedValue.Temporal(Dates.written(between)));
+        }
+
+        private Optional<ObservedValue> stepped(ObservedValue value, int by) {
+            BigDecimal day = dayOf(value);
+            return day == null ? Optional.empty()
+                    : Optional.of(new ObservedValue.Temporal(
+                            Dates.written(day.add(BigDecimal.valueOf(by)))));
+        }
+
+        private BigDecimal dayOf(ObservedValue value) {
+            return value instanceof ObservedValue.Temporal t ? Dates.dayOf(t.iso()) : null;
+        }
+    };
+
     /** Nothing has a neighbour here. */
     BoundaryDomain NONE = new BoundaryDomain() {
         @Override

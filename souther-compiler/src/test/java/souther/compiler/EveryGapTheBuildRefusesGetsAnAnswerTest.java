@@ -143,13 +143,22 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
             """;
 
     /** The same, with a case that carries a field whose value nothing here composes. */
+    /**
+     * A case an axis divides and nothing composes a value for.
+     *
+     * <p>A newtype over a record. What stands for the case is a value wrapped in its constructor, so
+     * what it needs is a value of what it wraps — and a record is not one a position hands over: its
+     * fields are composed, which is a composition a class cannot do on its own. A record case of a
+     * sum is composed through its own constructor and is no longer this shape.
+     */
     private static final String CARRIED = """
             module example.pay
 
             data Amount = Decimal
                 invariant value >= 0.0m
 
-            data Card = { holder: Amount }
+            data Holder = { holder: Amount }
+            data Card = Holder
             data Cash = { amount: Amount }
             data Payment = Card | Cash
 

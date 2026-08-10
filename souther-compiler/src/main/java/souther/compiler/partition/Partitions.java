@@ -65,12 +65,16 @@ public final class Partitions {
      */
     public record Partitioning(List<Axis> axes, List<OmittedAxis> omitted,
                                Map<NumericTerm, NumericDomain.Bounds> domains,
-                               java.util.Set<NumericTerm> uncertain) {
+                               java.util.Set<NumericTerm> uncertain,
+                               List<UndividedPosition> undivided,
+                               List<GuardThresholds.Guards.Unread> unread) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
             domains = Map.copyOf(domains);
             uncertain = java.util.Set.copyOf(uncertain);
+            undivided = List.copyOf(undivided);
+            unread = List.copyOf(unread);
         }
 
         /** Whether an edge of this term is a value some row could carry.
@@ -96,6 +100,7 @@ public final class Partitions {
         List<Axis> found = new ArrayList<>();
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
+        java.util.Set<String> stopped = new java.util.LinkedHashSet<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             // One reading per parameter, not one per record met on the way down. A clause on the
             // outer record relates positions at any depth it can name, and rebuilding the reading at
@@ -103,7 +108,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
-                    domains, uncertain);
+                    domains, uncertain, stopped);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -125,7 +130,31 @@ public final class Partitions {
                 omitted.add(new OmittedAxis(axis.id(), !axis.cuts().isEmpty()));
             }
         }
-        return new Partitioning(kept, omitted, domains, uncertain);
+        return new Partitioning(kept, omitted, domains, uncertain, undividedIn(kept, stopped),
+                List.of());
+    }
+
+    /**
+     * The positions with no classes, each saying which of the two it is.
+     *
+     * <p>Derived from the axes rather than recorded beside them, so that a position measured after a
+     * threshold arrives leaves this list by the same rule it entered it. {@code stopped} names the
+     * ones the walk did not finish, which is the one thing the axes cannot say for themselves: an
+     * axis that was never descended into looks exactly like one there was nothing under.
+     */
+    private static List<UndividedPosition> undividedIn(List<Axis> axes,
+                                                       java.util.Set<String> stopped) {
+        List<UndividedPosition> out = new ArrayList<>();
+        for (Axis axis : axes) {
+            if (axis.measurable()) {
+                continue;
+            }
+            out.add(stopped.contains(axis.path().toString())
+                    ? UndividedPosition.cannotDerive(axis.path(),
+                            UndividedPosition.Reason.DEPTH_LIMIT)
+                    : UndividedPosition.absent(axis.path()));
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -138,12 +167,56 @@ public final class Partitions {
      */
     public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
                                               Symbols symbols) {
+        return withThresholds(base, thresholds, symbols, List.of());
+    }
+
+    /**
+     * The same, told which positions a comparison names that nothing turned into a line.
+     *
+     * <p>A position left undivided is not thereby a position the model divides no way. What this
+     * takes in is the other half of that: the body compared it, and the form the comparison is
+     * written in is one no reader here takes apart. Carried rather than re-derived, because the only
+     * place that knows is the reader that gave up.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols,
+                                              List<GuardThresholds.Guards.Unread> unread) {
+        return withThresholds(base, thresholds, symbols, unread, List.of());
+    }
+
+    /**
+     * The same, with the values a body singles out as well.
+     *
+     * <p>An equality is not a place to cut. What it distinguishes is one value from every other,
+     * so where nothing else divides the position its classes are those two — and the second of them
+     * is not a range, which is a thing a class is allowed not to be. Where an ordering comparison
+     * divides the position as well, the model has drawn the further distinction itself and the value
+     * is one more line among the ranges.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols,
+                                              List<GuardThresholds.Guards.Unread> unread,
+                                              List<GuardThresholds.Guards.Singled> singled) {
         List<Axis> out = new ArrayList<>();
         for (Axis axis : base.axes()) {
             NumericTerm declared = axis.term();
             NumericTerm term = declared;
             List<Threshold> here = thresholds.stream()
                     .filter(t -> t.term().equals(declared)).toList();
+            List<GuardThresholds.Guards.Singled> points = singled.stream()
+                    .filter(one -> one.term().equals(declared)).toList();
+            if (here.isEmpty() && !points.isEmpty()) {
+                // Nothing orders this position, so its classes are the values singled out and
+                // everything else. Ranges here would ask the rows for a distinction between the two
+                // sides of a value the behavior treats alike.
+                NumericDomain.Bounds only = domainOf(base, term);
+                out.add(new Axis(axis.id(), term, axis.type(),
+                        singledClasses(points, term, axis.type(), only, symbols),
+                        mergedPoints(axis.cuts(), points,
+                                carrierOf(term, axis.type(), symbols)))
+                        .excluding(axis.excluded()));
+                continue;
+            }
             if (here.isEmpty()) {
                 // A position no rule divides, whose body measures some other number of it: a bare
                 // `List<String>` nothing bounds, under a `guard List.length(t.names) > 0`. The line
@@ -179,14 +252,163 @@ public final class Partitions {
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
-            boolean decimal = term.decimal(axis.type(), symbols);
+            Carrier carrier = carrierOf(term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), term, axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), reachable, decimal)).excluding(axis.excluded()));
+                    merged(axis.cuts(), reachable, carrier)).excluding(axis.excluded()));
         }
-        return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain());
+        List<UndividedPosition> undivided = new ArrayList<>();
+        for (UndividedPosition each : undividedIn(out, java.util.Set.of())) {
+            UndividedPosition had = base.undivided().stream()
+                    .filter(before -> before.at().equals(each.at())).findFirst().orElse(each);
+            UndividedPosition.Reason stopped = unread.stream()
+                    .filter(one -> one.at().equals(each.at())).map(GuardThresholds.Guards.Unread::why)
+                    .findFirst().orElse(null);
+            undivided.add(stopped == null ? had : had.because(stopped));
+        }
+        return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
+                undivided, unread);
+    }
+
+    /**
+     * The classes a position divided only by equalities has: each value singled out, and the rest.
+     *
+     * <p>The last of those is not an interval and is not asked to be. What a class needs is a way to
+     * say whether a value is in it and a value that stands for it, and a complement has both — the
+     * shape a class has been limited to is what this is here to stop being the limit.
+     */
+    private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
+                                                       NumericTerm term, Type type,
+                                                       NumericDomain.Bounds within, Symbols symbols) {
+        Carrier carrier = carrierOf(term, type, symbols);
+        TypeName wrapper = type instanceof Type.Ref ref && TypeOps.isSingleValueNewtype(type, symbols)
+                ? ref.name() : null;
+        List<BigDecimal> values = new ArrayList<>();
+        for (GuardThresholds.Guards.Singled each : points) {
+            if (values.stream().noneMatch(had -> had.compareTo(each.value()) == 0)) {
+                values.add(each.value());
+            }
+        }
+        List<PartitionClass> classes = new ArrayList<>();
+        for (BigDecimal value : values) {
+            classes.add(PartitionClass.of(term + "/= " + written(value, carrier),
+                    "= " + written(value, carrier), holding(term, at -> at.compareTo(value) == 0),
+                    RepresentativeSource.of(standing(value, wrapper, carrier))));
+        }
+        BigDecimal other = otherThan(values, within, carrier);
+        String label = "/= " + String.join(", ",
+                values.stream().map(each -> written(each, carrier)).toList());
+        classes.add(other == null
+                ? PartitionClass.ungeneratable(term + "/" + label, label,
+                        holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
+                        "nothing here composed a value of this position other than the ones"
+                                + " singled out")
+                : PartitionClass.of(term + "/" + label, label,
+                        holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
+                        RepresentativeSource.of(standing(other, wrapper, carrier))));
+        return List.copyOf(classes);
+    }
+
+    /** A classifier that reads the term's number out of a row and answers about it. */
+    private static Classifier holding(NumericTerm term,
+                                      java.util.function.Predicate<BigDecimal> holds) {
+        return value -> switch (term.read(value)) {
+            case NumericTerm.Reading.Number number -> Membership.of(holds.test(number.value()));
+            case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
+            case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
+        };
+    }
+
+    /**
+     * A number the position holds that is none of {@code values}, or null where this found none.
+     *
+     * <p>Where the values step, the one beside a singled-out value is the nearest thing to it and is
+     * tried first. Over a dense carrier there is no step to take: a value bounded to `+[0, 1]+` and
+     * singled out at `+0.5+` steps to `+1.5+` and `+-0.5+`, both outside, and neither says anything
+     * about whether the class has values — it holds `+0+`, `+1+` and everything between. So the ends
+     * of what the position admits are asked, and a value between them, before any step is.
+     *
+     * <p>Null is this having found none and never the class being empty. Nothing here enumerates a
+     * dense range, so what a caller may say about an empty answer is that it composed nothing.
+     */
+    private static BigDecimal otherThan(List<BigDecimal> values, NumericDomain.Bounds within,
+                                        Carrier carrier) {
+        List<BigDecimal> stepped = new ArrayList<>();
+        for (BigDecimal from : values) {
+            stepped.add(from.add(BigDecimal.ONE));
+            stepped.add(from.subtract(BigDecimal.ONE));
+        }
+        List<BigDecimal> inside = new ArrayList<>();
+        if (within != null) {
+            for (Endpoint end : List.of(within.min(), within.max())) {
+                if (end != null && end.inclusive()) {
+                    inside.add(end.value());
+                }
+            }
+            BigDecimal between = Endpoint.valueBetween(within.min(), within.max(),
+                    carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE);
+            if (between != null) {
+                inside.add(between);
+            }
+            // Between the value singled out and each end, which is where a dense range still has
+            // room once the ends themselves are singled out too.
+            for (BigDecimal from : values) {
+                for (Endpoint end : List.of(within.min(), within.max())) {
+                    if (end != null) {
+                        inside.add(Endpoint.valueBetween(Endpoint.exclusive(from), end,
+                                carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE));
+                        inside.add(Endpoint.valueBetween(end, Endpoint.exclusive(from),
+                                carrier == Carrier.DENSE ? Granularity.DENSE : Granularity.DISCRETE));
+                    }
+                }
+            }
+        }
+        List<BigDecimal> tried = new ArrayList<>();
+        if (carrier == Carrier.DENSE) {
+            tried.addAll(inside);
+            tried.addAll(stepped);
+        } else {
+            tried.addAll(stepped);
+            tried.addAll(inside);
+        }
+        for (BigDecimal each : tried) {
+            if (each != null && (within == null || within.admits(each))
+                    && values.stream().noneMatch(v -> v.compareTo(each) == 0)) {
+                return each;
+            }
+        }
+        return null;
+    }
+
+    private static String written(BigDecimal value, Carrier carrier) {
+        return carrier == Carrier.DATE ? Dates.written(value)
+                : value.stripTrailingZeros().toPlainString();
+    }
+
+    private static FixtureTemplate standing(BigDecimal value, TypeName wrapper, Carrier carrier) {
+        FixtureTemplate literal = switch (carrier) {
+            case DENSE -> FixtureTemplate.decimal(value);
+            case WHOLE -> FixtureTemplate.integer(value.longValueExact());
+            case DATE -> FixtureTemplate.date(Dates.written(value));
+        };
+        return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
+    }
+
+    /** The cuts a position has, with the values a body singled out added as lines of their own. */
+    private static List<Cut> mergedPoints(List<Cut> had, List<GuardThresholds.Guards.Singled> points,
+                                          Carrier carrier) {
+        Map<String, Cut> byValue = new LinkedHashMap<>();
+        for (Cut cut : had) {
+            byValue.put(same(cut.value()), cut);
+        }
+        for (GuardThresholds.Guards.Singled each : points) {
+            ObservedValue value = numeric(each.value(), carrier);
+            byValue.merge(same(value), Cut.at(value, each.origin()),
+                    (there, _) -> there.and(each.origin()));
+        }
+        return List.copyOf(byValue.values());
     }
 
     /**
@@ -232,13 +454,13 @@ public final class Partitions {
 
     /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
      * an invariant and a guard that state the same bound are one cut and two obligations. */
-    private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, boolean decimal) {
+    private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
         Map<String, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
             byValue.put(same(cut.value()), cut);
         }
         for (Threshold each : thresholds) {
-            ObservedValue value = numeric(each.value(), decimal);
+            ObservedValue value = numeric(each.value(), carrier);
             byValue.merge(same(value), Cut.at(value, each.origin()),
                     (there, _) -> there.and(each.origin()));
         }
@@ -278,9 +500,12 @@ public final class Partitions {
             for (OriginRef origin : cut.origins()) {
                 if (reachable) {
                     out.add(new BoundaryObligation(axis.id(), origin,
-                            BoundaryObligation.BoundarySide.AT, cut.value()));
+                            BoundaryObligation.BoundarySide.AT, cut.value(),
+                            witnessed(origin, true)));
                 }
-                if (origin instanceof OriginRef.GuardOrigin guard) {
+                // A line that singles a value out has no neighbour to ask for: the values either
+                // side of it are one class, so a row over there is a row the class's own already is.
+                if (origin instanceof OriginRef.GuardOrigin guard && !guard.singles()) {
                     // The other class's edge is the neighbour on the side the cut value is not on —
                     // where that class has values. A guard at the end of what the position can hold
                     // has nothing on one side of it, and a step off the end is a row nobody can write:
@@ -290,17 +515,38 @@ public final class Partitions {
                         domain.successor(cut.value()).filter(next -> holds(within, next))
                                 .ifPresent(next -> out.add(new BoundaryObligation(
                                         axis.id(), origin,
-                                        BoundaryObligation.BoundarySide.ABOVE, next)));
+                                        BoundaryObligation.BoundarySide.ABOVE, next,
+                                        witnessed(origin, false))));
                     } else {
                         domain.predecessor(cut.value()).filter(before -> holds(within, before))
                                 .ifPresent(before -> out.add(new BoundaryObligation(
                                         axis.id(), origin,
-                                        BoundaryObligation.BoundarySide.BELOW, before)));
+                                        BoundaryObligation.BoundarySide.BELOW, before,
+                                        witnessed(origin, false))));
                     }
                 }
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether an arm could stand as evidence for a row written at this obligation's value.
+     *
+     * <p>An invariant's line needs no arm: writing the value is how it is met. A guard's needs the
+     * arm that proves its comparison ran, and which arm that is depends on where the comparison sits
+     * in the condition — so what is asked is whether the arm on this side of the line is one of
+     * them.
+     *
+     * @param atTheValue whether this obligation is the line's own value rather than its neighbour,
+     *                   which is what decides whether the comparison holds where the row would sit
+     */
+    private static boolean witnessed(OriginRef origin, boolean atTheValue) {
+        if (!(origin instanceof OriginRef.GuardOrigin guard)) {
+            return true;
+        }
+        return guard.witnessedWhereItHolds(
+                atTheValue == guard.holdsAtTheValue());
     }
 
     /** Whether a value invented one step off a line is one the position can hold. */
@@ -324,7 +570,8 @@ public final class Partitions {
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
                              List<Axis> out, Placed placed,
                              Map<NumericTerm, NumericDomain.Bounds> domains,
-                             java.util.Set<NumericTerm> uncertain) {
+                             java.util.Set<NumericTerm> uncertain,
+                             java.util.Set<String> stopped) {
         List<PartitionClass> classes = classesOf(type, symbols);
         // Which number this position is measured at, and what its rules leave that number. Asked
         // together because they are one reading: whether a rule bounds the length of a string is how
@@ -362,10 +609,14 @@ public final class Partitions {
             return;
         }
         Map<String, Type> fields = productFields(type, symbols);
+        if (!fields.isEmpty() && depth >= MAX_DEPTH) {
+            // A record this never went into. What is under it may divide, and nothing here looked.
+            stopped.add(path.toString());
+        }
         if (!fields.isEmpty() && depth < MAX_DEPTH) {
             for (Map.Entry<String, Type> field : fields.entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
-                        placed, domains, uncertain);
+                        placed, domains, uncertain, stopped);
             }
             return;
         }
@@ -513,7 +764,8 @@ public final class Partitions {
                     some.isEmpty()
                             ? PartitionClass.ungeneratable("Some", "Some",
                                     Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
-                                    "no value of " + option.element() + " can be written")
+                                    "nothing here composed a value of "
+                                            + Type.show(option.element()))
                             : PartitionClass.of("Some", "Some",
                                     Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
                                     () -> some));
@@ -546,14 +798,14 @@ public final class Partitions {
             List<FixtureTemplate> inner = insideTheNewtype(leaf, symbols);
             return inner.isEmpty()
                     ? PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
-                            "no value of what `" + leaf.name() + "` wraps can be written")
+                            "nothing here composed a value of what `" + leaf.name() + "` wraps")
                     : PartitionClass.of(leaf.name(), leaf.name(), is,
                             () -> inner.stream().map(t -> FixtureTemplate.newtype(leaf, t)).toList());
         }
-        // A record case is written field by field, which is the generator's composition and not a
-        // value this position can hand over on its own.
-        return PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
-                "`" + leaf.name() + "` is a record, whose fields are composed rather than named here");
+        // A record case is written field by field, which is the generator's composition. So the class
+        // names the constructor and the generator does the composing — the same walk every other
+        // record goes through, rules between the fields and all.
+        return PartitionClass.composed(leaf.name(), leaf.name(), is, leaf);
     }
 
     // --- reading an invariant's bounds -------------------------------------------------------------
@@ -667,13 +919,15 @@ public final class Partitions {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
-        cut(byValue, bounds.min(), own == null ? null : own.min(), "min", bounds.decimal(), within);
-        cut(byValue, bounds.max(), own == null ? null : own.max(), "max", bounds.decimal(), within);
+        cut(byValue, bounds.min(), own == null ? null : own.min(), "min",
+                bounds.decimal() ? Carrier.DENSE : Carrier.WHOLE, within);
+        cut(byValue, bounds.max(), own == null ? null : own.max(), "max",
+                bounds.decimal() ? Carrier.DENSE : Carrier.WHOLE, within);
         return List.copyOf(byValue.values());
     }
 
     /** One end as a cut, owed once to each rule that put it there. */
-    private static void cut(Map<String, Cut> into, End end, End own, String clause, boolean decimal,
+    private static void cut(Map<String, Cut> into, End end, End own, String clause, Carrier carrier,
                             TypeName within) {
         if (end == null) {
             return;
@@ -683,7 +937,7 @@ public final class Partitions {
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
         for (TypeName from : end.from()) {
-            put(into, numeric(end.value(), decimal), from, clause, moved ? within : null);
+            put(into, numeric(end.value(), carrier), from, clause, moved ? within : null);
         }
     }
 
@@ -767,7 +1021,9 @@ public final class Partitions {
         }
         List<PartitionClass> classes = classesOf(type, symbols);
         for (PartitionClass each : classes) {
-            if (each.generatable()) {
+            // Values, not a class that could produce one. A class whose values are composed has none
+            // to hand over here, and returning its empty list would say the type has no values.
+            if (each.generatable() && !each.representatives().candidates().isEmpty()) {
                 return each.representatives().candidates();
             }
         }
@@ -1040,9 +1296,37 @@ public final class Partitions {
         return v instanceof ObservedValue.Bool b && b.value() == expected;
     }
 
-    private static ObservedValue numeric(BigDecimal value, boolean decimal) {
-        return decimal ? new ObservedValue.Decimal(value)
-                : new ObservedValue.Integer(value.longValueExact());
+    /**
+     * A number the algebra holds, written back as the kind of value the position takes.
+     *
+     * <p>The one place that turns a carrier back into a value. A date is a day count inside the
+     * ranges and a date everywhere a person reads it, and the conversion sitting here is what keeps
+     * a cut and a fixture from disagreeing about which of the two a line is drawn at.
+     */
+    private static ObservedValue numeric(BigDecimal value, Carrier carrier) {
+        return switch (carrier) {
+            case DENSE -> new ObservedValue.Decimal(value);
+            case WHOLE -> new ObservedValue.Integer(value.longValueExact());
+            case DATE -> new ObservedValue.Temporal(Dates.written(value));
+        };
+    }
+
+    /** What kind of value a term's numbers stand for. */
+    enum Carrier {
+        /** A whole number: an {@code Int}, and every size. */
+        WHOLE,
+        /** A decimal. */
+        DENSE,
+        /** A day count, standing for a date. */
+        DATE
+    }
+
+    /** Which of the three a term at this position is. */
+    static Carrier carrierOf(NumericTerm term, Type type, Symbols symbols) {
+        if (term instanceof NumericTerm.ValueOf && TypeOps.base(type, symbols) == Type.DATE) {
+            return Carrier.DATE;
+        }
+        return term.decimal(type, symbols) ? Carrier.DENSE : Carrier.WHOLE;
     }
 
     private Partitions() {}

@@ -192,8 +192,8 @@
               },
               "status": { "$ref": "#/$defs/status" },
               "reason": {
-                "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked` and `arms_unreadable` belong to a guard's line only, which is met by reaching the comparison rather than by writing the value; an invariant's line is met by writing it and is never waiting on the arms.",
-                "enum": ["arms_not_asked", "arms_unreadable", "no_rows"]
+                "description": "Why there is no answer, present exactly where `status` is `unavailable`. `arms_not_asked`, `arms_unreadable` and `no_arm_witnesses_it` belong to a guard's line only, which is met by reaching the comparison rather than by writing the value; an invariant's line is met by writing it and is never waiting on the arms. `no_arm_witnesses_it` is the comparison sitting inside a condition whose arms do not separate the rows that reached it from the rows that did not — the second operand of an `&&` on the side where it is false — so the line is owed and this build cannot see it met.",
+                "enum": ["arms_not_asked", "arms_unreadable", "no_rows", "no_arm_witnesses_it"]
               }
             }
           }
@@ -230,8 +230,24 @@
         },
         "notDerivable": {
           "type": "array",
-          "description": "Positions the current reading drew no line through. Not a finding: the reading established no boundary obligation here, so nothing is reported against the rows. Not a statement that nothing is owed either, and not one that the model has no boundary here — a bound one type away from the position a behavior takes lands in this list, and the reading that produced it cannot tell that from a position nothing bounds. Read `boundariesMeasure` for whether the measure was made.",
+          "description": "Positions the reading ran to the end at and divided no way. Not a finding: no boundary obligation was established here, so nothing is reported against the rows. Not a statement that nothing is owed either — a bound one type away from the position a behavior takes lands in this list, and the reading cannot tell that from a position nothing bounds. A position something is written about that the reading could not take apart is in `notRead` instead, and used to be in this one. Read `boundariesMeasure` for whether the measure was made.",
           "items": { "type": "string" }
+        },
+        "notRead": {
+          "type": "array",
+          "description": "Positions something in the body names that this reading did not turn into a line, each with what stopped it. Nothing is established about these either way, which is what separates them from `notDerivable` — and which limit stopped each one is what says whose work it is to lift. Not in `required`: a document written before this field existed is still a document of this version.",
+          "items": {
+            "type": "object",
+            "required": ["position", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "position": { "type": "string" },
+              "reason": {
+                "description": "`unsupported_syntax` is an expression the terms do not name; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position.",
+                "enum": ["unsupported_syntax", "unsupported_domain", "unsupported_partition_shape", "depth_limit"]
+              }
+            }
+          }
         },
         "omitted": {
           "type": "array",

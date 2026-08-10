@@ -51,9 +51,10 @@ final class Coverages {
         if (body == null) {
             return partitioning;
         }
-        return Partitions.withThresholds(partitioning,
-                GuardThresholds.of(behavior.name(), body, plan, parameters, symbols).thresholds(),
-                symbols);
+        GuardThresholds.Guards guards =
+                GuardThresholds.of(behavior.name(), body, plan, parameters, symbols);
+        return Partitions.withThresholds(partitioning, guards.thresholds(), symbols,
+                guards.unread(), guards.singled());
     }
 
     /**
@@ -72,15 +73,13 @@ final class Coverages {
                 partitioningOf(behavior, sig, symbols, body, plan, excluded);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
-        List<String> notDerivable = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
         Readings readings = Readings.of(rows, parameters, partitioning.axes(),
                 observed.someRowsUnseen());
         for (Axis axis : partitioning.axes()) {
             if (!axis.measurable()) {
-                notDerivable.add(axis.path().toString());
-                continue;
+                continue;   // said by `undivided`, which also says which kind of nothing it is
             }
             if (axis.derivable()) {
                 axes.add(coverageOf(axis, readings, excluded));
@@ -89,7 +88,7 @@ final class Coverages {
         }
         return new PartitionEvidence(PartitionEvidence.Partitioned.of(axes),
                 PartitionEvidence.Bounded.of(boundaries), pairsOf(divided, readings),
-                notDerivable, partitioning.omitted(),
+                partitioning.undivided(), partitioning.unread(), partitioning.omitted(),
                 whyUnclassified(readings.byRow(),
                         partitioning.axes().stream().map(Axis::id).toList()));
     }
@@ -358,6 +357,12 @@ final class Coverages {
             BoundaryObligation obligation, Axis axis, List<String> parameters,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
+        // Asked before the rows are, because no row could answer it. Reading the rows first would
+        // report "no row is at this value" about a value no row can be seen to be at.
+        if (!obligation.witnessed()) {
+            return new BoundaryAssessment.Coverage.NotMeasured(
+                    BoundaryAssessment.Coverage.Reason.NO_ARM_WITNESSES_IT);
+        }
         boolean guard = obligation.origin() instanceof OriginRef.GuardOrigin;
         BoundaryAssessment.Coverage.Reason absent = guard
                 ? whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen())
@@ -551,13 +556,11 @@ final class Coverages {
         return left != null && right != null && left.compareTo(right) == 0;
     }
 
+    /** Asked of the term's own reader rather than spelled again here. A boundary's value and a row's
+     * are compared as numbers, and two spellings of what a number is are two chances to disagree —
+     * which is how a date read out of a row failed to match the same date read out of a line. */
     private static java.math.BigDecimal numberOf(ObservedValue v) {
-        return switch (v) {
-            case ObservedValue.Integer i -> java.math.BigDecimal.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value();
-            case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
-            case null, default -> null;
-        };
+        return souther.compiler.partition.NumericTerm.numberOf(v);
     }
 
     private Coverages() {}
