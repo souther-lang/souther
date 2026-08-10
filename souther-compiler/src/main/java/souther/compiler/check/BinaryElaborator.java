@@ -60,7 +60,7 @@ public final class BinaryElaborator {
         Core right = operand(bin.right(), bin, env, ctx);
         return switch (bin.op()) {
             // both operands were asked for a Bool where they were read
-            case AND, OR -> new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
+            case AND, OR -> new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
             case LT, LE, GT, GE -> {
                 // The ordered primitives: Int numerically, String lexicographically, Decimal by
                 // value, Date/DateTime in time. Unlike Elm (which orders only Int/Float/Char/String
@@ -74,7 +74,7 @@ public final class BinaryElaborator {
                     throw CompileException.of(Diagnostic
                                     .at(bin.pos()).say(new TypeMessage.ComparisonNeedsOrderedValuesOfOneType(Type.show(lt), Type.show(rt))).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
+                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
                 // `+ - * /` work on two Int or two Decimal operands (spec
@@ -90,12 +90,12 @@ public final class BinaryElaborator {
                         isLiteralExpr(bin.left()), isLiteralExpr(bin.right()), ctx.symbols());
                 yield switch (answer) {
                     case ArithmeticCheck.Allowed allowed ->
-                            new Core.Binary(bin.op(), left, right, allowed.resultType(), bin.pos());
+                            new Core.Binary(bin.op(), left, right, bin.origin(), allowed.resultType(), bin.pos());
                     case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
                         // One type against another: the found-versus-expected block says it better
                         // than a sentence would, and requireType raises or absorbs it.
                         Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");
-                        yield new Core.Binary(bin.op(), left, right, lt, bin.pos());
+                        yield new Core.Binary(bin.op(), left, right, bin.origin(), lt, bin.pos());
                     }
                     case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
                 };
@@ -107,7 +107,7 @@ public final class BinaryElaborator {
                 Type lraw = left.type();
                 Type rraw = right.type();
                 if (lraw == Type.STRING && rraw == Type.STRING) {
-                    yield new Core.Binary(bin.op(), left, right, Type.STRING, bin.pos());
+                    yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.STRING, bin.pos());
                 }
                 // A bottom operand ({@code Nothing}) is a list read from an accumulator an empty
                 // collection seed grows — the value at a key of a `Map.empty`-seeded fold, whose element
@@ -135,7 +135,7 @@ public final class BinaryElaborator {
                                     .hint(new TypeMessage.MakeEveryElementTheSameType())
                                     .say(new TypeMessage.TheTwoListsHoldDifferentElements()).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, Type.list(element), bin.pos());
+                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.list(element), bin.pos());
             }
             case EQ, NE -> {
                 Type lt = left.type();
@@ -175,7 +175,7 @@ public final class BinaryElaborator {
                                     
                                     .say(new TypeMessage.TheseTwoCannotBeCompared(Type.show(lt, rt), Type.show(rt, lt))).build());
                 }
-                yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
+                yield new Core.Binary(bin.op(), left, right, bin.origin(), Type.BOOL, bin.pos());
             }
         };
     }

@@ -3,9 +3,9 @@ package souther.compiler.coverage;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourceRef;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeName;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -47,17 +47,35 @@ public final class CoverageSites {
     public static final int NO_SITE = -1;
 
     /**
-     * One arm.
+     * What a row is owed for, which is not the same as where one runs.
      *
-     * @param index       what identifies it in this run — the probe number, and what a hit set holds
+     * <p>A non-recursive helper is spliced into each body that calls it, so one arm the author wrote
+     * is several arms in the tree that runs. Each of those is emitted and probed on its own, and each
+     * is asked separately whether anything can reach it — so the occurrences stay apart everywhere
+     * below. What they are not is several things to write rows for: covering the same arm through a
+     * second call site establishes nothing the first did not. This is the key those occurrences are
+     * one under.
+     *
+     * <p>Per behavior, because the measurement is per behavior. Two behaviors calling one helper each
+     * owe its arms, and a row written for one of them is not a row written for the other.
+     *
+     * @param part which arm of the fork — its place among the fork's arms. Always zero for a
+     *             comparison, whose origin is its own rather than the fork's: a comparison is one
+     *             construct, and what a fork holds several of is arms
+     */
+    public record Obligation(String behavior, CoverageOrigin origin, int part) {}
+
+    /**
+     * One arm, as it stands in the tree that runs.
+     *
+     * @param index       what identifies it in this run — the probe number, and what a hit set holds.
+     *                    One per occurrence: the emitter lights this one, and the reachability
+     *                    analysis proves things about this one
      * @param ordinal     where it comes in its behavior, for display
-     * @param fingerprint what the arm is made of, ignoring where it is written. Kept for a later
-     *                    version to match one run's sites against another's, and not used as identity
-     *                    here: two structurally identical arms in one behavior have the same one, and
-     *                    mixing the position back in would change it whenever a line is added above.
+     * @param obligation  what a row would be owed for, which several occurrences share
      */
     public record Site(String behavior, Kind kind, String label, SourceRef at,
-                       int index, int ordinal, String fingerprint) {
+                       int index, int ordinal, Obligation obligation) {
 
         public enum Kind {
             /** The arm an {@code if} takes when its condition holds. */
@@ -108,7 +126,15 @@ public final class CoverageSites {
      * {@code GuardRef} at all — there is nothing left for a row to reach, and a reference with two
      * absent sides would report the line as never met however the model is exercised.
      */
-    public record GuardRef(String behavior, int siteIndexThen, int siteIndexElse, SourceRef at) {}
+    public record GuardRef(String behavior, CoverageOrigin origin, int siteIndexThen,
+                           int siteIndexElse, SourceRef at) {
+
+        /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
+         * drawn on the condition is one line however many of them there are. */
+        public Obligation fork() {
+            return new Obligation(behavior, origin, 0);
+        }
+    }
 
     /**
      * Every site of a module, and how to find the ones belonging to a node.
@@ -221,8 +247,10 @@ public final class CoverageSites {
          * an {@code unreachable} is E1911 and states nothing, so an arm only such a row could go
          * through is an arm no row will ever be recorded in.
          */
-        private int armOf(Site.Kind kind, String label, Core owner, Core arm, boolean reachable) {
-            return reachable && NormalReturn.of(arm) ? site(kind, label, owner, arm) : NO_SITE;
+        private int armOf(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part,
+                          Core arm, boolean reachable) {
+            return reachable && NormalReturn.of(arm)
+                    ? site(kind, label, owner, origin, part) : NO_SITE;
         }
 
         /**
@@ -255,10 +283,10 @@ public final class CoverageSites {
          * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
-        private int site(Site.Kind kind, String label, Core owner, Core arm) {
+        private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part) {
             int index = sites.size();
             sites.add(new Site(behavior, kind, label, new SourceRef(sourceId, owner.pos()),
-                    index, ordinal++, Fingerprint.of(kind, label, arm)));
+                    index, ordinal++, new Obligation(behavior, origin, part)));
             return index;
         }
 
@@ -314,13 +342,13 @@ public final class CoverageSites {
                 case Core.NewData nd -> nd.inits().forEach(init -> walk(init.value(), inside));
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
-                    int then = armOf(Site.Kind.THEN, "then", iff, iff.then(), inside);
+                    int then = armOf(Site.Kind.THEN, "then", iff, iff.origin(), 0, iff.then(), inside);
                     walk(iff.then(), inside);
-                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.els(), inside);
+                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.origin(), 1, iff.els(), inside);
                     walk(iff.els(), inside);
                     byNode.put(iff, new int[] {then, els});
                     if (then != NO_SITE || els != NO_SITE) {
-                        guards.add(new GuardRef(behavior, then, els,
+                        guards.add(new GuardRef(behavior, iff.origin(), then, els,
                                 new SourceRef(sourceId, iff.pos())));
                         comparisons(iff.cond());
                     }
@@ -330,7 +358,8 @@ public final class CoverageSites {
                     int[] arms = new int[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, arm.body(), inside);
+                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, m.origin(), i, arm.body(),
+                                inside);
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, arms);
@@ -338,11 +367,13 @@ public final class CoverageSites {
                 case Core.IfConstructed ic -> {
                     ic.construct().inits().forEach(init -> walk(init.value(), inside));
                     int[] arms = new int[1 + ic.els().size()];
-                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.then(), inside);
+                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.origin(), 0,
+                            ic.then(), inside);
                     walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
-                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, arm.body(), inside);
+                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, ic.origin(), i + 1,
+                                arm.body(), inside);
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, arms);
@@ -377,9 +408,18 @@ public final class CoverageSites {
             // and would be reported as one.
             if (condition instanceof Core.Binary comparison
                     && !byComparison.containsKey(comparison)) {
+                // Keyed on where the comparison was written and not on the fork testing it. A
+                // condition can be an application of a function parameter, and then the comparison is
+                // the caller's: two predicates written separately are two lines, and one predicate
+                // handed to two calls is one, neither of which the fork can say.
+                if (!comparison.origin().isWritten()) {
+                    throw new IllegalStateException("a comparison with no source wrote it is being "
+                            + "numbered at " + comparison.pos()
+                            + "; a tree rebuilt for an analysis is not the tree that runs");
+                }
                 byComparison.put(comparison,
                         site(Site.Kind.COMPARISON, comparison.op().toString(), comparison,
-                                comparison));
+                                comparison.origin(), 0));
             }
         }
 
@@ -391,94 +431,6 @@ public final class CoverageSites {
         private static String label(Core.ElseArm arm) {
             return arm.clause().map(c -> "else " + c).orElse("else");
         }
-    }
-
-    /**
-     * What an arm is made of, said without saying where it is.
-     *
-     * <p>Positions are left out so that adding a line above an arm does not change it; the arm's own
-     * shape is what is hashed. That leaves two arms with identical bodies in one behavior sharing a
-     * fingerprint, which is why nothing here treats it as identity.
-     */
-    private static final class Fingerprint {
-
-        static String of(Site.Kind kind, String label, Core arm) {
-            StringBuilder out = new StringBuilder(kind.name()).append('/').append(label).append('/');
-            shape(arm, out);
-            return hex(out.toString());
-        }
-
-        private static void shape(Core e, StringBuilder out) {
-            out.append(e.getClass().getSimpleName()).append('(');
-            switch (e) {
-                case Core.Int i -> out.append(i.value());
-                case Core.Decimal d -> out.append(d.value());
-                case Core.Str s -> out.append(s.value().length());
-                case Core.Bool b -> out.append(b.value());
-                case Core.Read r -> out.append(r.name());
-                case Core.UnitValue u -> out.append(u.data());
-                case Core.FieldAccess fa -> {
-                    out.append(fa.field()).append(',');
-                    shape(fa.target(), out);
-                }
-                case Core.Binary b -> {
-                    out.append(b.op()).append(',');
-                    shape(b.left(), out);
-                    shape(b.right(), out);
-                }
-                case Core.Call c -> {
-                    out.append(c.fn()).append(',');
-                    c.args().forEach(a -> shape(a, out));
-                }
-                case Core.Apply a -> {
-                    out.append(a.fn().name()).append(',');
-                    a.args().forEach(x -> shape(x, out));
-                }
-                case Core.NewData nd -> {
-                    out.append(nd.typeName()).append(',');
-                    nd.inits().forEach(i -> {
-                        out.append(i.name()).append('=');
-                        shape(i.value(), out);
-                    });
-                }
-                case Core.Match m -> {
-                    shape(m.scrutinee(), out);
-                    m.cases().forEach(c -> {
-                        out.append(c.caseTypes()).append(':');
-                        shape(c.body(), out);
-                    });
-                }
-                case Core.If iff -> {
-                    shape(iff.cond(), out);
-                    shape(iff.then(), out);
-                    shape(iff.els(), out);
-                }
-                case Core.IfConstructed ic -> {
-                    shape(ic.construct(), out);
-                    shape(ic.then(), out);
-                    ic.els().forEach(arm -> shape(arm.body(), out));
-                }
-                case Core.Unreachable u -> out.append(u.reason());
-                default -> Core.forEachChild(e, child -> shape(child, out));
-            }
-            out.append(')');
-        }
-
-        private static String hex(String of) {
-            try {
-                byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
-                        .digest(of.getBytes(StandardCharsets.UTF_8));
-                StringBuilder out = new StringBuilder();
-                for (int i = 0; i < 6; i++) {
-                    out.append(String.format("%02x", digest[i]));
-                }
-                return out.toString();
-            } catch (java.security.NoSuchAlgorithmException e) {
-                throw new IllegalStateException("SHA-256 is required of every JVM", e);
-            }
-        }
-
-        private Fingerprint() {}
     }
 
     private CoverageSites() {}

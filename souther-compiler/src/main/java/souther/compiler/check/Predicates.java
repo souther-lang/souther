@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carrying;
@@ -375,7 +376,7 @@ final class Predicates {
     }
 
     static Core.Binary comparison(Ast.BinOp op, Core left, Core right, Core.Binary of) {
-        return new Core.Binary(op, left, right, of.type(), of.pos());
+        return new Core.Binary(op, left, right, of.origin(), of.type(), of.pos());
     }
 
     /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
@@ -680,6 +681,7 @@ final class Predicates {
             Core size = new Core.PreservedCall(DischargeRules.sizeMeantBy(call.operation()), call.args(),
                     Type.INT, call.pos());
             return new Core.Binary(Ast.BinOp.EQ, size, new Core.Int(0, Type.INT, call.pos()),
+                    CoverageOrigin.unwritten(),
                     Type.BOOL, call.pos());
         }
         return e;

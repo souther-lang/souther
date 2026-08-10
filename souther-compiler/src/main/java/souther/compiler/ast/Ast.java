@@ -7,6 +7,7 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -1213,8 +1214,13 @@ public interface Ast {
     record ListLit(List<Expr> elements, SourcePos pos, Region region) implements Expr {}
 
     /** A guard-only comprehension {@code [element | guard, ...]}: the element is included when
-     * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation). */
-    record ListComp(Expr element, List<Expr> guards, SourcePos pos, Region region) implements Expr {}
+     * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation).
+     *
+     * <p>{@code origin} names the comprehension, and the fork each guard lowers to is derived from it
+     * ({@link CoverageOrigin#lowered}) rather than minted where the lowering runs — so a comprehension
+     * inside a helper answers the same whichever call site expanded it. */
+    record ListComp(Expr element, List<Expr> guards, CoverageOrigin origin, SourcePos pos,
+                    Region region) implements Expr {}
 
     /** A tuple {@code (e1, e2, ...)} of two or more values (ADR-0036), an expression-level value
      * that never crosses the data/behavior boundary. Opened with a {@code let (x, y) = t} destructure. */
@@ -1225,8 +1231,13 @@ public interface Ast {
      * is the pattern's name count, so the checker rejects a tuple of a different size (ADR-0036). */
     record TupleGet(Expr tuple, int index, int arity, SourcePos pos, Region region) implements Expr {}
 
-    /** {@code if cond then a else b} — both branches must have the same type (spec §if). */
-    record If(Expr cond, Expr then, Expr els, SourcePos pos, Region region) implements Expr {}
+    /** {@code if cond then a else b} — both branches must have the same type (spec §if).
+     *
+     * <p>{@code origin} is the fork the author wrote, kept through every rewrite and every copy an
+     * expansion makes, so the arms of one {@code if} are one obligation however many times a helper
+     * holding it is called ({@link CoverageOrigin}). */
+    record If(Expr cond, Expr then, Expr els, CoverageOrigin origin, SourcePos pos, Region region)
+            implements Expr {}
 
     /**
      * {@code if T(v) as x then a else b} — an attempted construction, and what
@@ -1246,13 +1257,13 @@ public interface Ast {
      * That it is one, and that its type carries an invariant to attempt, are checked once the names
      * are resolved.
      */
-    record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els, SourcePos pos,
-                         Region region) implements Expr {
+    record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els,
+                         CoverageOrigin origin, SourcePos pos, Region region) implements Expr {
 
         /** The attempt whose failure is not told apart: one arm, naming no clause. */
-        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els, SourcePos pos,
-                             Region region) {
-            this(construct, binder, then, List.of(ElseArm.any(els)), pos, region);
+        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els,
+                             CoverageOrigin origin, SourcePos pos, Region region) {
+            this(construct, binder, then, List.of(ElseArm.any(els)), origin, pos, region);
         }
 
         /** The same, as the parser read it. */
@@ -1290,8 +1301,10 @@ public interface Ast {
         }
     }
 
-    /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. */
-    record Match(Expr scrutinee, List<Case> cases, SourcePos pos, Region region) implements Expr {}
+    /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. {@code origin} is the
+     * fork the author wrote; see {@link If}. */
+    record Match(Expr scrutinee, List<Case> cases, CoverageOrigin origin, SourcePos pos,
+                 Region region) implements Expr {}
 
     /**
      * One {@code match} case: {@code case A | B ... [as x] -> body} (spec §match). {@code caseTypes}
@@ -1729,7 +1742,12 @@ public interface Ast {
         }
     }
 
-    record Binary(BinOp op, Expr left, Expr right, SourcePos pos, Region region) implements Expr {}
+    /** {@code origin} is where the comparison was written, which is not always where the fork
+     * testing it was: a condition can be an application of a function parameter, and the predicate
+     * handed to it is the caller's. Carried so that two predicates written separately stay two lines
+     * and one predicate applied twice stays one ({@link CoverageOrigin}). */
+    record Binary(BinOp op, Expr left, Expr right, CoverageOrigin origin, SourcePos pos,
+                  Region region) implements Expr {}
 
 
     enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
@@ -1772,24 +1790,25 @@ public interface Ast {
             case Unreachable x -> new Unreachable(x.reason(), x.pos(), region);
             case Neg x -> new Neg(x.operand(), x.pos(), region);
             case FieldAccess x -> new FieldAccess(x.target(), x.name(), x.pos(), region);
-            case Binary x -> new Binary(x.op(), x.left(), x.right(), x.pos(), region);
+            case Binary x -> new Binary(x.op(), x.left(), x.right(), x.origin(), x.pos(), region);
             case Apply x -> new Apply(x.function(), x.args(), x.origin(), x.appliedAs(), x.pos(),
                     region);
-            case If x -> new If(x.cond(), x.then(), x.els(), x.pos(), region);
+            case If x -> new If(x.cond(), x.then(), x.els(), x.origin(), x.pos(), region);
             case IfConstructed x ->
-                    new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.pos(), region);
+                    new IfConstructed(x.construct(), x.binder(), x.then(), x.els(), x.origin(), x.pos(),
+                            region);
             case LetIn x -> new LetIn(x.binder(), x.value(), x.declaredType(), x.annotated(),
                     x.opens(), x.body(), x.pos(), region);
             case Expansion x -> new Expansion(x.callee(), x.application(), x.bound(), x.given(),
                     x.declaredReturn(), x.body(), x.pos(), region);
             case Block x -> new Block(x.params(), x.body(), x.pos(), region);
             case ListLit x -> new ListLit(x.elements(), x.pos(), region);
-            case ListComp x -> new ListComp(x.element(), x.guards(), x.pos(), region);
+            case ListComp x -> new ListComp(x.element(), x.guards(), x.origin(), x.pos(), region);
             case Tuple x -> new Tuple(x.elements(), x.pos(), region);
             case TupleGet x -> new TupleGet(x.tuple(), x.index(), x.arity(), x.pos(), region);
             case NewData x ->
                     new NewData(x.typeName(), x.inits(), x.spreads(), x.origin(), x.pos(), region);
-            case Match x -> new Match(x.scrutinee(), x.cases(), x.pos(), region);
+            case Match x -> new Match(x.scrutinee(), x.cases(), x.origin(), x.pos(), region);
         };
     }
 
@@ -1813,7 +1832,7 @@ public interface Ast {
                 Expr left = atExpr.apply(b.left());
                 Expr right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
-                        : new Binary(b.op(), left, right, b.pos(), b.region());
+                        : new Binary(b.op(), left, right, b.origin(), b.pos(), b.region());
             }
             case Apply a -> {
                 Expr function = atExpr.apply(a.function());
@@ -1826,7 +1845,7 @@ public interface Ast {
                 Expr then = atExpr.apply(iff.then());
                 Expr els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
-                        : new If(cond, then, els, iff.pos(), iff.region());
+                        : new If(cond, then, els, iff.origin(), iff.pos(), iff.region());
             }
             case IfConstructed ic -> {
                 Expr construct = atExpr.apply(ic.construct());
@@ -1836,7 +1855,8 @@ public interface Ast {
                     return body == arm.body() ? arm : arm.with(body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
-                        : new IfConstructed(construct, ic.binder(), then, els, ic.pos(), ic.region());
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.origin(), ic.pos(),
+                                ic.region());
             }
             case LetIn li -> {
                 Expr value = atExpr.apply(li.value());
@@ -1872,7 +1892,7 @@ public interface Ast {
                 Expr element = atExpr.apply(comp.element());
                 List<Expr> guards = each(comp.guards(), atExpr);
                 yield element == comp.element() && guards == comp.guards() ? comp
-                        : new ListComp(element, guards, comp.pos(), comp.region());
+                        : new ListComp(element, guards, comp.origin(), comp.pos(), comp.region());
             }
             case Tuple tup -> {
                 List<Expr> elements = each(tup.elements(), atExpr);
@@ -1902,7 +1922,7 @@ public interface Ast {
                             : new Case(c.caseTypes(), c.binding(), body, c.unwrapAsserts(), c.pos());
                 });
                 yield scrutinee == m.scrutinee() && cases == m.cases() ? m
-                        : new Match(scrutinee, cases, m.pos(), m.region());
+                        : new Match(scrutinee, cases, m.origin(), m.pos(), m.region());
             }
         };
     }

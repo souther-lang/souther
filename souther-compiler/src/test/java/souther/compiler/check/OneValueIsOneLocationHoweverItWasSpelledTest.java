@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
@@ -57,7 +58,7 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
         assertNull(of(new Core.Int(1, Type.INT, POS)));
         assertNull(of(new Core.Binary(Ast.BinOp.ADD,
                 new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
-                Type.INT, POS)));
+                CoverageOrigin.unwritten(), Type.INT, POS)));
     }
 
     private static Core read(BindingId binding, String spelledAs) {

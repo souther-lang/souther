@@ -3,6 +3,7 @@ package souther.compiler.frontend;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.LineIndex;
@@ -51,6 +52,16 @@ public final class AstBuilder {
     private int getterCounter = 0;
     private int patternCounter = 0;
     private int spreadCounter = 0;
+    /**
+     * How many coverage-bearing constructs this source has been read to hold, which is what numbers
+     * the next one ({@link CoverageOrigin}).
+     *
+     * <p>One number per construct the author wrote, not per fork object built. An {@code if} that is
+     * written as an attempted construction is one construct however many of the three shapes below it
+     * takes, and a comprehension is one construct whose guards derive their forks from it — so the
+     * number is taken once, where the construct is recognised.
+     */
+    private int constructCounter = 0;
 
     private AstBuilder(String source, String sourceId) {
         this.lines = new LineIndex(source, sourceId);
@@ -70,6 +81,12 @@ public final class AstBuilder {
     static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName,
                             String sourceId) {
         return new AstBuilder(source, sourceId).module(sourceFile, defaultModuleName);
+    }
+
+    /** The next construct of this source a coverage obligation can be about. Called once where a
+     * construct is recognised, never per node the construct is built as. */
+    private CoverageOrigin construct() {
+        return CoverageOrigin.written(moduleName, constructCounter++);
     }
 
     // --- module ---
@@ -731,7 +748,7 @@ public final class AstBuilder {
         // Anchored at the operator, which is what a report about the operation is about, and written
         // over both operands, which is what the operation is.
         return new Ast.Binary(binOp(op.kind()), expr(operands.get(0)), expr(operands.get(1)),
-                posOf(op), region(n));
+                construct(), posOf(op), region(n));
     }
 
     private static Ast.BinOp binOp(SyntaxKind k) {
@@ -789,7 +806,7 @@ public final class AstBuilder {
         for (int i = 1; i < exprs.size(); i++) {
             guards.add(expr(exprs.get(i)));
         }
-        return new Ast.ListComp(element, guards, pos(n), region(n));
+        return new Ast.ListComp(element, guards, construct(), pos(n), region(n));
     }
 
     private Ast.Expr ifExpr(SyntaxNode n) {
@@ -797,16 +814,18 @@ public final class AstBuilder {
         SyntaxToken as = attemptBinder(n);
         String binder = as == null ? null : ident(as);
         List<Ast.ElseArm> arms = elseArms(n, binder);
+        // One construct, so one origin whichever of the three shapes it is written as.
+        CoverageOrigin origin = construct();
         if (arms != null) {
             return new Ast.IfConstructed(expr(exprs.get(0)),
-                    binderOf(as), expr(exprs.get(1)), arms, pos(n), region(n));
+                    binderOf(as), expr(exprs.get(1)), arms, origin, pos(n), region(n));
         }
         return binder == null
-                ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n),
-                        region(n))
+                ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), origin,
+                        pos(n), region(n))
                 : new Ast.IfConstructed(expr(exprs.get(0)),
                         binderOf(as), expr(exprs.get(1)),
-                        List.of(Ast.ElseArm.any(expr(exprs.get(2)))), pos(n), region(n));
+                        List.of(Ast.ElseArm.any(expr(exprs.get(2)))), origin, pos(n), region(n));
     }
 
     /**
@@ -953,7 +972,7 @@ public final class AstBuilder {
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
             cases.add(matchCase(c));
         }
-        return new Ast.Match(scrutinee, cases, pos(n), region(n));
+        return new Ast.Match(scrutinee, cases, construct(), pos(n), region(n));
     }
 
     /** A name as the source wrote it — bare, or qualified through a module or an import alias — read
@@ -1256,16 +1275,18 @@ public final class AstBuilder {
                 String binder = as == null ? null : ident(as);
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
+                // One construct, so one origin whichever of the three shapes it is written as.
+                CoverageOrigin origin = construct();
                 if (arms != null) {
-                    yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, pos,
-                            held);
+                    yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, origin,
+                            pos, held);
                 }
                 Ast.Expr settles = expr(exprs.get(0));
                 Ast.Expr otherwise = expr(exprs.get(1));
                 yield binder == null
-                        ? new Ast.If(settles, rest, otherwise, pos, held)
+                        ? new Ast.If(settles, rest, otherwise, origin, pos, held)
                         : new Ast.IfConstructed(settles, binderOf(as), rest,
-                                List.of(Ast.ElseArm.any(otherwise)), pos, held);
+                                List.of(Ast.ElseArm.any(otherwise)), origin, pos, held);
             }
             case LET_DESTRUCTURE -> {
                 SyntaxNode pat = patternChild(s);

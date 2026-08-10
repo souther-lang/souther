@@ -306,15 +306,46 @@ final class Coverages {
             Symbols symbols, boolean armsAsked, boolean knownWritable, Probe probe,
             souther.compiler.numeric.NumericDomain.Bounds within) {
         List<RowOutcome> rows = observed.rows();
-        List<BoundaryAssessment> out = new ArrayList<>();
+        // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
+        // is read once per call of that helper, and the rows do not owe the same edge twice for
+        // having been offered it twice; what each reading saw is merged below.
+        java.util.SequencedMap<Line, BoundaryAssessment> out = new java.util.LinkedHashMap<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols, within)) {
             BoundaryAssessment.Coverage coverage =
                     coverageOf(each, axis, parameters, observed, armsAsked);
             BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
-            out.add(new BoundaryAssessment(each, coverage,
-                    writabilityOf(coverage, knownWritable, attempt), attempt));
+            BoundaryAssessment made = new BoundaryAssessment(each, coverage,
+                    writabilityOf(coverage, knownWritable, attempt), attempt);
+            out.merge(new Line(each.side(), each.value(), each.origin().line()), made,
+                    Coverages::whicheverSawMore);
         }
-        return out;
+        return List.copyOf(out.values());
+    }
+
+    /** One line of one axis, told from another by what drew it and where — and not by which copy of
+     * the body the reading came off. */
+    private record Line(BoundaryObligation.BoundarySide side, ObservedValue value,
+                        OriginRef.Line drawn) {}
+
+    /**
+     * Which of two readings of one line the report keeps.
+     *
+     * <p>Existential, the same way an arm is: a row met the edge if it met it through any reading of
+     * it. So a reading that found a row outranks one that could not tell, which outranks one that
+     * looked and found none, which outranks one that was never made. Anything else would let a
+     * second call site of a helper take back what a row at the first one established.
+     */
+    private static BoundaryAssessment whicheverSawMore(BoundaryAssessment a, BoundaryAssessment b) {
+        return rank(b.coverage()) > rank(a.coverage()) ? b : a;
+    }
+
+    private static int rank(BoundaryAssessment.Coverage coverage) {
+        return switch (coverage) {
+            case BoundaryAssessment.Coverage.Hit _ -> 3;
+            case BoundaryAssessment.Coverage.Undecided _ -> 2;
+            case BoundaryAssessment.Coverage.Missed _ -> 1;
+            case BoundaryAssessment.Coverage.NotMeasured _ -> 0;
+        };
     }
 
     /**

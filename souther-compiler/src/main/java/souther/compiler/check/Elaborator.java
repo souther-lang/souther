@@ -278,7 +278,7 @@ public final class Elaborator {
                     joined = TypeOps.joinAt(expected, tt, et);
                 }
                 if (joined != null) {
-                    yield new Core.If(cond, then, els, joined, iff.pos());
+                    yield new Core.If(cond, then, els, iff.origin(), joined, iff.pos());
                 }
                 throw CompileException.of(Diagnostic
                                 .at(iff.pos(), 2)
@@ -334,7 +334,8 @@ public final class Elaborator {
                     }
                     joined = next;
                 }
-                yield new Core.IfConstructed(construct, ic.binder(), then, arms, joined, ic.pos());
+                yield new Core.IfConstructed(construct, ic.binder(), then, arms, ic.origin(), joined,
+                        ic.pos());
             }
             case Ast.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
@@ -1216,7 +1217,7 @@ public final class Elaborator {
                                     Type.show(t), Type.show(f)))
                             .build());
                 }
-                yield new Core.If(cond, then, els, t, iff.pos());
+                yield new Core.If(cond, then, els, iff.origin(), t, iff.pos());
             }
             // a helper that answers a function: `adder(5)` expands to the lambda under the bindings
             // its arguments became, and what those captured is what the lambda closes over

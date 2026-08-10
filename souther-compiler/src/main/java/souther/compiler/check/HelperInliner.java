@@ -970,7 +970,7 @@ public final class HelperInliner {
             case Ast.Apply rawCall -> expandCall(rawCall);
             case Ast.FieldAccess fa -> fa.withTarget(inline(fa.target()));
             case Ast.Binary bin -> new Ast.Binary(bin.op(), inline(bin.left()), inline(bin.right()),
-                    bin.pos(), bin.region());
+                    bin.origin(), bin.pos(), bin.region());
             case Ast.Neg neg -> new Ast.Neg(inline(neg.operand()), neg.pos(), neg.region());
             case Ast.NewData nd -> newData(nd);
             case Ast.Match m -> {
@@ -978,12 +978,12 @@ public final class HelperInliner {
                 for (Ast.Case c : m.cases()) {
                     cases.add(new Ast.Case(c.caseTypes(), c.binding(), inline(c.body()), c.unwrapAsserts(), c.pos()));
                 }
-                yield new Ast.Match(inline(m.scrutinee()), cases, m.pos(), m.region());
+                yield new Ast.Match(inline(m.scrutinee()), cases, m.origin(), m.pos(), m.region());
             }
             case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()),
-                    iff.pos(), iff.region());
+                    iff.origin(), iff.pos(), iff.region());
             case Ast.IfConstructed ic -> new Ast.IfConstructed(inline(ic.construct()), ic.binder(),
-                    inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.pos(),
+                    inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.origin(), ic.pos(),
                     ic.region());
             // Already expanded. Its body may still hold calls of its own — a helper whose callee was
             // not in the table when this ran the first time — so it is walked like any other.
@@ -1054,7 +1054,7 @@ public final class HelperInliner {
             case Ast.TupleGet tg -> new Ast.TupleGet(inline(tg.tuple()), tg.index(), tg.arity(), tg.pos(),
                     tg.region());
             case Ast.ListComp comp -> new Ast.ListComp(inline(comp.element()), inlineList(comp.guards()),
-                    comp.pos(), comp.region());
+                    comp.origin(), comp.pos(), comp.region());
             case Ast.Block block -> new Ast.Block(block.params(), inline(block.body()), block.pos(),
                     block.region());
             case Ast.IntLit _ -> e;
@@ -1714,7 +1714,7 @@ public final class HelperInliner {
                     call.origin(), call.appliedAs(), renaming.at(call.pos()),
                     renaming.over(call.region()));
             case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), renaming),
-                    rename(bin.right(), renaming), renaming.at(bin.pos()),
+                    rename(bin.right(), renaming), bin.origin(), renaming.at(bin.pos()),
                     renaming.over(bin.region()));
             case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), renaming), renaming.at(neg.pos()),
                     renaming.over(neg.region()));
@@ -1744,11 +1744,11 @@ public final class HelperInliner {
                             rename(c.body(), renaming),
                             c.unwrapAsserts(), renaming.at(c.pos())));
                 }
-                yield new Ast.Match(rename(m.scrutinee(), renaming), cases, renaming.at(m.pos()),
-                        renaming.over(m.region()));
+                yield new Ast.Match(rename(m.scrutinee(), renaming), cases, m.origin(),
+                        renaming.at(m.pos()), renaming.over(m.region()));
             }
             case Ast.If iff -> new Ast.If(rename(iff.cond(), renaming), rename(iff.then(), renaming),
-                    rename(iff.els(), renaming), renaming.at(iff.pos()),
+                    rename(iff.els(), renaming), iff.origin(), renaming.at(iff.pos()),
                     renaming.over(iff.region()));
             // the success binder has its own BindingId, so a reference to it is not a candidate for
             // substitution, and neither the construction nor the else value can reach it
@@ -1756,7 +1756,7 @@ public final class HelperInliner {
                     rename(ic.construct(), renaming), renaming.copy().of(ic.binder()),
                     rename(ic.then(), renaming),
                     Ast.mapArms(ic.els(), body -> rename(body, renaming)),
-                    renaming.at(ic.pos()), renaming.over(ic.region()));
+                    ic.origin(), renaming.at(ic.pos()), renaming.over(ic.region()));
             case Ast.LetIn li -> {
                 Ast.Expr value = rename(li.value(), renaming);
                 Ast.Expr body = rename(li.body(), renaming);
@@ -1790,7 +1790,7 @@ public final class HelperInliner {
             case Ast.TupleGet tg -> new Ast.TupleGet(rename(tg.tuple(), renaming), tg.index(), tg.arity(),
                     renaming.at(tg.pos()), renaming.over(tg.region()));
             case Ast.ListComp comp -> new Ast.ListComp(rename(comp.element(), renaming),
-                    renameList(comp.guards(), renaming), renaming.at(comp.pos()),
+                    renameList(comp.guards(), renaming), comp.origin(), renaming.at(comp.pos()),
                     renaming.over(comp.region()));
             case Ast.Block block -> {
                 List<Ast.Binder> params = new ArrayList<>();

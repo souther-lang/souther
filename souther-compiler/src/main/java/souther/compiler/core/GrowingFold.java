@@ -406,7 +406,7 @@ public final class GrowingFold {
                 Core then = answers(iff.then(), acc, found, growth);
                 Core els = then == null ? null : answers(iff.els(), acc, found, growth);
                 return els == null ? null
-                        : new Core.If(iff.cond(), then, els, iff.type(), iff.pos());
+                        : new Core.If(iff.cond(), then, els, iff.origin(), iff.type(), iff.pos());
             }
             case Core.LetIn li -> {
                 if (acc.contains(li.binder().id()) && !(li.value() instanceof Core.Read v
@@ -429,7 +429,7 @@ public final class GrowingFold {
                     }
                     cases.add(new Core.Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos()));
                 }
-                return new Core.Match(m.scrutinee(), cases, m.type(), m.pos());
+                return new Core.Match(m.scrutinee(), cases, m.origin(), m.type(), m.pos());
             }
             // A call a representation kept standing is not part of the tree a fold grows in: this
             // reads what the backend emits, and that keeps none.

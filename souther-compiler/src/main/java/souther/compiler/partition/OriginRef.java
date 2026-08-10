@@ -59,13 +59,15 @@ public sealed interface OriginRef {
      *                          about the class the value is in and disagree here
      */
     record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
+                       souther.compiler.coverage.CoverageSites.Obligation comparison,
                        SourceRef at, boolean valueBelongsBelow, Witness witness,
                        boolean holdsAtTheValue, boolean singles) implements OriginRef {
 
         public GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, int site,
+                           souther.compiler.coverage.CoverageSites.Obligation comparison,
                            SourceRef at, boolean valueBelongsBelow, Witness witness,
                            boolean holdsAtTheValue) {
-            this(guard, site, at, valueBelongsBelow, witness, holdsAtTheValue, false);
+            this(guard, site, comparison, at, valueBelongsBelow, witness, holdsAtTheValue, false);
         }
 
         /** Which arms a row that reached this comparison can be in. */
@@ -98,6 +100,41 @@ public sealed interface OriginRef {
      * @param within the record whose own clauses decided where it stopped
      */
     record NarrowedOrigin(OriginRef bound, TypeName within) implements OriginRef {}
+
+    /**
+     * What tells one line from another, with nothing in it that says which copy of a body the line
+     * was read off.
+     *
+     * <p>A guard inside a non-recursive helper is read once per call of that helper, so one line the
+     * author drew arrives here as several. They carry different arms and a different comparison site
+     * — each is a real occurrence and each is measured on its own — and they are one line to write a
+     * row at. This is what says which of them are the same one.
+     *
+     * <p>A rule that is not a guard is its own line: nothing about an invariant or a type is read off
+     * a body, so there is nothing here that expansion could have duplicated.
+     *
+     * @param rule            the origin itself, for the rules that are their own line
+     * @param comparison      which comparison of which fork, for a guard's line
+     * @param narrowedWithin  the record a bound was taken in by, kept so that a narrowed line stays
+     *                        apart from the bare one it narrows
+     */
+    record Line(OriginRef rule, souther.compiler.coverage.CoverageSites.Obligation comparison,
+                boolean valueBelongsBelow, GuardOrigin.Witness witness, boolean holdsAtTheValue,
+                boolean singles, TypeName narrowedWithin) {}
+
+    /** The line this origin drew, said the way {@link Line} says it. */
+    default Line line() {
+        return switch (this) {
+            case GuardOrigin g -> new Line(null, g.comparison(), g.valueBelongsBelow(), g.witness(),
+                    g.holdsAtTheValue(), g.singles(), null);
+            case NarrowedOrigin n -> {
+                Line inner = n.bound().line();
+                yield new Line(inner.rule(), inner.comparison(), inner.valueBelongsBelow(),
+                        inner.witness(), inner.holdsAtTheValue(), inner.singles(), n.within());
+            }
+            default -> new Line(this, null, false, null, false, false, null);
+        };
+    }
 
     /** Where this came from, for a report to print. */
     default String describe() {

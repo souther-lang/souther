@@ -653,8 +653,67 @@ public final class Adequacy {
             return status != MeasurementStatus.NOT_APPLICABLE;
         }
 
+        /**
+         * The occurrences of each arm this behavior is owed a row for, in the order the body holds
+         * them.
+         *
+         * <p>Where the quotient is taken, and the only place. Everything below this — the probes, the
+         * proofs about what can reach what — is about one occurrence at a time, because a copy of an
+         * arm spliced under one call site is reachable on terms the copy under the next one does not
+         * share. What a row is owed for is the arm the author wrote, so the counts and the findings
+         * above this line are per key and not per copy.
+         */
+        private java.util.SequencedMap<souther.compiler.coverage.CoverageSites.Obligation,
+                List<souther.compiler.coverage.CoverageSites.Site>> byObligation() {
+            java.util.SequencedMap<souther.compiler.coverage.CoverageSites.Obligation,
+                    List<souther.compiler.coverage.CoverageSites.Site>> out = new LinkedHashMap<>();
+            for (souther.compiler.coverage.CoverageSites.Site site : all) {
+                out.computeIfAbsent(site.obligation(), _ -> new ArrayList<>()).add(site);
+            }
+            return out;
+        }
+
+        /**
+         * How many arms this behavior is owed a row for.
+         *
+         * <p>An arm is owed where something can reach any one of its occurrences: a helper called down
+         * a path a proof rules out is still owed rows through the paths it is called down elsewhere,
+         * and an arm nothing at all can reach was already taken out of {@link #all}.
+         */
+        public int obligations() {
+            return byObligation().size();
+        }
+
+        /** How many of them some row goes through — through any one occurrence, since going through
+         * an arm is going through it whichever call site the row arrived by. */
+        public int coveredObligations() {
+            int hit = 0;
+            for (List<souther.compiler.coverage.CoverageSites.Site> occurrences
+                    : byObligation().values()) {
+                if (occurrences.stream().anyMatch(site -> covered.contains(site.index()))) {
+                    hit++;
+                }
+            }
+            return hit;
+        }
+
+        /**
+         * The arms no row goes through, one entry per arm.
+         *
+         * <p>Named at the first occurrence the body holds. Where the copies keep the position they
+         * were written at they all say the same thing; where a copy was stamped with the call site
+         * that spliced it — a helper of another module — the occurrences are at different places and
+         * one of them has to be the one shown, since the arm is one arm and the report says so once.
+         */
         public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
-            return all.stream().filter(site -> !covered.contains(site.index())).toList();
+            List<souther.compiler.coverage.CoverageSites.Site> out = new ArrayList<>();
+            for (List<souther.compiler.coverage.CoverageSites.Site> occurrences
+                    : byObligation().values()) {
+                if (occurrences.stream().noneMatch(site -> covered.contains(site.index()))) {
+                    out.add(occurrences.get(0));
+                }
+            }
+            return List.copyOf(out);
         }
     }
 

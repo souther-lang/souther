@@ -132,8 +132,10 @@ public final class Lower {
         Ast.Expr result = new Ast.ListLit(List.of(comp.element()), comp.pos(), null);
         List<Ast.Expr> guards = comp.guards();
         for (int i = guards.size() - 1; i >= 0; i--) {
+            // The fork is derived from the comprehension rather than minted here, so a
+            // comprehension a helper holds answers the same in every body that expanded it.
             result = new Ast.If(guards.get(i), result, new Ast.ListLit(List.of(), comp.pos(), null),
-                    comp.pos(), comp.region());
+                    comp.origin().lowered(i), comp.pos(), comp.region());
         }
         return result;
     }

@@ -375,7 +375,7 @@ public final class GuardThresholds {
                 return null;
             }
             singled.add(new Guards.Singled(term, value,
-                    new OriginRef.GuardOrigin(guard, site,
+                    new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
                             new SourceRef(guard.at().sourceId(), iff.pos()),
                             true, placed.witness(), op == Ast.BinOp.EQ, true)));
             return term.path();
@@ -384,7 +384,7 @@ public final class GuardThresholds {
         // question as which class the value falls in: `x <= c` and `x > c` agree about the second.
         boolean holds = op == Ast.BinOp.LE || op == Ast.BinOp.GE;
         out.add(new Threshold(term, value, below,
-                new OriginRef.GuardOrigin(guard, site,
+                new OriginRef.GuardOrigin(guard, site, plan.site(site).obligation(),
                         new SourceRef(guard.at().sourceId(), iff.pos()),
                         below, placed.witness(), holds)));
         // Which side of the line the line's own value is on does not say which arm is which. `x <= c`
