@@ -609,8 +609,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
         for (BoundaryAssessment b : unpromised) {
-            out.append(String.format("      · not known to be writable: %s = %s (%s)%n",
-                    b.axis(), b.value(), b.origin()));
+            // What the search came to, beside the verdict it did not decide. Whether this edge is
+            // counted turns on whether a concrete value was accepted at it, so a reader looking at
+            // two models that differ here is looking at what the compiler could establish — and
+            // without this line the difference reads as the tool being arbitrary.
+            out.append(String.format("      · not known to be writable: %s = %s (%s)%s%n",
+                    b.axis(), b.value(), b.origin(), whatWasTried(b.attempt())));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
             out.append(String.format("      · not derivable: %s%n", f.args().get(0)));
@@ -737,6 +741,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return switch (reason) {
             case NO_LINES_DERIVED -> "not measured (no line was derived at any position)";
             case NO_SUBJECT -> "not applicable (this behavior is measured at its stages)";
+        };
+    }
+
+    /** What the search for a value at an edge came to, where it ran and found none. */
+    private static String whatWasTried(BoundaryAssessment.Attempt attempt) {
+        if (!(attempt instanceof BoundaryAssessment.Attempt.Unresolved left)) {
+            return "";   // nothing ran, and what a run would have said is not this line's to guess
+        }
+        return " — nothing composed one: " + left.why().said()
+                .orElseGet(() -> whyUnresolved(left.why()));
+    }
+
+    /** The category a search came back with, where the class it was about said nothing itself. */
+    private static String whyUnresolved(souther.compiler.partition.Generator.UnresolvedCombination why) {
+        String at = why.subject();
+        return switch (why.reason()) {
+            case NO_REPRESENTATIVE -> "no value stands for " + at;
+            case NOTHING_COMPOSES_ONE -> "nothing here composes a value at " + at;
+            case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
+            case SEARCH_LIMIT -> "the search stopped before reaching " + at;
         };
     }
 
