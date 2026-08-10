@@ -1,6 +1,9 @@
 package souther.compiler.diag;
 
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * The public identity of a compiler diagnostic.
@@ -194,6 +197,21 @@ public enum DiagnosticCode {
     E2306("the-source-is-made-of-tokens", "parse.title"),
     E2307("an-anonymous-union-is-not-written-in-a-narrow-type-position", "parse.title"),
     E2308("an-optional-is-not-written-inside-another-type", "parse.title");
+
+    /**
+     * The codes for a text the compiler could not read, one for each place the reading can stop.
+     *
+     * <p>Written out rather than derived from what the codes happen to point at. The specification
+     * lists the same places on its own side, and a comparison whose two sides come from one of them
+     * agrees with itself: a code that wandered off to some other rule would drop out of the
+     * comparison instead of failing it, which is exactly the drift worth catching.
+     */
+    public static Set<DiagnosticCode> whereAReadingStops() {
+        return WHERE_A_READING_STOPS;
+    }
+
+    private static final Set<DiagnosticCode> WHERE_A_READING_STOPS = Collections.unmodifiableSet(
+            EnumSet.of(E2301, E2302, E2303, E2304, E2305, E2306, E2307, E2308));
 
     private final String ruleAnchor;
     private final String titleKey;

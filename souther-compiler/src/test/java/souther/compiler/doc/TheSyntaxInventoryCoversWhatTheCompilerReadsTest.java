@@ -52,13 +52,13 @@ class TheSyntaxInventoryCoversWhatTheCompilerReadsTest {
     private static final String LEXED_BUT_UNREAD = "<-";
 
     @Test
-    void everySymbolTheLexerMakesIsInTheInventory() {
-        Set<String> lexer = new TreeSet<>(symbolsTheLexerMakes());
-        assertTrue(lexer.remove(LEXED_BUT_UNREAD),
-                "`" + LEXED_BUT_UNREAD + "` is no longer a token the lexer makes, so the inventory"
-                        + " no longer has to leave it out — drop this exception");
-        assertEquals(lexer, new TreeSet<>(symbolsTheInventoryLists()),
-                "the inventory and the lexer disagree about the symbols the language has");
+    void everySymbolTheKindsSpellIsInTheInventory() {
+        Set<String> spelled = new TreeSet<>(symbolsTheKindsSpell());
+        assertTrue(spelled.remove(LEXED_BUT_UNREAD),
+                "`" + LEXED_BUT_UNREAD + "` is no longer a kind at all, so the inventory no longer"
+                        + " has to leave it out — drop this exception");
+        assertEquals(spelled, new TreeSet<>(symbolsTheInventoryLists()),
+                "the inventory and the kinds disagree about the symbols the language has");
     }
 
     @Test
@@ -68,13 +68,16 @@ class TheSyntaxInventoryCoversWhatTheCompilerReadsTest {
     }
 
     /**
-     * Each punctuation and operator the lexer can make, as it is written.
+     * Each punctuation and operator, as {@link SyntaxKind} spells it. The lexer is not run: what is
+     * read is the kinds' own account of how each is written.
      *
      * <p>A symbol is a spelling with no letter in it, which is what separates one from a keyword and
      * from the kinds of the tree above the leaves — those spell themselves out of their own names,
-     * and a name is letters.
+     * and a name is letters. One enum holds both the leaves and the nodes, so that is the only
+     * handle there is; a kind above the leaves that spelled itself with punctuation would be taken
+     * for a symbol, and what would fix that is the enum saying which of its constants are tokens.
      */
-    private static Set<String> symbolsTheLexerMakes() {
+    private static Set<String> symbolsTheKindsSpell() {
         Set<String> symbols = new LinkedHashSet<>();
         for (SyntaxKind kind : SyntaxKind.values()) {
             if (kind.display() instanceof String spelled) {
