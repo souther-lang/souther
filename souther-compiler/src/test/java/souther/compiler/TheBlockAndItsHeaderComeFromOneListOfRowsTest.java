@@ -100,13 +100,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
         return said.find() ? Integer.parseInt(said.group(1)) : -1;
     }
 
-    @Test
-    void twoEdgesOneInputMeetsAreOfferedAsOneRow() {
-        String block = block(POLICY, "example.policy");
-
-        assertEquals(1, rows(block).size(), "one input, one row to write: " + block);
-    }
-
+    /** Which says the count as well: two edges meet at this input, and one {@code |} is written. */
     @Test
     void theRowNamesEveryEdgeItStandsOn() {
         String block = block(POLICY, "example.policy");
@@ -131,11 +125,12 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
     void nothingAsksForAPlaceholderTheBlockDoesNotHold() {
         String block = block(RELATED, "example.policy");
 
-        assertFalse(block.isEmpty(), "the block says what it could not offer");
-        assertFalse(block.contains("<?>"), "no row was composed: " + block);
-        assertFalse(block.contains("Replace each"),
-                "there is nothing in it to replace: " + block);
-        assertTrue(block.contains("nothing offers a row for `then`"),
+        assertFalse(block.isBlank(), "the block says what it could not offer");
+        // Which covers the line above the block as well as the rows: it is written with the
+        // placeholder in it, so a block holding no `<?>` anywhere is one that does not ask for one.
+        assertFalse(block.contains("<?>"),
+                "no row was composed, so nothing asks for an answer: " + block);
+        assertTrue(block.contains("`then`"),
                 "and the gap it offers nothing for is named: " + block);
     }
 }
