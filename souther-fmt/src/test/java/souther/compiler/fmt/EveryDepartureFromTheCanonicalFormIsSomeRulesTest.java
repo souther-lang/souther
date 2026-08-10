@@ -81,13 +81,19 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
             String canonical = form.layout().text();
             List<String> lines = List.of(canonical.split("\n", -1));
             List<String> shapes = shapesOf(form, lines);
+            Declarations standing = Declarations.of(lines);
             for (int i = 0; i < lines.size(); i++) {
+                Map<String, String> locally = standing == null ? null : standing.written(i);
                 for (Map.Entry<String, String> m : written(lines, i).entrySet()) {
                     String text = m.getValue();
                     String shape = shapes.get(i);
                     if (text == null || text.equals(canonical)
                             || seen.contains(m.getKey() + " of " + shape)) {
                         continue;   // this shape is already among them, written this way
+                    }
+                    if (locally != null
+                            && !standing.admits(m.getKey(), locally.get(m.getKey()), i)) {
+                        continue;   // the declaration this line is in already answers no
                     }
                     // The parse is what says the grammar still admits it, and the formatter takes
                     // what it produced rather than the text it came from — the same answer without
@@ -106,6 +112,117 @@ class EveryDepartureFromTheCanonicalFormIsSomeRulesTest {
             }
         }
         return out;
+    }
+
+    /**
+     * A canonical form cut into the declarations it is made of, so that a line written differently
+     * is answered by the declaration it is in rather than by the whole file.
+     *
+     * <p>A candidate differs from its source in one line, and the formatter answers a module by
+     * answering each of its declarations: put back together, a declaration canonicalised on its own
+     * with the header in front is what stands there in the whole. So a declaration whose canonical
+     * form the change did not survive is a change the whole file will not survive either, and that
+     * is a smaller question — for the longest source here, one twenty-first of the text.
+     *
+     * <p>It is used to refuse and never to admit. What is kept is still decided by the whole file,
+     * so nothing here decides what a departure is; the only thing a mistake in it can do is drop a
+     * candidate, which the number of rows says.
+     */
+    private record Declarations(String header, List<List<String>> pieces, List<String> canonical,
+            List<Integer> opensAt) {
+
+        /**
+         * The declarations of {@code lines}: what opens at column zero under a blank line, and the
+         * header everything before the first of them.
+         */
+        static Declarations of(List<String> lines) {
+            List<Integer> opens = new ArrayList<>();
+            for (int i = 0; i < lines.size(); i++) {
+                String line = lines.get(i);
+                boolean opensOne = !line.isBlank() && !line.startsWith(" ")
+                        && !line.startsWith("module") && !line.startsWith("import");
+                if (opensOne && (i == 0 || lines.get(i - 1).isBlank())) {
+                    opens.add(i);
+                }
+            }
+            if (opens.size() < 2) {
+                return null;   // one declaration is the whole file, and there is nothing to save
+            }
+            String header = String.join("\n", lines.subList(0, opens.get(0)));
+            List<List<String>> pieces = new ArrayList<>();
+            List<String> canonical = new ArrayList<>();
+            for (int d = 0; d < opens.size(); d++) {
+                int to = d + 1 < opens.size() ? opens.get(d + 1) : lines.size();
+                List<String> piece = lines.subList(opens.get(d), to);
+                pieces.add(piece);
+                String alone = header + "\n" + String.join("\n", piece);
+                CstParser.Result parsed = CstParser.parse(alone);
+                // A declaration that will not stand on its own, or that the formatter writes
+                // differently when it does, is one this cannot answer for. Its own canonical form
+                // is recorded as absent and every candidate in it goes to the whole file.
+                canonical.add(parsed.errors().isEmpty()
+                        && Formatter.format(parsed.root()).equals(alone) ? alone : null);
+            }
+            return new Declarations(header, pieces, canonical, opens);
+        }
+
+        /** Which declaration line {@code i} is in, or -1 where this cannot answer for it. */
+        private int at(int i) {
+            for (int d = 0; d < opensAt.size(); d++) {
+                int from = opensAt.get(d);
+                int to = d + 1 < opensAt.size() ? opensAt.get(d + 1) : Integer.MAX_VALUE;
+                if (i >= from && i < to) {
+                    // The first line of a declaration and the last are where a blank line written
+                    // in and two lines run together reach the declaration next door, which is a
+                    // question about the file rather than about either of them.
+                    return canonical.get(d) == null ? -1 : d;
+                }
+            }
+            return -1;   // the header
+        }
+
+        /**
+         * Whether writing line {@code i} that way reaches the declaration after it.
+         *
+         * <p>Two of them do: a line run on into the next one, and a blank line written under it.
+         * Written under the last line of a declaration, both are about what stands between two of
+         * them, which is the file's question and not either declaration's. The rest write the line
+         * where it stands.
+         *
+         * <p>What this buys is the refusal below being sound rather than any row: filtering those
+         * two as well leaves this corpus with the same 481, since none of them is admitted here
+         * anyway. It is the local question being a part of the whole one that the refusal rests on,
+         * and for these two it is not.
+         */
+        private boolean reachesTheNextOne(String kind, int i, int d) {
+            int to = d + 1 < opensAt.size() ? opensAt.get(d + 1) : Integer.MAX_VALUE;
+            boolean last = i == to - 1;
+            return last && ("run on into the next line".equals(kind)
+                    || "with a blank line under it".equals(kind));
+        }
+
+        /** Line {@code i} written every way, inside its declaration alone. */
+        Map<String, String> written(int i) {
+            int d = at(i);
+            if (d < 0) {
+                return null;
+            }
+            List<String> piece = pieces.get(d);
+            return EveryDepartureFromTheCanonicalFormIsSomeRulesTest
+                    .written(piece, i - opensAt.get(d));
+        }
+
+        /** Whether {@code local} is still the declaration's canonical form, written that way. */
+        boolean admits(String kind, String local, int i) {
+            int d = at(i);
+            if (d < 0 || local == null || reachesTheNextOne(kind, i, d)) {
+                return true;   // nothing was asked, so nothing is refused
+            }
+            String alone = header + "\n" + local;
+            CstParser.Result parsed = CstParser.parse(alone);
+            return parsed.errors().isEmpty()
+                    && Formatter.format(parsed.root()).equals(canonical.get(d));
+        }
     }
 
     /**
