@@ -1243,16 +1243,19 @@ The check is intraprocedural. Within a behavior's `+let+` body it seeds what the
 
 Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
 
-[,text]
+[,souther]
 ----
-data Money = Decimal invariant value >= 0m
-data WithdrawRequest = { balance: Money, amount: Money }
+data Money = Decimal
+    invariant value >= 0m
+data WithdrawRequest =
+    { balance: Money
+    , amount: Money
+    }
 
 behavior withdraw : (req: WithdrawRequest) -> Money | InsufficientBalance
 let withdraw (req) = {
-    guard req.amount <= req.balance
-        else InsufficientBalance
-    req.balance - req.amount          // discharged: the guard proves balance - amount >= 0
+    guard req.amount <= req.balance else InsufficientBalance
+    req.balance - req.amount // discharged: the guard proves balance - amount >= 0
 }
 ----
 
@@ -1265,15 +1268,15 @@ An *attempted* construction (<<attempted-construction>>) is never possibly viola
 
 A term it compares is the numeric content of a location — a parameter, a field chain, a newtype's wrapped value — or the size of a container or a string: `+List.length+`, `+String.length+`, `+Set.size+`, `+Map.size+` applied to such a location. A value the body reaches nowhere else is a location too, and carries what its type guarantees exactly as a parameter does: what a `+match+` arm binds, and what a standard-library operation hands its closure — an element, and a fold's accumulator. A size is named by the location it is taken of, so a guard and an invariant clause mean the same term exactly when they take the size of the same one. The size of a container is never negative, and the procedure knows that much without being told.
 
-[,text]
+[,souther]
 ----
-data Lines = List<Line> invariant List.length(value) >= 1
+data Lines = List<Line>
+    invariant List.length(value) >= 1
 
 behavior build : (rows: List<Line>) -> Lines | NoRows
 let build (rows) = {
-    guard List.length(rows) >= 1
-        else NoRows
-    Lines(rows)                       // discharged: the guard sizes the same list
+    guard List.length(rows) >= 1 else NoRows
+    Lines(rows) // discharged: the guard sizes the same list
 }
 ----
 
@@ -1358,15 +1361,15 @@ What each keeps:
 
 So `+List.length(List.map(f, xs))+` *is* `+List.length(xs)+` — how the elements are made has no bearing on how many there are — and a guard on the length of `+xs+` discharges a construction from the mapped list. `+List.length(List.filter(p, xs))+` is its own term, no greater than `+List.length(xs)+`: an upper bound on the input bounds the result, and a lower bound on the input says nothing.
 
-[,text]
+[,souther]
 ----
-data Lines = List<Line> invariant List.length(value) >= 1
+data Lines = List<Line>
+    invariant List.length(value) >= 1
 
 behavior build : (rows: List<Row>) -> Lines | NoRows
 let build (rows) = {
-    guard List.length(rows) >= 1
-        else NoRows
-    Lines(List.map(toLine, rows))     // discharged: a mapping keeps the length
+    guard List.length(rows) >= 1 else NoRows
+    Lines(List.map(toLine, rows)) // discharged: a mapping keeps the length
 }
 ----
 
@@ -1462,15 +1465,15 @@ A relation the clause in turn states of a container is read at that container's 
 
 Not every invariant is a comparison. `+List.allDistinctBy(.product, value)+`, `+List.contains(value, codes)+` and `+String.matches("[A-Z]{2}-[0-9]{4}", value)+` state something about a value that no arithmetic relates to anything else. Such a clause is *settled* by a guard rather than derived: a `+guard+` states its condition where it does not depart and denies it where it does, and a construction under a guard stating the clause is discharged, one under a guard denying it a violation.
 
-[,text]
+[,souther]
 ----
-data Lines = List<Line> invariant List.allDistinctBy(.product, value)
+data Lines = List<Line>
+    invariant List.allDistinctBy(.product, value)
 
 behavior build : (rows: List<Line>) -> Lines | DuplicateProduct
 let build (rows) = {
-    guard List.allDistinctBy(.product, rows)
-        else DuplicateProduct
-    Lines(rows)                       // discharged: the guard states the clause
+    guard List.allDistinctBy(.product, rows) else DuplicateProduct
+    Lines(rows) // discharged: the guard states the clause
 }
 ----
 
@@ -2054,11 +2057,10 @@ The DSL holds only these two because it places side effects at the ends of a wor
 
 What is written in `+depends on+` appears as a `+let+` argument, after the business inputs, in declaration order.
 
-[,text]
+[,souther]
 ----
 let preApprove (request, approverId, now) = {
-    guard approverId == request.applicant.managerId
-        else NotAuthorized
+    guard approverId == request.applicant.managerId else NotAuthorized
 
     PreApproved { ...request, preApprovedAt = now(), preApprover = approverId }
 }
@@ -2189,15 +2191,17 @@ let isOver (amount: Amount) = amount > ceiling // a function
 
 A value is named where the value it stands for would be written, and it may be spread (`+Drafting { ...standardRequest, estimatedCost = Amount(50000) }+`). A behavior taking nothing is implemented by a value, since the parameter counts agree.
 
-[,text]
+[,souther]
 ----
-behavior preApprove : (request: AwaitingPreApproval, approverId: EmployeeId) -> PreApproved | NotAuthorized
+behavior preApprove : (
+    request: AwaitingPreApproval,
+    approverId: EmployeeId
+) -> PreApproved | NotAuthorized
     depends on now
     constructs PreApproved, NotAuthorized
 
 let preApprove (request, approverId, now) = {
-    guard approverId == request.applicant.managerId
-        else NotAuthorized
+    guard approverId == request.applicant.managerId else NotAuthorized
 
     PreApproved { ...request, preApprovedAt = now(), preApprover = approverId }
 }
@@ -2567,15 +2571,15 @@ Accumulation (applicative) is inside the decode boundary; case propagation is be
 
 An `+example+` attaches compile-time-checked test rows to a behavior. It is evaluated as part of compilation: a row that does not hold is a compile error (<<e1905>>), so a stale example cannot survive a build. An `+example+` is not exposed and produces no run-time class.
 
-[,text]
+[,souther]
 ----
 example submitTravelRequest
-    | "within the ceiling it submits" :
-        (Drafting { applicant = EmployeeId("e-001"), estimatedCost = Amount(50000) })
-            -> Submitted
-    | "over the ceiling waits for pre-approval" :
-        (Drafting { applicant = EmployeeId("e-001"), estimatedCost = Amount(100001) })
-            -> AwaitingPreApproval
+    | "within the ceiling it submits"
+        : (Drafting { applicant = EmployeeId("e-001"), estimatedCost = Amount(50000) })
+        -> Submitted
+    | "over the ceiling waits for pre-approval"
+        : (Drafting { applicant = EmployeeId("e-001"), estimatedCost = Amount(100001) })
+        -> AwaitingPreApproval
 ----
 
 What a row is held to, and what holding a build to it requires:
@@ -2615,14 +2619,16 @@ A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>-
 
 A composition's row is written like any other. Its arguments are the first stage's (<<sequential-composition>>), and its expected result is any case of the composition's output — including one that departed the main line at an earlier stage (<<type-routing>>), which is the part no stage's own example can state, because the routing is not any stage's rule.
 
-[,text]
+[,souther]
 ----
-behavior winOrder = settleQuote >-> makeOrder
-    -> Order | BelowFloor
+behavior winOrder = settleQuote >-> makeOrder -> Order | BelowFloor
 
 example winOrder
-    | "meeting the floor wins the order" : (Negotiating { floor = Amount(100) }, Amount(200)) -> Order
-    | "below the floor it stops here"    : (Negotiating { floor = Amount(100) }, Amount(50))
+    | "meeting the floor wins the order"
+        : (Negotiating { floor = Amount(100) }, Amount(200))
+        -> Order
+    | "below the floor it stops here"
+        : (Negotiating { floor = Amount(100) }, Amount(50))
         -> BelowFloor { floor = Amount(100), offered = Amount(50) }
 ----
 
@@ -3201,11 +3207,10 @@ takes; write the construction out (`+T(a.value - b.value)+`).
 
 `+{ ... }+` is an expression. Place `+let+`s and `+guard+`s, then put the result expression last.
 
-[,text]
+[,souther]
 ----
 let preApprove (request, approverId) = {
-    guard approverId == request.applicant.managerId
-        else NotAuthorized
+    guard approverId == request.applicant.managerId else NotAuthorized
 
     PreApproved { ...request, preApprovedAt = now(), preApprover = approverId }
 }
