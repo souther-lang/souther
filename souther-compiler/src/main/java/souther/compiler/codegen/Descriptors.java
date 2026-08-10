@@ -167,7 +167,9 @@ final class Descriptors {
     static final MethodTypeDesc MTD_bdDivide =
             MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, ConstantDescs.CD_int, CD_JavaRoundingMode);
     static final ClassDesc CD_LocalDate = ClassDesc.of("java.time.LocalDate");
+    static final ClassDesc CD_LocalTime = ClassDesc.of("java.time.LocalTime");
     static final ClassDesc CD_LocalDateTime = ClassDesc.of("java.time.LocalDateTime");
+    static final ClassDesc CD_Instant = ClassDesc.of("java.time.Instant");
     static final ClassDesc CD_Lists = ClassDesc.of("souther.runtime.Lists");
     static final ClassDesc CD_Strings = ClassDesc.of("souther.runtime.Strings");
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
@@ -350,6 +352,11 @@ final class Descriptors {
     // shapes call the typed decoder's own constraint, and what is left calls `refine` with the
     // invariant as a predicate.
     static final ClassDesc CD_Predicate = ClassDesc.of("java.util.function.Predicate");
+    /** {@code TemporalDecoder.refine(Predicate, code, message)}: the temporal leaf narrowed to what
+     *  the language can hold — a {@code Time} and a {@code DateTime} to the second. Returns the
+     *  temporal decoder itself, so a chain stays one. */
+    static final MethodTypeDesc MTD_refineTemporal =
+            MethodTypeDesc.of(CD_TemporalDecoder, CD_Predicate, CD_String, CD_String);
     static final ClassDesc CD_Pattern = ClassDesc.of("java.util.regex.Pattern");
     static final MethodTypeDesc MTD_patternCompile = MethodTypeDesc.of(CD_Pattern, CD_String);
     static final MethodTypeDesc MTD_strLengthBound = MethodTypeDesc.of(CD_StringDecoder, ConstantDescs.CD_int);

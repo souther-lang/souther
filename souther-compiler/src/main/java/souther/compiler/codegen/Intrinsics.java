@@ -182,7 +182,9 @@ final class Intrinsics {
                 case DECIMAL -> CD_BigDecimal;
                 case STRING -> CD_String;
                 case DATE -> CD_LocalDate;
+                case TIME -> CD_LocalTime;
                 case DATETIME -> CD_LocalDateTime;
+                case INSTANT -> CD_Instant;
                 case RAW -> CD_Object;
             };
         }
@@ -353,6 +355,13 @@ final class Intrinsics {
         t.put("date.year", rt(CD_Temporals, "year", order(0), ts -> Type.INT));
         t.put("date.month", rt(CD_Temporals, "month", order(0), ts -> Type.INT));
         t.put("date.day", rt(CD_Temporals, "day", order(0), ts -> Type.INT));
+        // Building from parts: partial, so the declaration states `Date | NotADate` and the emitter
+        // takes the result from it rather than working one out.
+        t.put("date.fromParts", rtDeclared(CD_Temporals, "fromDateParts", order(0, 1, 2)));
+        t.put("time.fromParts", rtDeclared(CD_Temporals, "fromTimeParts", order(0, 1, 2)));
+        t.put("time.hour", rt(CD_Temporals, "hour", order(0), ts -> Type.INT));
+        t.put("time.minute", rt(CD_Temporals, "minute", order(0), ts -> Type.INT));
+        t.put("time.second", rt(CD_Temporals, "second", order(0), ts -> Type.INT));
         t.put("datetime.addMinutes",
                 jdk(CD_LocalDateTime, "plusMinutes", mtd(CD_LocalDateTime, lng), order(1, 0), Type.DATETIME));
         t.put("datetime.addHours",
@@ -362,6 +371,12 @@ final class Intrinsics {
         t.put("datetime.minutesBetween", rt(CD_Temporals, "minutesBetween", order(0, 1), ts -> Type.INT));
         t.put("datetime.toDate",
                 jdk(CD_LocalDateTime, "toLocalDate", mtd(CD_LocalDate), order(0), Type.DATE));
+        t.put("datetime.toTime",
+                jdk(CD_LocalDateTime, "toLocalTime", mtd(CD_LocalTime), order(0), Type.TIME));
+        // A date and a time of day are both settled values, so joining them cannot fail: total, with
+        // the date as the receiver of `LocalDate.atTime`.
+        t.put("datetime.fromDateAndTime",
+                jdk(CD_LocalDate, "atTime", mtd(CD_LocalDateTime, CD_LocalTime), order(0, 1), Type.DATETIME));
 
         // Int — IntMath statics. add/subtract/multiply share the overflow-aborting kernel with the
         // `+ - *` operators; modBy aborts on a zero divisor; compare returns -1/0/1.

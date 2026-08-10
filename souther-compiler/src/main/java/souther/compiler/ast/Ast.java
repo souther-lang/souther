@@ -772,7 +772,7 @@ public interface Ast {
     }
 
     /** The kind of primitive Raw a single-value decoder reads / an encoder writes. */
-    enum RawKind { TEXT, INT, BOOL, DECIMAL, DATE, DATETIME }
+    enum RawKind { TEXT, INT, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT }
 
     // --- decoders ---
 

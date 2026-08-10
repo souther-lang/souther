@@ -1,0 +1,28 @@
+module souther.time
+
+// A local time of day (ADR-0028, [#stdlib-time]). `Time` is `java.time.LocalTime` held to the
+// second: what a `DateTime` carries beside its `Date` ([#stdlib-datetime]), and what a model naming
+// an opening hour holds on its own, where writing a `DateTime` would invent a day the domain does
+// not have.
+//
+// `fromParts` reads three Ints as a time of day and answers `NotATime` where they name none — hour
+// 24, minute 60, the leap second. The parts are values rather than text, so the refusal is a
+// business result at the position that built it, not a compile error ([#temporal-literal] is where
+// a written time is refused at compile time instead). This is the same shape `String.toInt` has,
+// and for the same reason: what a caller may hand over is not known until it runs.
+//
+//     Time.fromParts(Time.hour(t), Time.minute(t), Time.second(t)) == t
+//
+// holds for every `Time`, which is what makes this the inverse of the readers rather than a second
+// way in that answers something else.
+let fromParts (hour: Int, minute: Int, second: Int): Time | NotATime = intrinsic "time.fromParts"
+
+// The parts of a time, as `Date.year` / `month` / `day` are the parts of a date ([#stdlib-date]).
+// All three are Ints: the hour 0 to 23, the minute and the second 0 to 59.
+let hour (t: Time): Int = intrinsic "time.hour"
+let minute (t: Time): Int = intrinsic "time.minute"
+let second (t: Time): Int = intrinsic "time.second"
+// There is no time arithmetic here. Adding to a time of day has to say what happens at midnight —
+// whether 23:30 plus an hour is 00:30 or is nothing — and that is a decision about the domain
+// rather than about the clock. A model that needs it holds a `DateTime` and adds there, where the
+// day is present to carry the answer.

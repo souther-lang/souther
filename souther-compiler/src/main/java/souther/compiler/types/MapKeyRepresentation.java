@@ -47,11 +47,27 @@ public sealed interface MapKeyRepresentation {
         }
     }
 
+    /** A {@code Time}, as its ISO form. */
+    record Time() implements MapKeyRepresentation {
+        @Override
+        public Type type() {
+            return Type.TIME;
+        }
+    }
+
     /** A {@code DateTime}, as its ISO form. */
     record DateTime() implements MapKeyRepresentation {
         @Override
         public Type type() {
             return Type.DATETIME;
+        }
+    }
+
+    /** An {@code Instant}, as its ISO form. */
+    record Instant() implements MapKeyRepresentation {
+        @Override
+        public Type type() {
+            return Type.INSTANT;
         }
     }
 

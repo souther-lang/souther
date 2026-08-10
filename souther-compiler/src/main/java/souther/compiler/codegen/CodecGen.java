@@ -142,9 +142,17 @@ final class CodecGen {
                 emitStringLeaf(code, CD_ObjectDecoders);
                 code.invokevirtual(CD_StringDecoder, "date", MTD_leafTemporal);
             }
+            case MapKeyRepresentation.Time _ -> {
+                emitStringLeaf(code, CD_ObjectDecoders);
+                code.invokevirtual(CD_StringDecoder, "time", MTD_leafTemporal);
+            }
             case MapKeyRepresentation.DateTime _ -> {
                 emitStringLeaf(code, CD_ObjectDecoders);
                 code.invokevirtual(CD_StringDecoder, "dateTime", MTD_leafTemporal);
+            }
+            case MapKeyRepresentation.Instant _ -> {
+                emitStringLeaf(code, CD_ObjectDecoders);
+                code.invokevirtual(CD_StringDecoder, "iso8601", MTD_leafTemporal);
             }
         }
     }
@@ -176,7 +184,9 @@ final class CodecGen {
             case MapKeyRepresentation.UnitEnum e -> "__rekey$" + e.name().qualified().replace('.', '$');
             case MapKeyRepresentation.Text _ -> "__rekey$$STRING";
             case MapKeyRepresentation.Date _ -> "__rekey$$DATE";
+            case MapKeyRepresentation.Time _ -> "__rekey$$TIME";
             case MapKeyRepresentation.DateTime _ -> "__rekey$$DATETIME";
+            case MapKeyRepresentation.Instant _ -> "__rekey$$INSTANT";
         };
     }
 
@@ -219,7 +229,8 @@ final class CodecGen {
             }
             // a temporal renders as its ISO form, which is its `toString` — the same rendering an
             // IsoTextRaw field gets
-            case MapKeyRepresentation.Date _, MapKeyRepresentation.DateTime _ -> DynamicCallSiteDesc.of(
+            case MapKeyRepresentation.Date _, MapKeyRepresentation.Time _,
+                 MapKeyRepresentation.DateTime _, MapKeyRepresentation.Instant _ -> DynamicCallSiteDesc.of(
                     BSM_METAFACTORY, "apply",
                     MethodTypeDesc.of(CD_Function),
                     MethodTypeDesc.of(CD_Object, CD_Object),
@@ -891,20 +902,64 @@ final class CodecGen {
             case INT -> code.invokestatic(owner, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(owner, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(owner, "decimal", MTD_leafDecimal);
-            case DATE -> emitTemporalLeaf(code, src, "date");
-            case DATETIME -> emitTemporalLeaf(code, src, "dateTime");
+            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
+            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
+            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
+            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
+    }
+
+    /** Raoh's code for text whose shape is wrong, so a fraction of a second is reported as the same
+     *  kind of failure at the same path as a date that does not parse. */
+    private static final String SUB_SECOND_CODE = "invalid_format";
+
+    private static final String SUB_SECOND_MESSAGE = "holds no fraction of a second";
+
+    /** {@code Temporals::toTheSecond} as a {@code Predicate}, for the leaf refinement below. */
+    private static final DynamicCallSiteDesc TO_THE_SECOND = DynamicCallSiteDesc.of(
+            BSM_METAFACTORY, "test",
+            MethodTypeDesc.of(CD_Predicate),                                   // no captures
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),            // samMethodType
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
+                    "toTheSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));           // instantiated
+
+    /** The Raoh leaf factory each temporal is parsed by. An exhaustive expression rather than a name
+     * passed in by the caller: the two switches that emit a leaf are statements, which javac does not
+     * hold to covering an enum, so the one place that has to name every temporal is this. */
+    private static String temporalFactory(Type.Prim temporal) {
+        return switch (temporal) {
+            case DATE -> "date";
+            case TIME -> "time";
+            case DATETIME -> "dateTime";
+            case INSTANT -> "iso8601";
+            case INT, STRING, BOOL, DECIMAL, RAW ->
+                    throw new IllegalStateException(temporal.shown() + " is not a temporal");
+        };
     }
 
     /** Emits a temporal leaf decoder. {@code JsonDecoders} has no {@code date()}/{@code dateTime()}
      * factory — a JSON temporal is a string that is then parsed (Raoh's {@code string().date()}),
-     * whereas the neutral/map source has a direct static factory. */
-    private void emitTemporalLeaf(CodeBuilder code, Src src, String method) {
+     * whereas the neutral/map source has a direct static factory.
+     *
+     * <p>A {@code Time} and a {@code DateTime} are then held to the second. They carry no fraction of
+     * one (spec §temporal-literal), so text that has one says something the domain cannot hold, and
+     * the boundary reports that rather than dropping it: a value silently rounded reads to everything
+     * downstream as the value that was sent. {@code Instant} is the temporal that keeps a sub-second
+     * reading and is not refined; a {@code Date} has no time of day to carry one. */
+    private void emitTemporalLeaf(CodeBuilder code, Src src, Type.Prim temporal) {
+        String method = temporalFactory(temporal);
         if (src == Src.JSON) {
             emitStringLeaf(code, CD_JsonDecoders);
             code.invokevirtual(CD_StringDecoder, method, MTD_leafTemporal);
         } else {
             code.invokestatic(srcLeafOwner(src), method, MTD_leafTemporal);
+        }
+        if (temporal == Type.Prim.TIME || temporal == Type.Prim.DATETIME) {
+            code.invokedynamic(TO_THE_SECOND);
+            code.loadConstant(SUB_SECOND_CODE);
+            code.loadConstant(SUB_SECOND_MESSAGE);
+            code.invokevirtual(CD_TemporalDecoder, "refine", MTD_refineTemporal);
         }
     }
 
@@ -922,8 +977,10 @@ final class CodecGen {
             case INT -> code.invokestatic(leaf, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(leaf, "decimal", MTD_leafDecimal);
-            case DATE -> emitTemporalLeaf(code, src, "date");
-            case DATETIME -> emitTemporalLeaf(code, src, "dateTime");
+            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
+            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
+            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
+            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
         emitInvariantConstraints(code, cdName, inputType, invariants);
         code.aload(1);                                                 // in (bare value)
@@ -1977,7 +2034,9 @@ final class CodecGen {
             case BOOL -> "bool";
             case DECIMAL -> "decimal";
             case DATE -> "date";
+            case TIME -> "time";
             case DATETIME -> "dateTime";
+            case INSTANT -> "iso8601";
         };
     }
 }

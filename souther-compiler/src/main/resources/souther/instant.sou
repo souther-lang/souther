@@ -1,0 +1,18 @@
+module souther.instant
+// A moment on the timeline (ADR-0028, [#stdlib-instant]). `Instant` is `java.time.Instant`, held to
+// the nanosecond because that is what an outside timestamp says and dropping it would make a value
+// written back out differ from the one that arrived.
+//
+// This module declares no function, and that is the rule rather than a gap waiting to be filled. An
+// `Instant` has no year, no month and no hour until a zone says which day it fell on, and the
+// language names no zone — the boundary owns it ([#primitives]). So there is nothing here to read a
+// part with, and nothing to build one from parts either: the two directions are absent together,
+// which is what keeps this from being the hole [#stdlib-date] had.
+//
+// What a model does with one it does without this module. Two `Instant`s compare, so a model says
+// which came first with `<` ([#primitives]); one keys a `Map` ([#collections]); one is written as a
+// literal in a fixture ([#temporal-literal]). Turning one into a `DateTime` needs the zone, so a
+// model declares that as a behavior with no implementation and the Java side supplies it, exactly
+// as it does for reading the current time ([#injected-behavior]):
+//
+//     behavior localDateTime : (at: Instant) -> DateTime

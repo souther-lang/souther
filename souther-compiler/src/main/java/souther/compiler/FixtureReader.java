@@ -296,7 +296,9 @@ public final class FixtureReader {
             case "Bool" -> "java.lang.Boolean";
             case "Decimal" -> "java.math.BigDecimal";
             case "Date" -> "java.time.LocalDate";
+            case "Time" -> "java.time.LocalTime";
             case "DateTime" -> "java.time.LocalDateTime";
+            case "Instant" -> "java.time.Instant";
             default -> null;
         };
         String is = value.getClass().getName();
@@ -605,8 +607,15 @@ public final class FixtureReader {
         if (v instanceof String s) {
             return "\"" + s + "\"";
         }
-        if (v instanceof java.time.LocalDate || v instanceof java.time.LocalDateTime) {
-            return (v instanceof java.time.LocalDate ? "Date(\"" : "DateTime(\"") + v + "\")";
+        String temporal = switch (v) {
+            case java.time.LocalDate _ -> "Date";
+            case java.time.LocalTime _ -> "Time";
+            case java.time.LocalDateTime _ -> "DateTime";
+            case java.time.Instant _ -> "Instant";
+            default -> null;
+        };
+        if (temporal != null) {
+            return temporal + "(\"" + v + "\")";
         }
         if (v instanceof Map<?, ?> m) {
             List<String> entries = new ArrayList<>();
@@ -969,7 +978,8 @@ public final class FixtureReader {
     }
 
     private Object newtypeInner(Ast.Apply c, Type expected) {
-        if ("Date".equals(c.reaches()) || "DateTime".equals(c.reaches())) {
+        Type.Prim written = Type.Prim.named(c.reaches());
+        if (written != null && written.temporal()) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
@@ -1188,7 +1198,9 @@ public final class FixtureReader {
             case BOOL -> ObjectDecoders.bool();
             case DECIMAL -> ObjectDecoders.decimal();
             case DATE -> ObjectDecoders.date();
+            case TIME -> ObjectDecoders.time();
             case DATETIME -> ObjectDecoders.dateTime();
+            case INSTANT -> ObjectDecoders.iso8601();
         };
     }
 

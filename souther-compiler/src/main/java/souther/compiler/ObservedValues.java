@@ -61,7 +61,9 @@ final class ObservedValues {
             case BigDecimal d -> new ObservedValue.Decimal(d);
             case String s -> text(s);
             case java.time.LocalDate d -> new ObservedValue.Temporal(d.toString());
+            case java.time.LocalTime t -> new ObservedValue.Temporal(t.toString());
             case java.time.LocalDateTime d -> new ObservedValue.Temporal(d.toString());
+            case java.time.Instant i -> new ObservedValue.Temporal(i.toString());
             case Map<?, ?> m -> mapping(m, depth);
             case Iterable<?> it -> sequence(it, depth);
             default -> constructed(live, depth);

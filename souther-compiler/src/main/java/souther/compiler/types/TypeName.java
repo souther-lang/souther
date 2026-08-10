@@ -48,12 +48,7 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
         if (!isPrimitive()) {
             return null;
         }
-        for (Type.Prim prim : Type.Prim.values()) {
-            if (prim.shown().equals(name())) {
-                return prim;
-            }
-        }
-        return null;
+        return Type.Prim.named(name());
     }
 
     /** A built-in error case ({@code DivisionByZero}). */

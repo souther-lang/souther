@@ -552,7 +552,9 @@ public final class Runner {
             case MapKeyRepresentation.UnitEnum e -> codecOf(loader, e.name(), "decoder");
             case MapKeyRepresentation.Text _ -> text();
             case MapKeyRepresentation.Date _ -> text().date();
+            case MapKeyRepresentation.Time _ -> text().time();
             case MapKeyRepresentation.DateTime _ -> text().dateTime();
+            case MapKeyRepresentation.Instant _ -> text().iso8601();
         };
     }
 
@@ -634,7 +636,9 @@ public final class Runner {
             case BOOL -> JsonDecoders.bool();
             case DECIMAL -> JsonDecoders.decimal();
             case DATE -> JsonDecoders.string().date();
+            case TIME -> JsonDecoders.string().time();
             case DATETIME -> JsonDecoders.string().dateTime();
+            case INSTANT -> JsonDecoders.string().iso8601();
         };
     }
 
@@ -700,7 +704,9 @@ public final class Runner {
         return (String) switch (key.representation()) {
             case MapKeyRepresentation.Text _ -> encodeLeaf(LeafScalar.STRING, value);
             case MapKeyRepresentation.Date _ -> encodeLeaf(LeafScalar.DATE, value);
+            case MapKeyRepresentation.Time _ -> encodeLeaf(LeafScalar.TIME, value);
             case MapKeyRepresentation.DateTime _ -> encodeLeaf(LeafScalar.DATETIME, value);
+            case MapKeyRepresentation.Instant _ -> encodeLeaf(LeafScalar.INSTANT, value);
             case MapKeyRepresentation.StringNewtype n ->
                     encodeThrough(loader, n.name().qualified(), value);
             case MapKeyRepresentation.UnitEnum e ->
@@ -740,7 +746,9 @@ public final class Runner {
             case DECIMAL -> ObjectEncoders.decimal()
                     .encode(Representations.canonicalNumber((java.math.BigDecimal) value));
             case DATE -> ObjectEncoders.date().encode((java.time.LocalDate) value);
+            case TIME -> ObjectEncoders.time().encode((java.time.LocalTime) value);
             case DATETIME -> ObjectEncoders.dateTime().encode((java.time.LocalDateTime) value);
+            case INSTANT -> ObjectEncoders.iso8601().encode((java.time.Instant) value);
         };
     }
 
