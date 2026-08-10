@@ -199,9 +199,11 @@ final class Witnesses {
         }
 
         Pairing(String source, String text) {
-            this(code(CstParser.parse(source).root()), code(CstParser.parse(text).root()),
-                    comments(CstParser.parse(source).root()),
-                    comments(CstParser.parse(text).root()));
+            this(CstParser.parse(source).root(), CstParser.parse(text).root());
+        }
+
+        private Pairing(SyntaxNode source, SyntaxNode text) {
+            this(code(source), code(text), comments(source), comments(text));
         }
     }
 
