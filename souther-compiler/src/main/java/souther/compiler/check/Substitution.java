@@ -1,11 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.diag.msg.TypeMessage;
-import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 
@@ -58,31 +52,6 @@ final class Substitution {
     }
 
     /**
-     * Reads {@code actual} against {@code declared}: records what it says about the variables
-     * {@code declared} carries, and holds it to everything {@code declared} states.
-     *
-     * <p>A variable is a hole, not a licence. {@code List<'a>} says the value is a list and leaves
-     * what it holds open; {@code Map<String, 'a>} says it is a map with String keys. So an argument
-     * is held to the constructors, the arities and the ground positions of a declared type however
-     * many variables stand inside it — and only the positions a variable stands at are free.
-     *
-     * <p>A variable takes the first type it is read at, and every later reading must agree. The
-     * empty-collection bottom is the one exception, in both directions: it settles nothing, so a
-     * variable standing at the bottom is widened by a later concrete reading and a bottom reading
-     * leaves a concrete one alone (ADR-0028). That is what lets an empty seed take its element type
-     * from the argument that decided it rather than from itself.
-     *
-     * <p>A disagreement is the caller's error and is reported here, at {@code pos}. It is not
-     * swallowed on the grounds that another pass would report it too: what this holds is the whole
-     * signature at once, so it is the only reader that can see two positions of one variable
-     * disagree.
-     */
-    void constrain(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
-        decide(declared, actual, symbols, pos, what);
-        hold(declared, actual, symbols, pos, what);
-    }
-
-    /**
      * Holds {@code actual} to what {@code declared} states, and records nothing.
      *
      * <p>For evidence read off an argument on its own rather than at what the signature settled: what
@@ -91,14 +60,9 @@ final class Substitution {
      * the application settles them at, so what its body answers under them is not what this
      * application decided.
      */
-    void hold(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
-        if (fits(actual, declared, symbols)) {
-            return;
-        }
-        Type stated = settle(declared);
-        throw CompileException.of(Diagnostic
-                        .at(pos)
-                        .diff(Type.show(actual, stated), Type.show(stated, actual)).say(new DeclarationMessage.ItExpectsAnotherType(what, Type.show(stated, actual), Type.show(actual, stated))).build());
+    Fit hold(Type declared, Type actual, Symbols symbols) {
+        return fits(actual, declared, symbols)
+                ? Fit.FITS : new Fit.Disagrees(settle(declared), actual);
     }
 
     /**
@@ -160,10 +124,15 @@ final class Substitution {
 
     /**
      * Records what {@code actual} says about the variables {@code declared} carries, and states
-     * nothing about whether the two agree — for a reader that is working out what it holds rather
-     * than checking a value against it.
+     * nothing about whether the two shapes agree — for a reader that is working out what it holds
+     * rather than checking a value against it. That question is {@link #hold}'s.
+     *
+     * <p>What it does answer is a variable this application has already read at a type that does not
+     * go with this one: two readings of one variable, which is the one disagreement only a reader
+     * holding the whole signature can see. The types are answered rather than reported, because
+     * where a reader is sent belongs to whoever still has the operand.
      */
-    void decide(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
+    Fit decide(Type declared, Type actual, Symbols symbols) {
         // Neither side is written through first. A variable already decided is still the variable
         // this reading is about, and writing what it stands for in its place would leave nothing for
         // a later, more definite reading to rebind — which is what a first reading carrying the
@@ -171,58 +140,63 @@ final class Substitution {
         Type left = declared;
         Type right = actual;
         if (left instanceof Type.MetaVar m) {
-            bind(m, right, symbols, pos, what);
-            return;
+            return bind(m, right, symbols);
         }
         // The other side carries what this one left open: a declared `List<Int>` read against a
         // result still standing at a variable says what that variable is.
         if (right instanceof Type.MetaVar m) {
-            bind(m, left, symbols, pos, what);
-            return;
+            return bind(m, left, symbols);
         }
         // Position by position where the two shapes line up. Where they do not there is no variable
         // here to decide, and whether they agree is {@link #fits}'s question.
         switch (left) {
             case Type.ListOf l -> {
                 if (right instanceof Type.ListOf a) {
-                    decide(l.element(), a.element(), symbols, pos, what);
+                    return decide(l.element(), a.element(), symbols);
                 }
             }
             case Type.SetOf s -> {
                 if (right instanceof Type.SetOf a) {
-                    decide(s.element(), a.element(), symbols, pos, what);
+                    return decide(s.element(), a.element(), symbols);
                 }
             }
             case Type.OptionOf o -> {
                 if (right instanceof Type.OptionOf a) {
-                    decide(o.element(), a.element(), symbols, pos, what);
+                    return decide(o.element(), a.element(), symbols);
                 }
             }
             case Type.MapOf m -> {
                 if (right instanceof Type.MapOf a) {
-                    decide(m.key(), a.key(), symbols, pos, what);
-                    decide(m.value(), a.value(), symbols, pos, what);
+                    Fit key = decide(m.key(), a.key(), symbols);
+                    return key instanceof Fit.Disagrees ? key : decide(m.value(), a.value(), symbols);
                 }
             }
             case Type.TupleOf t -> {
                 if (right instanceof Type.TupleOf a
                         && t.elements().size() == a.elements().size()) {
                     for (int i = 0; i < t.elements().size(); i++) {
-                        decide(t.elements().get(i), a.elements().get(i), symbols, pos, what);
+                        Fit at = decide(t.elements().get(i), a.elements().get(i), symbols);
+                        if (at instanceof Fit.Disagrees) {
+                            return at;
+                        }
                     }
                 }
             }
             case Type.FnOf f -> {
                 if (right instanceof Type.FnOf a && f.params().size() == a.params().size()) {
                     for (int i = 0; i < f.params().size(); i++) {
-                        decide(f.params().get(i), a.params().get(i), symbols, pos, what);
+                        Fit at = decide(f.params().get(i), a.params().get(i), symbols);
+                        if (at instanceof Fit.Disagrees) {
+                            return at;
+                        }
                     }
-                    decide(f.result(), a.result(), symbols, pos, what);
+                    return decide(f.result(), a.result(), symbols);
                 }
             }
             // Nothing inside it to descend into, so nothing here decides a variable.
             case Type.Leaf _ -> { }
         }
+        return Fit.FITS;
     }
 
     /** {@code t} with every variable this has decided written into it. One still open is left
@@ -257,7 +231,7 @@ final class Substitution {
         return Type.mentions(zonk(t), x -> x instanceof Type.MetaVar);
     }
 
-    private void bind(Type.MetaVar m, Type reading, Symbols symbols, SourcePos pos, String what) {
+    private Fit bind(Type.MetaVar m, Type reading, Symbols symbols) {
         // What the reading stands for, not how it was written. A variable another application
         // decided is that decision here, and comparing the variable itself would find every reading
         // through one to disagree with every other.
@@ -267,7 +241,7 @@ final class Substitution {
             // that would have to hold itself. It stays open, and the reading that said so settles
             // nothing rather than being taken as a disagreement — the same answer {@link Readings}
             // gives the same question.
-            return;
+            return Fit.FITS;
         }
         Substitution owner = owning(m);
         Type held = owner.at(m);
@@ -275,10 +249,10 @@ final class Substitution {
             if (!(at instanceof Type.MetaVar other) || at(other) == null) {
                 owner.decided.put(m, at);
             }
-            return;
+            return Fit.FITS;
         }
         if (at instanceof Type.Nothing || open(at) || open(held)) {
-            return;   // the bottom settles nothing, and neither does a reading still open
+            return Fit.FITS;   // the bottom settles nothing, and neither does a reading still open
         }
         // A reading that carried the bottom said what the value was made of and not what it holds —
         // `Option.withDefault([], xs)` reads the variable as a list of nothing first — so a later
@@ -287,15 +261,13 @@ final class Substitution {
         if (Type.mentions(held, x -> x instanceof Type.Nothing)
                 && TypeOps.assignable(held, at, symbols)) {
             owner.decided.put(m, at);
-            return;
+            return Fit.FITS;
         }
         Type stands = zonk(held);
         if (TypeOps.assignable(at, stands, symbols) || TypeOps.assignable(stands, at, symbols)) {
-            return;
+            return Fit.FITS;
         }
-        throw CompileException.of(Diagnostic
-                        .at(pos)
-                        .diff(Type.show(at, held), Type.show(held, at)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(held, at), Type.show(at, held))).build());
+        return new Fit.Disagrees(held, at);
     }
 
     /** Every variable still open read as the bottom, at every depth. */

@@ -84,22 +84,17 @@ public final class BottomInfer {
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context
-     * pushed down, into {@code bind}. Unifies into a scratch copy and merges only on success, so an
-     * expected type that does not fit the result leaves {@code bind} untouched and the ordinary checks
-     * report the mismatch rather than this throwing early. Shared by the checker's call typing and the
-     * backend's fold materialisation so both pin the same accumulator type (issue #70). */
+     * pushed down, into {@code bind}. An expected type that does not fit the result leaves
+     * {@code bind} untouched and the ordinary checks report the mismatch rather than this refusing
+     * early — which is what a solve that does not fit leaves behind anyway, so nothing is asked of
+     * the walk here beyond its own contract. Shared by the checker's call typing and the backend's
+     * fold materialisation so both pin the same accumulator type. */
     public static void pinResultTypeVars(Type result, Type expected, Map<String, Type> bind,
-                                         Symbols symbols, SourcePos pos, String what) {
+                                         Symbols symbols) {
         if (expected == null) {
             return;
         }
-        Map<String, Type> probe = new HashMap<>(bind);
-        try {
-            TypeOps.unify(result, expected, probe, symbols, pos, what);
-            bind.putAll(probe);
-        } catch (CompileException _) {
-            // the expected type does not fit this result; leave bind untouched
-        }
+        TypeOps.unify(result, expected, bind, symbols);
     }
 
     /** Whether a step-typing error is the unresolved-bottom error (an operand/branch reported as the
