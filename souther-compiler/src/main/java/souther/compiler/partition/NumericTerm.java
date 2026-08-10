@@ -107,6 +107,9 @@ public sealed interface NumericTerm {
 
     /** How the values beside a boundary on this term are found. A size steps like an {@code Int}. */
     default BoundaryDomain intervals(Type positionType, Symbols symbols) {
+        if (this instanceof ValueOf && TypeOps.base(positionType, symbols) == Type.DATE) {
+            return BoundaryDomain.DATE;
+        }
         return decimal(positionType, symbols) ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
     }
 
@@ -149,6 +152,9 @@ public sealed interface NumericTerm {
         return switch (at) {
             case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
             case ObservedValue.Decimal d -> d.value();
+            // A date counts days, which is the order it is compared in. A date-time is not read: its
+            // step is a separate decision and one carrier cannot be both.
+            case ObservedValue.Temporal t -> Dates.dayOf(t.iso());
             case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
             case null, default -> null;
         };

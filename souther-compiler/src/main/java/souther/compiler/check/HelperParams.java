@@ -778,8 +778,10 @@ final class HelperParams {
                     for (int i = 0; i < lambda.params().size(); i++) {
                         Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns, freshening)
                                 .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
-                        if (t != null) {   // a position the lambda's body leaves open says nothing
-                            decided.decide(step.params().get(i), t, symbols, ex.pos(), "closure");
+                        if (t != null   // a position the lambda's body leaves open says nothing
+                                && decided.decide(step.params().get(i), t, symbols)
+                                        instanceof Fit.Disagrees) {
+                            return new Substitution();   // it does not agree; settle nothing from it
                         }
                     }
                     // What it answers is a position of the signature too. `(f: (Int) -> 'a, x: 'a)`
@@ -787,11 +789,13 @@ final class HelperParams {
                     // takes would carry one of those and drop the other.
                     Type answers = typed(lambda.body(), walking(env, lambda,
                             decided.zonk(step) instanceof Type.FnOf f ? f : step));
-                    if (answers != null) {
-                        decided.decide(step.result(), answers, symbols, ex.pos(), "closure result");
+                    if (answers != null
+                            && decided.decide(step.result(), answers, symbols)
+                                    instanceof Fit.Disagrees) {
+                        return new Substitution();   // it does not agree; settle nothing from it
                     }
                 } catch (CompileException _) {
-                    return new Substitution();   // it does not agree; settle nothing from it
+                    return new Substitution();   // it could not be typed; settle nothing from it
                 }
             }
             return decided;
@@ -900,11 +904,11 @@ final class HelperParams {
          * same rule one step in. Only the positions its body determines are answered; the rest stay
          * the variables the signature wrote, which unify against anything.
          */
-        private void solveFromClosure(Ast.Expr arg, Type.FnOf step, Scope env,
-                                      Map<String, Type> bind, Ast.Apply call) {
+        private Fit solveFromClosure(Ast.Expr arg, Type.FnOf step, Scope env,
+                                     Map<String, Type> bind) {
             if (!(arg instanceof Ast.Block lambda)
                     || lambda.params().size() != step.params().size()) {
-                return;
+                return Fit.FITS;
             }
             // What the arguments beside it have settled, as the closure sees it: its parameters are
             // in force over its body at those types, and its result is what the body is asked for.
@@ -918,9 +922,13 @@ final class HelperParams {
                 if (t != null) {
                     // only a position the closure's body settled: unifying an undetermined one
                     // against the variable the signature wrote would bind that variable to itself
-                    TypeOps.unify(step.params().get(i), t, bind, symbols, call.pos(), "closure");
+                    Fit fit = TypeOps.unify(step.params().get(i), t, bind, symbols);
+                    if (fit instanceof Fit.Disagrees) {
+                        return fit;
+                    }
                 }
             }
+            return Fit.FITS;
         }
 
         /**
@@ -959,8 +967,7 @@ final class HelperParams {
                     // carries a variable this walk minted says as much as a stated one: the variable
                     // is this parameter's, so solving the callee's against it is what links the two
                     // positions the body read together.
-                    BottomInfer.pinResultTypeVars(sig.result(), expected, bind, symbols, call.pos(),
-                            "result of " + call.written());
+                    BottomInfer.pinResultTypeVars(sig.result(), expected, bind, symbols);
                 }
                 // The stages `CallElaborator.applySignature` types a call in, in that order and
                 // for its reason: an argument that is not a closure binds the variables, and the
@@ -973,18 +980,20 @@ final class HelperParams {
                         continue;   // a closure waits for the stage below; this argument is the one
                     }               // being typed, and typing it is the question being worked out
                     Type actual = typed(arg, env);
-                    if (actual != null) {
-                        TypeOps.unify(param, actual, bind, symbols, call.pos(), "argument");
+                    if (actual != null
+                            && TypeOps.unify(param, actual, bind, symbols) instanceof Fit.Disagrees) {
+                        return sig.params();   // the call does not fit; the check reports it
                     }
                 }
                 for (int i = 0; i < call.args().size(); i++) {
                     Ast.Expr arg = call.args().get(i);
-                    if (sig.params().get(i) instanceof Type.FnOf step && !mentions(arg, target)) {
-                        solveFromClosure(arg, step, env, bind, call);
+                    if (sig.params().get(i) instanceof Type.FnOf step && !mentions(arg, target)
+                            && solveFromClosure(arg, step, env, bind) instanceof Fit.Disagrees) {
+                        return sig.params();   // the call does not fit; the check reports it
                     }
                 }
             } catch (CompileException _) {
-                return sig.params();   // the call does not fit its signature; the check reports it
+                return sig.params();   // an argument could not be typed; the check reports it
             }
             // What this call decided for the variables it left open, and over it what this walk
             // solved. The decision belongs to the call, so every parameter reading it reads the same

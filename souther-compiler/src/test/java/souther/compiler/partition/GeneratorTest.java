@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,6 +47,46 @@ class GeneratorTest {
                 constructs Accepted
 
             let submit (request) = Accepted { at = "now" }
+            """;
+
+    /** A sum whose cases are records, which is what a generator composes rather than names. */
+    private static final String PAYMENT = """
+            module example.pay
+
+            data Amount = Decimal
+                invariant value >= 0.0m
+
+            data Card = { number: Amount }
+            data Cash = { amount: Amount }
+            data Payment = Card | Cash
+
+            behavior feeFor : (p: Payment) -> Amount
+                constructs Amount
+
+            let feeFor (p) =
+                match p with
+                    | Card -> Amount(1.0m)
+                    | Cash -> Amount(0.0m)
+            """;
+
+    /** An optional whose element is a record, which is the same value this composes at a parameter. */
+    private static final String OPTIONAL_RECORD = """
+            module example.opt
+
+            data Amount = Decimal
+                invariant value >= 0.0m
+
+            data Card = { number: Amount }
+
+            data Request = { card: Card? }
+
+            behavior feeOf : (p: Request) -> Amount
+                constructs Amount
+
+            let feeOf (p) =
+                match p.card with
+                    | None -> Amount(0.0m)
+                    | Some c -> c.number
             """;
 
     private record Model(Generator.Subject subject, Symbols symbols) {}
@@ -217,8 +258,9 @@ class GeneratorTest {
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
 
         assertEquals(List.of(), filled.rows());
-        assertEquals(Generator.UnresolvedCombination.Reason.NO_REPRESENTATIVE,
-                filled.unresolved().get(0).reason());
+        assertTrue(filled.unresolved().stream()
+                        .anyMatch(left -> left.classes().contains("a=opaque")),
+                filled.unresolved().toString());
     }
 
     /**
@@ -244,6 +286,69 @@ class GeneratorTest {
         assertEquals(List.of("a=opaque"), subjects,
                 "the class with nothing, once — not the three combinations it is in");
         assertEquals(2, filled.rows().size(), "the rest is still filled");
+    }
+
+    /**
+     * A sum's record case is composed from its fields, the same as a record a parameter holds.
+     *
+     * <p>Nothing about it was ever unwritable: a row carrying one is a line an author writes by hand,
+     * and the walk that would compose it is the one every other record goes through. What the class
+     * could not do is name a value, which is a different thing from there being none — so it names
+     * the constructor instead and the composition happens where composition happens.
+     */
+    @Test
+    void aRecordCaseOfASumIsComposedFromItsFields() {
+        Generator.GenerationResult filled = Generator.fill(modelOf(PAYMENT, "feeFor").subject(),
+                List.of(), Generator.CandidateCheck.ANY);
+
+        assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
+        assertEquals(List.of("Card { number = Amount(0m) }", "Cash { amount = Amount(0m) }"),
+                texts(filled));
+    }
+
+    /**
+     * A class that recorded why nothing was composed for it is not reported as one nothing can be
+     * written for.
+     *
+     * <p>The two license different work. "No value can be written there" tells an author the row does
+     * not exist; what a record case has is a value this composes everywhere else and does not compose
+     * here, which is a row they can write by hand in one line. The class already says which of the two
+     * it is, at the point it is built.
+     */
+    @Test
+    void aClassThatSaidWhyNothingWasComposedIsNotReportedAsHavingNoValue() {
+        Generator.GenerationResult filled = Generator.fill(
+                modelOf(OPTIONAL_RECORD, "feeOf").subject(), List.of(),
+                Generator.CandidateCheck.ANY);
+
+        Generator.UnresolvedCombination some = filled.unresolved().stream()
+                .filter(each -> each.classes().contains("p.card=Some")).findFirst().orElseThrow();
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, some.reason(),
+                "a value this could not compose, not one that cannot exist");
+        assertTrue(some.said().isPresent(), "the reason the class recorded");
+        assertEquals("p.card=Some", some.subject(),
+                "the position, which is what several of these share");
+    }
+
+    /**
+     * What a class records about itself does not claim the value cannot be written either.
+     *
+     * <p>The sentence is the whole of what an author gets, so moving the overclaim out of the reason
+     * and into the words beside it would change nothing. Nothing that ends at an empty list has
+     * established that a value does not exist: {@code Option<Card>} has one, spelled the way the row
+     * above spells a record.
+     */
+    @Test
+    void whatAClassRecordsDoesNotClaimTheValueCannotBeWritten() {
+        Generator.GenerationResult filled = Generator.fill(modelOf(OPTIONAL_RECORD, "feeOf").subject(),
+                List.of(), Generator.CandidateCheck.ANY);
+
+        Generator.UnresolvedCombination some = filled.unresolved().stream()
+                .filter(each -> each.classes().contains("p.card=Some")).findFirst().orElseThrow();
+        String said = some.said().orElse("");
+        assertTrue(said.contains("Card"), "which value it was about, which is " + said);
+        assertFalse(said.contains("can be written"),
+                "an empty list is not a value that cannot be written: " + said);
     }
 
     /**

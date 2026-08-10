@@ -6,6 +6,8 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.partition.TermPath;
+import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.List;
@@ -202,7 +204,8 @@ class CompileExampleBoundaryTest {
         assertNotNull(all);
         PartitionEvidence keep = all.get("keep");
 
-        assertEquals(List.of("note"), keep.notDerivable());
+        assertEquals(List.of(UndividedPosition.absent(TermPath.of("note"))), keep.notDerivable(),
+                "the model divides it no way, which is established rather than assumed");
         assertEquals(List.of(), keep.axes());
         assertEquals(List.of(), keep.boundaries());
     }

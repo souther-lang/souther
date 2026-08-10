@@ -590,6 +590,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                             b -> whyNoBoundary(b.coverage())),
                     undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
         }
+        // Named, and not only counted. The line is one somebody should still write; what is missing
+        // is a way for this build to see that they did, and an author who cannot tell which edge that
+        // is has been told a number and no work.
+        for (BoundaryAssessment b : partition.boundaries()) {
+            if (b.coverage() instanceof BoundaryAssessment.Coverage.NotMeasured absent
+                    && absent.reason() == BoundaryAssessment.Coverage.Reason.NO_ARM_WITNESSES_IT) {
+                out.append(String.format("      · not measurable: %s = %s (%s)%n",
+                        b.axis(), b.value(), b.origin()));
+            }
+        }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.BOUNDARY_UNMET)) {
             out.append(String.format("      · no row is at %s = %s (%s)%n",
                     f.args().get(0), f.args().get(1), f.args().get(2)));
@@ -599,11 +609,22 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         // rows anybody is owed, and they are still the only thing there is to say about the
         // position.
         for (BoundaryAssessment b : unpromised) {
-            out.append(String.format("      · not known to be writable: %s = %s (%s)%n",
-                    b.axis(), b.value(), b.origin()));
+            // What the search came to, beside the verdict it did not decide. Whether this edge is
+            // counted turns on whether a concrete value was accepted at it, so a reader looking at
+            // two models that differ here is looking at what the compiler could establish — and
+            // without this line the difference reads as the tool being arbitrary.
+            out.append(String.format("      · not known to be writable: %s = %s (%s)%s%n",
+                    b.axis(), b.value(), b.origin(), whatWasTried(b.attempt())));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
             out.append(String.format("      · not derivable: %s%n", f.args().get(0)));
+        }
+        // Said apart from the line above it, which is the whole of what this pair is for: one names
+        // a position the model divides no way, and this one a position nobody has established
+        // anything about.
+        for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_READ)) {
+            out.append(String.format("      · not read: %s (%s)%n",
+                    f.args().get(0), f.args().get(1)));
         }
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_OMITTED)) {
             out.append(String.format("      · omitted: %s (axis limit)%n", f.args().get(0)));
@@ -723,6 +744,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         };
     }
 
+    /** What the search for a value at an edge came to, where it ran and found none. */
+    private static String whatWasTried(BoundaryAssessment.Attempt attempt) {
+        if (!(attempt instanceof BoundaryAssessment.Attempt.Unresolved left)) {
+            return "";   // nothing ran, and what a run would have said is not this line's to guess
+        }
+        return " — nothing composed one: " + left.why().said()
+                .orElseGet(() -> whyUnresolved(left.why()));
+    }
+
+    /** The category a search came back with, where the class it was about said nothing itself. */
+    private static String whyUnresolved(souther.compiler.partition.Generator.UnresolvedCombination why) {
+        String at = why.subject();
+        return switch (why.reason()) {
+            case NO_REPRESENTATIVE -> "no value stands for " + at;
+            case NOTHING_COMPOSES_ONE -> "nothing here composes a value at " + at;
+            case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
+            case SEARCH_LIMIT -> "the search stopped before reaching " + at;
+            case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
+            case LINKAGE_FAILED -> "the generated classes would not link";
+            case NO_REASON_RECORDED -> "nothing was recorded about why";
+        };
+    }
+
     private static String whyNoBoundary(BoundaryAssessment.Coverage coverage) {
         if (!(coverage instanceof BoundaryAssessment.Coverage.NotMeasured absent)) {
             return "";
@@ -731,6 +775,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             case ARMS_NOT_ASKED -> "the arms were not asked for";
             case ARMS_UNREADABLE -> "the arms could not be measured";
             case NO_ROWS -> "no row names this behavior";
+            case NO_ARM_WITNESSES_IT ->
+                    "no arm of the guard shows the comparison ran at this value";
         };
     }
 
@@ -877,7 +923,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         pairs.put("unknown", partition.pairs().unknown());
         pairs.put("truncated", partition.pairs().truncated());
         measured(pairs, partition.pairs().status(), partition.pairs().reason());
-        partition.notDerivable().forEach(out.putArray("notDerivable")::add);
+        // Both arrays either way. An absent one and an empty one read the same to a person and not
+        // to a reader that checks whether the field is there, and this document's shape is what the
+        // schema is written against.
+        ArrayNode undivided = out.putArray("notDerivable");
+        ArrayNode unread = out.putArray("notRead");
+        partition.notDerivable().forEach(each -> {
+            if (each.isAbsent()) {
+                undivided.add(each.at().toString());
+                return;
+            }
+            // The position and what stopped it, kept as the product they are. Which limit a position
+            // is waiting on is the thing this list was added to say, and a document that named only
+            // the position would leave a consumer to guess it back.
+            ObjectNode said = unread.addObject();
+            said.put("position", each.at().toString());
+            said.put("reason", word(((souther.compiler.partition.UndividedPosition.Why.CannotDerive)
+                    each.why()).reason()));
+        });
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
     }

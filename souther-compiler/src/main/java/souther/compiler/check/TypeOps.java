@@ -9,7 +9,6 @@ import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.BindingOwner;
@@ -19,6 +18,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -606,10 +606,23 @@ public final class TypeOps {
      * its element; a concrete parameter just requires the argument to be assignable. This is what
      * monomorphises a generic intrinsic — {@code values(m: Map<String, 'a>): List<'a>} learns
      * {@code 'a} from the map so {@link #substitute} can resolve the {@code List<'a>} result.
+     *
+     * <p>Answers with the two types that disagreed rather than a report about them. Which operand
+     * supplied either type, where it is written and what a reader is told are the caller's, and the
+     * caller is what still has the expression in hand.
+     *
+     * <p>A walk that does not fit settles nothing. It stops at the first position that disagrees,
+     * so whatever it had settled before that was settled by a reading it went on to refuse, and a
+     * caller reading the map afterwards cannot tell those from what was there before.
      */
-    public static void unify(Type param, Type arg, Map<String, Type> bindings,
-                             Symbols symbols, SourcePos pos, String what) {
-        unify(param, arg, bindings, symbols, pos, what, true);
+    public static Fit unify(Type param, Type arg, Map<String, Type> bindings, Symbols symbols) {
+        Map<String, Type> settled = new HashMap<>(bindings);
+        Fit fit = unify(param, arg, settled, symbols, true);
+        if (fit instanceof Fit.Disagrees) {
+            return fit;
+        }
+        bindings.putAll(settled);
+        return fit;
     }
 
     /**
@@ -617,16 +630,18 @@ public final class TypeOps {
      *
      * <p>For a caller that requires each argument afterwards, against the parameter type this walk
      * settled and at the argument's own position. Refusing here as well would answer the same
-     * mismatch twice, and this reading is the one with no argument in its hands: it is given two
-     * types and the position of the call they belong to, so the caret it can offer is the callee's
-     * — which is the one part of the line a reader has already been told is not the problem.
+     * mismatch twice, and this reading is the one with no argument in its hands.
+     *
+     * <p>Reading every position rather than stopping at the first that disagrees is the difference:
+     * a position this cannot settle says nothing about the ones beside it, and refusing is not this
+     * walk's question.
      */
     public static void bindVars(Type param, Type arg, Map<String, Type> bindings, Symbols symbols) {
-        unify(param, arg, bindings, symbols, null, null, false);
+        unify(param, arg, bindings, symbols, false);
     }
 
-    private static void unify(Type param, Type arg, Map<String, Type> bindings,
-                              Symbols symbols, SourcePos pos, String what, boolean refusing) {
+    private static Fit unify(Type param, Type arg, Map<String, Type> bindings,
+                             Symbols symbols, boolean refusing) {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
@@ -639,41 +654,50 @@ public final class TypeOps {
                     // the empty bottom absorbs into the concrete binding already learned
                 } else if (refusing && !assignable(arg, bound, symbols)
                         && !assignable(bound, arg, symbols)) {
-                    throw CompileException.of(Diagnostic
-                                    .at(pos)
-                                    .diff(Type.show(arg, bound), Type.show(bound, arg)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(bound), Type.show(arg))).build());
+                    return new Fit.Disagrees(bound, arg);
                 }
             }
-            case Type.ListOf p when arg instanceof Type.ListOf a ->
-                    unify(p.element(), a.element(), bindings, symbols, pos, what, refusing);
-            case Type.MapOf p when arg instanceof Type.MapOf a -> {
-                unify(p.key(), a.key(), bindings, symbols, pos, what, refusing);
-                unify(p.value(), a.value(), bindings, symbols, pos, what, refusing);
+            case Type.ListOf p when arg instanceof Type.ListOf a -> {
+                return unify(p.element(), a.element(), bindings, symbols, refusing);
             }
-            case Type.SetOf p when arg instanceof Type.SetOf a ->
-                    unify(p.element(), a.element(), bindings, symbols, pos, what, refusing);
-            case Type.OptionOf p when arg instanceof Type.OptionOf a ->
-                    unify(p.element(), a.element(), bindings, symbols, pos, what, refusing);
+            case Type.MapOf p when arg instanceof Type.MapOf a -> {
+                Fit key = unify(p.key(), a.key(), bindings, symbols, refusing);
+                if (key instanceof Fit.Disagrees) {
+                    return key;
+                }
+                return unify(p.value(), a.value(), bindings, symbols, refusing);
+            }
+            case Type.SetOf p when arg instanceof Type.SetOf a -> {
+                return unify(p.element(), a.element(), bindings, symbols, refusing);
+            }
+            case Type.OptionOf p when arg instanceof Type.OptionOf a -> {
+                return unify(p.element(), a.element(), bindings, symbols, refusing);
+            }
             case Type.TupleOf p when arg instanceof Type.TupleOf a
                     && p.elements().size() == a.elements().size() -> {
                 for (int i = 0; i < p.elements().size(); i++) {
-                    unify(p.elements().get(i), a.elements().get(i), bindings, symbols, pos, what, refusing);
+                    Fit at = unify(p.elements().get(i), a.elements().get(i), bindings, symbols, refusing);
+                    if (at instanceof Fit.Disagrees) {
+                        return at;
+                    }
                 }
             }
             case Type.FnOf p when arg instanceof Type.FnOf a && p.params().size() == a.params().size() -> {
                 for (int i = 0; i < p.params().size(); i++) {
-                    unify(p.params().get(i), a.params().get(i), bindings, symbols, pos, what, refusing);
+                    Fit at = unify(p.params().get(i), a.params().get(i), bindings, symbols, refusing);
+                    if (at instanceof Fit.Disagrees) {
+                        return at;
+                    }
                 }
-                unify(p.result(), a.result(), bindings, symbols, pos, what, refusing);
+                return unify(p.result(), a.result(), bindings, symbols, refusing);
             }
             default -> {
                 if (refusing && !assignable(arg, param, symbols)) {
-                    throw CompileException.of(Diagnostic
-                                    .at(pos)
-                                    .diff(Type.show(arg, param), Type.show(param, arg)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(param), Type.show(arg))).build());
+                    return new Fit.Disagrees(param, arg);
                 }
             }
         }
+        return Fit.FITS;
     }
 
     /**

@@ -116,8 +116,7 @@ public final class CallElaborator {
         }
         Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
-        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols(),
-                v.pos(), "the type of " + lib.qualified());
+        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols());
         return new Core.Call(new ReachName.OfLibrary(lib), List.of(),
                 TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
@@ -171,8 +170,15 @@ public final class CallElaborator {
                 // signature and nothing more. The fold rule that reads a step's result as an
                 // accumulator to grow is one operation's meaning, and an operation kept standing is
                 // kept because its meaning belongs to whoever reads it, not to this.
-                TypeOps.unify(declared.result(), answered, bind, ctx.symbols(),
-                        call.pos(), "argument " + (i + 1) + " of " + call.written());
+                //
+                // Refused here rather than inside the walk, and by the sentence a value argument is
+                // refused by: both kinds of argument are one rule, and this is the reader that
+                // still has the argument to point at.
+                if (TypeOps.unify(declared.result(), answered, bind, ctx.symbols())
+                        instanceof Fit.Disagrees d) {
+                    throw Elaborator.doesNotFit(call.args().get(i), d.actual(), d.expected(),
+                            "argument " + (i + 1) + " of " + call.written());
+                }
             }
         }
         return new Core.PreservedCall(call.denotes(), ca.cores(),
@@ -210,8 +216,7 @@ public final class CallElaborator {
                                              CheckContext ctx) {
         Map<String, Type> bind = new HashMap<>();
         if (params.stream().anyMatch(Type.FnOf.class::isInstance)) {
-            BottomInfer.pinResultTypeVars(result, expected, bind, ctx.symbols(),
-                    call.pos(), "result of " + call.written());
+            BottomInfer.pinResultTypeVars(result, expected, bind, ctx.symbols());
         }
         // Each value argument is asked once, here, in the order it is written. What the ordering
         // below decides is which of them settles a variable first, and nothing about how many times

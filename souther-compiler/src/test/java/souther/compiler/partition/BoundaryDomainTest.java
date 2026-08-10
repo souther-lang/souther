@@ -63,4 +63,25 @@ class BoundaryDomainTest {
         assertTrue(BoundaryDomain.NONE.midpoint(new ObservedValue.Integer(0),
                 new ObservedValue.Integer(2)).isEmpty());
     }
+
+    /**
+     * A date's neighbours and midpoint are dates, and the count carrying them stays whole.
+     *
+     * <p>Two days apart by one have a midpoint, and it is one of them: the carrier is a number of
+     * days and there is no half a day in it. Taken over a carrier wider than the type — a decimal
+     * halfway between two counts — the answer is not a date at all, and the value it would be
+     * written from is one no calendar has.
+     */
+    @Test
+    void aDateStepsAndMeetsInWholeDays() {
+        ObservedValue first = new ObservedValue.Temporal("2026-01-01");
+        ObservedValue second = new ObservedValue.Temporal("2026-01-02");
+
+        assertEquals(Optional.of(second), BoundaryDomain.DATE.successor(first));
+        assertEquals(Optional.of(first), BoundaryDomain.DATE.predecessor(second));
+        assertEquals(Optional.of(first), BoundaryDomain.DATE.midpoint(first, second),
+                "an odd number of days apart still meets at a day");
+        assertEquals(Optional.of(second),
+                BoundaryDomain.DATE.midpoint(first, new ObservedValue.Temporal("2026-01-03")));
+    }
 }

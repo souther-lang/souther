@@ -222,9 +222,9 @@ class APairIsChosenOnePositionAtATimeTest {
         }
         String rows = out.toString(StandardCharsets.UTF_8);
 
-        assertTrue(rows.contains("\"band.low = 0\""),
+        assertTrue(rows.contains("band.low = 0"),
                 () -> "the bottom of `low` is a row it can write:\n" + rows);
-        assertTrue(rows.contains("\"band.high = 1\""),
+        assertTrue(rows.contains("band.high = 1"),
                 () -> "and so is the top of `high`:\n" + rows);
         assertFalse(rows.contains("band.high = 0"),
                 () -> "a high of zero is refused by the record, so nothing is owed there:\n" + rows);

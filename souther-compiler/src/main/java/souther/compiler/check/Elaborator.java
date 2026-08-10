@@ -654,14 +654,14 @@ public final class Elaborator {
         if (declaredResult != null) {
             // What the body answers decides a variable the arguments left open — a result the
             // signature relates to a function parameter rather than to a value one.
-            decided.decide(declaredResult, body.type(), ctx.symbols(), ex.pos(),
+            decide(decided, declaredResult, ex.body(), body.type(), ctx.symbols(),
                     "the result of `" + shown(ex) + "`");
             if (ex.callee() instanceof ValueName.Local) {
                 // A function the caller supplied, expanded where the callee applies it. What it was
                 // declared to answer is what the caller was held to when it handed the function
                 // over, so a body answering something else is the caller's error and is reported
                 // here — a helper's own declared return is its promise, and is reported against it.
-                decided.hold(declaredResult, body.type(), ctx.symbols(), ex.pos(),
+                hold(decided, declaredResult, ex.body(), body.type(), ctx.symbols(),
                         "what `" + shown(ex) + "` was given to answer");
             }
             type = decided.settle(declaredResult);
@@ -712,7 +712,7 @@ public final class Elaborator {
                 Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
                 // The argument is held to everything the declaration states, whether or not the
                 // callee's body ever reads it, and however many variables stand inside it.
-                decided.constrain(declared, value.type(), ctx.symbols(), b.value().pos(),
+                constrain(decided, declared, b.value(), value.type(), ctx.symbols(),
                         argument(ex, b.binder().name()));
                 Type required = decided.zonk(declared);
                 if (states(required)) {
@@ -760,7 +760,7 @@ public final class Elaborator {
                 // relates a function parameter to the rest of what it wrote — `(f: ('a) -> Bool):
                 // List<'a>` answers a list of what the function takes — so what the function says
                 // about a variable is what that variable is at every other position of the call.
-                decided.constrain(declared, arrives, ctx.symbols(), g.value().pos(),
+                constrain(decided, declared, g.value(), arrives, ctx.symbols(),
                         argument(ex, "a function"));
                 continue;
             }
@@ -771,9 +771,9 @@ public final class Elaborator {
             if (takes == null) {
                 continue;   // nothing says what it takes, and its own body does not either
             }
-            decided.constrain(declared,
+            constrain(decided, declared, g.value(),
                     elaborateFunctionValue(g.value(), takes, env, ctx).type(), ctx.symbols(),
-                    g.value().pos(), argument(ex, "a function"));
+                    argument(ex, "a function"));
         }
     }
 
@@ -1272,11 +1272,76 @@ public final class Elaborator {
     static void requireType(Ast.Expr e, Type actual, Type expected,
                                     Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec §sum-data)
+            throw doesNotFit(e, actual, expected, what);
+        }
+    }
+
+    /**
+     * The report for a value that does not have the type its position states, drawn at the operand
+     * that supplied it.
+     *
+     * <p>One rule, so one sentence. Every check that refuses a value for this reason builds its
+     * report here rather than writing a second one beside it: which of two sentences a reader gets
+     * would otherwise depend on which check ran, and that is not something a reader can see.
+     */
+    static CompileException doesNotFit(Ast.Expr operand, Type actual, Type expected, String what) {
+        return CompileException.of(Diagnostic
+                        .at(operand.reportedAt())
+                        .diff(Type.show(actual, expected), Type.show(expected, actual))
+                        .hint(new TypeMessage.AdjustTheValueOrThePosition())
+                        .say(new TypeMessage.ItDoesNotHaveTheTypeItNeedsHere(what)).build());
+    }
+
+    /**
+     * Reads {@code actual} against {@code declared} for this application: records what it says about
+     * the variables {@code declared} carries, and holds it to everything {@code declared} states.
+     *
+     * <p>A variable is a hole, not a licence. {@code List<'a>} says the value is a list and leaves
+     * what it holds open; {@code Map<String, 'a>} says it is a map with String keys. So an argument
+     * is held to the constructors, the arities and the ground positions of a declared type however
+     * many variables stand inside it — and only the positions a variable stands at are free.
+     *
+     * <p>A variable takes the first type it is read at, and every later reading must agree. The
+     * empty-collection bottom is the one exception, in both directions: it settles nothing, so a
+     * variable standing at the bottom is widened by a later concrete reading and a bottom reading
+     * leaves a concrete one alone (ADR-0028). That is what lets an empty seed take its element type
+     * from the argument that decided it rather than from itself.
+     *
+     * <p>A disagreement is the caller's error and is reported here rather than swallowed on the
+     * grounds that another pass would report it too: what {@link Substitution} holds is the whole
+     * signature at once, so it is the only reader that can see two positions of one variable
+     * disagree. Reported here rather than inside it because this is what still has {@code operand}.
+     */
+    static void constrain(Substitution decided, Type declared, Ast.Expr operand, Type actual,
+                          Symbols symbols, String what) {
+        decide(decided, declared, operand, actual, symbols, what);
+        hold(decided, declared, operand, actual, symbols, what);
+    }
+
+    /** What {@code actual} says about the variables {@code declared} carries, refusing a variable
+     * this application has already read at a type that does not go with this one. */
+    static void decide(Substitution decided, Type declared, Ast.Expr operand, Type actual,
+                       Symbols symbols, String what) {
+        if (decided.decide(declared, actual, symbols) instanceof Fit.Disagrees d) {
             throw CompileException.of(Diagnostic
-                            .at(e.reportedAt())
-                            .diff(Type.show(actual, expected), Type.show(expected, actual))
-                            .hint(new TypeMessage.AdjustTheValueOrThePosition())
-                            .say(new TypeMessage.ItDoesNotHaveTheTypeItNeedsHere(what)).build());
+                            .at(operand.reportedAt())
+                            .diff(Type.show(d.actual(), d.expected()), Type.show(d.expected(), d.actual()))
+                            .say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what,
+                                    Type.show(d.expected(), d.actual()),
+                                    Type.show(d.actual(), d.expected()))).build());
+        }
+    }
+
+    /** {@code actual} held to what {@code declared} states, recording nothing about its variables. */
+    static void hold(Substitution decided, Type declared, Ast.Expr operand, Type actual,
+                     Symbols symbols, String what) {
+        if (decided.hold(declared, actual, symbols) instanceof Fit.Disagrees d) {
+            throw CompileException.of(Diagnostic
+                            .at(operand.reportedAt())
+                            .diff(Type.show(d.actual(), d.expected()), Type.show(d.expected(), d.actual()))
+                            .say(new DeclarationMessage.ItExpectsAnotherType(what,
+                                    Type.show(d.expected(), d.actual()),
+                                    Type.show(d.actual(), d.expected()))).build());
         }
     }
 

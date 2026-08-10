@@ -126,8 +126,11 @@ than the name is, and the constructor refuses a region that does not contain the
 extent an expression now carries is right for a multi-line expression and what a terminal draws under
 it is not yet; a published region and an editor reading one get the whole of it today.
 
-Two rows of `ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest` expected an argument to be
-underlined as far as its callee's name. They now expect the argument.
+Three rows expected an argument to be underlined as far as its callee's name — two of
+`ADiagnosticPointsAtTheOperandThatSuppliedTheValueTest` and one of
+`AnExpansionRefusesAnArgumentWhereItIsWrittenTest`. Each says in its own message that the caret is
+meant to cover the argument, so what they held was what the table could reach rather than what they
+were written to state. They now expect the argument.
 
 What holds the rule at a rewrite is a property rather than a case: every name an expansion says the
 author wrote has to be spelled by the characters it points at, part by part, checked against the
