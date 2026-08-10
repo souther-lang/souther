@@ -305,9 +305,17 @@ final class Witnesses {
      * not among them — its unit is a pair of items and its answer a count of blank lines, and
      * {@link #separation} says it.
      *
-     * <p>Nothing is reported the other way round. A break the source wrote where the canonical form
-     * writes none is not a forced rule being disobeyed: the rule says a line ends there, not that
-     * no other line may. What answers for such a break is the group whose opportunity it sits at.
+     * <p>How many lines end there and not whether one does. A construct writes its members one to a
+     * line, so a source that left a blank line between two of them has as much departed from that
+     * as one that ran them together — and where several obligations break at one adjacency, what
+     * they say together is the count.
+     *
+     * <p>A break the source wrote at an adjacency no forced rule breaks is not reported here. The
+     * rule says a line ends where it does, not that no other line may, and what answers for such a
+     * break is the group whose opportunity it sits at.
+     *
+     * <p>A pair of top-level items is left to the separation rule, which counts the same lines from
+     * its own unit, and a gap holding a comment to the rules about comments.
      */
     static List<Witness> forced(String source, Formatter.CanonicalForm canonical) {
         Layout layout = canonical.layout();
@@ -318,10 +326,13 @@ final class Witnesses {
                     "the source has " + had.size() + " tokens and its canonical form "
                             + writes.size() + "; the two cannot be held side by side");
         }
+        // The obligations that break at each adjacency, in the order they are written. Several
+        // stand at one where a blank line or a comment is written between two tokens, and what the
+        // rules say together is how many lines end there.
+        Map<Integer, List<Obligation>> at = new LinkedHashMap<>();
         List<Witness> out = new ArrayList<>();
         for (Newline n : layout.breaks()) {
-            if (!(n.cause() instanceof Newline.Cause.Forced f)
-                    || f.obligation() == Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS) {
+            if (!(n.cause() instanceof Newline.Cause.Forced f)) {
                 continue;
             }
             if (writes.isEmpty() || n.offset() >= writes.get(writes.size() - 1).end()) {
@@ -333,15 +344,36 @@ final class Witnesses {
                 continue;
             }
             int i = adjacencyAt(writes, n.offset());
-            if (i < 0) {
-                continue;   // before the first token: nothing of the source stands on both sides
+            if (i >= 0) {
+                at.computeIfAbsent(i, _ -> new ArrayList<>()).add(f.obligation());
+            }
+        }
+        String text = layout.text();
+        for (Map.Entry<Integer, List<Obligation>> e : at.entrySet()) {
+            int i = e.getKey();
+            if (e.getValue().contains(Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS)) {
+                continue;   // a pair of top-level items, and the separation rule counts its lines
             }
             String has = source.substring(had.get(i).end(), had.get(i + 1).start());
-            if (has.indexOf('\n') < 0) {
-                out.add(new Witness.Forced(new Witness.ForcedBoundary(i, f.obligation())));
+            String wrote = text.substring(writes.get(i).end(), writes.get(i + 1).start());
+            if (has.contains("//") || wrote.contains("//")) {
+                continue;   // what is written around a comment is the comment rules'
+            }
+            if (newlines(has) != newlines(wrote)) {
+                out.add(new Witness.Forced(new Witness.ForcedBoundary(i, e.getValue().get(0))));
             }
         }
         return out;
+    }
+
+    private static int newlines(String text) {
+        int n = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                n++;
+            }
+        }
+        return n;
     }
 
     /** Which adjacency of {@code tokens} the offset {@code at} stands in, or -1 where it stands
