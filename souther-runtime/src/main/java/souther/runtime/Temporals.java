@@ -16,6 +16,51 @@ public final class Temporals {
 
     private Temporals() {}
 
+    /**
+     * Calendar arithmetic, each shift run off the end of what its temporal can hold reported the way
+     * an {@code Int} overflow is (spec {@code [#jvm-abort]}).
+     *
+     * <p>These called {@code java.time} directly and needed no helper until it was asked what happens
+     * at the end of the range. {@code LocalDate.plusYears} raises a {@code DateTimeException} past
+     * year 999999999 and {@code plusDays} an {@code ArithmeticException} past what a day count holds,
+     * and both went out to the boundary as themselves — a {@code java.time} class named in the
+     * failure of a program that has no such type. Running out of range is the same kind of thing as
+     * an {@code Int} overflow: not a business result, and not the infrastructure being unavailable
+     * either (ADR-0029), so it aborts and says what it was doing.
+     */
+    /** Runs {@code shift} and turns either way {@code java.time} refuses into the abort. */
+    private static <T> T aborting(java.util.function.Supplier<T> shift, String what) {
+        try {
+            return shift.get();
+        } catch (DateTimeException | ArithmeticException _) {
+            throw new ConstraintViolation(what + " is outside the range it can hold");
+        }
+    }
+
+    public static LocalDate addDays(LocalDate d, long days) {
+        return aborting(() -> d.plusDays(days), d + " + " + days + " days");
+    }
+
+    public static LocalDate addMonths(LocalDate d, long months) {
+        return aborting(() -> d.plusMonths(months), d + " + " + months + " months");
+    }
+
+    public static LocalDate addYears(LocalDate d, long years) {
+        return aborting(() -> d.plusYears(years), d + " + " + years + " years");
+    }
+
+    public static LocalDateTime addMinutes(LocalDateTime dt, long minutes) {
+        return aborting(() -> dt.plusMinutes(minutes), dt + " + " + minutes + " minutes");
+    }
+
+    public static LocalDateTime addHours(LocalDateTime dt, long hours) {
+        return aborting(() -> dt.plusHours(hours), dt + " + " + hours + " hours");
+    }
+
+    public static LocalDateTime addDateTimeDays(LocalDateTime dt, long days) {
+        return aborting(() -> dt.plusDays(days), dt + " + " + days + " days");
+    }
+
     /** Whole days from {@code from} to {@code to}, negative when {@code to} precedes {@code from}. */
     public static long daysBetween(LocalDate from, LocalDate to) {
         return ChronoUnit.DAYS.between(from, to);
