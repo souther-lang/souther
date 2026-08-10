@@ -19,8 +19,9 @@ sealed interface Opening {
     Opening FILE_BEGINS = new FileBegins();
 
     /** The boundary that opens this place's line, and what the construct writes after it before
-     *  the place itself — a leading comma, or nothing. */
-    record Breaks(TokenDoc.Break policy, TokenDoc opener) implements Opening {}
+     *  the place itself — a leading comma, or nothing. The boundary is held whole rather than as
+     *  its policy, so a forced one carries from here the obligation it is written for. */
+    record Breaks(TokenDoc.Gap gap, TokenDoc opener) implements Opening {}
 
     /**
      * The line is open and no boundary opened it, which is true in one place: the start of a file.
@@ -34,14 +35,31 @@ sealed interface Opening {
     /** The place does not open a line: what holds it goes on writing the line it is on. */
     record None() implements Opening {}
 
+    /** A line opened by a boundary the layout may break, which the group holding it settles. */
     static Opening breaks(TokenDoc.Break policy) {
-        return new Breaks(policy, TokenDoc.NIL);
+        return breaks(policy, TokenDoc.NIL);
+    }
+
+    /** The same, where the construct writes something at the head of the line before the place —
+     *  the connector a chained construct joins its stages with. */
+    static Opening breaks(TokenDoc.Break policy, TokenDoc opener) {
+        return new Breaks(new TokenDoc.Gap(policy, null, true), opener);
+    }
+
+    /** A line opened by a boundary written whatever the width, for the obligation named. */
+    static Opening forced(Obligation obligation) {
+        return forced(obligation, TokenDoc.NIL);
+    }
+
+    /** The same, where the construct writes something at the head of the line before the place. */
+    static Opening forced(Obligation obligation, TokenDoc opener) {
+        return new Breaks(new TokenDoc.Gap(TokenDoc.Break.ALWAYS, obligation, true), opener);
     }
 
     /** The boundary that opens the line, or nothing where the line is already open. */
     default TokenDoc boundary() {
         return switch (this) {
-            case Breaks b -> new TokenDoc.Gap(b.policy(), true);
+            case Breaks b -> b.gap();
             case FileBegins _, None _ -> TokenDoc.NIL;
         };
     }
@@ -69,7 +87,7 @@ sealed interface Opening {
      */
     default boolean opensALine() {
         return switch (this) {
-            case Breaks b -> b.policy() != TokenDoc.Break.NEVER;
+            case Breaks b -> b.gap().policy() != TokenDoc.Break.NEVER;
             case FileBegins _ -> true;
             case None _ -> false;
         };

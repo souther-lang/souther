@@ -28,7 +28,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
     @Test
     void aWidthBreakAndAForcedBreakWriteTheSameCharacters() {
         Doc tooWide = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd")));
-        Doc forced = Doc.group(Doc.concat(Doc.text("ab"), Doc.hardline(), Doc.text("cd")));
+        Doc forced = Doc.group(Doc.concat(Doc.text("ab"), Doc.hardline(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN), Doc.text("cd")));
 
         Layout byWidth = tooWide.layout(4);
         Layout byForce = forced.layout(100);
@@ -64,7 +64,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
         Doc one = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd")));
         Doc other = Doc.group(Doc.concat(Doc.text("ab"), Doc.line(), Doc.text("cd")));
 
-        Layout layout = Doc.concat(one, Doc.hardline(), other).layout(100);
+        Layout layout = Doc.concat(one, Doc.hardline(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN), other).layout(100);
 
         assertEquals("ab cd\nab cd", layout.text());
         assertEquals(2, layout.decisions().size());
@@ -153,7 +153,7 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
     @Test
     void aGroupThatCanNeverBeFlatSaysSoAtEveryWidth() {
         Doc wideAndForced = Doc.group(Doc.concat(
-                Doc.text("way-too-wide"), Doc.hardline(), Doc.text("tail")));
+                Doc.text("way-too-wide"), Doc.hardline(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN), Doc.text("tail")));
 
         assertEquals(wideAndForced.layout(1000).decisions().get(0).outcome(),
                 wideAndForced.layout(4).decisions().get(0).outcome(),
@@ -166,8 +166,8 @@ class TheLayoutKeepsWhatItsTextCannotSayTest {
      * without the group being measured again to find out which it was. */
     @Test
     void andTheDecisionNamesWhatRefusedTheFlatLayout() {
-        Doc refusing = Doc.hardline();
-        Doc other = Doc.hardline();
+        Doc.Hard refusing = Doc.hardline(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN);
+        Doc.Hard other = Doc.hardline(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN);
         Doc doc = Doc.group(Doc.concat(Doc.text("a"), refusing, Doc.text("b")));
 
         Outcome outcome = Doc.concat(doc, other, Doc.text("c")).layout(100)

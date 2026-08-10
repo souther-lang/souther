@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static souther.compiler.fmt.TokenDoc.HARD_GAP;
 import static souther.compiler.fmt.TokenDoc.concat;
 import static souther.compiler.fmt.TokenDoc.group;
 import static souther.compiler.fmt.TokenDoc.nest;
@@ -557,13 +556,13 @@ public final class Formatter {
      */
     private Place segmentPlace(Place chain, TokenDoc connector, SyntaxNode owner) {
         return places.under(chain, owner == null ? null : owner.kind(),
-                new Opening.Breaks(TokenDoc.Break.MAY, connector), Written.of(owner));
+                Opening.breaks(TokenDoc.Break.MAY, connector), Written.of(owner));
     }
 
 
     private Place segmentPlace(Place chain, TokenDoc connector, SyntaxToken owner) {
         return places.under(chain, owner.kind(),
-                new Opening.Breaks(TokenDoc.Break.MAY, connector),
+                Opening.breaks(TokenDoc.Break.MAY, connector),
                 new Written.Run(nameStart(owner), nameEnd(owner)));
     }
 
@@ -653,17 +652,22 @@ public final class Formatter {
             // the item's; the first item's line is opened by the start of the file. The blank line
             // between two of them separates them and belongs to neither, so it stays here.
             Place at = places.under(ofTheFile, item.kind(),
-                    prev == null ? Opening.FILE_BEGINS : Opening.breaks(TokenDoc.Break.ALWAYS),
+                    prev == null ? Opening.FILE_BEGINS
+                            : Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(item));
             if (prev != null && blankBetween(prev, item.kind(), paragraph.contains(item))) {
-                parts.add(TokenDoc.BLANK_LINE);
+                parts.add(TokenDoc.blank(Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS));
             }
             parts.add(TokenDoc.at(at, concat(item(item, at), TokenDoc.endsTheLineOf(at))));
             prev = item.kind();
         }
         parts.add(TokenDoc.carries(ofTheFile, Carrier.AT_END));
-        parts.add(HARD_GAP);   // files end with a single newline
-        return concat(parts);
+        parts.add(TokenDoc.forced(Obligation.A_FILE_ENDS_WITH_ONE_NEWLINE));
+        // The file joins its items, so the boundary between the last token of one and the first of
+        // the next belongs to a construct like any other. Left unnamed, the one adjacency a reader
+        // can close up by hand — writing two top-level items on a line — is the one no rule is
+        // recorded against.
+        return TokenDoc.node(file.kind(), concat(parts));
     }
 
     /**
@@ -765,7 +769,8 @@ public final class Formatter {
         String target = ids.size() >= 2 ? ids.get(1).text() : "";
         List<TokenDoc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
-            Place r = places.under(at, row.kind(), Opening.breaks(TokenDoc.Break.ALWAYS),
+            Place r = places.under(at, row.kind(),
+                    Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(row));
             rows.add(TokenDoc.at(r, concat(exampleRow(row, r), TokenDoc.endsTheLineOf(r))));
         }
@@ -844,7 +849,8 @@ public final class Formatter {
         String target = ids.size() >= 2 ? ids.get(1).text() : "";
         List<TokenDoc> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
-            Place r = places.under(at, row.kind(), Opening.breaks(TokenDoc.Break.ALWAYS),
+            Place r = places.under(at, row.kind(),
+                    Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(row));
             rows.add(TokenDoc.at(r, concat(fakeRow(row, r), TokenDoc.endsTheLineOf(r))));
         }
@@ -932,7 +938,8 @@ public final class Formatter {
             // A named clause keeps its name: it is what an attempt's arm and a boundary issue call it.
             TokenDoc label = inv.token(SyntaxKind.ASSIGN).isPresent()
                     ? concat(ident(firstIdent(inv)), GAP, ASSIGN, GAP) : TokenDoc.NIL;
-            Place clause = places.under(at, inv.kind(), Opening.breaks(TokenDoc.Break.ALWAYS),
+            Place clause = places.under(at, inv.kind(),
+                    Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(inv));
             invariants.add(TokenDoc.at(clause, concat(TokenDoc.node(inv.kind(),
                             concat(TokenDoc.token(SyntaxKind.INVARIANT_KW, "invariant"), GAP, label,
@@ -968,7 +975,8 @@ public final class Formatter {
             boolean movesDown = firstCase != null && comments.aboveToken()
                     .containsKey(new Written.Run(nameStart(firstCase), nameEnd(firstCase)));
             Place chainAt = places.under(at, sum.get().kind(),
-                    movesDown ? Opening.breaks(TokenDoc.Break.ALWAYS) : Opening.NONE,
+                    movesDown ? Opening.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE)
+                            : Opening.NONE,
                     Written.of(sum.get()));
             TokenDoc head = null;
             List<TokenDoc> cases = new ArrayList<>();
@@ -1032,8 +1040,8 @@ public final class Formatter {
             // block's indent rather than after the comma the rest of the block is written with.
             boolean first = lines.isEmpty();
             Place place = places.under(run, m.kind(),
-                    first ? new Opening.Breaks(TokenDoc.Break.ALWAYS, LBRACE)
-                            : new Opening.Breaks(TokenDoc.Break.ALWAYS, COMMA),
+                    Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN,
+                            first ? LBRACE : COMMA),
                     Written.of(m));
             TokenDoc written = m.kind() == SyntaxKind.FIELD
                     ? field(m, place)
@@ -1046,10 +1054,12 @@ public final class Formatter {
             // No member wrote the opening brace, so the block writes it on a line of its own. This
             // is the body that holds only comments: `dataDef` writes a body holding nothing at all
             // as `{}` and never reaches here.
-            lines.add(concat(HARD_GAP, LBRACE));
+            lines.add(concat(TokenDoc.forced(Obligation.A_BRACKET_TAKES_A_LINE_OF_ITS_OWN),
+                    LBRACE));
         }
         lines.add(TokenDoc.carries(run, Carrier.AT_END));
-        lines.add(concat(HARD_GAP, RBRACE));
+        lines.add(concat(TokenDoc.forced(Obligation.A_BRACKET_TAKES_A_LINE_OF_ITS_OWN),
+                RBRACE));
         // The place is the whole block and not what its members cover: the braces are the block's,
         // so the members leave them out and where the block is is where it wrote.
         return TokenDoc.node(body.kind(), TokenDoc.at(run, concat(lines)));
@@ -1099,7 +1109,8 @@ public final class Formatter {
                     continue;
                 }
                 Place clause = places.under(ofTheSig, c.kind(),
-                        Opening.breaks(TokenDoc.Break.ALWAYS), Written.of(c));
+                        Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
+                        Written.of(c));
                 TokenDoc listed = c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE
                         ? TokenDoc.node(c.kind(),
                                 concat(TokenDoc.token(SyntaxKind.CONSTRUCTS_KW, "constructs"), GAP,
@@ -1129,7 +1140,7 @@ public final class Formatter {
             // opener. What the declaration writes after the last stage is on that stage's line, so
             // it comes before the comment that ends the line rather than after it.
             Place ofTheStage = places.under(ofThePipe, st.kind(),
-                    new Opening.Breaks(TokenDoc.Break.MAY, i == 0 ? TokenDoc.NIL
+                    Opening.breaks(TokenDoc.Break.MAY, i == 0 ? TokenDoc.NIL
                             : concat(TokenDoc.token(SyntaxKind.PIPEFWD, ">->"), GAP)),
                     Written.of(st));
             // The declared output is written after the last stage and on that stage's line, so that
@@ -1721,7 +1732,8 @@ public final class Formatter {
         List<TokenDoc> lines = new ArrayList<>();
         lines.add(headerLine(run, n.token(SyntaxKind.ELSE_KW)));
         for (SyntaxNode arm : childNodes(arms.get(), SyntaxKind.ELSE_ARM)) {
-            Place place = places.under(run, arm.kind(), Opening.breaks(TokenDoc.Break.ALWAYS),
+            Place place = places.under(run, arm.kind(),
+                    Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(arm));
             lines.add(TokenDoc.at(place, concat(TokenDoc.node(arm.kind(),
                             concat(PIPE, GAP, ident(firstIdent(arm)), GAP, ARROW, GAP,
@@ -1753,7 +1765,8 @@ public final class Formatter {
                 Written.of(scrutinee));
         List<TokenDoc> cases = new ArrayList<>();
         for (SyntaxNode c : childNodes(n, SyntaxKind.MATCH_CASE)) {
-            Place place = places.under(at, c.kind(), Opening.breaks(TokenDoc.Break.ALWAYS),
+            Place place = places.under(at, c.kind(),
+                    Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(c));
             cases.add(TokenDoc.at(place, concat(matchCase(c, place), TokenDoc.endsTheLineOf(place))));
         }
@@ -1859,9 +1872,9 @@ public final class Formatter {
                                         childAt(place, v, Opening.NONE)))
                                 .orElse(ident(firstIdent(c))));   // shorthand `field`
             }
-            // A member's leading comments come before it, each on its own line. The HARD_GAP forces
-            // the enclosing group to break, which is what a literal with a comment in it wants
-            // anyway: a `//` on a line the group had collapsed would swallow the rest of it.
+            // A member's leading comments come before it, each on its own line. The boundary after
+            // one forces the enclosing group to break, which is what a literal with a comment in it
+            // wants anyway: a `//` on a line the group had collapsed would swallow the rest of it.
             members.add(member(place, c, written));
         }
         return TokenDoc.node(n.kind(), concat(ident(typeName), GAP, TokenDoc.at(run,
@@ -1880,12 +1893,13 @@ public final class Formatter {
         java.util.Set<SyntaxNode> paragraph = openedByABlankLine(n, steps);
         for (SyntaxNode c : steps) {
             if (!lines.isEmpty() && paragraph.contains(c)) {
-                lines.add(TokenDoc.BLANK_LINE);
+                lines.add(TokenDoc.blank(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN));
             }
             // A statement inside a block carries its leading comments the same way a top-level item
             // does. Walking only the child nodes dropped them, so a comment explaining a step was
             // lost on the first format.
-            Place place = places.under(run, c.kind(), Opening.breaks(TokenDoc.Break.ALWAYS),
+            Place place = places.under(run, c.kind(),
+                    Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(c));
             TokenDoc d = switch (c.kind()) {
                 case LET_STMT -> TokenDoc.node(c.kind(), concat(TokenDoc.token(SyntaxKind.LET_KW, "let"), GAP, ident(firstIdent(c)),
@@ -1902,7 +1916,9 @@ public final class Formatter {
         lines.add(TokenDoc.carries(run, Carrier.AT_END));
         return TokenDoc.at(run, TokenDoc.node(n.kind(),
                 concat(LBRACE, headerLine(run, n.token(SyntaxKind.LBRACE)),
-                        nest(INDENT, concat(lines)), HARD_GAP, RBRACE)));
+                        nest(INDENT, concat(lines)),
+                        TokenDoc.forced(Obligation.A_BRACKET_TAKES_A_LINE_OF_ITS_OWN),
+                        RBRACE)));
     }
 
     /** A binding pattern, written back as it was: a name, a tuple, a newtype opened by its
@@ -1993,7 +2009,7 @@ public final class Formatter {
         // condition happened to finish on. The condition's group is measured afterwards, on the
         // line the `guard` left it, so it stays flat where it fits there.
         Place ofTheDeparture = places.under(at, exprs.get(1).kind(),
-                new Opening.Breaks(TokenDoc.Break.MAY,
+                Opening.breaks(TokenDoc.Break.MAY,
                         concat(TokenDoc.token(SyntaxKind.ELSE_KW, "else"), GAP)),
                 Written.of(exprs.get(1)));
         return TokenDoc.node(n.kind(), group(concat(

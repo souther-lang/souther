@@ -32,20 +32,28 @@ sealed interface TokenDoc {
     TokenDoc NIL = new Nil();
 
     /** Two tokens on one line, with whatever the rule says between them. */
-    TokenDoc GAP = new Gap(Break.NEVER, true);
+    TokenDoc GAP = new Gap(Break.NEVER, null, true);
 
     /** A boundary the layout may break, and which holds the rule's answer where it does not. */
-    TokenDoc SOFT_GAP = new Gap(Break.MAY, true);
+    TokenDoc SOFT_GAP = new Gap(Break.MAY, null, true);
 
-    /** A boundary the layout always breaks. It has no unbroken form, so the rule is not asked. */
-    TokenDoc HARD_GAP = new Gap(Break.ALWAYS, true);
+    /** Writes nothing, and the group holding it is never laid out flat — {@link Doc#MUST_BREAK}.
+     *  What refuses is a comment, so it is that obligation this discharges. */
+    TokenDoc MUST_BREAK = new MustBreak(Obligation.NOTHING_SHARES_A_COMMENTS_LINE);
+
+    /** A boundary the layout always breaks, and the obligation it is written for. It has no
+     *  unbroken form, so the spacing rule is not asked about it — and there is no constant for one,
+     *  because a forced boundary with no obligation would be the policy standing in for the rule
+     *  again. */
+    static TokenDoc forced(Obligation obligation) {
+        return new Gap(Break.ALWAYS, obligation, true);
+    }
 
     /** A break that leaves a line with nothing on it, which is what a blank line is. Written before
      *  the boundary that opens the next line, so the two together are one blank line. */
-    TokenDoc BLANK_LINE = new Gap(Break.ALWAYS, false);
-
-    /** Writes nothing, and the group holding it is never laid out flat — {@link Doc#MUST_BREAK}. */
-    TokenDoc MUST_BREAK = new MustBreak();
+    static TokenDoc blank(Obligation obligation) {
+        return new Gap(Break.ALWAYS, obligation, false);
+    }
 
     /** What the layout may do at a boundary. What is written where it does not break is not here:
      * that is the rule's, and a construct choosing both would be spelling the separator again. */
@@ -107,13 +115,29 @@ sealed interface TokenDoc {
             implements TokenDoc {}
 
     /**
-     * A boundary between two tokens, and whether the break it may write indents the line it opens.
+    /**
+     * A boundary, the obligation it is written for where it always breaks, and whether the break it
+     * may write indents the line it opens.
      *
-     * <p>Every boundary but one does. The exception is the break that leaves a blank line: the line
-     * it opens has nothing on it, so it has no indent to write, and writing one would leave spaces
-     * on a line a reader sees as empty and an editor strips.
+     * <p>The obligation is there exactly where the policy is {@link Break#ALWAYS}. A boundary the
+     * layout may break is settled by the group holding it and a boundary it may not is the spacing
+     * rule's, so those two say which rule answers them by their policy alone; a forced one does
+     * not, and five constructions write one.
+     *
+     * <p>Every boundary but one indents. The exception is the break that leaves a blank line: the
+     * line it opens has nothing on it, so it has no indent to write, and writing one would leave
+     * spaces on a line a reader sees as empty and an editor strips.
      */
-    record Gap(Break policy, boolean indents) implements TokenDoc {}
+    record Gap(Break policy, Obligation forced, boolean indents) implements TokenDoc {
+
+        public Gap {
+            if ((policy == Break.ALWAYS) != (forced != null)) {
+                throw new IllegalArgumentException(
+                        "a forced boundary says what forced it, and no other boundary does: "
+                                + policy + " with " + forced);
+            }
+        }
+    }
 
     record Concat(List<TokenDoc> parts) implements TokenDoc {}
 
@@ -121,7 +145,8 @@ sealed interface TokenDoc {
 
     record Group(TokenDoc doc) implements TokenDoc {}
 
-    record MustBreak() implements TokenDoc {}
+    /** Writes nothing and refuses a flat layout, for the obligation named. */
+    record MustBreak(Obligation forced) implements TokenDoc {}
 
     static TokenDoc token(SyntaxKind kind, String lexeme) {
         return new Token(kind, lexeme);

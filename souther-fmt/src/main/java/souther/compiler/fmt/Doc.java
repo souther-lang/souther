@@ -24,10 +24,47 @@ sealed interface Doc {
     record Nil() implements Doc {}
     record Text(String s) implements Doc {}
 
-    /** Which of the things that refuse a flat layout this one is. A group is broken by one of them
-     * in particular, and told apart only by their kind two hardlines are one answer. */
+    /**
+     * Which of the things that refuse a flat layout this one is, and the obligation it discharges.
+     *
+     * <p>An identity because a group is broken by one of them in particular, and told apart only by
+     * their kind two hardlines are one answer. The obligation is on it rather than beside it: what
+     * refused and why it was written there are one fact, and a layout that carried the first alone
+     * would send a reader back to the document to look the second up.
+     */
     final class Ref {
+
+        private final Obligation obligation;
+
+        Ref(Obligation obligation) {
+            if (obligation == null) {
+                throw new IllegalArgumentException(
+                        "a break written whatever the width says what it is written for");
+            }
+            this.obligation = obligation;
+        }
+
+        Obligation obligation() {
+            return obligation;
+        }
     }
+    /**
+     * A document that cannot be laid out flat, and which says what it is written for.
+     *
+     * <p>Three of them, and a group broken by one is broken by one of these. Named as a kind so
+     * that a broken group can be asked its obligation and answer, rather than the caller matching
+     * over three cases that all hold the same thing.
+     */
+    sealed interface Refuses permits Hard, Trailing, MustBreak {
+
+        Ref ref();
+
+        /** The obligation the group holding this was written down the page for. */
+        default Obligation obligation() {
+            return ref().obligation();
+        }
+    }
+
     record Line(LineRef ref, String flat) implements Doc {}
 
     /** Which place the layout may break this is. Two written the same way are two of them, and the
@@ -36,9 +73,10 @@ sealed interface Doc {
     final class LineRef {
     }
 
-    /** A break, and whether it writes the indent of the line it opens. The one that does not is the
-     *  one that leaves a blank line: nothing is on that line, so it has no indent. */
-    record Hard(Ref ref, boolean indents) implements Doc {}
+    /** A break, the obligation it is written for, and whether it writes the indent of the line it
+     *  opens. The one that does not is the one that leaves a blank line: nothing is on that line,
+     *  so it has no indent. */
+    record Hard(Ref ref, boolean indents) implements Doc, Refuses {}
     record Concat(List<Doc> parts) implements Doc {}
     record Nest(NestRef ref, int indent, Doc doc) implements Doc {}
 
@@ -68,9 +106,9 @@ sealed interface Doc {
      * for — it sits past the end of the line whatever its length — but nothing else can share the
      * line after it, so a group holding one cannot be laid out flat.
      */
-    record Trailing(Ref ref, String s) implements Doc {}
+    record Trailing(Ref ref, String s) implements Doc, Refuses {}
 
-    record MustBreak(Ref ref) implements Doc {}
+    record MustBreak(Ref ref) implements Doc, Refuses {}
 
     static Doc text(String s) {
         return new Text(s);
@@ -86,19 +124,21 @@ sealed interface Doc {
         return new Line(new LineRef(), "");
     }
 
-    /** Always a newline, and the group holding it is never laid out flat. */
-    static Doc hardline() {
-        return new Hard(new Ref(), true);
+    /** Always a newline, for the obligation named, and the group holding it is never laid out
+     *  flat. */
+    static Hard hardline(Obligation obligation) {
+        return new Hard(new Ref(obligation), true);
     }
 
     /** The same, leaving the line it opens empty: a blank line, written with no indent on it. */
-    static Doc blankLine() {
-        return new Hard(new Ref(), false);
+    static Hard blankLine(Obligation obligation) {
+        return new Hard(new Ref(obligation), false);
     }
 
-    /** Writes nothing, and the group holding it is never laid out flat. */
+    /** Writes nothing, and the group holding it is never laid out flat. What writes one is a
+     *  comment on a line of its own, so that is the obligation it discharges. */
     static Doc mustBreak() {
-        return new MustBreak(new Ref());
+        return new MustBreak(new Ref(Obligation.NOTHING_SHARES_A_COMMENTS_LINE));
     }
 
     static Doc concat(Doc... parts) {
@@ -109,9 +149,10 @@ sealed interface Doc {
         return new Concat(List.copyOf(parts));
     }
 
-    /** A comment at the end of the line the preceding document ends on. */
+    /** A comment at the end of the line the preceding document ends on. Nothing can follow it on
+     *  that line, which is the obligation it refuses a flat layout for. */
     static Doc trailing(String s) {
-        return new Trailing(new Ref(), s);
+        return new Trailing(new Ref(Obligation.NOTHING_SHARES_A_COMMENTS_LINE), s);
     }
 
     static Doc nest(int indent, Doc doc) {
@@ -215,19 +256,21 @@ sealed interface Doc {
                     // decision settles it. The formatter writes none, which is its own check.
                     if (it.within() != null) {
                         opportunities.add(new Opportunity(l.ref(), it.within(),
-                                it.mode != Mode.FLAT));
+                                it.mode != Mode.FLAT, sb.length()));
                     }
                     if (it.mode == Mode.FLAT) {
                         sb.append(l.flat());
                         col += l.flat().length();
                     } else {
-                        breaks.add(newline(sb, it, it.indent));
+                        breaks.add(newline(sb, it, it.indent,
+                                new Newline.Cause.Settled(l.ref()), true));
                         col = it.indent;
                     }
                 }
                 case Hard h -> {
                     int indent = h.indents() ? it.indent : 0;
-                    breaks.add(newline(sb, it, indent));
+                    breaks.add(newline(sb, it, indent,
+                            new Newline.Cause.Forced(h.ref().obligation()), h.indents()));
                     col = indent;
                 }
                 case Trailing t -> {
@@ -241,13 +284,14 @@ sealed interface Doc {
         return new Layout(sb.toString(), decisions, extents, breaks, opportunities);
     }
 
-    /** Writes a break and says what it wrote. {@code indent} is the item's, except on the break
-     *  that leaves a blank line, whose line has nothing on it to indent. */
-    private static Newline newline(StringBuilder sb, Item it, int indent) {
+    /** Writes a break and says what it wrote, and what wrote it. {@code indent} is the item's,
+     *  except on the break that leaves a blank line, whose line has nothing on it to indent. */
+    private static Newline newline(StringBuilder sb, Item it, int indent, Newline.Cause cause,
+            boolean indents) {
         int offset = sb.length();
         sb.append('\n').append(" ".repeat(indent));
         return new Newline(offset, indent,
-                it.under() == null ? List.of() : it.under().outermostFirst());
+                it.under() == null ? List.of() : it.under().outermostFirst(), cause, indents);
     }
 
     /**
