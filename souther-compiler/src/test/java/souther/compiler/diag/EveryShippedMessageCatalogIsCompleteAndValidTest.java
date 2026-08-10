@@ -595,9 +595,10 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     @Test
     void everyMessageIsBuiltSomewhere() throws IOException {
+        Set<String> built = built();
         List<String> unbuilt = new ArrayList<>();
         for (Class<? extends Message> message : messages()) {
-            if (!built().contains(message.getEnclosingClass().getSimpleName() + "."
+            if (!built.contains(message.getEnclosingClass().getSimpleName() + "."
                     + message.getSimpleName())) {
                 unbuilt.add(message.getName());
             }
@@ -627,10 +628,11 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
      */
     @Test
     void everyCodeIsReportedByAMessage() throws IOException {
+        Set<String> built = built();
         Set<DiagnosticCode> reported = new java.util.HashSet<>();
         for (Class<? extends Message> message : messages()) {
             if (souther.compiler.diag.msg.Reported.class.isAssignableFrom(message)
-                    && built().contains(message.getEnclosingClass().getSimpleName() + "."
+                    && built.contains(message.getEnclosingClass().getSimpleName() + "."
                             + message.getSimpleName())) {
                 reported.add(MessageCodes.of(
                         message.asSubclass(souther.compiler.diag.msg.Reported.class)));

@@ -233,6 +233,7 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
     private List<String> every(String name) {
         List<String> parts = new ArrayList<>();
         String arguments = "{\"name\":\"" + name + "\"}";
+        int printed = -1;
         while (true) {
             String said = text(call(arguments));
             Matcher carriesOn = CARRIES_ON.matcher(said);
@@ -241,8 +242,11 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
                 return parts;
             }
             parts.add(carriesOn.group(1));
+            if (printed < 0) {
+                printed = printed(name).length();
+            }
             assertEquals(Integer.parseInt(carriesOn.group(2)),
-                    printed(name).length() - String.join("", parts).length(),
+                    printed - String.join("", parts).length(),
                     "a part says how much of the document is still to come");
             arguments = withCursor("{\"name\":\"" + name + "\"}", carriesOn.group(3));
             assertTrue(parts.size() < 100, "the walk is not advancing");
