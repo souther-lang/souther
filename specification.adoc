@@ -3644,7 +3644,32 @@ The model author does not write this type name in Souther source; they only writ
 [#compiler-pipeline]
 == Compiler structure
 
-[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler walks. Every later reading of it — checking, formatting, compiling — descends it the same way, so a text that is too deep for one is too deep for all of them, and the limit is stated as the compiler's rather than as any one pass's. Naming the parts with `+let+` flattens it.
+[[source-nesting-is-bounded]]A source MUST nest no deeper than the compiler reads. The limit is stated as the compiler's rather than as any one pass's, and it is reached while reading, so it is reported at the token that reached it — including by the formatter, which reads sources it cannot compile. Breaking the nesting into named parts is how a text past it is written instead.
+
+[[source-structural-complexity-is-bounded]]A definition MUST have a structural complexity of 320 or less. Its complexity is counted over what the source wrote:
+
+* a name or a literal is one;
+* a construct is one more than the deepest thing it holds;
+* an application of a helper that is substituted at the call (<<fn-rules>>) is its argument count more than the deepest of what it holds, since each argument is bound where the body is put; an application that is not substituted — a behavior, a recursive helper, a function a binding holds — is a construct like any other;
+* a name that reaches a value counts that value's complexity where the value is substituted (<<fn-value-semantics>>).
+
+A block is counted in the steps its statements take. Everything a statement is followed by is written inside what that statement introduced, so a block of statements and an expression written that deep are the same structure said two ways, and what a statement holds is counted from where that statement stands rather than from the block's end.
+
+A step is not always a binding. A `+guard+` introduces no name and is one step, since what follows it is written inside the case it settles; an ordinary `+let+` is one; a `+let+` written with a pattern is one per binding that pattern introduces.
+
+A pattern that is a name costs nothing beyond the name it binds. Any other pattern takes a value apart, and binds the value and each part taken out of it: a tuple binds the value and each of its elements, a record the value and one per field it names, a case the value and whatever its inner pattern binds, each of those counted the same way through a pattern written inside one.
+
+Two things follow from that, and they are different numbers. What comes after the pattern is written inside one level per binding, since each part is named before the next is: that is what a `+let+` written with a pattern takes as steps. Taking a part out of the value is one level more, on the part rather than on what comes after — so a pattern on its own is one deeper than it binds, and a statement written with one encloses what follows it in the bindings alone. A definition's parameters, and a lambda's, are patterns with the body written after them, and cost the bindings and that one more.
+
+This is a separate limit from the one above, and neither implies the other. Nesting is bounded as the source is read; complexity is bounded over what the source says, which the reading does not settle: a module writes its declarations flat and substitution composes them, so a source that nests barely at all can be arbitrarily complex. It is reported at the construct that exceeded it — the block, the definition, or the value whose substitution composed it — and never as a nesting to flatten, since naming parts is what composes complexity rather than what reduces it.
+
+The limit is a property of the language, not of a compiler's internal representation. What a compiler builds from a definition, and how deep that is, is its own choice; what a definition may say is this.
+
+A compiler states the runtime it holds this bound on. Every phase descends what it builds by recursion, so what a definition may say and what it takes to walk one are the same question asked from two sides, and a stack left to whatever a platform defaults to would make a source compile in one place and not another. This compiler is supported on a 4 MB thread stack, against a source at the bound needing about a megabyte. The `+souther+` binary sets it for itself and this compiler's tests run with it; a host that launches the language server, or the compiler as a library, is the one that gives it that stack, and this is what it has to give. The number is this implementation's and moves with it; the bound above does not.
+
+[[running-out-of-room-is-reported]]A compiler that runs out of room MUST report it rather than fail. Every phase descends what it builds by recursion, and running out of stack is not a diagnostic, so left alone it reaches the author as a trace and takes an editor's session with it. No position is claimed: where the stack ended is not a fact about the source.
+
+This is not either of the limits above said again. Both of those are reached at a place in the source and reported there; this is reached wherever a walk happened to end, and on the stated runtime a source that passed both should not reach it at all. Reaching it is therefore a report about the compiler or about the stack it was given, and it says so rather than asking the author to change anything.
 
 [,text]
 ----
@@ -5366,15 +5391,57 @@ As E2102, for the other thing a class file runs out of. The pool belongs to the 
 The pool is run out of two ways and the message says which: referring to an entry the class file cannot address, which names the entry that was wanted, and holding more entries than it can write out, which names how many there are. They are one code because the author's move is the same.
 
 [#e2104]
-=== A source nests deeper than the compiler walks
+=== A source nests deeper than the compiler reads
 
 [,text]
 ----
-An expression in this source nests too deeply for the compiler to walk. Name its parts with `let` to
-flatten it.
+This nests deeper than I read. Break it into parts that have names, so each one is read on its own
+and says what it is: a binding for a value, a declaration for a type. What those parts add up to is
+bounded too, and far above this.
 ----
 
-Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). Every pass descends the same text the same way, so this is not one pass's limit; it is reported wherever the descent is made, including by the formatter, which reads sources it cannot compile.
+Reported where reading a source descends past the depth the compiler holds itself to (<<source-nesting-is-bounded>>). It is reached while reading, so it is reported wherever the reading is done, including by the formatter, which reads sources it cannot compile, and at the token that reached it.
+
+Naming the parts is the answer to this one, and what the parts add up to is a separate limit — <<e2107>>, which is far above this one and counted differently. What a pass builds from a source may be deeper than the source was; this limit says nothing about that.
+
+[#e2107]
+=== A definition is more complex than the compiler holds
+
+[,text]
+----
+This block takes {steps} structural steps, and a definition holds at most {holds}. Everything a
+statement is followed by is written inside what that statement introduced, so each step is a level —
+a `guard` binds nothing and is one all the same.
+----
+
+[,text]
+----
+`let {definition}` is {costs} levels of structure, and a definition holds at most {holds}.
+----
+
+[,text]
+----
+Substituting `{value}` here takes this past {holds} levels of structure, which is what a definition
+holds. A value is substituted where it is named, so what it is worth is added to what names it.
+----
+
+Reported where a definition says more than the compiler holds (<<source-structural-complexity-is-bounded>>), at whichever construct exceeded it: the block, the definition as written, or the value whose substitution composed it. The three are one limit counted one way, and which of them is reported is where the count first passed it.
+
+Naming parts with `+let+` is not the answer to this one — it is what a block and a substitution are made of, and both are counted. What reduces it is writing less structure: a behavior of its own, which is a definition of its own and counted on its own.
+
+[#e2108]
+=== The compiler ran out of room
+
+[,text]
+----
+I ran out of room working on this. What a source may nest and what a definition may say are both
+bounded, and a source past either is refused with the place it happened, so this is not a report
+about the source: on the stack this compiler is supported on, something it built went deeper than
+anything it accepted should. Either the stack it was given is smaller than that, or this is a shape
+the bounds do not hold yet.
+----
+
+Reported where a walk exhausted the stack (<<running-out-of-room-is-reported>>). It carries no position and asks for nothing: a source within <<source-nesting-is-bounded>> and <<source-structural-complexity-is-bounded>>, read on the runtime the compiler states, does not reach it.
 
 [#e2105]
 === Two declarations become one class

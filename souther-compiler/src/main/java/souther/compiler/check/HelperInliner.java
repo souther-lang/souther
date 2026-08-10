@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -11,6 +12,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.HelperMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.SourcePos;
@@ -840,6 +842,7 @@ public final class HelperInliner {
     /** As {@link #inline(Ast.Expr, BindingOwner)}, for the body of a behavior {@code let} whose
      * {@code depends on} parameters are the trailing bindings named in {@code dependencies}. */
     public Ast.Expr inline(Ast.Expr e, Set<BindingId> dependencies, BindingOwner into) {
+        heldToTheBound(e);
         return writing(into, dependencies, () -> inline(e));
     }
 
@@ -850,6 +853,7 @@ public final class HelperInliner {
      * so two copies of one helper's body spliced into two definitions do not answer as one binding.
      */
     public Ast.Expr inline(Ast.Expr e, BindingOwner into) {
+        heldToTheBound(e);
         return writing(into, Set.of(), () -> inline(e));
     }
 
@@ -879,6 +883,41 @@ public final class HelperInliner {
         } finally {
             writing = outer;
         }
+    }
+
+    /**
+     * Refuses a body whose expansion would say more than a definition holds.
+     *
+     * <p>Before the expansion and not after it. What the expansion builds is what a walk after it
+     * descends, so a body that composed past the bound is one nothing downstream can be asked
+     * about — and the expansion that built it descends it too, so finding out by running it is
+     * finding out by running out.
+     *
+     * <p>Counted over what the source wrote, with each name standing for what it reaches. The body
+     * as written was already held to the bound where it was written; what is asked here is the
+     * larger question, which only substitution can answer: a definition can be small and name three
+     * that are not.
+     */
+    private void heldToTheBound(Ast.Expr body) {
+        StructuralCost.Composed composed = StructuralCost.composed(body, this::substitutedAt);
+        if (composed.isPastTheBound()) {
+            throw CompileException.of(Diagnostic
+                    .say(new DeclarationMessage.SubstitutingAValueIsMoreStructureThanIsHeld(
+                            composed.past().name(), StructuralCost.MAX))
+                    .at(composed.past().pos())
+                    .hint(new DeclarationMessage.WriteItAsABehaviorOfItsOwn())
+                    .build());
+        }
+    }
+
+    /** The body {@code name} would put here, or null where the name stands for itself — asked as
+     *  {@link #valueOf} and {@link #expandCall} ask it, so what is counted is what is spliced. */
+    private Ast.Expr substitutedAt(Ast.Var name) {
+        if (!(name.denotes() instanceof ValueName.Helper) || graph.recurses(name.reaches())) {
+            return null;
+        }
+        Ast.FnDef reached = table.reached(name.reaches());
+        return reached == null || reached.body() == null ? null : reached.writtenBody();
     }
 
     /** The next number this pass has for the body it is writing into. */

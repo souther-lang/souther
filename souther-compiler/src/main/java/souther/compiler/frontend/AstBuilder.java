@@ -3,6 +3,7 @@ package souther.compiler.frontend;
 import souther.compiler.diag.msg.Reported;
 import souther.compiler.diag.msg.Supporting;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.StructuralCost;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.LineIndex;
 import souther.compiler.cst.SyntaxElement;
@@ -459,6 +460,18 @@ public final class AstBuilder {
                 SourcePos at = pos(pat);
                 body = bindPattern(pat, Ast.Var.desugared(params.get(i).name(), at), body, at);
             }
+        }
+        // What the definition says, measured on what was built for it. Folding a block writes a
+        // level per structural step and folding a pattern writes one per binding and one to take
+        // them out of the value, which is what those cost (spec
+        // [#source-structural-complexity-is-bounded]) — so this is the source's number, arrived at
+        // the only place it is ever arrived at.
+        int costs = StructuralCost.of(body);
+        if (costs > StructuralCost.MAX) {
+            throw errorWithHint(pos,
+                    new DeclarationMessage.ADefinitionIsMoreStructureThanIsHeld(
+                            declared.spelling(), costs, StructuralCost.MAX),
+                    new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
         }
         return new Ast.FnDef(declared, moduleName, params, declaredReturn,
                 new Ast.FnBody.Written(body), modifiers, pos);
@@ -1093,7 +1106,89 @@ public final class AstBuilder {
         return foldStatements(stmts, 0, result);
     }
 
+    /**
+     * How many steps a block takes, blocks written inside it counted along with it, read from the
+     * source before any of it is folded.
+     *
+     * <p>Before, because folding descends once per step and a block whose steps are the ones inside
+     * it too has as many to descend. Each block on its own can be well under the bound while what
+     * they come to together is thousands, and the fold would be that far down before anything could
+     * say so — the answer would come from running out rather than from counting.
+     *
+     * <p>What is counted is the way down: the steps before a statement, the step it is, and then
+     * whatever block it holds. A block held at the first statement of one that takes three hundred
+     * costs what it costs and not three hundred more, which is what makes this never refuse
+     * something the whole count would keep. Anything that is not a block counts as one here — it is
+     * bounded as the source is read, and this is only about what the fold will descend.
+     */
+    private int stepsTakenBy(List<SyntaxNode> stmts, SyntaxNode result) {
+        int stepsBefore = 0;
+        int most = 0;
+        for (SyntaxNode stmt : stmts) {
+            for (SyntaxNode held : exprChildren(stmt)) {
+                most = Math.max(most, stepsBefore + 1 + stepsHeldBy(held));
+            }
+            stepsBefore += stepsTakenBy(stmt);
+        }
+        return Math.max(most, stepsBefore + stepsHeldBy(result));
+    }
+
+    /**
+     * What the deepest block written anywhere in {@code held} would take, or one where there is no
+     * block in it.
+     *
+     * <p>Down through whatever is written around a block and not only where one is written
+     * directly. A block handed to a call or put in a tuple is a block the fold still descends, and
+     * a preflight that only looked at what a statement's value is would be walked past by writing
+     * {@code f({ … })}. What is written around it is not counted — a construct is a level and the
+     * source's nesting is bounded as it is read — so what this comes to is the steps the fold will
+     * take and nothing else.
+     */
+    private int stepsHeldBy(SyntaxNode held) {
+        if (held == null) {
+            return 1;
+        }
+        if (held.kind() == SyntaxKind.BLOCK_EXPR) {
+            List<SyntaxNode> stmts = new ArrayList<>();
+            SyntaxNode result = null;
+            for (SyntaxNode c : held.childNodes()) {
+                switch (c.kind()) {
+                    case LET_STMT, LET_DESTRUCTURE, GUARD_STMT -> stmts.add(c);
+                    default -> result = c;
+                }
+            }
+            return stepsTakenBy(stmts, result);
+        }
+        int most = 1;
+        for (SyntaxNode child : held.childNodes()) {
+            most = Math.max(most, stepsHeldBy(child));
+        }
+        return most;
+    }
+
+    /** How many steps one statement takes: a `let` written with a pattern is what the pattern
+     *  binds, and anything else — an ordinary `let`, a `guard`, which binds nothing — is one. */
+    private int stepsTakenBy(SyntaxNode stmt) {
+        return stmt.kind() == SyntaxKind.LET_DESTRUCTURE
+                ? bindingsIntroducedBy(patternChild(stmt))
+                : 1;
+    }
+
     private Ast.Expr foldStatements(List<SyntaxNode> stmts, int index, SyntaxNode result) {
+        // Before the fold and not after it. Everything a statement is followed by is written inside
+        // what that statement introduced, so folding them descends once per step — a block long
+        // enough to be refused is a block long enough to run this out on the way to saying so.
+        if (index == 0) {
+            int steps = stepsTakenBy(stmts, result);
+            if (steps > StructuralCost.MAX) {
+                // A block holding nothing but another block has no statement to be reported at, and
+                // what it comes to is what that one comes to; the result is where it is written.
+                throw errorWithHint(pos(stmts.isEmpty() ? result : stmts.get(stmts.size() - 1)),
+                        new DeclarationMessage.ABlockTakesMoreStructuralStepsThanADefinitionHolds(
+                                steps, StructuralCost.MAX),
+                        new DeclarationMessage.WriteItAsABehaviorOfItsOwn());
+            }
+        }
         if (index == stmts.size()) {
             return expr(result);   // a block always ends in a result expression
         }
@@ -1118,14 +1213,14 @@ public final class AstBuilder {
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 if (arms != null) {
-                    yield new Ast.IfConstructed(expr(exprs.get(0)),
-                            binderOf(as), rest, arms, pos);
+                    yield new Ast.IfConstructed(expr(exprs.get(0)), binderOf(as), rest, arms, pos);
                 }
+                Ast.Expr settles = expr(exprs.get(0));
+                Ast.Expr otherwise = expr(exprs.get(1));
                 yield binder == null
-                        ? new Ast.If(expr(exprs.get(0)), rest, expr(exprs.get(1)), pos)
-                        : new Ast.IfConstructed(expr(exprs.get(0)),
-                                binderOf(as), rest,
-                                List.of(Ast.ElseArm.any(expr(exprs.get(1)))), pos);
+                        ? new Ast.If(settles, rest, otherwise, pos)
+                        : new Ast.IfConstructed(settles, binderOf(as), rest,
+                                List.of(Ast.ElseArm.any(otherwise)), pos);
             }
             case LET_DESTRUCTURE -> {
                 SyntaxNode pat = patternChild(s);
@@ -1142,6 +1237,44 @@ public final class AstBuilder {
      * to field reads — so nothing past this point has to know a pattern was written. It is the same
      * lowering a {@code match} arm does; the difference is only that here there is one arm.
      */
+    /** How many bindings {@code patterns} introduce between them — what they cost, counted from
+     *  what the source wrote rather than from the shape {@link #bindPattern} folds them into. */
+    private int bindingsIntroducedBy(List<SyntaxNode> patterns) {
+        int bindings = 0;
+        for (SyntaxNode pat : patterns) {
+            bindings += pat == null ? 0 : bindingsIntroducedBy(pat);
+        }
+        return bindings;
+    }
+
+    /**
+     * How many bindings one pattern introduces.
+     *
+     * <p>The value itself is one, and what is taken out of it is one each: an element of a tuple,
+     * a field a record pattern names, what a case pattern opens. A pattern written inside one of
+     * those counts its own the same way. Nothing here reads the tree the pattern becomes — this is
+     * what the author wrote, and it is what the bound is over.
+     */
+    private int bindingsIntroducedBy(SyntaxNode pat) {
+        return switch (pat.kind()) {
+            case PATTERN_NAME -> 1;
+            case PATTERN_TUPLE -> {
+                List<SyntaxNode> elems = patternChildren(pat);
+                if (elems.size() == 1) {
+                    yield bindingsIntroducedBy(elems.get(0));   // `(p)` is grouping
+                }
+                int bindings = 1;
+                for (SyntaxNode elem : elems) {
+                    bindings += bindingsIntroducedBy(elem);
+                }
+                yield bindings;
+            }
+            case PATTERN_CTOR -> 1 + bindingsIntroducedBy(patternChild(pat));
+            case PATTERN_RECORD -> 1 + childNodes(pat, SyntaxKind.PATTERN_FIELD).size();
+            default -> 1;
+        };
+    }
+
     private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos) {
         return switch (pat.kind()) {
             case PATTERN_NAME -> new Ast.LetIn(binderOf(pat), value, rest, pos);
