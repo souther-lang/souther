@@ -67,8 +67,9 @@ final class Witnesses {
         Map<Integer, Place> opened = placesByStart(layout);
 
         for (Newline n : layout.breaks()) {
-            if (n.under().isEmpty()) {
-                continue;   // a line the file holds, at column zero, under no nesting
+            if (n.under().isEmpty() || !n.indents()) {
+                continue;   // a line the file holds under no nesting, or one with nothing on it:
+                            // neither is a line written at a level's column
             }
             Doc.NestRef innermost = n.under().get(n.under().size() - 1);
             Integer already = written.put(innermost, n.indent());
@@ -117,6 +118,9 @@ final class Witnesses {
         Map<Integer, Place> opened = placesByStart(layout);
         Map<Newline, Integer> out = new LinkedHashMap<>();
         for (Newline n : layout.breaks()) {
+            if (!n.indents()) {
+                continue;   // its line has nothing on it, so there is no indent to repair
+            }
             Integer start = lineStartFor(source, canonical, opened, n);
             if (start != null) {
                 out.put(n, start);

@@ -228,6 +228,9 @@ public final class Formatter {
             file(out, declared, endsTheLine(e.getKey(), e.getKey().end(), declared),
                     Carrier.TRAILING, e.getValue());
         }
+        for (var e : comments.below().entrySet()) {
+            file(out, declared, entryPlaces(e.getKey(), Carrier.BELOW), Carrier.BELOW, e.getValue());
+        }
         for (var e : comments.atEnd().entrySet()) {
             file(out, declared, entryPlaces(e.getKey(), Carrier.AT_END), Carrier.AT_END, e.getValue());
         }
@@ -523,9 +526,23 @@ public final class Formatter {
             // hands the brackets over and the pass that answers the carriers says.
             return new TokenDoc.Vacant(run, construct, open, close, INDENT);
         }
-        return TokenDoc.node(construct, group(concat(open,
+        return group(bracketed(construct, open, members, close));
+    }
+
+    /**
+     * The same brackets and members, with no group of its own.
+     *
+     * <p>For the one caller that has to decide this bracket's layout together with what is written
+     * after it. A group is one decision, so a construct holding two of them holds two, and which of
+     * the two gives way first is then whichever the layout reaches with too little room left —
+     * an order that comes from how the document was built rather than from anything anyone decided.
+     * Handing the brackets over ungrouped is how a caller makes the two one decision.
+     */
+    private static TokenDoc bracketed(SyntaxKind construct, TokenDoc open, List<Member> members,
+            TokenDoc close) {
+        return TokenDoc.node(construct, concat(open,
                 nest(INDENT, separated(members)),
-                SOFT_GAP, close)));
+                SOFT_GAP, close));
     }
 
     /**
@@ -618,11 +635,15 @@ public final class Formatter {
         comments = attach(file);
         Place ofTheFile = places.fileOf(file);
         List<TokenDoc> parts = new ArrayList<>();
-        SyntaxKind prev = null;
+        List<SyntaxNode> items = new ArrayList<>();
         for (SyntaxNode item : file.childNodes()) {
-            if (!isTopLevel(item.kind())) {
-                continue;
+            if (isTopLevel(item.kind())) {
+                items.add(item);
             }
+        }
+        java.util.Set<SyntaxNode> paragraph = openedByABlankLine(file, items);
+        SyntaxKind prev = null;
+        for (SyntaxNode item : items) {
             // A top-level item's comments are read the same way a member's are, and marked written
             // the same way: an `example`'s comment is the item's leading trivia here and the first
             // row's from inside, and it belongs to whichever asks first.
@@ -634,8 +655,8 @@ public final class Formatter {
                     prev == null ? Opening.FILE_BEGINS
                             : Opening.forced(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN),
                     Written.of(item));
-            if (prev != null && blankBetween(prev, item.kind())) {
-                parts.add(TokenDoc.forced(Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS));
+            if (prev != null && blankBetween(prev, item.kind(), paragraph.contains(item))) {
+                parts.add(TokenDoc.blank(Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS));
             }
             parts.add(TokenDoc.at(at, concat(item(item, at), TokenDoc.endsTheLineOf(at))));
             prev = item.kind();
@@ -649,12 +670,66 @@ public final class Formatter {
         return TokenDoc.node(file.kind(), concat(parts));
     }
 
-    /** One blank line separates every top-level item, except the module header and its imports,
-     * which stay tight together (as gofmt keeps a package clause and its import block). */
-    private static boolean blankBetween(SyntaxKind prev, SyntaxKind current) {
-        boolean header = (prev == SyntaxKind.MODULE_HEADER || prev == SyntaxKind.IMPORT_DECL)
-                && current == SyntaxKind.IMPORT_DECL;
-        return !header;
+    /**
+     * What separates two top-level items: one blank line, or none.
+     *
+     * <p>Two of them are the file's rather than the author's. A module header is a header and the
+     * file begins under it; the imports are a block and what follows them is the module's own text.
+     * Both are written with a blank line under them whatever was there, which is what gofmt writes
+     * under a package clause and under an import block.
+     *
+     * <p>Everywhere else {@code written} says, which is whether the author put a blank line there.
+     * That a paragraph break is there is something a reader wrote and the canonical form keeps;
+     * how big it is is not, so any number of blank lines comes back as one. The canonical form still
+     * has one answer per input, and a run of related one-line declarations stays a run — which
+     * writing a blank line between every pair took away.
+     */
+    private static boolean blankBetween(SyntaxKind prev, SyntaxKind current, boolean written) {
+        if (prev == SyntaxKind.MODULE_HEADER || prev == SyntaxKind.EXAMPLES_FILE_HEADER) {
+            return true;
+        }
+        if (prev == SyntaxKind.IMPORT_DECL && current != SyntaxKind.IMPORT_DECL) {
+            return true;
+        }
+        return written;
+    }
+
+    /**
+     * Which of {@code members} the author wrote a blank line in front of.
+     *
+     * <p>Read from the trivia between the last code token of one member and the first of the next.
+     * A comment written in that gap belongs to one of the two members, and the blank line beside it
+     * is what separates the two groups either way, so what is asked is the gap and not the comment.
+     *
+     * <p>The tree is lossless and holds the blank lines; nothing read them. Counting the line breaks
+     * rather than asking whether one is there is the whole of the difference between a paragraph
+     * break and the end of a line.
+     */
+    private static java.util.Set<SyntaxNode> openedByABlankLine(SyntaxNode parent,
+            List<SyntaxNode> members) {
+        java.util.Set<SyntaxNode> out =
+                java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        if (members.size() < 2) {
+            return out;
+        }
+        List<SyntaxToken> blanks = new ArrayList<>();
+        for (SyntaxToken t : tokens(parent)) {
+            if (t.kind() == SyntaxKind.WHITESPACE && newlines(t) >= 2) {
+                blanks.add(t);
+            }
+        }
+        for (int i = 1; i < members.size(); i++) {
+            SyntaxToken last = lastCodeTokenOf(members.get(i - 1));
+            int from = last == null ? members.get(i - 1).end() : last.end();
+            int to = firstCodeOffset(members.get(i));
+            for (SyntaxToken t : blanks) {
+                if (t.start() >= from && t.start() < to) {
+                    out.add(members.get(i));
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     /** The kinds {@link #file} writes as items of the file, and so the kinds the separation between
@@ -1026,7 +1101,7 @@ public final class Formatter {
             // for it. It still ends that line, which is what lets it own the comment there.
             Place ofTheResult = places.under(ofTheSig, retNode.kind(), Opening.NONE,
                     Written.of(retNode));
-            TokenDoc ret = TokenDoc.at(ofTheResult, concat(retType(retNode, ofTheResult), TokenDoc.endsTheLineOf(ofTheResult)));
+            TokenDoc ret = TokenDoc.at(ofTheResult, retType(retNode, ofTheResult));
             List<TokenDoc> clauses = new ArrayList<>();
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() != SyntaxKind.CONSTRUCTS_CLAUSE
@@ -1048,8 +1123,10 @@ public final class Formatter {
             return TokenDoc.node(n.kind(),
                     concat(TokenDoc.token(SyntaxKind.BEHAVIOR_KW, "behavior"), GAP, ident(name),
                             GAP, COLON, GAP, TokenDoc.at(ofTheSig,
-                                    TokenDoc.node(s.kind(), concat(params, GAP, ARROW, GAP,
-                                            ret, nest(INDENT, concat(clauses)))))));
+                                    TokenDoc.node(s.kind(), concat(
+                                            signature(params, ret),
+                                            TokenDoc.carries(ofTheResult, Carrier.TRAILING),
+                                            nest(INDENT, concat(clauses)))))));
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         Place ofThePipe = places.under(at, pipe.kind(), Opening.NONE, Written.of(pipe));
@@ -1078,6 +1155,30 @@ public final class Formatter {
                         TokenDoc.node(pipe.kind(), group(nest(INDENT, concat(parts)))))));
     }
 
+    /**
+     * A behavior's inputs and output as one decision, so that the parameter list is what gives way
+     * when the signature does not fit and the output union is what gives way after it.
+     *
+     * <p>The order is a rule about reading a signature and not about the shape of the tree. A
+     * reader takes a signature as three regions — the name, the inputs, the output — and breaking
+     * the union first leaves one member of it on the signature line, attached to the arrow, with
+     * the rest below: a union whose members are alike, written as though the first were the answer.
+     * Breaking the inputs keeps all three regions whole.
+     *
+     * <p>What states the order is that the parameters have no group of their own and the union
+     * does. This one group covers both, so it is measured with the union flat and breaks at the
+     * parameters; the union is then measured on the line the {@code )} left it, and breaks only
+     * where it does not fit there by itself. Two groups would be two decisions and the layout would
+     * take whichever it reached with too little room — which is the parameters last, since they are
+     * written first.
+     *
+     * <p>The gaps around the arrow never break, so this group adds no place to break that the
+     * parameters and the union did not already have.
+     */
+    private static TokenDoc signature(TokenDoc params, TokenDoc ret) {
+        return group(concat(params, GAP, ARROW, GAP, ret));
+    }
+
     private TokenDoc paramList(SyntaxNode n, Place at) {
         Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
         List<Member> params = new ArrayList<>();
@@ -1087,8 +1188,12 @@ public final class Formatter {
                     concat(ident(firstIdent(p)), GAP, COLON, GAP,
                             retType(p.child(SyntaxKind.RET_TYPE).orElseThrow(), param)))));
         }
-        return TokenDoc.at(run,
-                delimited(run, SyntaxKind.PARAM_LIST, LPAREN, withEndComments(run, params), RPAREN));
+        List<Member> members = withEndComments(run, params);
+        // Ungrouped: a behavior signature lays this list out together with the union after the
+        // arrow, and which of the two gives way first is that construct's rule to state.
+        return TokenDoc.at(run, members.isEmpty()
+                ? new TokenDoc.Vacant(run, SyntaxKind.PARAM_LIST, LPAREN, RPAREN, INDENT)
+                : bracketed(SyntaxKind.PARAM_LIST, LPAREN, members, RPAREN));
     }
 
     /** One stage of a pipeline, which is a name and is written as one. */
@@ -1780,7 +1885,16 @@ public final class Formatter {
     private TokenDoc block(SyntaxNode n, Place at) {
         Place run = places.under(at, n.kind(), Opening.NONE, Written.of(n));
         List<TokenDoc> lines = new ArrayList<>();
-        for (SyntaxNode c : n.childNodes()) {
+        List<SyntaxNode> steps = n.childNodes();
+        // The paragraph breaks between the steps are the author's, the same as between two
+        // top-level items, and for the same reason: what a block has for structure is where its
+        // steps are grouped, and a body written as three paragraphs says something a body written
+        // as nine lines does not.
+        java.util.Set<SyntaxNode> paragraph = openedByABlankLine(n, steps);
+        for (SyntaxNode c : steps) {
+            if (!lines.isEmpty() && paragraph.contains(c)) {
+                lines.add(TokenDoc.blank(Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN));
+            }
             // A statement inside a block carries its leading comments the same way a top-level item
             // does. Walking only the child nodes dropped them, so a comment explaining a step was
             // lost on the first format.
@@ -1917,6 +2031,8 @@ public final class Formatter {
             Map<SyntaxNode, List<SyntaxToken>> above,
             /** At the end of the line the node ends. */
             Map<SyntaxNode, List<SyntaxToken>> after,
+            /** On lines of its own below the line the node ends, with a member still to come. */
+            Map<SyntaxNode, List<SyntaxToken>> below,
             /** Inside the node, under its last member and before it closes. */
             Map<SyntaxNode, List<SyntaxToken>> atEnd,
             /** Against a name rather than a node — the identifiers a sum's case or a clause's
@@ -1936,7 +2052,8 @@ public final class Formatter {
 
         static Attachments empty() {
             return new Attachments(new IdentityHashMap<>(), new IdentityHashMap<>(),
-                    new IdentityHashMap<>(), new java.util.HashMap<>(), new java.util.HashMap<>());
+                    new IdentityHashMap<>(), new IdentityHashMap<>(),
+                    new java.util.HashMap<>(), new java.util.HashMap<>());
         }
     }
 
@@ -1950,32 +2067,152 @@ public final class Formatter {
 
     /**
      * Every comment of {@code file}, against where it will be written. One pass over the tokens: a
-     * comment is read as written above the code that follows it or at the end of the code before it,
-     * and then given to whichever construct has the line that code is on.
+     * comment is read as written at the end of the code before it, above the code that follows it,
+     * or below the code before it, and then given to whichever construct has the line that code is
+     * on.
+     *
+     * <p>Which of the three is read from the line breaks around the comment, the blank line
+     * included. A comment on the code's own line was written after that code. A comment on a line
+     * of its own belongs to what follows it — unless a blank line stands under it and none stands
+     * over it, because then the blank line is what separates the comment from what follows and
+     * there is nothing between the comment and the code above. Counting only whether a line ended
+     * left that last case unreadable, and a note written under a declaration came back describing
+     * the next one.
      */
     private static Attachments attach(SyntaxNode file) {
         Attachments out = Attachments.empty();
         List<SyntaxToken> all = tokens(file);
         List<SyntaxToken> code = new ArrayList<>();   // the tokens that were not trivia
-        boolean lineEnded = true;                     // nothing precedes the first token of a file
+        int breaks = 1;                               // nothing precedes the first token of a file
         for (int i = 0; i < all.size(); i++) {
             SyntaxToken t = all.get(i);
             if (t.kind() == SyntaxKind.WHITESPACE) {
-                lineEnded |= t.text().indexOf('\n') >= 0;
+                breaks += newlines(t);
             } else if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                if (lineEnded) {
-                    Follows follows = nextCode(all, i);
-                    above(out, follows.code(), t, file, follows.pastAConnector());
-                } else {
+                if (breaks == 0) {
                     after(out, lastCode(code), t);
+                    breaks = 1;                       // a line comment runs to the end of its line
+                    continue;
                 }
-                lineEnded = true;                     // a line comment runs to the end of its line
+                // A run of comment lines with no blank line in it is one comment as far as this
+                // question goes. Asked line by line, a run with a blank line under it would have
+                // its last line answered one way and every line above it the other.
+                int last = runEnds(all, i);
+                SyntaxNode under = breaks >= 2 || !blankUnder(all, last)
+                        ? null
+                        : belowAnchor(lastCode(code));
+                Follows follows = nextCode(all, last);
+                for (int j = i; j <= last; j++) {
+                    SyntaxToken c = all.get(j);
+                    if (c.kind() != SyntaxKind.LINE_COMMENT) {
+                        continue;
+                    }
+                    if (under != null) {
+                        add(out.below(), under, c);
+                    } else {
+                        above(out, follows.code(), c, file, follows.pastAConnector());
+                    }
+                }
+                i = last;
+                breaks = 1;
             } else {
                 code.add(t);
-                lineEnded = false;
+                breaks = 0;
             }
         }
         return out;
+    }
+
+    /** The line breaks {@code whitespace} holds. Two of them are a blank line. */
+    private static int newlines(SyntaxToken whitespace) {
+        int n = 0;
+        String text = whitespace.text();
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** The last comment of the run beginning at {@code i}: the comment lines following one another
+     *  with no blank line and no code between them. */
+    private static int runEnds(List<SyntaxToken> all, int i) {
+        int last = i;
+        int breaks = 0;
+        for (int j = i + 1; j < all.size(); j++) {
+            SyntaxToken t = all.get(j);
+            if (t.kind() == SyntaxKind.WHITESPACE) {
+                breaks += newlines(t);
+            } else if (t.kind() == SyntaxKind.LINE_COMMENT && breaks < 2) {
+                last = j;
+                breaks = 0;
+            } else {
+                break;
+            }
+        }
+        return last;
+    }
+
+    /** Whether a blank line stands between the comment at {@code last} and whatever follows it. The
+     *  end of the file is not one: nothing follows there for a blank line to separate it from, and
+     *  a comment with nothing after it is the file's rather than the last declaration's. */
+    private static boolean blankUnder(List<SyntaxToken> all, int last) {
+        int breaks = 0;
+        for (int j = last + 1; j < all.size(); j++) {
+            SyntaxToken t = all.get(j);
+            if (t.kind() != SyntaxKind.WHITESPACE) {
+                return breaks >= 2 && t.kind() != SyntaxKind.EOF;
+            }
+            breaks += newlines(t);
+        }
+        return false;
+    }
+
+    /**
+     * What a comment written under {@code written}, and cut off from what follows by a blank line,
+     * was written about: the outermost construct that ends there.
+     *
+     * <p>Null where the construct ending there is not a member of something that writes its members
+     * on lines of their own. A comment written below one that is not — below the type of a
+     * {@code data} whose {@code invariant} is still to come — is in the middle of a construct, so the
+     * blank line under it separates it from nothing that construct has finished saying, and it is
+     * read as written above what follows, which is what it was before any blank line was read.
+     *
+     * <p>Asked of the member rather than of the place it will be written at, because the place is
+     * found by widening to the nearest one that can carry a comment below it, and widening from the
+     * middle of a construct reaches the whole construct: a comment under a declaration's first line
+     * would come back under its last.
+     */
+    private static SyntaxNode belowAnchor(SyntaxToken written) {
+        if (written == null) {
+            return null;                              // no code above it: it is above what follows
+        }
+        SyntaxToken code = lastOfName(written);
+        // A member with something still to come after it owns its own line, and what is written
+        // below it is below that member rather than below the construct. The last member of a run
+        // ends where the run does, so what is below it is below the whole thing — the same reading
+        // {@link #after} takes of a comment at the end of that line.
+        if (isBareMember(code) && nameEnd(code) != code.parent().end()) {
+            return null;
+        }
+        if (isChainHead(code)) {
+            return null;
+        }
+        SyntaxNode ends = endingAt(code);
+        if (ends.end() != code.end()) {
+            return null;
+        }
+        SyntaxNode holder = ends.parent();
+        return holder != null && writesEachMemberOnItsOwnLine(holder.kind()) ? ends : null;
+    }
+
+    /** Whether a construct of this kind writes each of its members beginning a line of its own, so
+     *  that a member has a line under it that is the member's and not the construct's. These are
+     *  the two that separate members by a break alone; everywhere else a member is written into a
+     *  run its holder wrote the connectors of, and what is under it is under the run. */
+    private static boolean writesEachMemberOnItsOwnLine(SyntaxKind k) {
+        return k == SyntaxKind.SOURCE_FILE || k == SyntaxKind.BLOCK_EXPR;
     }
 
     /**

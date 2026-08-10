@@ -72,7 +72,11 @@ sealed interface Doc {
      * boundary. */
     final class LineRef {
     }
-    record Hard(Ref ref) implements Doc, Refuses {}
+
+    /** A break, the obligation it is written for, and whether it writes the indent of the line it
+     *  opens. The one that does not is the one that leaves a blank line: nothing is on that line,
+     *  so it has no indent. */
+    record Hard(Ref ref, boolean indents) implements Doc, Refuses {}
     record Concat(List<Doc> parts) implements Doc {}
     record Nest(NestRef ref, int indent, Doc doc) implements Doc {}
 
@@ -123,7 +127,12 @@ sealed interface Doc {
     /** Always a newline, for the obligation named, and the group holding it is never laid out
      *  flat. */
     static Hard hardline(Obligation obligation) {
-        return new Hard(new Ref(obligation));
+        return new Hard(new Ref(obligation), true);
+    }
+
+    /** The same, leaving the line it opens empty: a blank line, written with no indent on it. */
+    static Hard blankLine(Obligation obligation) {
+        return new Hard(new Ref(obligation), false);
     }
 
     /** Writes nothing, and the group holding it is never laid out flat. What writes one is a
@@ -253,14 +262,16 @@ sealed interface Doc {
                         sb.append(l.flat());
                         col += l.flat().length();
                     } else {
-                        breaks.add(newline(sb, it, new Newline.Cause.Settled(l.ref())));
+                        breaks.add(newline(sb, it, it.indent,
+                                new Newline.Cause.Settled(l.ref()), true));
                         col = it.indent;
                     }
                 }
                 case Hard h -> {
-                    breaks.add(newline(sb, it,
-                            new Newline.Cause.Forced(h.ref().obligation())));
-                    col = it.indent;
+                    int indent = h.indents() ? it.indent : 0;
+                    breaks.add(newline(sb, it, indent,
+                            new Newline.Cause.Forced(h.ref().obligation()), h.indents()));
+                    col = indent;
                 }
                 case Trailing t -> {
                     sb.append(' ').append(t.s());
@@ -273,12 +284,14 @@ sealed interface Doc {
         return new Layout(sb.toString(), decisions, extents, breaks, opportunities);
     }
 
-    /** Writes a break and says what it wrote, and what wrote it. */
-    private static Newline newline(StringBuilder sb, Item it, Newline.Cause cause) {
+    /** Writes a break and says what it wrote, and what wrote it. {@code indent} is the item's,
+     *  except on the break that leaves a blank line, whose line has nothing on it to indent. */
+    private static Newline newline(StringBuilder sb, Item it, int indent, Newline.Cause cause,
+            boolean indents) {
         int offset = sb.length();
-        sb.append('\n').append(" ".repeat(it.indent()));
-        return new Newline(offset, it.indent(),
-                it.under() == null ? List.of() : it.under().outermostFirst(), cause);
+        sb.append('\n').append(" ".repeat(indent));
+        return new Newline(offset, indent,
+                it.under() == null ? List.of() : it.under().outermostFirst(), cause, indents);
     }
 
     /**

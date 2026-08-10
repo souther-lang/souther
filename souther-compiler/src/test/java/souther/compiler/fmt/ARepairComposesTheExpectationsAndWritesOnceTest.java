@@ -65,8 +65,8 @@ class ARepairComposesTheExpectationsAndWritesOnceTest {
     void twoFamiliesOverOneSourceCompose() {
         String source = """
                 module fmtprobe exposing ( Alpha, f )
-
                 data Alpha = Int
+
                 let f (x: Int): Int = g( x )
                 """;
 

@@ -43,7 +43,7 @@ sealed interface Opening {
     /** The same, where the construct writes something at the head of the line before the place —
      *  the connector a chained construct joins its stages with. */
     static Opening breaks(TokenDoc.Break policy, TokenDoc opener) {
-        return new Breaks(new TokenDoc.Gap(policy, null), opener);
+        return new Breaks(new TokenDoc.Gap(policy, null, true), opener);
     }
 
     /** A line opened by a boundary written whatever the width, for the obligation named. */
@@ -53,7 +53,7 @@ sealed interface Opening {
 
     /** The same, where the construct writes something at the head of the line before the place. */
     static Opening forced(Obligation obligation, TokenDoc opener) {
-        return new Breaks(new TokenDoc.Gap(TokenDoc.Break.ALWAYS, obligation), opener);
+        return new Breaks(new TokenDoc.Gap(TokenDoc.Break.ALWAYS, obligation, true), opener);
     }
 
     /** The boundary that opens the line, or nothing where the line is already open. */

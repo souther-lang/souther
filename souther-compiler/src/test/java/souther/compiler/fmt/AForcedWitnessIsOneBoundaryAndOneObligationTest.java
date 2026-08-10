@@ -102,8 +102,9 @@ class AForcedWitnessIsOneBoundaryAndOneObligationTest {
     }
 
     /**
-     * The two answers, and not whether a line ends. A source with a blank line between two members
-     * does end a line there — it ends two — so a witness saying it does not would be untrue of it.
+     * The two answers, and not whether a line ends. A source with two blank lines between two
+     * members does end a line there — it ends three — so a witness saying it does not would be
+     * untrue of it. One blank line is a paragraph break the canonical form keeps.
      */
     @Test
     void theWitnessCountsTheLinesThatEndThere() {
@@ -114,6 +115,7 @@ class AForcedWitnessIsOneBoundaryAndOneObligationTest {
                     {
                         let a = x
 
+
                         a
                     }
                 """);
@@ -122,8 +124,8 @@ class AForcedWitnessIsOneBoundaryAndOneObligationTest {
                 .filter(w -> ((Witness.Forced) w).unit().obligation()
                         == Obligation.MEMBERS_TAKE_LINES_OF_THEIR_OWN)
                 .findFirst().orElseThrow();
-        assertEquals(1, only.canonical());
-        assertEquals(2, only.source(), "the source ends two lines there, and it is that that is"
+        assertEquals(2, only.canonical(), "a paragraph break the author wrote is kept");
+        assertEquals(3, only.source(), "the source ends three lines there, and it is that that is"
                 + " wrong rather than ending none");
     }
 

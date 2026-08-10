@@ -279,7 +279,8 @@ final class Gaps {
             case TokenDoc.Gap g -> {
                 String flat = answers.get(next[0]++);
                 yield switch (g.policy()) {
-                    case ALWAYS -> Doc.hardline(g.forced());
+                    case ALWAYS -> g.indents() ? Doc.hardline(g.forced())
+                            : Doc.blankLine(g.forced());
                     case MAY -> flat.isEmpty() ? Doc.softline() : Doc.line();
                     case NEVER -> flat.isEmpty() ? Doc.NIL : Doc.text(flat);
                 };

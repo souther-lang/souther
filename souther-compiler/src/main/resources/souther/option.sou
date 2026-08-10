@@ -16,9 +16,9 @@ module souther.option
 // `List.find`), not a helper here; its signature is `map(f: ('a) -> 'b, opt: Option<'a>) : Option<'b>`.
 // `andThen` is intentionally absent: its step would have to return an `Option`, which no user lambda can
 // build under the non-surface rule (spec §algebraic-types).
-let map (f: ('a) -> 'b, opt: Option<'a>) : Option<'b> = intrinsic "option.map"
+let map (f: ('a) -> 'b, opt: Option<'a>): Option<'b> = intrinsic "option.map"
 
-let withDefault (default: 'a, opt: Option<'a>) : 'a =
+let withDefault (default: 'a, opt: Option<'a>): 'a =
     match opt with
         | Some v -> v
         | None -> default

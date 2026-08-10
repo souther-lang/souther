@@ -46,6 +46,7 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
     void aMemberWrittenAsAnIdentifier() {
         assertEquals("""
                 module m
+
                 import other.mod (
                     A,
                     // about B
@@ -75,16 +76,13 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 data A =
                     { n: Int
                     }
-
                 data B =
                     { n: Int
                     }
-
                 behavior f : (n: Int) -> A | B
                     constructs A,
                         // about B
                         B
-
                 let f (n) = A { n = n }
                 """, Formatter.format("""
                 module m
@@ -109,11 +107,9 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 data A =
                     { n: Int
                     }
-
                 behavior f : (n: Int) -> A
                     // why this one
                     constructs other.A
-
                 let f (n) = A { n = n }
                 """, Formatter.format("""
                 module m
@@ -137,10 +133,8 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 data A =
                     { n: Int
                     }
-
                 behavior f : (n: Int) -> A // result
                     constructs A
-
                 let f (n) = A { n = n }
                 """, Formatter.format("""
                 module m
@@ -175,14 +169,10 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 data O =
                     { n: Int
                     }
-
                 let g (x: Int) = x
-
                 let h (x: Int) = x
-
                 behavior f : (n: Int) -> O
                     constructs O
-
                 let f (n) =
                     O {
                         n = n
@@ -203,6 +193,12 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 """));
     }
 
+    /**
+     * The parameter list goes down the page with it. A comment cannot share the line after it, so
+     * every group holding one is written broken, and a behavior's inputs and output are one group —
+     * the signature decides the two together so that the inputs are what give way to the width
+     * first. What the comment is about is unchanged by that, which is what this asks.
+     */
     @Test
     void aMemberWrittenAsASegmentOfAWrittenUnion() {
         assertEquals("""
@@ -211,15 +207,14 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 data A =
                     { n: Int
                     }
-
                 data B =
                     { n: Int
                     }
-
-                behavior f : (n: Int) -> A
+                behavior f : (
+                    n: Int
+                ) -> A
                     // exceptional result
                     | B
-
                 let f (n) = A { n = n }
                 """, Formatter.format("""
                 module m
@@ -243,9 +238,7 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 module m
 
                 let b (x: Int) = x
-
                 let c (x: Int) = x
-
                 let value =
                     1
                         |> b // about the b stage
@@ -425,18 +418,13 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 module m
 
                 data A
-
                 data B
-
                 data S = A | B
-
                 data O =
                     { n: Int
                     }
-
                 behavior f : (s: S) -> O
                     constructs O
-
                 let f (s) =
                     O {
                         n = match s with
@@ -494,10 +482,8 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 data O =
                     { xs: List<Int>
                     }
-
                 behavior f : () -> O
                     constructs O
-
                 let f =
                     O {
                         // empty for now
@@ -522,9 +508,7 @@ class ACommentKeepsItsMemberHoweverItIsWrittenTest {
                 module m
 
                 data One
-
                 data Two
-
                 let value (n: Int) = if n > 0 then One else Two // about the test
                 """, Formatter.format("""
                 module m

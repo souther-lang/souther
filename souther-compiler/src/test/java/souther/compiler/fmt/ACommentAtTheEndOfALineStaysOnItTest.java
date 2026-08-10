@@ -29,11 +29,8 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 module m
 
                 data WebForm
-
                 data PhoneInquiry
-
                 data Inbound = WebForm | PhoneInquiry // three units; nothing to attribute
-
                 data LeadSource = Inbound
                 """, formatted);
     }
@@ -101,11 +98,8 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 module m
 
                 data A
-
                 data B
-
                 data C
-
                 data S = A // about A
                     | B
                     | C
@@ -145,14 +139,11 @@ class ACommentAtTheEndOfALineStaysOnItTest {
 
                 data Amount = Int
                     invariant value > 0
-
                 data O =
                     { n: Int
                     }
-
                 behavior f : (n: Int) -> O | Amount
                     constructs O, Amount
-
                 let f (n) = {
                     guard Amount(n) as a else
                         // why this arm
@@ -166,14 +157,11 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 data A =
                     { n: Int
                     }
-
                 data B =
                     { n: Int
                     }
-
                 behavior one : (a: A) -> B
                     constructs B
-
                 behavior p =
                     one
                     // why this stage
@@ -199,11 +187,8 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 module m
 
                 data AccountId = String
-
                 data DomainName = String
-
                 data Industry
-
                 data Account =
                     { id: AccountId
                     , domain: DomainName? // an honest optional
@@ -233,10 +218,8 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                     { a: Int
                     , b: Int
                     }
-
                 behavior f : (n: Int) -> O
                     constructs O
-
                 let f (n) =
                     O {
                         a = n, // the first
@@ -263,18 +246,13 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 module m
 
                 data A
-
                 data B
-
                 data S = A | B
-
                 data O =
                     { n: Int
                     }
-
                 behavior f : (s: S) -> O
                     constructs O
-
                 let f (s) =
                     O {
                         n = match s with
@@ -299,9 +277,7 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 module m
 
                 data WebForm
-
                 data PhoneInquiry
-
                 data Inbound = WebForm | PhoneInquiry // a comment long enough that the line it is written on runs well past the hundred columns the canonical form is measured against
                 """, formatted);
     }
@@ -323,15 +299,10 @@ class ACommentAtTheEndOfALineStaysOnItTest {
                 module m
 
                 data AlphaMeasurement
-
                 data BetaMeasurement
-
                 data GammaMeasurement
-
                 data DeltaMeasurement
-
                 data EpsilonMeasurement
-
                 data Measurement = AlphaMeasurement
                     | BetaMeasurement
                     | GammaMeasurement

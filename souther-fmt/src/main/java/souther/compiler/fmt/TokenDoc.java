@@ -32,10 +32,10 @@ sealed interface TokenDoc {
     TokenDoc NIL = new Nil();
 
     /** Two tokens on one line, with whatever the rule says between them. */
-    TokenDoc GAP = new Gap(Break.NEVER, null);
+    TokenDoc GAP = new Gap(Break.NEVER, null, true);
 
     /** A boundary the layout may break, and which holds the rule's answer where it does not. */
-    TokenDoc SOFT_GAP = new Gap(Break.MAY, null);
+    TokenDoc SOFT_GAP = new Gap(Break.MAY, null, true);
 
     /** Writes nothing, and the group holding it is never laid out flat — {@link Doc#MUST_BREAK}.
      *  What refuses is a comment, so it is that obligation this discharges. */
@@ -46,7 +46,13 @@ sealed interface TokenDoc {
      *  because a forced boundary with no obligation would be the policy standing in for the rule
      *  again. */
     static TokenDoc forced(Obligation obligation) {
-        return new Gap(Break.ALWAYS, obligation);
+        return new Gap(Break.ALWAYS, obligation, true);
+    }
+
+    /** A break that leaves a line with nothing on it, which is what a blank line is. Written before
+     *  the boundary that opens the next line, so the two together are one blank line. */
+    static TokenDoc blank(Obligation obligation) {
+        return new Gap(Break.ALWAYS, obligation, false);
     }
 
     /** What the layout may do at a boundary. What is written where it does not break is not here:
@@ -109,14 +115,20 @@ sealed interface TokenDoc {
             implements TokenDoc {}
 
     /**
-     * A boundary, and the obligation it is written for where it always breaks.
+    /**
+     * A boundary, the obligation it is written for where it always breaks, and whether the break it
+     * may write indents the line it opens.
      *
      * <p>The obligation is there exactly where the policy is {@link Break#ALWAYS}. A boundary the
      * layout may break is settled by the group holding it and a boundary it may not is the spacing
      * rule's, so those two say which rule answers them by their policy alone; a forced one does
      * not, and five constructions write one.
+     *
+     * <p>Every boundary but one indents. The exception is the break that leaves a blank line: the
+     * line it opens has nothing on it, so it has no indent to write, and writing one would leave
+     * spaces on a line a reader sees as empty and an editor strips.
      */
-    record Gap(Break policy, Obligation forced) implements TokenDoc {
+    record Gap(Break policy, Obligation forced, boolean indents) implements TokenDoc {
 
         public Gap {
             if ((policy == Break.ALWAYS) != (forced != null)) {
@@ -155,8 +167,15 @@ sealed interface TokenDoc {
      */
     static TokenDoc at(Place place, TokenDoc doc) {
         Opening opening = place.opening();
-        return concat(opening.boundary(), new Carries(place, Carrier.ABOVE), opening.opener(),
-                new At(place, doc));
+        TokenDoc written = concat(opening.boundary(), new Carries(place, Carrier.ABOVE),
+                opening.opener(), new At(place, doc));
+        // A place with a line of its own can be written below as well as above, and the slot is
+        // outside the place because what is written below it is not part of it. A place the
+        // construct runs into has no such line: a comment there would have the rest of the line
+        // written inside it, which is the same reason it cannot be written above one.
+        return opening.opensALine()
+                ? concat(written, new Carries(place, Carrier.BELOW))
+                : written;
     }
 
     /** What the place carries at the end of the line it ends. Written where the construct holding

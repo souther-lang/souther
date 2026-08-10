@@ -122,7 +122,7 @@ final class Carriers {
                 case ABOVE -> parts.add(TokenDoc.concat(c,
                         TokenDoc.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE)));
                 case TRAILING -> parts.add(c);
-                case AT_END -> parts.add(TokenDoc.concat(
+                case BELOW, AT_END -> parts.add(TokenDoc.concat(
                         TokenDoc.forced(Obligation.NOTHING_SHARES_A_COMMENTS_LINE), c));
             }
         }

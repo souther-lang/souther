@@ -41,12 +41,12 @@ class ASeparationWitnessIsAboutTheTwoItemsNotTheBreaksTest {
                 """)));
     }
 
-    /** Two items run together are one witness, and it says one blank line against none. */
+    /** An item run onto the header's line is one witness: the file writes a blank line under a
+     * header whatever the author put there. */
     @Test
-    void twoItemsWithNoBlankLineAreOneWitness() {
+    void anItemUnderAHeaderWithNoBlankLineIsOneWitness() {
         List<Witness> found = witnesses("""
                 module fmtprobe exposing ( Alpha, Beta )
-
                 data Alpha = Int
                 data Beta = Int
                 """);
@@ -73,9 +73,9 @@ class ASeparationWitnessIsAboutTheTwoItemsNotTheBreaksTest {
         assertEquals(2, ((Witness.Separation) found.get(0)).source());
     }
 
-    /** An import after the header takes no blank line, so a source that writes one deviates. */
+    /** What follows an import block takes a blank line whatever the author put there. */
     @Test
-    void aBlankLineBeforeAnImportIsAWitness() {
+    void anItemRunOntoAnImportBlockIsAWitness() {
         List<Witness> found = witnesses("""
                 module fmtprobe exposing ( Alpha )
 
@@ -83,13 +83,21 @@ class ASeparationWitnessIsAboutTheTwoItemsNotTheBreaksTest {
                 data Alpha = Int
                 """);
 
-        assertEquals(2, found.size(), "the header before the import, and the import before the"
-                + " data definition: " + found);
-        assertEquals(List.of(0, 1),
-                found.stream().map(w -> ((Witness.Separation) w).canonical()).toList(),
-                "the first pair takes none and the second takes one");
-        assertEquals(List.of(1, 0),
-                found.stream().map(w -> ((Witness.Separation) w).source()).toList());
+        assertEquals(1, found.size(), "the import before the data definition: " + found);
+        assertEquals(1, ((Witness.Separation) found.get(0)).canonical());
+        assertEquals(0, ((Witness.Separation) found.get(0)).source());
+    }
+
+    /** And a paragraph break the author wrote is kept, so two items run together are no witness:
+     * what a reader grouped is something the canonical form has an answer for and it is theirs. */
+    @Test
+    void aParagraphTheAuthorWroteIsNotAWitness() {
+        assertEquals(List.of(), witnesses("""
+                module fmtprobe exposing ( Alpha, Beta )
+
+                data Alpha = Int
+                data Beta = Int
+                """));
     }
 
     /** Two pairs written wrongly are two witnesses, each naming its own. */
@@ -99,7 +107,11 @@ class ASeparationWitnessIsAboutTheTwoItemsNotTheBreaksTest {
                 module fmtprobe exposing ( Alpha, Beta, Gamma )
 
                 data Alpha = Int
+
+
                 data Beta = Int
+
+
                 data Gamma = Int
                 """);
 

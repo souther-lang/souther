@@ -52,10 +52,8 @@ class ACommentUnderTheLastMemberStaysInsideTest {
                 module m
 
                 data O
-
                 behavior f : () -> O
                     constructs O
-
                 let f =
                     O {
                         // keep me
@@ -83,10 +81,8 @@ class ACommentUnderTheLastMemberStaysInsideTest {
                     { a: Int
                     , b: Int
                     }
-
                 behavior f : (n: Int) -> O
                     constructs O
-
                 let f (n) =
                     O {
                         a = n,

@@ -81,6 +81,11 @@ sealed interface Witness {
     /**
      * The separation rule at one pair of items: how many blank lines the canonical form writes
      * between them, and how many the source wrote.
+     *
+     * <p>The canonical form keeps a paragraph break the author wrote and writes one under a header
+     * whatever was there, so most pairs agree; what this reports is the pairs where they do not —
+     * a blank line missing under a header or an import block, and any number of them coming back
+     * as one.
      */
     record Separation(Items unit, int canonical, int source) implements Witness {}
 

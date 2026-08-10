@@ -9,20 +9,20 @@
 // core declaration cannot yet express. See the stdlib implementation-location policy.
 module souther.int
 
-let divide (dividend: Int, divisor: Int) : Int | DivisionByZero = intrinsic "int.divide"
+let divide (dividend: Int, divisor: Int): Int | DivisionByZero = intrinsic "int.divide"
 
 // `truncatingRemainder` is the remainder of a division whose quotient is truncated toward zero, so
 // its result takes the sign of the dividend: `truncatingRemainder(-7, 3)` is `-1`. The name carries
 // that, because a bare `remainder` (or `mod`) means the truncated one in some languages and the
 // floored one in others, and the two disagree on exactly the values a domain is least likely to test.
-let truncatingRemainder (dividend: Int, divisor: Int) : Int | DivisionByZero
-    = intrinsic "int.truncatingRemainder"
-let add (a: Int, b: Int) : Int = intrinsic "int.add"
-let subtract (a: Int, b: Int) : Int = intrinsic "int.subtract"
-let multiply (a: Int, b: Int) : Int = intrinsic "int.multiply"
+let truncatingRemainder (dividend: Int, divisor: Int): Int | DivisionByZero =
+    intrinsic "int.truncatingRemainder"
+let add (a: Int, b: Int): Int = intrinsic "int.add"
+let subtract (a: Int, b: Int): Int = intrinsic "int.subtract"
+let multiply (a: Int, b: Int): Int = intrinsic "int.multiply"
 
 // compare returns -1, 0, or 1 (the function form of the comparison operators).
-let compare (a: Int, b: Int) : Int = intrinsic "int.compare"
+let compare (a: Int, b: Int): Int = intrinsic "int.compare"
 
 // `floorMod` is the remainder of a division whose quotient is floored, so its result takes the sign
 // of the divisor: `floorMod(-7, 3)` is `2`, where `truncatingRemainder(-7, 3)` is `-1`. Both take the
@@ -34,7 +34,7 @@ let compare (a: Int, b: Int) : Int = intrinsic "int.compare"
 // (`invariant Int.floorMod(value, 12) == 0`). That makes it the one standard-library function whose
 // failure is not in its type; `truncatingRemainder` beside it shows the rule it is the exception to.
 // Use that one where a zero divisor must be a business case.
-let floorMod (dividend: Int, divisor: Int) : Int = intrinsic "int.floorMod"
+let floorMod (dividend: Int, divisor: Int): Int = intrinsic "int.floorMod"
 
 // Elm's `Basics` arithmetic, written as ordinary helpers because `<` and `-` already say it all.
 // `abs` negates with the `-` operator, so the one value with no positive counterpart (the smallest

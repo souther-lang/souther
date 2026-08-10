@@ -23,8 +23,8 @@ enum Obligation {
     /** A file ends with one newline. */
     A_FILE_ENDS_WITH_ONE_NEWLINE,
 
-    /** One blank line separates two top-level items, unless an import follows the header or an
-     *  import. */
+    /** A blank line stands between two top-level items where the author wrote one, and under a
+     *  module header and an import block whatever was there. */
     A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS,
 
     /** Nothing is written after a comment on the line it is on. The one obligation here that is
@@ -41,7 +41,7 @@ enum Obligation {
                     "a bracket of a construct written down the page takes a line of its own";
             case A_FILE_ENDS_WITH_ONE_NEWLINE -> "a file ends with one newline";
             case A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS ->
-                    "one blank line separates two top-level items";
+                    "a blank line stands where the author wrote one, and under a header";
             case NOTHING_SHARES_A_COMMENTS_LINE -> "nothing shares a comment's line";
         };
     }

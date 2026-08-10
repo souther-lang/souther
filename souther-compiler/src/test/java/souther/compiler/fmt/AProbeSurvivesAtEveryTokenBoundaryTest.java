@@ -51,6 +51,7 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
      * from it only by the probe. */
     private static final String WHOLE_MODULE = """
             module m exposing ( A, B, S, run, value )
+
             import other.mod ( Thing )
 
             data A =
@@ -100,6 +101,7 @@ class AProbeSurvivesAtEveryTokenBoundaryTest {
      * example's bindings, a comprehension, and the empty forms of the bracketed constructs. */
     private static final String THE_OTHER_FORMS = """
             module m exposing ()
+
             import other.mod
 
             data Amount = Int
