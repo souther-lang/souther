@@ -936,10 +936,6 @@ public final class Adequacy {
             gaps = List.copyOf(gaps);
         }
 
-        static Filling stopped(souther.compiler.partition.GenerationReason why) {
-            return new Filling(new Generator.GenerationResult(List.of(), List.of(), List.of(why)),
-                    Generator.GenerationResult.NONE, List.of());
-        }
     }
 
     /**
@@ -995,25 +991,31 @@ public final class Adequacy {
                 }
                 List<BoundaryAssessment> edges = boundaries == null ? List.of()
                         : boundaries.getOrDefault(spec.name(), List.of());
+                Generator.GenerationResult pairs;
                 try {
-                    Generator.GenerationResult pairs = pairsFor(spec, sig, symbols,
-                            bodies.get(spec.name()), plan,
+                    pairs = pairsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
                             excluded == null ? Exclusions.NONE
                                     : excluded.getOrDefault(spec.name(), Exclusions.NONE));
-                    out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
-                            dispositions(findings == null ? List.of()
-                                            : findings.getOrDefault(spec.name(), List.of()),
-                                    edges, partitions == null ? null : partitions.get(spec.name()),
-                                    pairs, spec)));
                 } catch (LinkageError _) {
                     // The generated classes would not link, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
-                    out.put(spec.name(), Filling.stopped(
-                            new souther.compiler.partition.GenerationReason.NothingToBuildAgainst(
-                                    spec.name())));
+                    //
+                    // Caught around the search and not around the answer. A gap's answer is owed
+                    // whatever the search did, and a failure that skipped the walk over the findings
+                    // would take the gaps out of a list that is meant to hold every one of them —
+                    // which is the same defect the list was written against, arriving as control
+                    // flow rather than as a value.
+                    pairs = new Generator.GenerationResult(List.of(), List.of(),
+                            List.of(new souther.compiler.partition.GenerationReason
+                                    .NothingToBuildAgainst(spec.name())));
                 }
+                out.put(spec.name(), new Filling(pairs, offered(spec.name(), edges),
+                        dispositions(findings == null ? List.of()
+                                        : findings.getOrDefault(spec.name(), List.of()),
+                                edges, partitions == null ? null : partitions.get(spec.name()),
+                                pairs, spec)));
             }
             // In the order the module declares them, because the block printed from this is read
             // against the one before it.
@@ -1092,11 +1094,11 @@ public final class Adequacy {
                 };
             }
             // The gap was established from an assessment, so one names it. Where the two lists have
-            // come apart, the strategy applies and produced nothing for this edge, which is what is
-            // said — the alternative reads a missing entry as a fact about the model.
-            return new GenerationOutcome.CannotGenerate(
-                    new Generator.UnresolvedCombination(List.of(subject),
-                            Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST));
+            // come apart, what happened is that these two readings of one measurement disagree, and
+            // that is not a fact about generating a row: answering it as one would turn a pipeline
+            // that contradicts itself into a strategy that tried and failed.
+            throw new IllegalStateException(
+                    "no boundary assessment for the gap at " + subject + ": " + gap);
         }
 
         /**
@@ -1128,15 +1130,26 @@ public final class Adequacy {
             if (!written.isEmpty()) {
                 return new GenerationOutcome.Generated(written);
             }
+            // Asked before the row list is read, because a search that had nothing to build against
+            // wrote nothing at every class, and a reason taken from the empty result it left would
+            // name the one thing that did not happen.
+            if (pairs.reasons().stream().anyMatch(
+                    why -> why instanceof souther.compiler.partition.GenerationReason
+                            .NothingToBuildAgainst)) {
+                return new GenerationOutcome.CannotGenerate(
+                        new Generator.UnresolvedCombination(List.of(label),
+                                Generator.UnresolvedCombination.Reason.NOTHING_TO_BUILD_AGAINST));
+            }
             return pairs.unresolved().stream()
                     .filter(left -> left.classes().contains(label))
                     .<GenerationOutcome>map(GenerationOutcome.CannotGenerate::new)
                     .findFirst()
-                    // The axis was derived and the search wrote nothing at this class, which is what
-                    // a position no row's value could be read at leaves behind.
+                    // The axis was derived, so a strategy takes this class; it wrote neither a row
+                    // nor a reason. What that leaves is a gap nothing here can account for, and the
+                    // one thing not to do is name a cause from the shape of the emptiness.
                     .orElseGet(() -> new GenerationOutcome.CannotGenerate(
                             new Generator.UnresolvedCombination(List.of(label),
-                                    Generator.UnresolvedCombination.Reason.POSITION_NOT_READ)));
+                                    Generator.UnresolvedCombination.Reason.NO_REASON_RECORDED)));
         }
 
         /**

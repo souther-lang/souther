@@ -114,12 +114,14 @@ public final class Generator {
             /** The module's classes were not there to build a candidate against. */
             NOTHING_TO_BUILD_AGAINST,
             /**
-             * Some row's value at the position could not be read.
+             * A strategy that takes this class produced neither a row nor a reason for it.
              *
-             * <p>So what is written there is unknown, and a row offered for a class of it may be a row
-             * that is already in the file. Nothing was withheld about the model; a reading was.
+             * <p>Which is this compiler failing to say, and not something established about the
+             * class. Named rather than guessed at: the alternative is to write down whichever cause
+             * seemed likely when the branch was added, and a reason read off an empty result outlives
+             * whatever made it plausible.
              */
-            POSITION_NOT_READ
+            NO_REASON_RECORDED
         }
 
         public UnresolvedCombination {

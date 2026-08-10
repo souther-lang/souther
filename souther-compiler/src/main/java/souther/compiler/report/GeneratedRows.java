@@ -334,9 +334,9 @@ public final class GeneratedRows {
             case SEARCH_LIMIT -> "the search stopped before reaching it";
             case NOTHING_TO_BUILD_AGAINST ->
                     "the module's classes were not there to build a candidate against";
-            case POSITION_NOT_READ ->
-                    "a row's value at that position could not be read, so a row written for it may"
-                            + " be one that is already here";
+            case NO_REASON_RECORDED ->
+                    "the search that takes this class left no reason, which is this compiler failing"
+                            + " to say rather than anything established about the class";
         };
     }
 
