@@ -110,23 +110,47 @@ sealed interface Witness {
     record Separation(Items unit, int canonical, int source) implements Witness {}
 
     /**
-     * The conditional-layout rule's unit: one group, and where in the canonical form it stands.
+     * The conditional-layout rule's unit: one group, and the first place under it the source
+     * settled differently.
      *
-     * <p>The group and not the boundaries under it. One record literal written down the page moves
-     * every member boundary it holds, and the rule was evaluated once — whether the line this would
-     * take is within the width.
+     * <p>The group is what the rule was asked about — one record literal written down the page
+     * moves every member boundary it holds, and whether the line it would take is within the width
+     * was decided once. The place is where that decision and the source part company, which is not
+     * the same thing: a source can break the construct down the page as it should have and run one
+     * of the places it settles together, and the group alone cannot say which.
      */
     record Group(Doc.GroupRef group, int at) {}
 
     /**
-     * The conditional-layout rule at one group: whether the canonical form writes it on one line,
-     * and whether the source did.
+     * A group one text writes down the page and the other writes whole: which of them does which,
+     * and why the canonical form does.
      *
-     * <p>Only for a group the width decided. One written down the page because it holds something
-     * that cannot be laid out flat was settled before this rule was asked, and the forced-layout
-     * rule is what answers for it.
+     * <p>The two forms are what differ, so this is where saying them is saying the difference. A
+     * source that wrote the construct down the page as the canonical form does and ran one of its
+     * places together is not this — it agrees about the form — and is {@link RunTogether}.
+     *
+     * <p>{@code why} is the layout's own answer, because the rule a reader is being held to depends
+     * on it. A group the width decided is the width's; one written down the page because it holds
+     * something that cannot share a line broke for that thing's reason, and telling an author their
+     * line would exceed the width would be naming a rule that did not decide anything here.
      */
-    record Conditional(Group unit, boolean canonicalIsWhole, boolean sourceIsWhole)
+    record Conditional(Group unit, boolean canonicalIsWhole, boolean sourceIsWhole, Outcome why)
+            implements Witness {}
+
+    /**
+     * A group both texts write down the page, at one place the source ran together: whether the
+     * canonical form ends a line there, and whether the source did.
+     *
+     * <p>A construct written down the page breaks at every place it settles, and a source that
+     * broke some of them and ran the rest together has not written it that way. What differs is the
+     * place and not the form — both texts write the construct down the page — so the form is what
+     * this must not quote. Quoted, the line reports a difference and says the same words twice.
+     *
+     * <p>Why the canonical form is down the page is not this rule's. The width may have decided it
+     * or something it holds may have refused to share a line; either way it is down the page, and
+     * that every place it settles breaks with it follows from the form rather than from the reason.
+     */
+    record RunTogether(Group unit, boolean canonicalBreaks, boolean sourceBreaks)
             implements Witness {}
 
     /**

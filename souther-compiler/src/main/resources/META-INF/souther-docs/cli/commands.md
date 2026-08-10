@@ -44,10 +44,27 @@ souther fmt <file.sou>... [-w|--write] [--check]
 Prints the canonical form to stdout, rewrites in place with `-w`, or exits non-zero on a file that
 is not formatted with `--check`.
 
-`--check` prints each file it rejects as a unified diff against that file's canonical form. The
-canonical form is what the verdict is taken against, so a failing build says what differs rather
-than only which file did, and nothing has to be formatted a second time locally to read it. A file
-already in canonical form is not mentioned.
+`--check` prints each file it rejects as the rules it differs by: a line naming the rule, the place
+in your own source, and the two answers — what the canonical form does there and what your file
+does.
+
+```
+m.sou:5:11: a construct written down the page breaks at every place it settles
+    the canonical form: one line ends here; this source: no line ends here
+```
+
+A rule and not a diff. A diff says which characters moved and cannot say why any of them did, so a
+reader who wants to write the canonical form rather than have it written for them had to work the
+rule out from the characters. The canonical form is still what the verdict is taken against, so
+nothing has to be formatted a second time locally to read the report. A file already in canonical
+form is not mentioned.
+
+Where a difference is one no rule accounts for yet, the report says so and shows the rest as a
+unified diff. A list that named what it can and stopped would read as a file with these differences
+and no others.
+
+Every rule a line can name is written down under "The words the report uses" below, and read on its
+own with `souther doc cli/commands/fmt-report-vocabulary`.
 
 ### What the canonical form is
 
@@ -160,6 +177,76 @@ A comment keeps what it was written about. On the line of the code it follows it
 line of its own it goes above what follows it, unless a blank line separates it from that and none
 separates it from the code above, in which case it stays under that code. A comment with nothing
 after it closes whatever holds it.
+
+<!-- souther-section: fmt-report-vocabulary -->
+### The words the report uses
+
+`--check` writes its own words, and a reader who wants to know what one of them means has nowhere to
+look it up unless it is written down. A diagnostic carries a code and a code names a section; a line
+of this report carries neither, so its vocabulary is fixed here. These are all of the rules a line
+can name, and nothing else is one.
+
+Which tokens are written. Asked first, because which tokens there are settles what boundaries the
+rest of the rules are about:
+
+- a comma-separated run is written without a comma after its last member — the two answers quote the
+  comma and the nothing that stands where it would.
+- a match writes every arm with its bar — including the first, which a source may leave off.
+- a definition writes its parameters to the left of the `=` — rather than as a lambda to the right
+  of it.
+
+What stands between two tokens the same line holds:
+
+- what goes between two tokens on a line — one space, or none. The two answers quote the characters,
+  so a source that wrote a line break where neither text ends a line reads it back as `\n`.
+
+Whether a construct is written down the page at all. The two answers are `on one line` and `down the
+page`, and which rule is named is which one decided the form:
+
+- a construct whose line would exceed the width breaks — named only where the width decided it.
+- a construct written down the page writes its members one to a line — the construct holds something
+  that cannot share a line with what follows it, so no width would have kept it whole.
+- a bracket of a construct written down the page takes a line of its own — the same, for the bracket
+  rather than the members.
+- nothing shares a comment's line — a comment ends the line it is on, which is why a construct
+  holding one is never written flat.
+
+The last three of those answer about one boundary as well as about the whole construct, and the two
+answers say which they are about. `on one line` against `down the page` is the construct: the two
+texts write it in different forms. `one line ends here` against `no line ends here` is one of the
+boundaries under it, asked where the forms agree and a single place does not.
+
+Where a construct written down the page breaks. Both texts write it down the page and the source ran
+one of its places together; the line stands at that place, and the two answers say whether a line
+ends there:
+
+- a construct written down the page breaks at every place it settles — some of its places were run
+  together, whatever put the construct down the page.
+- a group written down the page ends one line where it breaks — the same place, asked about how many
+  lines end at it rather than whether one does.
+
+How far in a line begins. The two answers are columns:
+
+- one level deeper is one indent further in — a step, and not a column the rule never states.
+- a line the file holds begins at column zero — the outermost level, which has no level outside it
+  to be measured from.
+
+What separates one thing from another, and what ends:
+
+- a blank line stands where the author wrote one, and under a header — how many, as lines.
+- a line ends where what is written on it does — nothing stands after it.
+- a file ends with one newline.
+
+Comments:
+
+- a comment at the end of a line is written one space after the code.
+- a comment on a line of its own is written above the line it owns.
+- a comment is carried by the construct it was written against — this one answers with where the
+  comment goes rather than with what stands there.
+
+A rule is named where a source departs from it, so a rule missing from a report is one the file
+already writes. What no rule here accounts for is not left out: the report says so and shows it as a
+diff.
 
 <!-- souther-section: examples -->
 ## examples

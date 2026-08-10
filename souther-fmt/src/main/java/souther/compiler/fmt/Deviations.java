@@ -148,28 +148,72 @@ public final class Deviations {
                 Witnesses.Pairing pairing);
     }
 
+    private static final String BETWEEN_TWO_TOKENS = "what goes between two tokens on a line";
+    private static final String THE_FILES_OWN_LINES = "a line the file holds begins at column zero";
+    private static final String ONE_LEVEL_DEEPER = "one level deeper is one indent further in";
+    private static final String A_GROUPS_BREAK_ENDS_ONE_LINE =
+            "a group written down the page ends one line where it breaks";
+    private static final String NOTHING_AT_THE_END_OF_A_LINE =
+            "a line ends where what is written on it does";
+    private static final String THE_WIDTH_BREAKS =
+            "a construct whose line would exceed the width breaks";
+    private static final String EVERY_PLACE_IT_SETTLES =
+            "a construct written down the page breaks at every place it settles";
+    private static final String A_TRAILING_COMMENT =
+            "a comment at the end of a line is written one space after the code";
+    private static final String A_COMMENT_ABOVE =
+            "a comment on a line of its own is written above the line it owns";
+    private static final String A_COMMENT_IS_CARRIED =
+            "a comment is carried by the construct it was written against";
+
+    /**
+     * Every rule a line of this report can name.
+     *
+     * <p>What the report says has to be lookupable, and a reader has nowhere to look it up unless
+     * the words are written down. That makes the set of them something outside this class asks
+     * about — so it is answered from the same values the report is written from, rather than from a
+     * second list beside them that is right until one of the two is edited.
+     */
+    public static Set<String> vocabulary() {
+        Set<String> out = new LinkedHashSet<>(List.of(BETWEEN_TWO_TOKENS, THE_FILES_OWN_LINES,
+                ONE_LEVEL_DEEPER, A_GROUPS_BREAK_ENDS_ONE_LINE, NOTHING_AT_THE_END_OF_A_LINE,
+                THE_WIDTH_BREAKS, EVERY_PLACE_IT_SETTLES, A_TRAILING_COMMENT, A_COMMENT_ABOVE,
+                A_COMMENT_IS_CARRIED));
+        for (Obligation o : Obligation.values()) {
+            out.add(o.said());
+        }
+        for (Rewrites.Kind k : Rewrites.Kind.values()) {
+            out.add(k.said());
+        }
+        return out;
+    }
+
     private static String rule(Witness w) {
         return switch (w) {
-            case Witness.BetweenTwoTokens _ -> "what goes between two tokens on a line";
+            case Witness.BetweenTwoTokens _ -> BETWEEN_TWO_TOKENS;
             case Witness.Separation _ -> Obligation.A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS.said();
             // Two statements and one rule. The step between two levels is what it says everywhere
             // inside the file; at the file itself there is no level outside to measure from, and a
             // report that told an author their definitions are one indent further in than nothing
             // would be naming a level that is not there.
             case Witness.Indentation i -> i.unit().outer() == null
-                    ? "a line the file holds begins at column zero"
-                    : "one level deeper is one indent further in";
+                    ? THE_FILES_OWN_LINES
+                    : ONE_LEVEL_DEEPER;
             case Witness.Forced f -> f.unit().obligation().said();
-            case Witness.Settled _ -> "a group written down the page ends one line where it breaks";
-            case Witness.AtTheEndOfALine _ -> "a line ends where what is written on it does";
+            case Witness.Settled _ -> A_GROUPS_BREAK_ENDS_ONE_LINE;
+            case Witness.AtTheEndOfALine _ -> NOTHING_AT_THE_END_OF_A_LINE;
             case Witness.ACodeToken t -> t.unit().kind().said();
-            case Witness.Conditional _ -> "a construct whose line would exceed the width breaks";
-            case Witness.TrailingComment _ ->
-                    "a comment at the end of a line is written one space after the code";
-            case Witness.CommentAbove _ ->
-                    "a comment on a line of its own is written above the line it owns";
-            case Witness.CommentCarrier _ ->
-                    "a comment is carried by the construct it was written against";
+            // Which rule decided the form is the layout's answer and not this one's. A group
+            // written down the page because it holds something that cannot share a line was not
+            // measured against the width, and a reader told it was would be looking for a line
+            // that is not too long.
+            case Witness.Conditional c -> c.why() instanceof Outcome.BrokenByForcedLayout forced
+                    ? forced.obligation().said()
+                    : THE_WIDTH_BREAKS;
+            case Witness.RunTogether _ -> EVERY_PLACE_IT_SETTLES;
+            case Witness.TrailingComment _ -> A_TRAILING_COMMENT;
+            case Witness.CommentAbove _ -> A_COMMENT_ABOVE;
+            case Witness.CommentCarrier _ -> A_COMMENT_IS_CARRIED;
         };
     }
 
@@ -183,6 +227,7 @@ public final class Deviations {
             case Witness.AtTheEndOfALine e -> quoted(e.canonical());
             case Witness.ACodeToken t -> quoted(t.canonical());
             case Witness.Conditional c -> c.canonicalIsWhole() ? "on one line" : "down the page";
+            case Witness.RunTogether r -> ends(r.canonicalBreaks() ? 1 : 0);
             case Witness.TrailingComment t -> quoted(t.canonical());
             case Witness.CommentAbove a -> lineBreaks(a.canonical());
             case Witness.CommentCarrier _ -> "somewhere else";
@@ -200,6 +245,7 @@ public final class Deviations {
             case Witness.AtTheEndOfALine e -> quoted(e.source());
             case Witness.ACodeToken t -> quoted(t.source());
             case Witness.Conditional c -> c.sourceIsWhole() ? "on one line" : "down the page";
+            case Witness.RunTogether r -> ends(r.sourceBreaks() ? 1 : 0);
             case Witness.TrailingComment t -> quoted(t.source());
             case Witness.CommentAbove a -> lineBreaks(a.source());
             case Witness.CommentCarrier _ -> "here";

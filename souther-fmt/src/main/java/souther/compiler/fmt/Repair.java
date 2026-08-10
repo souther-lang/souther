@@ -153,8 +153,13 @@ final class Repair {
                 case -2 -> List.of(aboveTheLastComment(source, canonical, pairing));
                 default -> gaps(source, canonical, pairing, List.of(f.unit().adjacency()));
             };
-            case Witness.Conditional c ->
-                    gaps(source, canonical, pairing, opportunitiesOf(canonical, pairing, c));
+            // One repair for two rules. Which of them a source is being held to is what the two
+            // texts disagree about; what writes the canonical form is the same either way, since
+            // a construct is put down the page by breaking the places it settles.
+            case Witness.Conditional c -> gaps(source, canonical, pairing,
+                    opportunitiesOf(source, canonical, pairing, c.unit().group()));
+            case Witness.RunTogether r -> gaps(source, canonical, pairing,
+                    opportunitiesOf(source, canonical, pairing, r.unit().group()));
             case Witness.Settled s ->
                     gaps(source, canonical, pairing, List.of(s.unit().adjacency()));
             case Witness.AtTheEndOfALine e -> List.of(new Edit(e.unit().at(),
@@ -236,13 +241,27 @@ final class Repair {
         return out;
     }
 
-    /** Which adjacencies of the canonical form the opportunities a group settles stand at. */
-    private static List<Integer> opportunitiesOf(Formatter.CanonicalForm canonical,
-            Witnesses.Pairing pairing, Witness.Conditional witness) {
+    /**
+     * Which adjacencies of the canonical form the places a group settles differently stand at.
+     *
+     * <p>The ones the source settled the other way, and every one of them: the group's decision is
+     * one and a source that took it at some of its places has still not taken it. A place the
+     * source already ends a line at is left alone — what is still wrong there is how far in the
+     * next line begins, which is the indentation rule's, and writing the canonical form's text over
+     * it would be two rules over the same characters.
+     *
+     * <p>In the order they stand in, so that the first is the one the witness stands at. Where the
+     * report says the source departed is the first place it did, and that has to be the same
+     * question as which of them this writes first.
+     */
+    private static List<Integer> opportunitiesOf(String source, Formatter.CanonicalForm canonical,
+            Witnesses.Pairing pairing, Doc.GroupRef group) {
+        List<SyntaxToken> had = pairing.hadCode();
         List<SyntaxToken> writes = pairing.writesCode();
         List<Integer> out = new ArrayList<>();
         for (Opportunity o : canonical.layout().opportunities()) {
-            if (o.settledBy() != witness.unit().group()) {
+            if (o.settledBy() != group
+                    || Witnesses.brokeInSource(source, had, writes, o.at()) == o.broke()) {
                 continue;
             }
             for (int i = 0; i + 1 < writes.size(); i++) {
@@ -252,6 +271,7 @@ final class Repair {
                 }
             }
         }
+        out.sort(null);
         return out;
     }
 
