@@ -609,6 +609,24 @@ public final class TypeOps {
      */
     public static void unify(Type param, Type arg, Map<String, Type> bindings,
                              Symbols symbols, SourcePos pos, String what) {
+        unify(param, arg, bindings, symbols, pos, what, true);
+    }
+
+    /**
+     * What {@code arg} settles of the variables {@code param} carries, refusing nothing.
+     *
+     * <p>For a caller that requires each argument afterwards, against the parameter type this walk
+     * settled and at the argument's own position. Refusing here as well would answer the same
+     * mismatch twice, and this reading is the one with no argument in its hands: it is given two
+     * types and the position of the call they belong to, so the caret it can offer is the callee's
+     * — which is the one part of the line a reader has already been told is not the problem.
+     */
+    public static void bindVars(Type param, Type arg, Map<String, Type> bindings, Symbols symbols) {
+        unify(param, arg, bindings, symbols, null, null, false);
+    }
+
+    private static void unify(Type param, Type arg, Map<String, Type> bindings,
+                              Symbols symbols, SourcePos pos, String what, boolean refusing) {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
@@ -619,36 +637,37 @@ public final class TypeOps {
                     bindings.put(v.name(), arg);
                 } else if (arg == Type.NOTHING) {
                     // the empty bottom absorbs into the concrete binding already learned
-                } else if (!assignable(arg, bound, symbols) && !assignable(bound, arg, symbols)) {
+                } else if (refusing && !assignable(arg, bound, symbols)
+                        && !assignable(bound, arg, symbols)) {
                     throw CompileException.of(Diagnostic
                                     .at(pos)
                                     .diff(Type.show(arg, bound), Type.show(bound, arg)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(bound), Type.show(arg))).build());
                 }
             }
             case Type.ListOf p when arg instanceof Type.ListOf a ->
-                    unify(p.element(), a.element(), bindings, symbols, pos, what);
+                    unify(p.element(), a.element(), bindings, symbols, pos, what, refusing);
             case Type.MapOf p when arg instanceof Type.MapOf a -> {
-                unify(p.key(), a.key(), bindings, symbols, pos, what);
-                unify(p.value(), a.value(), bindings, symbols, pos, what);
+                unify(p.key(), a.key(), bindings, symbols, pos, what, refusing);
+                unify(p.value(), a.value(), bindings, symbols, pos, what, refusing);
             }
             case Type.SetOf p when arg instanceof Type.SetOf a ->
-                    unify(p.element(), a.element(), bindings, symbols, pos, what);
+                    unify(p.element(), a.element(), bindings, symbols, pos, what, refusing);
             case Type.OptionOf p when arg instanceof Type.OptionOf a ->
-                    unify(p.element(), a.element(), bindings, symbols, pos, what);
+                    unify(p.element(), a.element(), bindings, symbols, pos, what, refusing);
             case Type.TupleOf p when arg instanceof Type.TupleOf a
                     && p.elements().size() == a.elements().size() -> {
                 for (int i = 0; i < p.elements().size(); i++) {
-                    unify(p.elements().get(i), a.elements().get(i), bindings, symbols, pos, what);
+                    unify(p.elements().get(i), a.elements().get(i), bindings, symbols, pos, what, refusing);
                 }
             }
             case Type.FnOf p when arg instanceof Type.FnOf a && p.params().size() == a.params().size() -> {
                 for (int i = 0; i < p.params().size(); i++) {
-                    unify(p.params().get(i), a.params().get(i), bindings, symbols, pos, what);
+                    unify(p.params().get(i), a.params().get(i), bindings, symbols, pos, what, refusing);
                 }
-                unify(p.result(), a.result(), bindings, symbols, pos, what);
+                unify(p.result(), a.result(), bindings, symbols, pos, what, refusing);
             }
             default -> {
-                if (!assignable(arg, param, symbols)) {
+                if (refusing && !assignable(arg, param, symbols)) {
                     throw CompileException.of(Diagnostic
                                     .at(pos)
                                     .diff(Type.show(arg, param), Type.show(param, arg)).say(new TypeMessage.ItExpectedOneTypeAndGotAnother(what, Type.show(param), Type.show(arg))).build());

@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
@@ -161,6 +162,7 @@ public final class CallElaborator {
             arity(call, params.size());
         }
         Map<String, Type> bind = settledByValues(call, params, kept.result(), expected, ca::type, ctx);
+        requireValueArgs(call, params, ca, bind);
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
                 Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
@@ -171,12 +173,6 @@ public final class CallElaborator {
                 // kept because its meaning belongs to whoever reads it, not to this.
                 TypeOps.unify(declared.result(), answered, bind, ctx.symbols(),
                         call.pos(), "argument " + (i + 1) + " of " + call.written());
-            }
-        }
-        for (int i = 0; i < params.size(); i++) {
-            if (!(params.get(i) instanceof Type.FnOf)) {
-                ca.requireTyped(i, TypeOps.substitute(params.get(i), bind),
-                        "argument " + (i + 1) + " of " + call.written());
             }
         }
         return new Core.PreservedCall(call.denotes(), ca.cores(),
@@ -233,9 +229,12 @@ public final class CallElaborator {
             (Type.mentions(stated[i], BottomInfer::answersNoValue) ? bottoms : stating).add(i);
         }
         stating.addAll(bottoms);
+        // What an argument settles, and not whether it fits: that is required of each argument once
+        // the substitution is complete, and required there because that is where the argument itself
+        // is in hand. A refusal from here would name the argument in words and point at the callee,
+        // the two being as far apart as an argument list is long.
         for (int i : stating) {
-            TypeOps.unify(params.get(i), stated[i], bind, ctx.symbols(),
-                    call.pos(), "argument " + (i + 1) + " of " + call.written());
+            TypeOps.bindVars(params.get(i), stated[i], bind, ctx.symbols());
         }
         return bind;
     }
@@ -408,15 +407,22 @@ public final class CallElaborator {
      *       bound from the context before the step is checked (issue #70). With no function
      *       argument nothing waits, and pinning anyway would answer an argument mismatch against
      *       the type the context wanted rather than the one the declaration asks for;</li>
-     *   <li>type the value arguments and unify each with its declared parameter;</li>
+     *   <li>type the value arguments, settle what they say of the signature's variables, and
+     *       require each of them against the parameter it was given to;</li>
      *   <li>type the function arguments last, against parameter types the earlier arguments
      *       settled. A failure that is genuinely an empty-collection seed nothing typed — one that
      *       reported the unresolved bottom — is re-pointed at the seed rather than at the
      *       arithmetic the bottom reached; an unrelated error in the step is rethrown untouched
      *       (issue #70);</li>
-     *   <li>require each value argument against its settled parameter type, and substitute into
-     *       the declared result.</li>
+     *   <li>substitute into the declared result.</li>
      * </ol>
+     *
+     * <p>The value arguments are required before a function argument is typed because a function
+     * argument is typed against what they settled. Where one of them does not fit, what the
+     * signature says the function takes was worked out from a type the call does not have — and a
+     * body checked against that reports something wrong with the block, which is the reader's cue
+     * to look at a block that is not the problem. Held in the other order, {@code List.sortBy(x ->
+     * String.length(x), n)} on an {@code n} that is no list answers about {@code String.length}.
      *
      * <p>Arity is the caller's to check first, in its own words; this throws where the two
      * disagree rather than walking off the shorter list.
@@ -430,6 +436,7 @@ public final class CallElaborator {
         }
         Map<String, Type> bind = settledByValues(call, signature.params(), signature.result(),
                 expected, ca::type, ctx);
+        requireValueArgs(call, signature.params(), ca, bind);
         try {
             for (int i = 0; i < args.size(); i++) {
                 if (signature.params().get(i) instanceof Type.FnOf declaredStep) {
@@ -449,14 +456,20 @@ public final class CallElaborator {
             }
             throw CompileException.of(b.say(new NameMessage.TheElementTypeCannotBeInferredHere()).build());
         }
-        for (int i = 0; i < args.size(); i++) {
-            Type param = signature.params().get(i);
+        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
+    }
+
+    /** Each value argument held to the parameter it was given to, at its own position — the
+     * refusal {@link #settledByValues} leaves to whoever has the argument in hand. */
+    private static void requireValueArgs(Ast.Apply call, List<Type> params, CallArgs ca,
+                                         Map<String, Type> bind) {
+        for (int i = 0; i < params.size(); i++) {
+            Type param = params.get(i);
             if (!(param instanceof Type.FnOf)) {
                 ca.requireTyped(i, TypeOps.substitute(param, bind),
                         "argument " + (i + 1) + " of " + call.written());
             }
         }
-        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
     }
 
     static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
@@ -686,20 +699,22 @@ public final class CallElaborator {
             throw CompileException.of(Diagnostic
                             .at(call.name().region()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
-        parseTemporal(call.written(), lit.value(), call.pos());
+        parseTemporal(call.written(), lit.value(), Elaborator.region(lit));
         return isDate ? Type.DATE : Type.DATETIME;
     }
 
-    /** Parses a written temporal, reporting a malformed one against {@code pos}. Returns the parsed
-     * value so the backend and the example verifier share this one reading of the text. */
-    public static Object parseTemporal(String fn, String text, SourcePos pos) {
+    /** Parses a written temporal, reporting a malformed one against {@code at} — the text the
+     * message quotes, which is the part of the form a reader cannot work out from the message.
+     * Returns the parsed value so the backend and the example verifier share this one reading of
+     * the text. */
+    public static Object parseTemporal(String fn, String text, Region at) {
         try {
             return fn.equals("Date")
                     ? java.time.LocalDate.parse(text)
                     : java.time.LocalDateTime.parse(text);
         } catch (java.time.format.DateTimeParseException _) {
             throw CompileException.of(Diagnostic
-                            .at(pos, fn.length()).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
+                            .at(at).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
         }
     }
 

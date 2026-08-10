@@ -137,7 +137,7 @@ class CompileImportedNameTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { t = trim(i.n) }
                 """));
-        assertTrue(e.getMessage().contains("of trim:"), e.getMessage());
+        assertTrue(e.getMessage().contains("argument 1 of trim "), e.getMessage());
         assertTrue(!e.getMessage().contains("String.trim"), e.getMessage());
     }
 
