@@ -447,6 +447,18 @@ Lists: `+[+` `+]+` (literal and guard comprehension), `{plus}{plus}` (concatenat
 
 There is no type name that carries an invariant violation. A violation inside the domain aborts, so no value needs to be carried (<<algebraic-types>>, <<violation-destination>>).
 
+[#comment]
+=== Comments
+
+A comment begins at `+//+` and runs to the end of the line. The line ends it, and nothing else does.
+
+[,text]
+----
+let a = 1   // the rest of this line is a comment
+----
+
+There is no block comment. `+/*+` is not a form: the characters read as the operators they are, and a text written that way does not compile. A `+//+` inside a string literal is part of the literal (<<string-literal>>), the literal having begun first.
+
 [#delimiters]
 === Delimiters and disambiguation
 
