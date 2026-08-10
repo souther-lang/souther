@@ -1,6 +1,8 @@
 package souther.compiler.diag;
 
 
+import souther.compiler.text.DisplayColumns;
+
 import java.util.Locale;
 import java.util.Objects;
 
@@ -14,6 +16,8 @@ import java.util.Objects;
  */
 public final class HumanRenderer implements DiagnosticRenderer {
 
+    /** How wide the title bar is written, in display columns — a translated title holds full-width
+     *  characters, and padding it by character count is what makes the bar overrun. */
     private static final int WIDTH = 60;
 
     private static final String RESET = "[0m";
@@ -74,7 +78,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
         String code = d.code() == null ? "" : "  " + d.code();
         String left = "-- " + title + code + " ";
         String loc = location(d.pos(), src);
-        int dashes = WIDTH - left.length() - loc.length();
+        int dashes = WIDTH - DisplayColumns.width(left) - DisplayColumns.width(loc);
         StringBuilder bar = new StringBuilder(left);
         for (int i = 0; i < dashes; i++) {
             bar.append('-');
@@ -129,15 +133,16 @@ public final class HumanRenderer implements DiagnosticRenderer {
         }
         String gutter = start.line() + "| ";
         out.append(color(DIM, gutter)).append(line).append('\n');
-        StringBuilder caret = new StringBuilder();
-        for (int i = 0; i < gutter.length() + start.column() - 1; i++) {
-            caret.append(' ');
-        }
-        int width = region.caretWidth();
-        for (int i = 0; i < width; i++) {
-            caret.append('^');
-        }
-        out.append(color(caretColor, caret.toString())).append('\n');
+        // A region says where it is in UTF-16 units, which is where it is in the text and not
+        // where it is on the screen. The two are asked separately: where the line before the
+        // region ends, and how far the region itself carries on from there. A tab in either is
+        // measured from the column it starts at, and the gutter is part of that column, since the
+        // quoted line and the carets under it are written on the same terminal line.
+        int from = Math.min(Math.max(start.column() - 1, 0), line.length());
+        int to = Math.min(from + region.sourceSpan(), line.length());
+        int at = DisplayColumns.advance(line.substring(0, from), DisplayColumns.width(gutter));
+        int span = Math.max(1, DisplayColumns.advance(line.substring(from, to), at) - at);
+        out.append(color(caretColor, " ".repeat(at) + "^".repeat(span))).append('\n');
     }
 
     private String hintLabel(Locale locale) {

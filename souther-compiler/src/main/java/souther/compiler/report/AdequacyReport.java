@@ -14,6 +14,7 @@ import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.text.DisplayColumns;
 import souther.compiler.types.TypeName;
 
 import tools.jackson.databind.node.ArrayNode;
@@ -382,7 +383,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         int implemented = 0;
         int injected = 0;
         for (ModuleReport module : modules) {
-            out.append(String.format("%-56s measurement: %s%n", module.module(),
+            out.append(String.format("%s measurement: %s%n",
+                    DisplayColumns.padRight(module.module(), 56),
                     module.status().name().toLowerCase(java.util.Locale.ROOT)));
             for (BehaviorReport behavior : module.behaviors()) {
                 if (behavior.injected()) {
@@ -390,8 +392,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 } else {
                     implemented++;
                 }
-                out.append(String.format("  %-24s %-13s rows %-4d pending %d%n", behavior.name(),
-                        behavior.injected() ? "injected" : "implemented",
+                out.append(String.format("  %s %s rows %-4d pending %d%n",
+                        DisplayColumns.padRight(behavior.name(), 24),
+                        DisplayColumns.padRight(
+                                behavior.injected() ? "injected" : "implemented", 13),
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
                 partition(out, behavior);

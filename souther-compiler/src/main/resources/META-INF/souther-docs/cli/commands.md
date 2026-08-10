@@ -61,10 +61,17 @@ These are the rules it derives it by, so that what the tool will write can be re
 reconstructed from having run it.
 
 Lines are at most 100 columns and a nesting level is 4 spaces. A line longer than 100 columns is one
-whose content holds nowhere to break — a long string, a single long name, a nesting deep enough that
-the indent takes the width. That is not an exemption for some constructs: everything that has a
-boundary to break at breaks at it, and a 130-column `unreachable` message survives only because a
-string literal has none.
+whose content holds nowhere to break — a long string, a comment, a single long name, a nesting deep
+enough that the indent takes the width. That is not an exemption for some constructs: everything
+that has a boundary to break at breaks at it, and a 130-column `unreachable` message survives only
+because a string literal has none.
+
+A column is a column on the screen and not a character. A character East Asian Width calls wide or
+fullwidth — every CJK ideograph, kana and hangul syllable, and the fullwidth forms — is two columns,
+every other character is one, and a tab advances to the next column that is a multiple of 8. So a
+name written in Japanese takes twice the width its characters suggest, and a line of them fits half
+as many. This is a convention the formatter states rather than a reading of your terminal: the
+canonical form of a file has to be the same file whatever it is being looked at in.
 
 Where a blank line goes is yours; how big it is is not. Between two top-level items, and between two
 steps of a block, one blank line comes back as one and three come back as one, and none stays none —
