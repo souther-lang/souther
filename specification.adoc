@@ -4959,7 +4959,7 @@ Reported at the argument (<<a-function-goes-where-a-function-is-taken>>). Which 
 A fold's block must return the accumulator type Amount, but got Int.
 ----
 
-Reported at the block (<<a-block-answers-the-type-its-position-takes>>): a `+fold+`'s accumulator, a predicate's `+Bool+`, the element type of what is being grown.
+Reported at the expression that supplies the block's result (<<a-block-answers-the-type-its-position-takes>>): a `+fold+`'s accumulator, a predicate's `+Bool+`, the element type of what is being grown. A block's own position is where its parameters start, and the value being refused came from its body, so the report is at the body's answer — past any `+let+` written above it, which holds what it binds and not what the block answered. An `+if+` or a `+match+` the body ends in is that answer: its type is the one its arms join to, so no single arm supplied it.
 
 [#e1806]
 === An argument does not have the type its parameter takes
@@ -4969,7 +4969,7 @@ Reported at the block (<<a-block-answers-the-type-its-position-takes>>): a `+fol
 `List.map`'s element type Amount is not acceptable to the function, which takes Int.
 ----
 
-Reported at the argument (<<an-argument-has-the-type-its-parameter-takes>>).
+Reported at the argument (<<an-argument-has-the-type-its-parameter-takes>>). Where the argument is a `+fold+`'s step and the step is written as a block, it is reported at the expression that supplies the step's result, as <<e1805>> is. Where the step is a function declared elsewhere, nothing at this call made the value it answered with, and the argument is as far as the source goes.
 
 [#e1807]
 === A function binding would need two types
