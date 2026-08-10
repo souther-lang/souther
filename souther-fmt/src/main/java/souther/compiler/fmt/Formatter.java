@@ -2009,7 +2009,7 @@ public final class Formatter {
         // condition happened to finish on. The condition's group is measured afterwards, on the
         // line the `guard` left it, so it stays flat where it fits there.
         Place ofTheDeparture = places.under(at, exprs.get(1).kind(),
-                new Opening.Breaks(TokenDoc.Break.MAY,
+                Opening.breaks(TokenDoc.Break.MAY,
                         concat(TokenDoc.token(SyntaxKind.ELSE_KW, "else"), GAP)),
                 Written.of(exprs.get(1)));
         return TokenDoc.node(n.kind(), group(concat(
