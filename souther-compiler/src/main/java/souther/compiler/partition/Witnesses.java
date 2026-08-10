@@ -60,16 +60,56 @@ final class Witnesses {
     private static final int MOST_PAIRINGS = 64;
 
     /**
+     * Values of {@code carrier} whose count is exactly {@code size}, or none where this can build none.
+     *
+     * <p>The primitive the other two are asked through, because it is the narrower promise. A caller
+     * holding a line drawn on a count needs the count itself and not a value that merely clears it:
+     * a row at {@code String.length = 5} is a row carrying five characters, and four or six is a row
+     * at some other edge.
+     *
+     * <p>Which is why nothing is the answer at a size of none and the empty value is the answer at a
+     * size of zero. A rule asking a collection to hold at least none of anything has asked for no
+     * value in particular; a line drawn at zero is the edge the empty one stands on, and it is a
+     * value like any other.
+     */
+    static List<FixtureTemplate> ofSize(Type carrier, int size, Symbols symbols,
+                                        Set<TypeName> expanding) {
+        if (size == 0) {
+            return carrier == Type.STRING ? List.of(FixtureTemplate.string(""))
+                    : carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
+                            || carrier instanceof Type.MapOf
+                                    ? List.of(FixtureTemplate.collection(List.of())) : List.of();
+        }
+        return sized(carrier, size, symbols, expanding).proposals();
+    }
+
+    /**
+     * Why no value of {@code carrier} counting exactly {@code size} was built, or null where one was.
+     *
+     * <p>The same decision {@link #ofSize} reads, asked for its other half, so that what could not be
+     * built and why are one answer given twice rather than two answers that may disagree.
+     */
+    static Generator.UnresolvedCombination.Reason reasonForSize(Type carrier, int size,
+                                                                Symbols symbols) {
+        return sized(carrier, size, symbols, Set.of()).heldBack();
+    }
+
+    /**
      * Values of {@code carrier} holding at least {@code least} of whatever counts it, or none where
      * this can build none.
      *
      * <p>The minimum itself and not one element. Recognising {@code >= 3} and then offering a list of
      * one would refuse the row for the reason the empty list was refused, having read the rule and not
      * used it.
+     *
+     * <p>Which is why this asks for exactly the minimum: the cheapest value that clears a floor is the
+     * one standing on it. That is this method's choice and not the other's promise — a caller wanting
+     * the floor cleared some other way changes the request made here, and a caller that asked for a
+     * count goes on getting the count.
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
                                          Set<TypeName> expanding) {
-        return decide(carrier, least, symbols, expanding).proposals();
+        return least <= 0 ? List.of() : ofSize(carrier, least, symbols, expanding);
     }
 
     /**
@@ -80,10 +120,10 @@ final class Witnesses {
      * build, back when this was a second reading of the same conditions.
      */
     static Generator.UnresolvedCombination.Reason heldBackFor(Type carrier, int least, Symbols symbols) {
-        return decide(carrier, least, symbols, Set.of()).heldBack();
+        return reasonForSize(carrier, least, symbols);
     }
 
-    /** What a value of {@code carrier} holding {@code least} comes to: what was built, and what was
+    /** What a value of {@code carrier} counting {@code size} comes to: what was built, and what was
      * not. */
     private record Built(List<FixtureTemplate> proposals,
                          Generator.UnresolvedCombination.Reason heldBack) {
@@ -95,7 +135,7 @@ final class Witnesses {
         }
     }
 
-    private static Built decide(Type carrier, int least, Symbols symbols, Set<TypeName> expanding) {
+    private static Built sized(Type carrier, int least, Symbols symbols, Set<TypeName> expanding) {
         if (carrier == null || least <= 0) {
             return Built.NONE;
         }
@@ -305,7 +345,7 @@ final class Witnesses {
 
     /** The value under every name the position wears, which is how it is written where the position
      * declares a newtype rather than what the newtype carries. */
-    private static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
+    static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
         if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
                 || !data.newtype()) {
             return bare;
