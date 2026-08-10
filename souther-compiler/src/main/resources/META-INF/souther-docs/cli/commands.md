@@ -51,9 +51,14 @@ already in canonical form is not mentioned.
 
 ### What the canonical form is
 
-There is one form per program and the formatter derives it from the tree, so nothing about the
-layout you write is kept. These are the rules it derives it by, so that what the tool will write can
-be read here rather than reconstructed from having run it.
+The formatter derives the layout rather than keeping yours. Two of the things you wrote are
+structure and not layout, and it keeps those: where a paragraph break is, and what a comment was
+written about. Everything else is derived. So there is one form per program taken with those two —
+write the same program with the same paragraphs and the same comments and the same text comes back,
+however differently the rest of it was laid out.
+
+These are the rules it derives it by, so that what the tool will write can be read here rather than
+reconstructed from having run it.
 
 Lines are at most 100 columns and a nesting level is 4 spaces. A line longer than 100 columns is one
 whose content holds nowhere to break — a long string, a single long name, a nesting deep enough that
@@ -64,9 +69,10 @@ string literal has none.
 Where a blank line goes is yours; how big it is is not. Between two top-level items, and between two
 steps of a block, one blank line comes back as one and three come back as one, and none stays none —
 so a run of related one-line declarations stays a run and a body written as paragraphs keeps them.
-Two places are the file's rather than yours and get a blank line whatever you wrote: under a module
-header, and under the last import. Nothing else is kept: a blank line inside a construct, between
-the fields of a `data` or the arms of a `match`, is not a paragraph break and does not survive.
+Two places are the file's rather than yours and get a blank line whatever you wrote: under the header
+a file opens with — a `module` or an `examples for` — and under the last import. Nothing else is
+kept: a blank line inside a construct, between the fields of a `data` or the arms of a `match`, is
+not a paragraph break and does not survive.
 
 A `data` product body writes each field on a line of its own, opening the line with the `{` for the
 first and with a `,` for the rest, and closing with a `}` at the body's own indent. It is written
@@ -80,10 +86,11 @@ data Employee =
     }
 ```
 
-Everything else written between brackets — a record literal, an argument list, a parameter list, a
-type argument list, a tuple, a list literal, the names in `exposing` and `import` — is written on one
-line if it fits and one member to a line if it does not, each line but the last ending with its `,`.
-No trailing `,` is written before the closing bracket in either case.
+Everything else written between brackets — a record literal, an argument list, a type argument list,
+a tuple, a list literal, the names in `exposing` and `import` — fits or breaks as one thing: written
+on one line where it fits and one member to a line where it does not, each line but the last ending
+with its `,`. No trailing `,` is written before the closing bracket in either case. A behavior's
+parameter list is the exception and is laid out with the signature holding it, below.
 
 ```
 let e = Employee { id = EmployeeId("e-1"), rank = Staff }
@@ -97,6 +104,30 @@ let wide =
 
 So the two conventions are the constructs' and not the file's: a `data` body opens its lines with
 the comma and everything else closes them with it.
+
+A behavior signature lays its inputs and its output out together, so neither is decided on its own.
+Where the whole signature fits, it is one line. Where it does not, the parameter list breaks first —
+one parameter to a line, with the `)` opening the line the output is written on — and the output
+union breaks only where it still does not fit that line. A parameter list short enough for a line of
+its own is therefore written down the page anyway when what follows the arrow leaves it no room:
+inputs give way before the output, so that a signature keeps its three parts whole for as long as it
+can rather than leaving the first member of a union on the signature line beside the arrow.
+
+```
+behavior fits : (a: A, b: B) -> X | Y
+
+behavior preApprove : (
+    request: AwaitingPreApproval,
+    approverId: EmployeeId
+) -> PreApproved | NotAuthorized
+
+behavior judge : (
+    code: Code
+) -> AcceptedByTheUnderwriter
+    | RefusedByTheUnderwriter
+    | DeferredForManualReview
+    | EscalatedToTheManager
+```
 
 A comment keeps what it was written about. On the line of the code it follows it stays there; on a
 line of its own it goes above what follows it, unless a blank line separates it from that and none
