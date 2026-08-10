@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * Declares the unit data a module only names. A name written where a module introduces a type — a
  * sum's case list, a behavior's output, a composition's declared output — and declared nowhere is a
- * data with no fields, and the name alone is its declaration (spec 8.4). Without this,
+ * data with no fields, and the name alone is its declaration (spec §unit-data). Without this,
  * {@code data Terms = Net15 | Net30} needed a {@code data Net15} line that repeated the name and
  * said nothing else.
  *

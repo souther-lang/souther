@@ -11,9 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A sum whose cases include a unit data (no fields) derives a decoder/encoder: the unit case
- * decodes from the discriminated object and encodes back to {@code {"type": "<case>"}}
- * (spec 8.3, 8.4, 10.3, 11.2). Previously the derived sum decoder rejected unit cases.
+ * A sum whose cases include a unit data (no fields) derives a decoder/encoder: the unit case decodes from the
+ * discriminated object and encodes back to {@code {"type": "<case>"}} (spec §sum-data, §unit-data,
+ * §sum-discrimination, §encoder-derivation). Previously the derived sum decoder rejected unit cases.
  */
 class CompileUnitCaseTest {
 

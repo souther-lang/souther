@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * An example may be written for a behavior whose input (or a fake's type) is an imported type
- * (spec 4, 14). The example evaluator decodes such a fixture against the type's declaring module,
+ * (spec §modules, §composition). The example evaluator decodes such a fixture against the type's declaring module,
  * not the module holding the example — so a cross-module fixture builds and the example evaluates.
  */
 class CompileCrossModuleExampleTest {

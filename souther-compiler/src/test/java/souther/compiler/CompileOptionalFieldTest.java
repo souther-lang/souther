@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A field marked {@code T?} is optional (spec 7.4): it decodes to {@code Some}/{@code None}
+ * A field marked {@code T?} is optional (spec §optional): it decodes to {@code Some}/{@code None}
  * and round-trips. An absent (or null) key decodes to {@code None} without failing.
  */
 class CompileOptionalFieldTest {
@@ -48,6 +48,6 @@ class CompileOptionalFieldTest {
 
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Trip", ((Ok<?>) r).value());
         assertFalse(out.containsKey("approver"),
-                "None omits the key entirely, not a null value (spec 11.2)");
+                "None omits the key entirely, not a null value (spec §encoder-derivation)");
     }
 }

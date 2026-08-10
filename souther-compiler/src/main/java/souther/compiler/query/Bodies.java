@@ -367,9 +367,9 @@ public final class Bodies {
     }
 
     /**
-     * The signatures of the behaviors a module injects — its own targets and the imported ones it
-     * names (spec 13.2, 14.3). What a call to one of them is typed against, both where a helper's
-     * parameter types are settled and in the check itself.
+     * The signatures of the behaviors a module injects — its own targets and the imported ones it names (spec
+     * §injected-behavior, §composition-with-requirements). What a call to one of them is typed against, both
+     * where a helper's parameter types are settled and in the check itself.
      *
      * <p>A signature that does not build is not reported here: the check reports it where it reports
      * it today, and settling reads what it can and leaves the rest to the annotation rule. Answering
@@ -536,7 +536,7 @@ public final class Bodies {
      * the module that declares it.
      *
      * <p>A definition another module publishes is expanded here like one of this module's own: a value
-     * is substituted at its references (ADR-0072), a helper at its call sites (spec 12.5). What
+     * is substituted at its references (ADR-0072), a helper at its call sites (spec §blocks). What
      * arrives is closed — the body with its own module's definitions already substituted into it — so
      * the only name of the declaring module that reaches this one is the definition's own. A body
      * carrying those names would be read against the definitions here, and a reader that happens to
@@ -967,7 +967,7 @@ public final class Bodies {
     }
 
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
-     * constructions are attributed to the behavior that calls it (spec 12.5). */
+     * constructions are attributed to the behavior that calls it (spec §blocks). */
     public record RecursiveHelperConstructs(String name)
             implements Key<Map<String, DataChecker.Constructs>> {
         @Override
@@ -1214,7 +1214,7 @@ public final class Bodies {
                 // In the order they are declared, so what the backend emits does not move with what
                 // the check happened to ask for first.
                 for (Ast.BehaviorDef b : settled.value().behaviors()) {
-                    // An injection target has no body here — something else supplies it (spec 13.2)
+                    // An injection target has no body here — something else supplies it (spec §injected-behavior)
                     // — so there is nothing to check and nothing missing when there is none.
                     if (!(b instanceof Ast.SpecBehavior spec) || !implemented.contains(spec.name())) {
                         continue;

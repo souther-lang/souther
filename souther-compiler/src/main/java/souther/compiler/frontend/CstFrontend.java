@@ -96,7 +96,7 @@ public final class CstFrontend {
                 default -> { /* examples and fakes are not declarations to publish */ }
             }
         }
-        // a unit only named (spec 8.4) has no slice of its own; what it declares is its name, so
+        // a unit only named (spec §unit-data) has no slice of its own; what it declares is its name, so
         // that is what an importing project reads back
         for (Ast.Def def : module.defs()) {
             defs.computeIfAbsent(def.name(), name -> "data " + name);

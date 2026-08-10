@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Decimal division states its rounding as a domain decision: {@code divide(a, b, scale, mode)}
- * gives a Decimal rounded to {@code scale} places by {@code mode} (spec 18.3). A zero divisor is a
+ * gives a Decimal rounded to {@code scale} places by {@code mode} (spec §stdlib-decimal). A zero divisor is a
  * possible input, so it returns a {@code DivisionByZero} case rather than aborting. The 2-argument
  * {@code divide} stays Int-only.
  */

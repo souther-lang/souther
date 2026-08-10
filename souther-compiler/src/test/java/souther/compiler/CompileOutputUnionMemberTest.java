@@ -278,7 +278,7 @@ class CompileOutputUnionMemberTest {
     /**
      * A Java implementation of an injected behavior whose output union has a bridged member. It has
      * to answer with a member of the union, so the base has to hand it the bridge case the way it
-     * hands it every other case it may build (spec 19.8).
+     * hands it every other case it may build (spec §jvm-anonymous-union).
      */
     @Test
     void anInjectedBehaviorCanAnswerWithABridgedMember() throws Exception {
@@ -351,7 +351,7 @@ class CompileOutputUnionMemberTest {
         assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());
     }
 
-    /** A behavior capitalizes into a class name too (spec 19.5), and it is the same table. */
+    /** A behavior capitalizes into a class name too (spec §jvm-behavior), and it is the same table. */
     @Test
     void aBridgeCaseCollidingWithABehaviorsClassIsRejected() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""

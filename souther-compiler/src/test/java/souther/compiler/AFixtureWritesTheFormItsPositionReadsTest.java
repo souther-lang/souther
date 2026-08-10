@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * A fixture is written in the form the position's own decoder reads. For a newtype that some sum also
  * lists, that form depends on the position: read as a case of the sum it wears the {@code "value"}
  * envelope beside the discriminator, and read as itself it is its bare inner value — because the
- * envelope is what membership adds and not part of the newtype's representation (spec 10.3).
+ * envelope is what membership adds and not part of the newtype's representation (spec §sum-discrimination).
  *
  * <p>Both positions are written here, since the form is right in one of them under either rule and a
  * row that only ever stands in a sum cannot tell the two apart.

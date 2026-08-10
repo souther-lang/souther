@@ -62,7 +62,7 @@ public final class ModuleMetadata {
      * module's own {@code $Module}. {@code module} is the module as parsed, before anything derived
      * or inlined, so the invariants read as they were written. {@code sigs} supplies the signature
      * of a {@code >->} composition, which declares stages instead of one; {@code injected} names the
-     * behaviors this module leaves to be injected (spec 13.2), which is the compiler's rule to state
+     * behaviors this module leaves to be injected (spec §injected-behavior), which is the compiler's rule to state
      * and not a fact about any one class.
      */
     public static void stamp(Map<String, byte[]> out, Ast.Module module, CstFrontend.Slices slices,

@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * Compiles a hand-written Java class against a module's generated classes — how a Java or Kotlin
- * implementation of an injection target reaches the generated base (spec 13.3). A test that needs one
+ * implementation of an injection target reaches the generated base (spec §java-base-class). A test that needs one
  * gets the real thing: javac reads the same class files a consuming build would, so a base whose
  * {@code apply} changed shape fails here as it would there.
  */

@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test for the named required-behavior base class and the {@code bind(...)} factory
- * (spec 13.3, 19.5). A required behavior is generated as an abstract {@code Behavior}
+ * (spec §java-base-class, §jvm-behavior). A required behavior is generated as an abstract {@code Behavior}
  * subclass; a Java implementation {@code extends} it. Here the implementation is compiled
  * at runtime and injected through {@code bind}.
  */

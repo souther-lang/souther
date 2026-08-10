@@ -18,7 +18,7 @@ import static souther.compiler.codegen.Descriptors.*;
  *
  * <p>A member a module declared is the union's case itself. A primitive and a type another module
  * emitted cannot implement an interface declared here, so they reach the union through a bridge case
- * (spec 19.8). That leaves the union with two forms, and this is where they meet:
+ * (spec §jvm-anonymous-union). That leaves the union with two forms, and this is where they meet:
  *
  * <ul>
  *   <li>{@link #inject} — a behavior returns, and the Souther value it answers with becomes a member

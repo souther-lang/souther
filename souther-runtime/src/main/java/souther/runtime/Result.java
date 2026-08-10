@@ -4,7 +4,7 @@ import java.util.function.Function;
 
 /**
  * The Souther result type: either {@link Ok} (a success value of type {@code T}) or
- * {@link Err} (a failure value of type {@code E}). Corresponds to spec section 7.3.
+ * {@link Err} (a failure value of type {@code E}). Corresponds to spec §algebraic-types.
  *
  * <p>Unlike Raoh's {@code Result}, the failure side is a typed value {@code E}, not an
  * untyped issue bag. Raoh's issue types never leak into this public type.

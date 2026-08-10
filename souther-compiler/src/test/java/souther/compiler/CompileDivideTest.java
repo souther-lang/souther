@@ -6,7 +6,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Integer division yields Int | DivisionByZero, matched via a primitive case (spec 18.2). */
+/** Integer division yields Int | DivisionByZero, matched via a primitive case (spec §stdlib-int). */
 class CompileDivideTest {
 
     private static final String MODULE = """

@@ -19,7 +19,7 @@ Naming it reached six positions. Five are the reading ADR-0011 already permits, 
 inferred: a data field (where `T?` means the same type), a behavior's input, a helper's parameter, a
 helper's declared return, and a function type's result. Two of those cannot be written any other way,
 because the annotation is mandatory there — a recursive helper's return type, and a function-typed
-parameter (spec 13.1):
+parameter (spec §fn-declaration):
 
 ```souther
 partial let firstOver (xs: List<Int>) : Option<Int> = ...

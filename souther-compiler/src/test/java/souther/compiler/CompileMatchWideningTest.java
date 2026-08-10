@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A {@code match} whose cases yield different data types widens to the union of those types, the
- * same way an {@code if} does (spec 16.2, 16.3). Before, match required every branch to have the
+ * same way an {@code if} does (spec §if, §match). Before, match required every branch to have the
  * identical type; now {@code | A -> OutA} and {@code | B -> OutB} give {@code OutA | OutB}.
  */
 class CompileMatchWideningTest {

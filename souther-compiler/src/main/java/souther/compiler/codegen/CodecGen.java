@@ -36,10 +36,11 @@ import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
 
 /**
- * Generates a data/sum/unit type's decoders and encoders at the Raoh boundary (spec 10.6, 15, 27.7):
- * the three input sources (neutral/JSON/jOOQ), object/leaf/newtype/sum decoding, a newtype's
- * invariant as Raoh constraints, the construct check, and the encoder raw expressions. Name resolution and the synthetic-class sink come
- * from {@link CodegenContext}; body expressions are emitted through a {@link BodyGen} built per method.
+ * Generates a data/sum/unit type's decoders and encoders at the Raoh boundary (spec §codec-generation,
+ * §case-propagation): the three input sources (neutral/JSON/jOOQ), object/leaf/newtype/sum decoding, a
+ * newtype's invariant as Raoh constraints, the construct check, and the encoder raw expressions. Name
+ * resolution and the synthetic-class sink come from {@link CodegenContext}; body expressions are emitted
+ * through a {@link BodyGen} built per method.
  */
 final class CodecGen {
 
@@ -54,7 +55,7 @@ final class CodecGen {
         this.symbols = ctx.symbols;
     }
 
-    /** The three boundary input sources a decoder can read from (spec 6, 10.6). */
+    /** The three boundary input sources a decoder can read from (spec §external-representation, §codec-generation). */
     enum Src { NEUTRAL, JSON, JOOQ }
 
     private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
@@ -255,7 +256,7 @@ final class CodecGen {
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdEnc);
             // Dispatch on the runtime case type, encode that case as it writes itself, then add what
-            // membership in this sum requires of it (spec 11.2).
+            // membership in this sum requires of it (spec §encoder-derivation).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 for (Ast.EncVariant v : enc.variants()) {
                     TypeName caseName = v.caseType().denotes();
@@ -288,7 +289,7 @@ final class CodecGen {
             emitSharedInstance(cb, cdDec);
             // Build a Raoh discriminate decoder and delegate: the tag is read from the
             // discriminator key of the source, each case dispatches to that case's decoder for the
-            // same source (spec 10.3). discriminate/variant are the core (input-generic) combinators.
+            // same source (spec §sum-discrimination). discriminate/variant are the core (input-generic) combinators.
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 // this=0, in=1, path=2, so 3 is the first free slot for the guard to hold the node in.
                 emitObjectGuard(code, src, 3);
@@ -736,7 +737,7 @@ final class CodecGen {
      * Emits {@code static Result __rekey$K(Map src, Path path)}: it remaps a decoded
      * {@code Map<String, V>}'s keys into the String-backed newtype {@code K}, running {@code K}'s own
      * decoder (which applies K's invariant) on each key. Key issues accumulate across the whole map
-     * (spec 15) and a failure lands at the key's path; on success it returns a {@code Map<K, V>} in
+     * (spec §case-propagation) and a failure lands at the key's path; on success it returns a {@code Map<K, V>} in
      * iteration order. Materialised as a {@code BiFunction} for {@code Decoder.flatMapWithPath}.
      */
     private void emitRekeyHelper(ClassBuilder cb, MapKeyRepresentation key) {
@@ -959,7 +960,7 @@ final class CodecGen {
 
     /**
      * A newtype over a non-primitive Y: decode the whole input with Y's decoder, then wrap the
-     * result in X (spec 8.7). Same Err short-circuit as {@link #emitPrimDecode}, but the leaf is
+     * result in X (spec §newtype). Same Err short-circuit as {@link #emitPrimDecode}, but the leaf is
      * Y's decoder rather than a primitive one.
      */
     private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.NewtypeDecoder dec,
@@ -1099,7 +1100,7 @@ final class CodecGen {
             resultSlots[i] = rSlot;
         }
 
-        // Accumulate every field's issues (applicative), then fail once if any (spec 15).
+        // Accumulate every field's issues (applicative), then fail once if any (spec §case-propagation).
         int accSlot = gen.slot(Type.STRING);
         code.getstatic(CD_RIssues, "EMPTY", CD_RIssues);
         code.astore(accSlot);
@@ -1484,7 +1485,7 @@ final class CodecGen {
         gen.emitFieldValues(fields, inits, List.of());
         code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));
         // Souther construction Result -> Raoh boundary Result. An invariant failure becomes a
-        // Raoh failure (spec 9.4, 10.1); success wraps the constructed value.
+        // Raoh failure (spec §violation-destination, §decoder-role); success wraps the constructed value.
         //
         // The failure names the clause that did not hold, and it travels in the metadata beside the
         // rejecting type: with the code the shared one, that metadata is all a resolver has to go on.
@@ -1501,7 +1502,9 @@ final class CodecGen {
         code.invokevirtual(CD_ResultErr, "error", MTD_error);
         code.checkcast(CD_InvariantFailure);
         code.astore(failure);
-        code.aload(2);   // the path this value was decoded at (spec 9.4, 15) — not the document root
+        // the path this value was decoded at (spec §violation-destination, §case-propagation) —
+        // not the document root
+        code.aload(2);
         code.loadConstant("invariant_violation");
         code.aload(failure);
         code.invokevirtual(CD_InvariantFailure, "toString", MethodTypeDesc.of(CD_String));
@@ -1629,7 +1632,7 @@ final class CodecGen {
 
     /**
      * Puts an optional field into the object map only when it is {@code Some}: {@code None} omits
-     * the key entirely rather than writing {@code null} (spec 11.2). The map is on the stack on
+     * the key entirely rather than writing {@code null} (spec §encoder-derivation). The map is on the stack on
      * entry and left on the stack on exit, so both the Some and None branches converge on it.
      */
     private void emitOptionalEntry(CodeBuilder code, BodyGen gen, String key, Ast.OptionRaw o) {
@@ -1814,12 +1817,12 @@ final class CodecGen {
                 MethodTypeDesc.of(CD_Map, CD_Map));                      // instantiatedMethodType: (Map) -> Map
     }
 
-    // --- a behavior output union's encoder (spec 19.8) -------------------------------------------
+    // --- a behavior output union's encoder (spec §jvm-anonymous-union) -------------------------------------------
 
     /**
      * The encoder of a behavior's anonymous output union: dispatch on the member, encode it as that
      * member writes itself, and write the discriminator {@code "type"} — what a named sum over the
-     * same leaves does (spec 11.2). Without it the same value would travel two ways depending on
+     * same leaves does (spec §encoder-derivation). Without it the same value would travel two ways depending on
      * where it sat, since a member's own encoder writes no discriminator.
      *
      * <p>A member this module declared is the case itself; any other arrives in its bridge case, and
@@ -1868,7 +1871,7 @@ final class CodecGen {
 
     /**
      * Leaves a discriminated case on the stack: what the case writes on its own, plus what standing
-     * in this sum — or in a behavior's answer, which is the same rule — adds to it (spec 11.2). A
+     * in this sum — or in a behavior's answer, which is the same rule — adds to it (spec §encoder-derivation). A
      * product lays its fields beside the discriminator and a unit is the discriminator alone, so both
      * carry it in the object they already are; a newtype and a primitive have no key of their own to
      * put it on, so their representation goes under {@code "value"} beside it.
@@ -1915,7 +1918,7 @@ final class CodecGen {
             return;
         }
         // a member is one of the union's effective members, every named sum already expanded to its
-        // leaves (spec 19.2), so its encoder() is on a class and never on a sealed interface
+        // leaves (spec §jvm-product), so its encoder() is on a class and never on a sealed interface
         code.invokestatic(cd(member), "encoder", MTD_Rencoder, false);
     }
 
@@ -1934,7 +1937,7 @@ final class CodecGen {
     }
 
     /** Whether every member is a unit, so the union carries nothing but which member it is and
-     * travels as that member's name — the form a named sum of units has (spec 11.2). */
+     * travels as that member's name — the form a named sum of units has (spec §encoder-derivation). */
     private boolean isEnumeration(List<TypeName> members) {
         for (TypeName member : members) {
             if (!(symbols.get(member) instanceof Ast.UnitData)) {

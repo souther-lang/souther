@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 /**
  * A data may state more than one {@code invariant} line; every one must hold. Earlier only the
  * last survived (each line overwrote the previous), so a value breaking an earlier one was minted
- * anyway. All lines are now conjoined, so any single violation aborts (spec 9, 19.7).
+ * anyway. All lines are now conjoined, so any single violation aborts (spec §invariant, §jvm-abort).
  */
 class CompileMultiInvariantTest {
 

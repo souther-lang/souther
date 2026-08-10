@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Int is signed 64-bit; an add/subtract/multiply that leaves that range aborts with a
- * {@link ConstraintViolation} rather than wrapping (spec 18.2). This covers both the {@code *}
+ * {@link ConstraintViolation} rather than wrapping (spec §stdlib-int). This covers both the {@code *}
  * operator and the {@code multiply} stdlib call, and confirms in-range arithmetic is unaffected.
  */
 class CompileIntOverflowTest {

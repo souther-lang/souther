@@ -246,7 +246,7 @@ public final class Names {
 
         /**
          * A {@code >->} stage. {@code X.decoder} / {@code X.encoder} name a codec, which is a
-         * boundary edge rather than a behavior (spec 14.1) — said here, where the question is what
+         * boundary edge rather than a behavior (spec §sequential-composition) — said here, where the question is what
          * the name denotes, so nothing further down has a spelling to test for it.
          */
         Ast.Var stage(Ast.Var ref) {
@@ -771,7 +771,7 @@ public final class Names {
      * claim a vocabulary the module does not speak and no one was told.
      *
      * <p>Being written bare is the whole test, and it is narrower than being mentioned. What another
-     * module declares is reachable qualified whether or not it is imported (spec 4), so
+     * module declares is reachable qualified whether or not it is imported (spec §modules), so
      * {@code Stock.Sku} is a use of the declaration and not of the import: take {@code Sku} off the
      * list and that line still compiles. An entry earns its place by being the spelling something
      * below actually used, which is why a use is matched on what was written as well as on what it

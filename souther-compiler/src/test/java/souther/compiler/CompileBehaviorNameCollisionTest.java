@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A behavior's generated class capitalizes its first letter (spec 19.5). Data names are already
+ * A behavior's generated class capitalizes its first letter (spec §jvm-behavior). Data names are already
  * capitalized, so {@code behavior quote} producing {@code data Quote} would generate two classes
  * named {@code Quote}. The compiler rejects the collision rather than let one class silently
  * overwrite the other.

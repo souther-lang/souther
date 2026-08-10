@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Spec 14.1: every stage after the first takes exactly one input, and a behavior that takes none is
+ * Spec §sequential-composition: every stage after the first takes exactly one input, and a behavior that takes none is
  * no more composable than one that takes two. It reaches signature building before
  * {@code checkStagesAreSingleInput} has reported it, so the arity is confirmed where the routing
  * reads the input — otherwise the routing indexes an empty input list and the compile aborts with

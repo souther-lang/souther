@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Spec 19.2: a data / unit class is a record — {@code java.lang.Record} with a {@code Record}
+ * Spec §jvm-product: a data / unit class is a record — {@code java.lang.Record} with a {@code Record}
  * attribute naming its fields as components. That is how a value reads at the boundary without the
  * reader being told anything: javac deconstructs it in a record pattern as it does the runtime's
  * {@code Ok} / {@code Err}, and Kotlin types each component as a property instead of resolving the

@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 
 /**
  * Settles the type of every helper parameter the author left unwritten, reading it off the helper's
- * own body (spec 13.1, issue #176) and writing it back onto the parameter (issue #178).
+ * own body (spec §fn-declaration, issue #176) and writing it back onto the parameter (issue #178).
  *
  * <p>Writing it back is what makes the type reach the helper's expansion. A helper call is rewritten
  * to {@code let $k_p = arg in <body>} carrying the parameter's type onto the binding, so a value the
@@ -76,7 +76,7 @@ final class HelperParams {
         Map<String, Ast.FnDef> settled = new LinkedHashMap<>();
         for (Ast.FnDef h : inliner.held().values()) {
             if (recursive.contains(h.name())) {
-                continue;   // a recursive helper is not inlined and declares its parameters (spec 13.1)
+                continue;   // a recursive helper is not inlined and declares its parameters (spec §fn-declaration)
             }
             Ast.FnDef s = settle(h, inliner, symbols, reqSigs, recursiveHelperFns);
             if (s != null) {
@@ -253,7 +253,7 @@ final class HelperParams {
         Map<Integer, Type> found = new LinkedHashMap<>();
         List<Integer> value = new ArrayList<>();
         for (int idx : open) {
-            // a function-typed parameter is annotated, not settled (spec 13.1); reading a value type
+            // a function-typed parameter is annotated, not settled (spec §fn-declaration); reading a value type
             // off one would hide the report that says so.
             if (!isApplied(body, h.params().get(idx).binder())) {
                 value.add(idx);
@@ -439,7 +439,7 @@ final class HelperParams {
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
             // expression a parameter takes its type from can be one — `x + count(t)` reads `count(t)`
             // to type `x`. Its signature goes in here, once, and every inner scope is derived from
-            // this one (spec 13.1). What is bound wins over it, as it does everywhere else.
+            // this one (spec §fn-declaration). What is bound wins over it, as it does everywhere else.
             visit(body, env.reaching(recursiveHelperFns), target.id(), answers);
             // What the readings settle is asked for once, here: a reading that says what a variable
             // is may arrive after the readings that used it, so nothing before this is the answer.
@@ -812,7 +812,7 @@ final class HelperParams {
          * {@code env} with what the binding is in force as. The written type says it, except where it
          * names a type variable: the binding a helper's expansion writes carries the callee's declared
          * type, so a combinator's {@code List<'a>} would stand in front of the {@code List<Int>} the
-         * argument actually is. A variable names nothing (spec 13.1), so what the value is wins there.
+         * argument actually is. A variable names nothing (spec §fn-declaration), so what the value is wins there.
          */
         private Scope bound(Ast.LetIn li, Type demanded, Scope env) {
             return bound(li.binder(), li.declaredType(), li.value(), demanded, env);
@@ -1017,7 +1017,7 @@ final class HelperParams {
         /**
          * The parameter types {@code call}'s callee declares, or null when nothing here declares them.
          * What is applied may be something this body binds — a function-typed parameter, which is
-         * always written (spec 13.1), or a binding holding a function — and a written type is a
+         * always written (spec §fn-declaration), or a binding holding a function — and a written type is a
          * declaration wherever it stands, so it is read first. Beyond that: a helper that annotates its
          * parameters has already been inlined into this body, where its annotation is on the binding
          * the call became, and a newtype's constructor {@code X(v)} has already been desugared to a
@@ -1091,7 +1091,7 @@ final class HelperParams {
          * constructors there are, so a constructor added later means what this already says of it.
          *
          * <p>A function type is refused where the value is one: a parameter that is applied is written
-         * (spec 13.1). A collection of functions is not that — it is a value the expansion carries
+         * (spec §fn-declaration). A collection of functions is not that — it is a value the expansion carries
          * like any other — so the question is asked of the outermost layer here as it is everywhere
          * else. A type that answers no value is refused at any depth, which is the existing rule
          * about the bottom an empty collection carries; that one says nothing about what it holds

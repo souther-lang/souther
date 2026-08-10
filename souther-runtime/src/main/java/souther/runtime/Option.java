@@ -3,7 +3,7 @@ package souther.runtime;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The optional type from spec section 7.3: {@code Some(T)} or {@code None}.
+ * The optional type from spec §algebraic-types: {@code Some(T)} or {@code None}.
  *
  * @param <T> the contained type
  */

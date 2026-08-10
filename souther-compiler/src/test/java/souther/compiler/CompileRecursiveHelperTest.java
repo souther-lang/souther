@@ -575,7 +575,7 @@ class CompileRecursiveHelperTest {
     @Test
     void anUnannotatedParameterTakesItsTypeFromANeighbouringRecursiveHelperCall() {
         // The type a parameter is left to take from the body can come from a call that is left
-        // standing — `x + depth(e)` types `x` from what `depth` returns (spec 13.1).
+        // standing — `x + depth(e)` types `x` from what `depth` returns (spec §fn-declaration).
         String src = ORG.replace("let measureDepth (e) = Depth(depth(e))", """
                 let bump (x, e: Employee) = x + depth(e)
                 let measureDepth (e) = Depth(bump(1, e))

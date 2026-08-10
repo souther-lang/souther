@@ -39,7 +39,7 @@ public final class Deriver {
     }
 
     /** Derives codecs using {@code symbols} for type resolution (own definitions plus any
-     * imported ones, for cross-module fields — spec 4). */
+     * imported ones, for cross-module fields — spec §modules). */
     public static Ast.Module derive(Ast.Module module, Symbols symbols) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
@@ -96,7 +96,7 @@ public final class Deriver {
         SourcePos pos = d.pos();
         Ast.Name self = Ast.Name.resolved(symbols.own(d.name()), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
-        // with one field (spec 8.7).
+        // with one field (spec §newtype).
         Map.Entry<String, CodecShape> single = bareField(d, shapes);
         if (single != null) {
             Ast.RawKind kind = rawKind(((CodecShape.Scalar) single.getValue()).kind());
@@ -105,7 +105,7 @@ public final class Deriver {
                     List.of(new Ast.FieldInit(single.getKey(), Ast.Var.local(input, pos), pos)), pos);
             return new Ast.PrimDecoder(kind, input, List.of(), result, pos);
         }
-        // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec 8.7)
+        // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec §newtype)
         if (d.newtype()) {
             Map.Entry<String, CodecShape> only = shapes.entrySet().iterator().next();
             Ast.Binder input = binders.binder("__in", pos);
@@ -174,7 +174,7 @@ public final class Deriver {
                     primRaw(((CodecShape.Scalar) single.getValue()).kind(), access, pos), pos);
         }
         // a newtype over a non-primitive Y encodes self.value as Y writes itself — Y's
-        // representation, not `{value: ...}` (spec 8.7). Y is a named data, a sum, or a collection,
+        // representation, not `{value: ...}` (spec §newtype). Y is a named data, a sum, or a collection,
         // so this is the same choice a field of type Y makes.
         if (d.newtype()) {
             Map.Entry<String, CodecShape> only = shapes.entrySet().iterator().next();
@@ -272,7 +272,7 @@ public final class Deriver {
     /**
      * The cases a derived codec dispatches over, with nested sums folded to their leaves —
      * `費用負担区分 = 自社負担 | 先方負担` where `自社負担 = 立替 | 仮払い | 会社カード` dispatches over
-     * 立替 / 仮払い / 会社カード / 先方負担 (spec 8.3, 10.3).
+     * 立替 / 仮払い / 会社カード / 先方負担 (spec §sum-data, §sum-discrimination).
      *
      * <p>Folding is what makes a nested sum round-trip. Tagging the direct case instead would put
      * two levels on one `"type"` key: the outer encoder wrote {@code {type: 自社負担}}, losing
@@ -320,7 +320,7 @@ public final class Deriver {
 
     /**
      * The bare inner field of an explicit newtype {@code data X = Y} whose {@code Y} is primitive
-     * (spec 8.7). A braced record is always an object — even a single-field one — so newtype-ness
+     * (spec §newtype). A braced record is always an object — even a single-field one — so newtype-ness
      * is decided by the {@code = Y} syntax, not the shape.
      *
      * <p>What some other declaration does with the type is not asked. A derived codec is the

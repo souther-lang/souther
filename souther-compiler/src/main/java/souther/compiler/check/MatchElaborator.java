@@ -127,7 +127,7 @@ public final class MatchElaborator {
     }
 
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
-     * {@code None}; both must be present (spec 16.3). */
+     * {@code None}; both must be present (spec §match). */
     static Core elaborateOptionMatch(Ast.Match m, Core scrutineeCore, Type element,
                                           Scope env, CheckContext ctx, Type expected) {
         Set<TypeName> covered = new HashSet<>();
@@ -277,7 +277,7 @@ public final class MatchElaborator {
             return bt;
         }
         // arms merge by the join `if` branches use — equal types collapse, data-like ones widen to
-        // their union, and both hold under a collection or a tuple as well (spec 16.2). An arm
+        // their union, and both hold under a collection or a tuple as well (spec §if). An arm
         // answering a primitive joins only where the output written for this behavior says so.
         Type joined = TypeOps.join(branchType, bt);
         if (joined == null) {

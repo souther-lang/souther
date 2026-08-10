@@ -112,7 +112,7 @@ public final class TypeChecker {
     }
 
     /**
-     * One behavior's body against the behavior it implements (spec 13.1), as the Core the backend
+     * One behavior's body against the behavior it implements (spec §fn-declaration), as the Core the backend
      * emits. Its own question: what it reads is the behavior, its {@code let}, and what the module
      * around it means — never another body.
      */
@@ -134,7 +134,7 @@ public final class TypeChecker {
     }
 
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
-     * constructions are attributed to the behavior that calls it (spec 12.5). */
+     * constructions are attributed to the behavior that calls it (spec §blocks). */
     public static Map<String, DataChecker.Constructs> recursiveHelperConstructs(
             Set<String> names, Map<String, Ast.Expr> loweredBodies, HelperInliner inliner,
             Symbols symbols) {
@@ -293,7 +293,7 @@ public final class TypeChecker {
         for (String e : module.exposing()) {
             int dot = e.indexOf('.');
             // `exposing` is type-granular: a data's decoder/encoder are always public API once the
-            // data itself is exposed (spec 19.4), so there is nothing a `.decoder`/`.encoder` member
+            // data itself is exposed (spec §jvm-codec), so there is nothing a `.decoder`/`.encoder` member
             // could narrow. Reject it rather than accept a form that reads as a granularity that
             // does not exist.
             if (dot >= 0) {
@@ -326,21 +326,21 @@ public final class TypeChecker {
             }
             exposed.add(e);
         }
-        // Injection targets (spec 13.2): a SpecBehavior with no matching fn. Its name and success
-        // type let a fn call it inline (spec 12.2); it is the "required" behavior of the old form.
-        // An imported injection target is one here too (spec 14.3): the module that names it injects
-        // and binds it, whether it named it as a `>->` stage or as a `depends on` dependency. Its
-        // signature comes from the module that declared it; a local behavior of the same name wins.
-        // The same map is built before the module is lowered, where a helper's parameter type is
-        // settled from a call to an injected behavior (issue #178), and read again by every body
-        // check. It arrives here rather than being built again because it is one question.
+        // Injection targets (spec §injected-behavior): a SpecBehavior with no matching fn. Its name and
+        // success type let a fn call it inline (spec §unmarked-output); it is the "required" behavior of the
+        // old form. An imported injection target is one here too (spec §composition-with-requirements): the
+        // module that names it injects and binds it, whether it named it as a `>->` stage or as a `depends
+        // on` dependency. Its signature comes from the module that declared it; a local behavior of the same
+        // name wins. The same map is built before the module is lowered, where a helper's parameter type is
+        // settled from a call to an injected behavior (issue #178), and read again by every body check. It
+        // arrives here rather than being built again because it is one question.
         Set<String> injectionTargets = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
-                // `depends on` names what an implementation calls (12.6), and an injection target has
-                // no implementation here — the Java side provides it (13.2). Declaring `depends on` on
+                // `depends on` names what an implementation calls (§depends-on), and an injection target has
+                // no implementation here — the Java side provides it (§injected-behavior). Declaring `depends on` on
                 // one is meaningless: nothing calls those behaviors, and nothing injects them. The
-                // behavior that composes or calls this one carries the requirement instead (13.2).
+                // behavior that composes or calls this one carries the requirement instead (§injected-behavior).
                 if (!spec.dependsOn().isEmpty()) {
                     throw CompileException.of(Diagnostic
                                     .at(spec.pos()).say(new DeclarationMessage.AnInjectionTargetCannotDependOnAnything(spec.name())).build());
@@ -366,14 +366,14 @@ public final class TypeChecker {
         // Fail-fast too: a behavior reaching itself has no first element to build, and the code that
         // works out requirement sets and emits classes would walk the loop.
         SpecChecker.checkBehaviorsDoNotRecurse(module);
-        // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
+        // A binding whose value is a lambda takes no annotation (spec §let). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {
             collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.writtenBody(), symbols));
         }
-        // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
+        // Helper fns (no matching behavior) are expanded inline at each call site (spec §blocks); a
         // helper is checked standalone against its own parameter types, which its body settles
-        // (spec 13.1). Recovered so a broken helper does not hide the behavior-body errors below.
+        // (spec §fn-declaration). Recovered so a broken helper does not hide the behavior-body errors below.
         collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns,
                 loweredBodies, elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
@@ -395,7 +395,7 @@ public final class TypeChecker {
                     () -> PartialHelperUse.rejectNamedAsValue(fn, module.name(), reachability));
         }
         // A fn matching a pipeline is rejected (a pipeline is already its own implementation, so it
-        // cannot also have a fn body — spec 13.1). A fn matching a SpecBehavior is that behavior's
+        // cannot also have a fn body — spec §fn-declaration). A fn matching a SpecBehavior is that behavior's
         // implementation, which is checked as its own question; any other fn is a helper (checked by
         // checkHelpers). These terminal validations build no state, so each is recovered
         // independently.
@@ -408,7 +408,7 @@ public final class TypeChecker {
             }
         });
         // an exposed composition must declare its output in `exposing`, matching the inferred one
-        // (spec 14.5, ADR-0024), so a far-away change cannot grow a published output silently.
+        // (spec §declared-composition-output, ADR-0024), so a far-away change cannot grow a published output silently.
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, symbols));
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberFields(module, sigs, symbols));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,

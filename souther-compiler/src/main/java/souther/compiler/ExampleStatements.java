@@ -780,7 +780,7 @@ public final class ExampleStatements {
         }
 
         /** Whether a fake's row states the arguments a call arrived with, each by the language's
-         * equality. A multi-input dependency is matched as a tuple (spec 22), so this walks them. */
+         * equality. A multi-input dependency is matched as a tuple (spec §example-fakes), so this walks them. */
         private static boolean sameArguments(Object[] row, Object[] key) {
             if (row.length != key.length) {
                 return false;

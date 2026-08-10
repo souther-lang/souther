@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A {@code let} does not bind its own name in its value (spec 16.1), so a name inside a lambda bound
+ * A {@code let} does not bind its own name in its value (spec §let), so a name inside a lambda bound
  * by one is whatever that name was outside it.
  *
  * <p>The inliner used to hold declared helpers and let-bound lambdas in one table keyed by spelling,

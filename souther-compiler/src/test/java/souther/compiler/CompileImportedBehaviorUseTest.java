@@ -18,10 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An imported behavior can be named where a local one can: as a {@code >->} stage and as a
- * {@code depends on} dependency (spec 4, 13.2, 14.3). The declaring module's arity is what decides how
- * it is called, not whether it crossed a module boundary — a multi-input injected behavior is
- * injected and called on its base class either way (issue #96, issue #57).
+ * An imported behavior can be named where a local one can: as a {@code >->} stage and as a {@code depends on}
+ * dependency (spec §modules, §injected-behavior, §composition-with-requirements). The declaring module's
+ * arity is what decides how it is called, not whether it crossed a module boundary — a multi-input injected
+ * behavior is injected and called on its base class either way (issue #96, issue #57).
  */
 class CompileImportedBehaviorUseTest {
 

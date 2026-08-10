@@ -166,7 +166,7 @@ final class JvmTypes {
      * to find out what it was handed.
      *
      * <p>{@code BigDecimal.equals} also compares the scale, so it calls 1.0 and 1.00 different.
-     * Scale is how a number was written, not what it is (spec 7.1): the same amount arrives with
+     * Scale is how a number was written, not what it is (spec §primitives): the same amount arrives with
      * a different scale depending on whether it was read from JSON or a DB column, and a money
      * type whose equality turns on that is a trap. Clojure, Scala and Ceylon all chose the same way.
      */

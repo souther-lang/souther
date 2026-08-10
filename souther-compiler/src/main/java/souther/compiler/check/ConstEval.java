@@ -86,8 +86,8 @@ public final class ConstEval {
             case NE -> Optional.of(!equal(a, b));
             case LT, LE, GT, GE -> compare(bin.op(), a, b);
             case ADD, SUB, MUL -> arith(bin.op(), a, b);
-            // `++` appends two strings or two lists (spec 18.1); the string case folds, and a list is
-            // not a constant here to begin with.
+            // `++` appends two strings or two lists (spec §an-operator-takes-the-types-it-is-defined-for);
+            // the string case folds, and a list is not a constant here to begin with.
             case CONCAT -> a instanceof String x && b instanceof String y
                     ? Optional.of(x + y) : Optional.empty();
             // `/` is left to the run-time check (it aborts on a zero divisor, and Decimal `/` rounds).

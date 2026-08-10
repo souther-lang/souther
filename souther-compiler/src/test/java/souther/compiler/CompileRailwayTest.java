@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * End-to-end test for {@code guard ... else} and type-routed {@code >->} composition: a case
- * the next stage does not accept propagates through unchanged (spec 12.2, 14.2).
+ * the next stage does not accept propagates through unchanged (spec §unmarked-output, §type-routing).
  */
 class CompileRailwayTest {
 
@@ -21,7 +21,7 @@ class CompileRailwayTest {
             data Doubled = Int
 
             // over 100 leaves the main line as a TooLarge case. `guard ... else` mints the
-            // TooLarge, so the behavior declares it (spec 12.3).
+            // TooLarge, so the behavior declares it (spec §constructs).
             behavior capAmount : (a: Amount) -> Amount | TooLarge constructs TooLarge
 
             let capAmount (a) = {
@@ -67,7 +67,7 @@ class CompileRailwayTest {
      * Regression: a case that leaves the main line must stay off it. The router kept the passed
      * case in the running union and offered it to every later stage, so a stage that happened to
      * accept it pulled it back in — `A >-> B >-> C` returned C's output for a value B had already
-     * dropped. That is not Railway (spec 14.2), and it made the meaning of a pipeline depend on
+     * dropped. That is not Railway (spec §type-routing), and it made the meaning of a pipeline depend on
      * where it was split.
      */
     @Test

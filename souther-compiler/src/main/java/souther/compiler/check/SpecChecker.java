@@ -166,9 +166,9 @@ public final class SpecChecker {
     }
 
     /**
-     * An exposed composition ({@code >->}) behavior must declare its output in the {@code exposing}
-     * list ({@code exposing ( name : A | B )}, spec 14.5, ADR-0024), and the declaration must match
-     * the inferred output exactly. A far-away change that grows the output then fails here, at the
+     * An exposed composition ({@code >->}) behavior must declare its output in the {@code exposing} list
+     * ({@code exposing ( name : A | B )}, spec §declared-composition-output, ADR-0024), and the declaration
+     * must match the inferred output exactly. A far-away change that grows the output then fails here, at the
      * module boundary, instead of reaching separately-compiled consumers unannounced.
      *
      * <p>The requirement applies only to a composition that is explicitly exposed: a module with no
@@ -221,8 +221,8 @@ public final class SpecChecker {
 
     /**
      * Checks a behavior's {@code fn} implementation against the behavior's declared signature
-     * (spec 13.1). The {@code fn}'s parameters are the behavior's inputs followed by its
-     * {@code depends on} (12.6); the trailing ones name the injection targets in declared order and
+     * (spec §fn-declaration). The {@code fn}'s parameters are the behavior's inputs followed by its
+     * {@code depends on} (§depends-on); the trailing ones name the injection targets in declared order and
      * do not bind values — they resolve as inline calls to those behaviors.
      */
     static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
@@ -278,7 +278,7 @@ public final class SpecChecker {
                     TypeOps.successType(spec.params().get(i).type(), symbols));
         }
         Type output = TypeOps.successType(spec.ret(), symbols);
-        // recursive helpers this behavior calls resolve through their signatures (spec 13.1); merged
+        // recursive helpers this behavior calls resolve through their signatures (spec §fn-declaration); merged
         // only for typing, so the construction and dependency walks below still see the business params alone.
         // A parameter of the same name wins: a binding in force wins over the declaration it shadows
         // (spec §fn-rules), so an input written `depth` is the input and not the helper spelled that way.
@@ -289,7 +289,7 @@ public final class SpecChecker {
         HelperTyping.checkFunctionArgs(fn.writtenBody(), tenv, symbols, reqSigs, inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
-        // behavior's permission and dependencies — exactly as if the code had been written inline (12.5).
+        // behavior's permission and dependencies — exactly as if the code had been written inline (§blocks).
         Ast.Expr body = inlinedBody;
 
         // push the declared output type into the body so a body that is directly an empty collection
@@ -303,7 +303,7 @@ public final class SpecChecker {
                             .diff(Type.show(rt, output), Type.show(output, rt)).say(new BehaviorMessage.TheBodyIsNotWhatTheBehaviorReturns(spec.name(), Type.show(output), Type.show(rt))).build());
         }
 
-        // One expression (spec 16.4): this single walk sees every construction, including under a
+        // One expression (spec §guard): this single walk sees every construction, including under a
         // desugared `guard`.
         DataChecker.Constructs constructed = DataChecker.Constructs.empty();
         DataChecker.collectConstructs(body, constructed, symbols, recHelperConstructs);
@@ -311,9 +311,9 @@ public final class SpecChecker {
         // (invisible to callers, unlike `depends on`), so with the body visible the set can be inferred
         // (ADR-0002). Omit it and inference stands. Declare it and it must match the body exactly —
         // under-declaration is E1002, over-declaration E1006 — so an explicit clause stays a checkable,
-        // readable record of what is newly built versus passed through (spec 12.3), the same exact
+        // readable record of what is newly built versus passed through (spec §constructs), the same exact
         // match `depends on` gets (E1602/E1603). Injected behaviors still declare it: no body to infer
-        // from, and it drives factory generation (spec 13.3).
+        // from, and it drives factory generation (spec §java-base-class).
         if (!spec.constructs().isEmpty()) {
             // Both sides name types, and a type has one identity however it is written — `up.Amount`
             // and an `Amount` an import brings in are the same one. Each side keeps its own spelling
@@ -334,7 +334,7 @@ public final class SpecChecker {
                 }
             }
         }
-        // The `depends on` clause must match what the fn actually calls (spec 12.6): missing -> E1602,
+        // The `depends on` clause must match what the fn actually calls (spec §depends-on): missing -> E1602,
         // extra -> E1603.
         List<String> actual = requiredCalls(body, reqSigs.keySet());
         List<String> declared = new ArrayList<>();
@@ -402,7 +402,7 @@ public final class SpecChecker {
 
     /**
      * A member of an output union lays its fields flatly beside the `"type"` discriminator the union
-     * writes (spec 19.8), so a member declaring a field of that name and the tag want one key. The
+     * writes (spec §jvm-anonymous-union), so a member declaring a field of that name and the tag want one key. The
      * same rule a sum's cases are under, asked of the signature so a composition is subject to it too.
      */
     static void checkUnionMemberFields(Ast.Module module, Map<String, Sig> sigs, Symbols symbols) {
@@ -421,12 +421,12 @@ public final class SpecChecker {
         }
     }
 
-    /** The key a derived codec writes the case name under (spec 11.2). */
+    /** The key a derived codec writes the case name under (spec §encoder-derivation). */
     private static final String DISCRIMINATOR = "type";
 
 
     /**
-     * An injected behavior's declared {@code constructs} must each be Java-buildable (spec 13.3):
+     * An injected behavior's declared {@code constructs} must each be Java-buildable (spec §java-base-class):
      * a unit data (the base class hands the implementation a {@code protected} factory) or an
      * exposed data (its {@code decoder} is public). A non-unit, unexposed one is E1305 — Java has
      * no way to mint it.
@@ -459,7 +459,7 @@ public final class SpecChecker {
      * types its fields and its signature are written in, and a type this module keeps to itself has
      * no name there and a class the reader may not touch. The abstract base of an injected behavior
      * is the other, whether or not the behavior is exposed, because it is public whatever
-     * {@code exposing} says (spec 13.3) and the implementation writes the input and output types
+     * {@code exposing} says (spec §java-base-class) and the implementation writes the input and output types
      * where it overrides {@code apply} — with no raw-typed override to fall back on, since the
      * erased signature clashes with the one being overridden rather than overriding it.
      *
@@ -608,7 +608,7 @@ public final class SpecChecker {
     }
 
     /**
-     * Every stage after the first takes exactly one input (spec 14.1): {@code >->} hands a single
+     * Every stage after the first takes exactly one input (spec §sequential-composition): {@code >->} hands a single
      * value along.
      *
      * <p>The first stage is not restricted — it consumes the pipeline's own arguments, and the
@@ -630,7 +630,7 @@ public final class SpecChecker {
                 continue;
             }
             // check the flattened stages: a named intermediate splices in its own first stage, which
-            // then sits after `>->` and so must be single-input too (spec 14.1, 14.2)
+            // then sits after `>->` and so must be single-input too (spec §sequential-composition, §type-routing)
             List<Ast.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
                     pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
@@ -660,7 +660,7 @@ public final class SpecChecker {
         // Every subexpression, through the one exhaustive walk — a call to an injected behavior may
         // sit anywhere. Listing the node kinds here instead left `-dep(x)` and `(dep(x), y)` out of
         // the set, and a block's requirements still float out to the behavior that passes it
-        // (spec 12.5, 29) because a Block's body is one of its children.
+        // (spec §blocks, §requirement-propagation) because a Block's body is one of its children.
         Ast.forEachChild(e, c -> collectRequiredCalls(c, requiredNames, out));
     }
 

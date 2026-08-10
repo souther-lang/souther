@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A {@code depends on} clause names injection targets (spec 12.6, 13.2). A name that is not one is
+ * A {@code depends on} clause names injection targets (spec §depends-on, §injected-behavior). A name that is not one is
  * reported where it was written, saying which rule it broke — not left to the call site, where it
  * used to surface as an arbitrary JVM call (E1401), advice for a problem the author did not have
  * (issue #96).

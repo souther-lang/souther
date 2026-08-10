@@ -3,7 +3,7 @@ package souther.runtime;
 import java.util.Comparator;
 
 /**
- * The rounding-mode enumeration core declares as {@code data RoundingMode} (spec 18.3). The
+ * The rounding-mode enumeration core declares as {@code data RoundingMode} (spec §stdlib-decimal). The
  * declaration lives in {@code souther/decimal.sou}; the implementation is provided here rather than
  * generated, like {@link Option} and {@link DivisionByZero}, so the static shape mirrors what the
  * compiler emits for a unit-only sum: a sealed interface carrying {@code __tag}, {@code __order}

@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
 
 /**
  * Drives a compiled behavior from the command line: {@code souther run <file.sou> [-cp <path>]
- * [--behavior <name>] [--input <json>]}. The runner is itself the Java boundary (spec section 13) —
+ * [--behavior <name>] [--input <json>]}. The runner is itself the Java boundary (spec §fn) —
  * it decodes the JSON input into the behavior's parameter types through their derived decoders,
  * applies the behavior, and encodes the returned domain value back to JSON through its derived
  * encoder. Souther keeps no I/O of its own; a header-less {@code .sou} is named after the file (see
@@ -684,7 +684,7 @@ public final class Runner {
             case BoundaryOutput.Nominal n ->
                     encodeThrough(loader, n.name().qualified(), result);
             // A union nobody named is generated as the behavior's result type, which is where its
-            // encoder is (spec 19.8). It is the only output with no name in the source, so it is the
+            // encoder is (spec §jvm-anonymous-union). It is the only output with no name in the source, so it is the
             // behavior that says which class to reach for.
             case BoundaryOutput.Cases c -> encodeThrough(loader,
                     pkg + "." + Backend.behaviorResultClass(behavior), result);

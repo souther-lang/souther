@@ -211,9 +211,9 @@ public interface Ast {
     /**
      * A whole source file: its public surface, imports, and definitions.
      *
-     * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature
-     * written in the {@code exposing} list ({@code exposing ( name : A | B )}, spec 14.5). An exposed
-     * {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
+     * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature written
+     * in the {@code exposing} list ({@code exposing ( name : A | B )}, spec §declared-composition-output). An
+     * exposed {@code >->} composition must have one, checked to match its inferred output (ADR-0024); other
      * exposed names carry no signature (their type is at the definition).
      *
      * <p>{@code fns} is what the source wrote, and it stays that at every stage. {@code takenOn} is
@@ -284,10 +284,10 @@ public interface Ast {
                       SourcePos pos) implements Ast {}
 
     /**
-     * {@code import a.b as B ( X, Y )} — an explicit, non-wildcard import (spec 4).
+     * {@code import a.b as B ( X, Y )} — an explicit, non-wildcard import (spec §modules).
      * {@code importedNames} are the names this import brings into scope bare; {@code alias} is the
      * qualifier the module is read under here, or null. Both parts are optional: a type is reachable
-     * qualified whether or not it was imported (spec 4), so an import with neither is just the
+     * qualified whether or not it was imported (spec §modules), so an import with neither is just the
      * dependency written down.
      */
     record Import(String module, String alias, List<ImportedName> importedNames, SourcePos pos)
@@ -331,7 +331,7 @@ public interface Ast {
     }
 
     /**
-     * A behavior definition — a specification, not an implementation (spec 12, 21.1). It is either
+     * A behavior definition — a specification, not an implementation (spec §behavior, §ast-nodes). It is either
      * a {@link SpecBehavior} (an input/output signature, with the body left to a matching
      * {@link FnDef} or to Java injection) or a {@link PipeBehavior} (a {@code >->} composition, which
      * is itself the implementation).
@@ -351,11 +351,11 @@ public interface Ast {
 
     /**
      * {@code behavior name = (p1: T1, ...) -> R constructs A, B depends on C, D} — a signature with
-     * no body (spec 12.1). A same-named {@link FnDef} is its implementation (13.1); with none, and
-     * not a pipeline, it is a Java-injected behavior (13.2).
+     * no body (spec §behavior-io). A same-named {@link FnDef} is its implementation (§fn-declaration); with none, and
+     * not a pipeline, it is a Java-injected behavior (§injected-behavior).
      *
      * <p>{@code dependsOn} lists the implementation-less behaviors the {@code fn} calls; they become
-     * the {@code fn}'s trailing arguments and the injected fields of the generated class (12.6).
+     * the {@code fn}'s trailing arguments and the injected fields of the generated class (§depends-on).
      */
     record SpecBehavior(WrittenName written,
                         List<Param> params,
@@ -371,7 +371,7 @@ public interface Ast {
         }
     }
 
-    /** A behavior parameter. Its type may be an anonymous union of cases (spec 12.2). */
+    /** A behavior parameter. Its type may be an anonymous union of cases (spec §unmarked-output). */
     record Param(WrittenName written, RetType type) implements Ast {
 
         /** A parameter a pass wrote. */
@@ -391,9 +391,10 @@ public interface Ast {
     }
 
     /**
-     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec 14.1). {@code declaredOut}
-     * is the optional trailing output declaration (14.5): null when absent (output is inferred), else
-     * the declared cases, which must match the inferred output exactly (E1604).
+     * {@code behavior name = f >-> g >-> ... [-> A | B]} — a composition (spec §sequential-composition).
+     * {@code declaredOut} is the optional trailing output declaration (§declared-composition-output): null
+     * when absent (output is inferred), else the declared cases, which must match the inferred output exactly
+     * (E1604).
      */
     record PipeBehavior(WrittenName written, List<Var> stages, RetType declaredOut, SourcePos pos)
             implements BehaviorDef {
@@ -405,13 +406,13 @@ public interface Ast {
     }
 
     /**
-     * {@code fn name (a1, ...) = body} — a behavior's implementation (spec 13.1). If a same-named
+     * {@code fn name (a1, ...) = body} — a behavior's implementation (spec §fn-declaration). If a same-named
      * {@link SpecBehavior} exists, the parameter types come from it and the author writes none
      * ({@link FnParam#type()} is null, or read off a pattern; {@link FnParam#typeFromPattern()});
      * otherwise it is a helper {@code fn} that writes its own parameter types.
      *
      * <p>{@code body} is a single expression. The surface forms {@code let} and {@code guard} are
-     * desugared by the parser into {@link LetIn} and {@link If} (spec 16.4), so every later stage
+     * desugared by the parser into {@link LetIn} and {@link If} (spec §guard), so every later stage
      * sees one expression tree and has exactly one place where a value can be constructed.
      */
     /**
@@ -540,7 +541,7 @@ public interface Ast {
         public static final Modifiers NONE = new Modifiers(false, false);
     }
 
-    /** A {@code fn} parameter: a name, and a type only when the {@code fn} is a helper (spec 13.1).
+    /** A {@code fn} parameter: a name, and a type only when the {@code fn} is a helper (spec §fn-declaration).
      * A helper's parameter type may be a function type {@link FnType}; a behavior fn's parameter
      * carries no type ({@code type} is null). {@code typeFromPattern} marks a type read off a
      * constructor pattern in parameter position rather than written beside the name — a behavior's
@@ -578,7 +579,7 @@ public interface Ast {
      * function may take one and may return one. */
     record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {}
 
-    /** A written type: one term, or the unmarked sum of several (spec 12.2). */
+    /** A written type: one term, or the unmarked sum of several (spec §unmarked-output). */
     record RetType(List<TypeTerm> cases, SourcePos pos) implements Ast {
 
         /** The function type this stands for, or null when it is not a lone function type. A sum of
@@ -618,7 +619,7 @@ public interface Ast {
     /**
      * A product data definition: included data (flattened) plus its own fields.
      *
-     * <p>{@code newtype} marks the explicit newtype form {@code data X = Y} (spec 8.7): a single
+     * <p>{@code newtype} marks the explicit newtype form {@code data X = Y} (spec §newtype): a single
      * implicit field named {@code value} of type {@code Y}, encoded as bare {@code Y} instead of an
      * object. Everything else (construction {@code X { value: v }}, access {@code x.value},
      * invariant on {@code value}) is the same as a one-field product; only the external
@@ -791,7 +792,7 @@ public interface Ast {
     record ObjectDecoder(List<Bind> binds, Construct result, SourcePos pos) implements DecoderDef {}
 
     /**
-     * A newtype {@code data X = Y} over a non-primitive {@code Y} (spec 8.7): the whole input is
+     * A newtype {@code data X = Y} over a non-primitive {@code Y} (spec §newtype): the whole input is
      * decoded by {@code inner} (a reference to {@code Y}'s decoder), and the result wrapped in
      * {@code X}. {@code X}'s external representation is {@code Y}'s — an object or a discriminated
      * sum, not {@code {value: ...}}.
@@ -980,7 +981,7 @@ public interface Ast {
                     Tuple, TupleGet, Unreachable {}
 
     /**
-     * {@code unreachable "reason"} — the point the model says cannot arise (spec 16.3).
+     * {@code unreachable "reason"} — the point the model says cannot arise (spec §match).
      *
      * <p>It answers no value, so it has no type of its own to check against the position it is
      * written in: it types at {@code Never} and fits whatever is expected. The reason is a literal
@@ -990,7 +991,7 @@ public interface Ast {
     record Unreachable(String reason, SourcePos pos) implements Expr {}
 
     /**
-     * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec 12.5).
+     * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec §blocks).
      *
      * <p>Second-class: it may only be an argument, never a value that is returned, stored in a
      * field, or bound by {@code let}. The parser only accepts one in an argument position, and
@@ -1021,7 +1022,7 @@ public interface Ast {
 
     /**
      * {@code let name = value} followed by {@code body} — what a body's {@code let} desugars to
-     * (spec 16.1). Nesting the rest of the body inside keeps {@code value} from being evaluated
+     * (spec §let). Nesting the rest of the body inside keeps {@code value} from being evaluated
      * when an enclosing {@code if} (a desugared {@code guard}) takes the other branch.
      *
      * <p>{@code declaredType} is the binding's declared type, if any, and {@code annotated} says
@@ -1154,7 +1155,7 @@ public interface Ast {
     record ListLit(List<Expr> elements, SourcePos pos) implements Expr {}
 
     /** A guard-only comprehension {@code [element | guard, ...]}: the element is included when
-     * every guard holds, giving a 0-or-1 element list (spec 18.4, conditional accumulation). */
+     * every guard holds, giving a 0-or-1 element list (spec §stdlib-list, conditional accumulation). */
     record ListComp(Expr element, List<Expr> guards, SourcePos pos) implements Expr {}
 
     /** A tuple {@code (e1, e2, ...)} of two or more values (ADR-0036), an expression-level value
@@ -1166,7 +1167,7 @@ public interface Ast {
      * is the pattern's name count, so the checker rejects a tuple of a different size (ADR-0036). */
     record TupleGet(Expr tuple, int index, int arity, SourcePos pos) implements Expr {}
 
-    /** {@code if cond then a else b} — both branches must have the same type (spec 16.2). */
+    /** {@code if cond then a else b} — both branches must have the same type (spec §if). */
     record If(Expr cond, Expr then, Expr els, SourcePos pos) implements Expr {}
 
     /**
@@ -1178,7 +1179,7 @@ public interface Ast {
      * {@code If}'s condition never binds.
      *
      * <p>A construction here does not abort, so it is exempt from the possible-violation warning
-     * (spec 7.6); a violation the compiler *decides* is still reported, because then no branch was
+     * (spec §invariant-discharge); a violation the compiler *decides* is still reported, because then no branch was
      * ever in question.
      *
      * <p>{@code construct} is an {@link Expr} rather than a {@link NewData} because the newtype
@@ -1234,8 +1235,8 @@ public interface Ast {
     record Match(Expr scrutinee, List<Case> cases, SourcePos pos) implements Expr {}
 
     /**
-     * One {@code match} case: {@code case A | B ... [as x] -> body} (spec 16.3). {@code caseTypes}
-     * holds one case name, or several joined by {@code |} (an or-pattern, spec 16.3). With one case,
+     * One {@code match} case: {@code case A | B ... [as x] -> body} (spec §match). {@code caseTypes}
+     * holds one case name, or several joined by {@code |} (an or-pattern, spec §match). With one case,
      * {@code x} binds that case's type; with several, it binds the scrutinee's sum type, since no
      * single case type fits all alternatives.
      */
@@ -1293,7 +1294,7 @@ public interface Ast {
 
     record DecimalLit(java.math.BigDecimal value, SourcePos pos) implements Expr {}
 
-    /** Unary minus {@code -operand} on an Int or Decimal (spec 18.1). */
+    /** Unary minus {@code -operand} on an Int or Decimal (spec §an-operator-takes-the-types-it-is-defined-for). */
     record Neg(Expr operand, SourcePos pos) implements Expr {}
 
     record StringLit(String value, SourcePos pos) implements Expr {}

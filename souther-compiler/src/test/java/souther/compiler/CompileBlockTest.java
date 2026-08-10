@@ -11,12 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Blocks and the list combinators that take them (spec 12.5, 18.4).
+ * Blocks and the list combinators that take them (spec §blocks, §stdlib-list).
  *
- * <p>A block's requirements float out to the behavior that passes it, so nothing about them is
- * written down (spec 29), and the backend inlines the block instead of building a closure. A block
- * may also be bound to a {@code let} and applied — see {@link CompileLambdaLetTest}; only a block
- * that escapes (is used as a value, not just applied) is rejected, for want of a runtime closure.
+ * <p>A block's requirements float out to the behavior that passes it, so nothing about them is written down
+ * (spec §requirement-propagation), and the backend inlines the block instead of building a closure. A block
+ * may also be bound to a {@code let} and applied — see {@link CompileLambdaLetTest}; only a block that
+ * escapes (is used as a value, not just applied) is rejected, for want of a runtime closure.
  */
 class CompileBlockTest {
 

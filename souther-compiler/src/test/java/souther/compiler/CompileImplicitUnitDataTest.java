@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A case name written where a module introduces a type — a sum's case list, a behavior's output —
  * needs no separate {@code data} declaration when it carries no fields: the name alone declares the
- * unit (spec 8.4). Before this, {@code data Terms = Net15 | Net30} demanded a {@code data Net15}
+ * unit (spec §unit-data). Before this, {@code data Terms = Net15 | Net30} demanded a {@code data Net15}
  * line that repeated the name and said nothing else.
  *
  * <p>Everywhere else a type is referred to rather than introduced, and an unknown name there is

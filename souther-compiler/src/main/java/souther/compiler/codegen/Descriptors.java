@@ -14,9 +14,9 @@ import java.lang.constant.MethodTypeDesc;
 import java.util.function.Consumer;
 
 /**
- * The JVM class and method descriptors the backend emits against (spec sections 19, 20). These name
+ * The JVM class and method descriptors the backend emits against (spec §jvm-output, §compiler-pipeline). These name
  * the runtime classes ({@code Result}/{@code Behavior}/{@code Maps}/{@code Sets}/...), the Raoh
- * decode/encode targets (spec 10.6), and the boxed-primitive and collection interfaces. Shared by
+ * decode/encode targets (spec §codec-generation), and the boxed-primitive and collection interfaces. Shared by
  * every generator in this package; a call site references one through a static import.
  */
 final class Descriptors {
@@ -37,22 +37,22 @@ final class Descriptors {
             }));
 
     /**
-     * Builds a class targeting Java 25 (spec 19.1), carrying JSpecify's {@code @NullMarked}.
+     * Builds a class targeting Java 25 (spec §target-jdk), carrying JSpecify's {@code @NullMarked}.
      *
      * <p>The version is pinned rather than left to {@link ClassFile#of}, which defaults to the
      * JDK running the compiler: the generated code would then track whatever JDK built it, and
      * two developers on different JDKs would emit mutually incompatible artifacts.
      *
-     * <p>The marking says that in this class a type saying nothing about null is not null — which is
-     * what the generated code already is, since absence is {@code Option} and a failure is a case of
-     * the output union (spec 7.3, 12). Saying it is what lets a caller's compiler know: Kotlin reads
-     * the annotation off the class file and types what it names as non-null instead of falling back to
-     * a platform type, where a null check is neither required nor possible — every member but a record
-     * component's accessor, which says it on the return type itself ({@link #CD_NonNull}). It rides
-     * on each class rather than on a {@code package-info} because a module's own package is where a
-     * consumer's hand-written {@code package-info.java} lives — theirs would be the declaration, and
-     * the marking would reach only the modules that own no Java of their own (issue #150). It is read
-     * by name, so neither this compiler nor anything downstream needs the JSpecify jar.
+     * <p>The marking says that in this class a type saying nothing about null is not null — which is what the
+     * generated code already is, since absence is {@code Option} and a failure is a case of the output union
+     * (spec §algebraic-types, §behavior). Saying it is what lets a caller's compiler know: Kotlin reads the
+     * annotation off the class file and types what it names as non-null instead of falling back to a platform
+     * type, where a null check is neither required nor possible — every member but a record component's
+     * accessor, which says it on the return type itself ({@link #CD_NonNull}). It rides on each class rather
+     * than on a {@code package-info} because a module's own package is where a consumer's hand-written {@code
+     * package-info.java} lives — theirs would be the declaration, and the marking would reach only the
+     * modules that own no Java of their own (issue #150). It is read by name, so neither this compiler nor
+     * anything downstream needs the JSpecify jar.
      */
     static byte[] build(ClassDesc cd, Consumer<ClassBuilder> handler) {
         return CF.build(cd, cb -> {
@@ -101,7 +101,7 @@ final class Descriptors {
      * marking, so those say it on the return type itself (spec §jvm-nullness).
      */
     static final ClassDesc CD_NonNull = ClassDesc.of("org.jspecify.annotations.NonNull");
-    /** The superclass of a data / unit class: they are records (spec 19.2). */
+    /** The superclass of a data / unit class: they are records (spec §jvm-product). */
     static final ClassDesc CD_Record = ClassDesc.of("java.lang.Record");
     static final ClassDesc CD_Fn = ClassDesc.of("souther.runtime.Fn");
     static final MethodTypeDesc MTD_Fn_apply =
@@ -144,7 +144,7 @@ final class Descriptors {
     /** {@code meta()}: the rejecting type, and the clause where it has a name. */
     static final MethodTypeDesc MTD_failureMeta = MethodTypeDesc.of(CD_Map);
     static final ClassDesc CD_IntMath = ClassDesc.of("souther.runtime.IntMath");
-    /** {@code (long, long) -> long}: overflow-checked Int arithmetic (spec 18.2). */
+    /** {@code (long, long) -> long}: overflow-checked Int arithmetic (spec §stdlib-int). */
     static final MethodTypeDesc MTD_intExact =
             MethodTypeDesc.of(ConstantDescs.CD_long, ConstantDescs.CD_long, ConstantDescs.CD_long);
     static final ClassDesc CD_DivisionByZero = ClassDesc.of("souther.runtime.DivisionByZero");
@@ -163,7 +163,7 @@ final class Descriptors {
     /** {@code DecimalMath.toJava(RoundingMode)}: the Java constant a mode value denotes. */
     static final MethodTypeDesc MTD_toJavaRoundingMode =
             MethodTypeDesc.of(CD_JavaRoundingMode, CD_RoundingMode);
-    /** {@code BigDecimal.divide(BigDecimal, int, RoundingMode)} (spec 18.3). */
+    /** {@code BigDecimal.divide(BigDecimal, int, RoundingMode)} (spec §stdlib-decimal). */
     static final MethodTypeDesc MTD_bdDivide =
             MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, ConstantDescs.CD_int, CD_JavaRoundingMode);
     static final ClassDesc CD_LocalDate = ClassDesc.of("java.time.LocalDate");
@@ -228,7 +228,7 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Boolean_valueOf =
             MethodTypeDesc.of(CD_Boolean, ConstantDescs.CD_boolean);
 
-    // --- Raoh 0.6.0 decode/encode targets (generated code depends on Raoh directly; spec 10.6) ---
+    // --- Raoh 0.6.0 decode/encode targets (generated code depends on Raoh directly; spec §codec-generation) ---
     static final ClassDesc CD_Class = ClassDesc.of("java.lang.Class");
     static final ClassDesc CD_RDecoder = ClassDesc.of("net.unit8.raoh.decode.Decoder");
     static final ClassDesc CD_REncoder = ClassDesc.of("net.unit8.raoh.encode.Encoder");
@@ -402,7 +402,7 @@ final class Descriptors {
     static final MethodTypeDesc MTD_encodedOrNull =
             MethodTypeDesc.of(CD_Object, CD_Function, CD_Option);
     static final MethodTypeDesc MTD_error = MethodTypeDesc.of(CD_Object);
-    // Per-source (JSON / jOOQ) decode targets (spec 10.6). Every source's `field` answers a
+    // Per-source (JSON / jOOQ) decode targets (spec §codec-generation). Every source's `field` answers a
     // `CombinePart`; the three differ only in the input type they read, which is erased.
     static final ClassDesc CD_JooqRecordDecoder = ClassDesc.of("net.unit8.raoh.jooq.JooqRecordDecoder");
     static final MethodTypeDesc MTD_fieldJooq =

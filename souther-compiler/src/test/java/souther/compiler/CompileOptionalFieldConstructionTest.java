@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Giving a {@code ?} field a value from a behavior body (spec 7.3): a plain value is wrapped in
+ * Giving a {@code ?} field a value from a behavior body (spec §algebraic-types): a plain value is wrapped in
  * {@code Some}, and {@code None} is the empty one. Both are construction — the one place an optional
  * is made — so the type is still never named and {@code Some(...)} is still not a call anyone can
  * write (ADR-0011, issue #167). {@link CompileOptionalFieldTest} covers the codec side of the same

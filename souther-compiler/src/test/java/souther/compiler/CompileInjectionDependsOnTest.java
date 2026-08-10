@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code depends on} names what an implementation calls (spec 12.6). An injection target — a behavior
- * with a type but no {@code fn}, implemented from Java (spec 13.2) — has no implementation here, so
+ * {@code depends on} names what an implementation calls (spec §depends-on). An injection target — a behavior
+ * with a type but no {@code fn}, implemented from Java (spec §injected-behavior) — has no implementation here, so
  * it cannot declare {@code depends on}: the behavior that calls or composes it carries the requirement
  * instead. A fn-bearing behavior keeps declaring the behaviors its body calls.
  */

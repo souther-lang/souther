@@ -40,7 +40,7 @@ public final class Sig {
     /**
      * What the parameters can arrive as, in order. The whole list: only the first stage of a
      * pipeline may have more than one, since {@code >->} hands a single value along and every stage
-     * after the first takes one input (spec 14.1). {@link #in} is for those.
+     * after the first takes one input (spec §sequential-composition). {@link #in} is for those.
      */
     public List<BoundaryInput> ins() {
         return ins;

@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A helper's parameter takes its type from the helper's own body, never from its callers (spec 13.1,
+ * A helper's parameter takes its type from the helper's own body, never from its callers (spec §fn-declaration,
  * issue #176). The body determines it where it reaches a position that names a type — an operator
  * against a value of known type, an argument of a call whose parameter is declared, a field of a
  * construction, an {@code if} condition. Where it does not, the parameter is annotated; the report

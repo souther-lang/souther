@@ -8,7 +8,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** The List standard library beyond map/filter/all/any (spec 18.4): the further Elm combinators
+/** The List standard library beyond map/filter/all/any (spec §stdlib-list): the further Elm combinators
  *  derived from {@code fold}, plus the native {@code sort} primitive and String ordering. */
 class CompileListLibTest {
 
@@ -464,7 +464,7 @@ class CompileListLibTest {
     }
 
     /** A span longer than a list can hold aborts before the walk starts, rather than filling memory
-     *  until it dies — the treatment an Int overflow gets (spec 18.2). */
+     *  until it dies — the treatment an Int overflow gets (spec §stdlib-int). */
     @Test
     void aRangeWiderThanAListCanHoldAborts() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""

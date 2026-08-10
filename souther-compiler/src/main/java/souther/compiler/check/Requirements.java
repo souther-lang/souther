@@ -17,10 +17,10 @@ import java.util.Set;
 /**
  * What each behavior of a module requires injected to be constructed, in the order it takes them.
  *
- * <p>A behavior with a body requires what it declares it depends on (spec 12.6, 13.6). A
+ * <p>A behavior with a body requires what it declares it depends on (spec §depends-on, §requirement-propagation). A
  * composition requires the union of its stages', transitively: a stage with a body is constructed by
  * the composition and handed the fields it needs, so what has to be injected are the injected
- * behaviors the stages reach (14.3). A stage that is itself injected is one of those.
+ * behaviors the stages reach (§composition-with-requirements). A stage that is itself injected is one of those.
  *
  * <p>The order is first appearance, walking the stages left to right. That order is the injecting
  * constructor's parameter order, so it is the order fakes are passed in at an example as well —
@@ -32,8 +32,9 @@ public final class Requirements {
     private Requirements() {}
 
     /**
-     * The injection targets a module builds against: its own behaviors written with no body, and the
-     * imported ones it names, whose base lives in the module that declares them (spec 13.2, 14.3).
+     * The injection targets a module builds against: its own behaviors written with no body, and the imported
+     * ones it names, whose base lives in the module that declares them (spec §injected-behavior,
+     * §composition-with-requirements).
      *
      * <p>This is the rule that decides whether a name is something to inject or something to
      * construct, and both the emitter and the requirement walk below read it here so they cannot
@@ -121,7 +122,7 @@ public final class Requirements {
         Map<String, List<String>> acc = new LinkedHashMap<>();
         switch (bd) {
             // An injection target is answered above, so a SpecBehavior here has a body: what it
-            // requires is what it declared, in that order (spec 12.6, 13.6).
+            // requires is what it declared, in that order (spec §depends-on, §requirement-propagation).
             case Ast.SpecBehavior spec -> {
                 for (Ast.Var req : spec.dependsOn()) {
                     add(acc, req.bare(), name);
@@ -132,7 +133,7 @@ public final class Requirements {
                     String s = stage.bare();
                     if (injected.contains(s)) {
                         // the stage is the dependency: the composition holds it in a field and
-                        // applies it there (spec 14.3)
+                        // applies it there (spec §composition-with-requirements)
                         add(acc, s, name);
                         continue;
                     }

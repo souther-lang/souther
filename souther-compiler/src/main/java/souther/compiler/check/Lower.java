@@ -13,9 +13,9 @@ import java.util.Set;
  * The Lower stage (ADR-0021): rewrites the surface AST toward the form the backend emits, so the
  * backend only emits and never rewrites. It runs before the type checker, whose body check consumes
  * the lowered form (a behavior's permission and {@code depends on} are defined on the inlined body,
- * spec 12.5).
+ * spec §blocks).
  *
- * <p>It inlines every behavior-implementing {@code fn} body once (spec 12.5) and desugars the
+ * <p>It inlines every behavior-implementing {@code fn} body once (spec §blocks) and desugars the
  * body-level constructs that have a plain-AST equivalent — currently the guard-only list
  * comprehension {@code [e | g]}, which becomes {@code if g then [e] else []}. The backend then
  * emits from the lowered module instead of re-running the inliner or shaping these constructs
@@ -51,7 +51,7 @@ public final class Lower {
      * One fn as the backend emits it: its helper calls expanded and its comprehensions desugared.
      *
      * <p>A behavior body and a recursive helper both survive to the backend this way — non-recursive
-     * calls expanded, recursive calls left standing (spec 13.1). A recursive helper expands its own
+     * calls expanded, recursive calls left standing (spec §fn-declaration). A recursive helper expands its own
      * body with its parameters hidden from helper resolution ({@code foldFrom}'s {@code step} is a
      * parameter, not a same-named user helper), which is what {@code recursive} says. A helper that is
      * neither is fully inlined at its call sites and never emitted, so nothing asks for it here.
@@ -121,9 +121,9 @@ public final class Lower {
 
     /**
      * {@code [element | g1, g2]} is {@code if g1 then (if g2 then [element] else []) else []}: the
-     * element is included exactly when every guard holds, giving a 0-or-1 element list (spec 18.4).
+     * element is included exactly when every guard holds, giving a 0-or-1 element list (spec §stdlib-list).
      * The guards nest rather than joining with {@code &&} so a later guard is not evaluated once an
-     * earlier one is false — {@code &&} evaluates both sides (spec 18.1), which would run (and could
+     * earlier one is false — {@code &&} evaluates both sides (spec §stdlib-bool), which would run (and could
      * abort in) a guard the original comprehension short-circuited past.
      */
     private static Ast.Expr listCompToIf(Ast.ListComp comp) {

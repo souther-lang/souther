@@ -310,7 +310,7 @@ class CrossProjectImportTest {
                 """), published(LIBRARY));
     }
 
-    /** A unit the library only named in a sum (spec 8.4) is one of its declarations like any other,
+    /** A unit the library only named in a sum (spec §unit-data) is one of its declarations like any other,
      * so it is published on its class and read back here — the consumer builds it by name. */
     @Test
     void aUnitOnlyNamedByASumIsPublishedToo() throws Exception {

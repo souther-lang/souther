@@ -578,7 +578,7 @@ public final class FixtureReader {
     private Object named(Ast.Var v, Type expected) {
         return switch (v.denotes()) {
             // `None` maps to a null, which the optional decoder reads as the absent optional
-            // (spec 8, absent/null -> None), the same as omitting a `T?` field
+            // (spec §absence-is-written-as-null, absent/null -> None), the same as omitting a `T?` field
             case ValueName.Builtin b when b.name().equals("None") -> null;
             case ValueName.OfType named
                     when symbols.get(named.type()) instanceof Ast.UnitData ->
@@ -927,9 +927,9 @@ public final class FixtureReader {
         for (Ast.FieldInit fi : nd.inits()) {
             Object v = neutral.shaped(raw(fi.value(), neutral.shapeOf(declared.get(fi.name()))),
                     neutral.shapeOf(declared.get(fi.name())));
-            // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
-            // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
-            // A spread already wrote the field, so leaving the key out means taking it back out —
+            // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads it as
+            // absent (spec §absence-is-written-as-null, absent -> None), the same neutral form as omitting
+            // the field. A spread already wrote the field, so leaving the key out means taking it back out —
             // not writing nothing, which would leave what the spread copied standing.
             if (v == null) {
                 map.remove(fi.name());
@@ -1043,7 +1043,7 @@ public final class FixtureReader {
                 }
             }
             // A collection is decoded the way a data's collection field is, built from the same
-            // pieces the derived decoder is (spec 10.2): a list over its element decoder, a set as a
+            // pieces the derived decoder is (spec §decoder-derivation): a list over its element decoder, a set as a
             // list deduplicated, a map over its value decoder with the keys read by their own.
             case FixtureShape.ListOf l -> ObjectDecoders.list(decoderFor(l.element()));
             case FixtureShape.SetOf s -> ObjectDecoders.list(decoderFor(s.element()))

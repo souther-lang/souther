@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * The explicit newtype form {@code data X = Y} (spec 8.7): a single implicit field {@code value}
+ * The explicit newtype form {@code data X = Y} (spec §newtype): a single implicit field {@code value}
  * of type {@code Y}, encoded as bare {@code Y} rather than an object, with an invariant allowed on
  * {@code value}. For now only a primitive inner type is derived.
  */
@@ -36,7 +36,7 @@ class CompileNewtypeTest {
                     invariant value >= 0
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        // -1 breaks value >= 0, so the decode fails (Raoh Err at the boundary, spec 9.4)
+        // -1 breaks value >= 0, so the decode fails (Raoh Err at the boundary, spec §violation-destination)
         Result<?> r = Codecs.decode(loader, "demo.金額", -1L);
         assertEquals("Err", r.getClass().getSimpleName());
     }
@@ -57,7 +57,7 @@ class CompileNewtypeTest {
 
     @Test
     void bracedSingleFieldIsAnObjectNotBare() throws Exception {
-        // spec 8.7: newtype-ness is decided by the `= Y` syntax, not the single-field shape. A
+        // spec §newtype: newtype-ness is decided by the `= Y` syntax, not the single-field shape. A
         // braced single field `{ value: T }` is always an object `{"value": ...}`, even though it
         // has one primitive field. Only `data X = T` is bare.
         String src = """
@@ -73,7 +73,7 @@ class CompileNewtypeTest {
 
     @Test
     void newtypeOverANamedDataDelegatesToItsCodec() throws Exception {
-        // spec 8.7: `data X = Y` with a named-data Y wraps Y and reads/writes Y's representation.
+        // spec §newtype: `data X = Y` with a named-data Y wraps Y and reads/writes Y's representation.
         String src = """
                 module demo
                 data Inner = { a: Int, b: Int }
@@ -89,7 +89,7 @@ class CompileNewtypeTest {
 
     @Test
     void newtypeOverASumDelegatesToItsDiscriminator() throws Exception {
-        // spec 8.7: when Y is a sum, X's representation is Y's own — here an enumeration's name.
+        // spec §newtype: when Y is a sum, X's representation is Y's own — here an enumeration's name.
         String src = """
                 module demo
                 data 管理職

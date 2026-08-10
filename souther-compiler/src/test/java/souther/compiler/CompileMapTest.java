@@ -10,7 +10,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Map<String, T> as a field type with get/containsKey (spec 7.2, 18.5). */
+/** Map<String, T> as a field type with get/containsKey (spec §collections, §stdlib-map). */
 class CompileMapTest {
 
     @Test

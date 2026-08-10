@@ -11,11 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Spec 8.5 / 19.2: a data gets a public record-style read accessor {@code <field>()} per field, so an
- * exposed one is readable across the module (package) boundary and from Java. A data the module keeps
- * to itself has them too — a record's component is read through its accessor, and the class is out of
- * a Java caller's reach anyway — but its class is package-private, so nothing outside can call them.
- * The constructor stays non-public either way, so a read never enables construction.
+ * Spec §field-visibility, §jvm-product: a data gets a public record-style read accessor {@code <field>()} per
+ * field, so an exposed one is readable across the module (package) boundary and from Java. A data the module
+ * keeps to itself has them too — a record's component is read through its accessor, and the class is out of a
+ * Java caller's reach anyway — but its class is package-private, so nothing outside can call them. The
+ * constructor stays non-public either way, so a read never enables construction.
  */
 class CompileFieldAccessorTest {
 

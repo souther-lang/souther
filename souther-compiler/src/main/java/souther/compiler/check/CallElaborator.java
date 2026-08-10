@@ -548,7 +548,7 @@ public final class CallElaborator {
                     throw new IllegalStateException("`" + reached + "` was neither expanded nor"
                             + " bound before the call to it at " + call.pos() + " was typed");
                 }
-                // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
+                // a required behavior called inline (spec §unmarked-output, §fn), or one that requires nothing and
                 // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
                 // declaration; where the behavior comes from at run time is the backend's to know.
                 ReqSig callee = ctx.reqs().get(call.reaches());

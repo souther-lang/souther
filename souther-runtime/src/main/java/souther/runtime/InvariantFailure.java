@@ -6,7 +6,7 @@ import java.util.Map;
 
 /**
  * Which invariant clause a construction failed, and of which type — the failure side of the
- * {@code __construct} a generated class carries (spec 7.6, §invariant-declaration).
+ * {@code __construct} a generated class carries (spec §invariant-mvp, §invariant-declaration).
  *
  * <p>A construction runs the type's clauses in the order they are declared and stops at the first
  * that does not hold, so this names one clause and not a set. Where that clause was declared with a

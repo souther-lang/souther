@@ -31,16 +31,16 @@ import java.util.Set;
 import java.util.function.IntFunction;
 
 /**
- * Expands calls to helper {@code fn}s inline (spec 12.5: a named helper is the same as an inline block).
+ * Expands calls to helper {@code fn}s inline (spec §blocks: a named helper is the same as an inline block).
  *
  * <p>A helper fn is a {@code fn} with no matching behavior — it writes its own parameter types
- * (spec 13.1) and, unlike a behavior fn, is not lowered to a class of its own. Instead every call
+ * (spec §fn-declaration) and, unlike a behavior fn, is not lowered to a class of its own. Instead every call
  * {@code h(a, b)} is rewritten to {@code let $k_p1 = a in let $k_p2 = b in <body>}, with the
  * helper's parameters α-renamed to fresh {@code $}-prefixed names so they cannot capture a caller
  * local (a source identifier never starts with {@code $}). Because the body is spliced into the
  * caller, the caller's construction-permission check, {@code depends on} inference, and codegen all
  * see the helper's constructions and injected calls directly — exactly as if the code had been
- * written inline (spec 12.5). Helpers must not recurse (directly or indirectly), which keeps the
+ * written inline (spec §blocks). Helpers must not recurse (directly or indirectly), which keeps the
  * expansion finite; a cycle is rejected up front.
  */
 public final class HelperInliner {
@@ -432,7 +432,7 @@ public final class HelperInliner {
     }
 
     /** The recursive helpers this module emits as methods: the ones it declares, plus the ones it
-     * reaches and took on to emit — a library one, or one another module published (spec 13.1). A
+     * reaches and took on to emit — a library one, or one another module published (spec §fn-declaration). A
      * call to any of them is left standing by {@link #inline}. The graph's own {@code recursive} set
      * additionally holds recursive helpers the module does not reach at all, so {@code inline} never
      * expands one that slips in through a nested body.
@@ -518,7 +518,7 @@ public final class HelperInliner {
         return appliedHelper(call);
     }
 
-    /** {@code fold} is the one privileged loop primitive that takes a block (spec 18.4); its block is
+    /** {@code fold} is the one privileged loop primitive that takes a block (spec §stdlib-list); its block is
      * the first argument and has two parameters (`(acc, x)`, spec §pipe). A bare name passed in its
      * place is sugar for a block that wraps a call. The map is from the combinator name to the block's
      * argument index. The other combinators (map/filter/all/any) are ordinary prelude helpers derived
@@ -811,7 +811,7 @@ public final class HelperInliner {
      *
      * <p>Where the callee is expanded the two already are the same thing — the expansion substitutes
      * the argument's name into the parameter's applications, so the name only ever stands in a call.
-     * A recursive helper is lowered to a method instead (spec 13.1), which leaves the argument
+     * A recursive helper is lowered to a method instead (spec §fn-declaration), which leaves the argument
      * standing as a value, and a {@code depends on} parameter is reached through the behavior it
      * names rather than bound to a slot. Forwarding here is what makes the two callees say the same
      * thing about the same argument.
@@ -1075,7 +1075,7 @@ public final class HelperInliner {
                 && graph.recurses(call.reaches());
         if (helper == null || standing) {
             // builtin, injected behavior, a function-typed parameter, or a recursive helper —
-            // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
+            // a recursive helper is lowered to a method, so its call stays a Call (spec §fn-declaration);
             // only its args inline.
             return call.withArgs(forwardDependencies(helper, args));
         }
@@ -1188,7 +1188,7 @@ public final class HelperInliner {
                 // a function argument is not a value, so it cannot be bound to a let. A named
                 // function is substituted directly (f(x) becomes inc(x)); a lambda is
                 // registered under a fresh name as a scoped helper, so each application of the
-                // parameter β-reduces to the lambda's body, as a let-bound lambda does (spec 12.5).
+                // parameter β-reduces to the lambda's body, as a let-bound lambda does (spec §blocks).
                 // Asked of the callee as written, not of what it expanded to: applying a
                 // function parameter is what removes it, because the application β-reduces
                 // to the lambda's body, so the expansion holds no reference either way.
@@ -1488,7 +1488,7 @@ public final class HelperInliner {
     /**
      * A helper fn passed to {@code fold} by name is sugar for a block that wraps a call:
      * {@code List.fold(step, seed, xs)} with a named {@code step} becomes
-     * {@code List.fold(($b0, $b1) -> step($b0, $b1), seed, xs)} (spec 12.5, "名前で直接渡す。同じこと").
+     * {@code List.fold(($b0, $b1) -> step($b0, $b1), seed, xs)} (spec §blocks, "名前で直接渡す。同じこと").
      * The generated block has one parameter per helper parameter, so a later arity check against
      * {@code fold} (it wants two) still applies. The block is then expanded inline like any other
      * helper call. Only {@code fold} needs this — map/filter/all/any are helpers whose function

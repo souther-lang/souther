@@ -23,8 +23,8 @@ import java.util.Set;
 
 /**
  * The compiler pipeline facade: source → parse → derive → type check → ClassFile bytecode
- * (spec section 20). {@link #compile} handles a single self-contained module;
- * {@link #compileModules} links several modules through explicit imports (spec section 4).
+ * (spec §compiler-pipeline). {@link #compile} handles a single self-contained module;
+ * {@link #compileModules} links several modules through explicit imports (spec §modules).
  */
 public final class Compiler {
 

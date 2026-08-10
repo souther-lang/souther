@@ -264,7 +264,7 @@ public final class TypeOps {
     }
 
     /** Case names of a stage output, treating a {@code Raw} encoder output as the case {@code "Raw"}
-     * so it can be unioned with propagated error cases (spec 14.1, 24). */
+     * so it can be unioned with propagated error cases (spec §sequential-composition, §case-propagation). */
     static Set<TypeName> caseNamesOf(Type t) {
         if (t == Type.RAW) {
             return Set.of(TypeName.primitive("Raw"));
@@ -349,7 +349,7 @@ public final class TypeOps {
 
     /**
      * What a sum's encoding adds to this case, or a behavior's answer to this member — read from the
-     * declaration the name denotes (spec 11.2). A braced data lays its fields beside the
+     * declaration the name denotes (spec §encoder-derivation). A braced data lays its fields beside the
      * discriminator, a data with no contents is the discriminator alone, and a newtype or a primitive
      * puts its standalone representation under {@code "value"}.
      *
@@ -467,7 +467,7 @@ public final class TypeOps {
 
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
      * covariant, and a data-like type widens to the set of leaf cases it can be — so a list of
-     * a sum's cases is assignable to a list of the sum (spec 8.3, 12.2). */
+     * a sum's cases is assignable to a list of the sum (spec §sum-data, §unmarked-output). */
     public static boolean assignable(Type from, Type to, Symbols symbols) {
         if (from.equals(to)) {
             return true;
@@ -482,11 +482,11 @@ public final class TypeOps {
             return true;   // the empty list's bottom element assigns into any element type (ADR-0028)
         }
         if (from instanceof Type.Never) {
-            // nothing arrives from there, so no value of the wrong type can (spec 16.3)
+            // nothing arrives from there, so no value of the wrong type can (spec §match)
             return true;
         }
         // immutable collections are element-covariant: A <: S makes a List/Map/Option of A
-        // assignable to one of S. Sound because they cannot be mutated (spec 6), so no write can
+        // assignable to one of S. Sound because they cannot be mutated (spec §collections), so no write can
         // smuggle a sibling case in — the same reason Scala's immutable List and Kotlin's read-only
         // List are covariant, and Java's mutable arrays are not.
         if (from instanceof Type.ListOf a && to instanceof Type.ListOf b) {
@@ -521,7 +521,7 @@ public final class TypeOps {
      * <p>It descends the covariant constructors {@link #assignable} descends, so the widening a leaf
      * gets applies under one too: two data-like types widen to the union of their cases, and a list
      * of one case joins a list of another as a list of both — the same direction {@code ++} takes
-     * on its elements (spec 12.2, 16.2). An empty collection's bottom takes on the other side's
+     * on its elements (spec §unmarked-output, §if). An empty collection's bottom takes on the other side's
      * type, at the top or at any depth, so a bare {@code Set.empty} accumulator joins the
      * {@code Set<Int>} the other arm grows and a {@code (Set.empty, [])} joins position by
      * position. */
@@ -539,7 +539,7 @@ public final class TypeOps {
             return a;
         }
         // An arm that answers `unreachable` contributes no case to the join: what the position holds
-        // is what the arms that answer a value hold (spec 16.3).
+        // is what the arms that answer a value hold (spec §match).
         if (a instanceof Type.Never) {
             return b;
         }
@@ -1464,7 +1464,8 @@ public final class TypeOps {
             case "Decimal" -> Type.DECIMAL;
             case "Date" -> Type.DATE;
             case "DateTime" -> Type.DATETIME;
-            // 制約違反 is no longer a writable case: an invariant violation aborts (spec 7.3, 9.4).
+            // 制約違反 is no longer a writable case: an invariant violation aborts (spec §algebraic-types,
+            // §violation-destination).
             case "List" -> Type.list(typeArg(ref, symbols, "list", 4, "List needs a type argument, e.g. List<Int>"));
             case "Set" -> {
                 // a set holds no duplicates, which is a question about equality of its elements
