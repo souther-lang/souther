@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Turning the lines a model draws through one numeric position into the ranges between them.
@@ -116,15 +117,14 @@ final class Intervals {
      *
      * <p>The term says how a row's value is read into a number and how its numbers are spaced; the
      * type says what a value written at one of them looks like. A range of lengths has the first and
-     * not the second — a string five characters long is a value nothing here can write (#528) — so
-     * those classes are named and left without a representative rather than given the number itself.
+     * not the second: five is not what is written at the position, a string of five characters is,
+     * and which values carry a count is asked of what builds them rather than settled here.
      */
     static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
                                           Symbols symbols) {
         boolean decimal = of.decimal(type, symbols);
         souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
                 && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
-        boolean writable = of instanceof NumericTerm.ValueOf;
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
             String id = of + "/" + range.label();
@@ -135,16 +135,17 @@ final class Intervals {
                         new Membership.Incomplete(missing.code());
                 case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
             };
-            if (!writable) {
+            if (inside == null) {
                 classes.add(PartitionClass.ungeneratable(id, range.label(), is,
-                        "nothing here writes a value whose " + measureOf(of) + " is in this range"));
+                        "no value of this range can be written without a smallest step"));
                 continue;
             }
-            classes.add(inside == null
+            List<FixtureTemplate> values = standingIn(of, inside, type, wrapper, decimal, symbols);
+            classes.add(values.isEmpty()
                     ? PartitionClass.ungeneratable(id, range.label(), is,
-                            "no value of this range can be written without a smallest step")
+                            "nothing here writes a value whose " + measureOf(of) + " is in this range")
                     : PartitionClass.of(id, range.label(), is,
-                            RepresentativeSource.of(written(inside, wrapper, decimal))));
+                            RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
         }
         return List.copyOf(classes);
     }
@@ -160,6 +161,33 @@ final class Intervals {
                 range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
                 range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
                 decimal ? Granularity.DENSE : Granularity.DISCRETE);
+    }
+
+    /**
+     * Values of the position that read as {@code inside} on this term, or none where the term is one
+     * nothing here can put a value on.
+     *
+     * <p>A number the term reads out of the value is written into it; a number the term counts of the
+     * value is a value carrying that many, which is {@link Witnesses}'s question rather than this
+     * one's. Asked of it rather than answered here, so that this says a range has no representative
+     * only when the thing that builds them has none to give.
+     */
+    private static List<FixtureTemplate> standingIn(NumericTerm of, BigDecimal inside, Type type,
+                                                    souther.compiler.types.TypeName wrapper,
+                                                    boolean decimal, Symbols symbols) {
+        if (of instanceof NumericTerm.ValueOf) {
+            return List.of(written(inside, wrapper, decimal));
+        }
+        if (inside.stripTrailingZeros().scale() > 0
+                || inside.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
+            return List.of();
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (FixtureTemplate each : Witnesses
+                .ofSize(TypeOps.base(type, symbols), inside.intValue(), symbols, Set.of()).values()) {
+            out.add(Witnesses.wrapped(type, each, symbols));
+        }
+        return List.copyOf(out);
     }
 
     private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,

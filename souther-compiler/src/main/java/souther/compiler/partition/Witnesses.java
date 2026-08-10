@@ -60,16 +60,93 @@ final class Witnesses {
     private static final int MOST_PAIRINGS = 64;
 
     /**
-     * Values of {@code carrier} holding at least {@code least} of whatever counts it, or none where
-     * this can build none.
+     * Values of a count, and whether they are all the values of it there were.
+     *
+     * <p>Two halves of one answer. A caller reading only the first says every value was refused where
+     * some were never built, which is a different thing to tell an author and a different thing for a
+     * measure to record.
+     */
+    record Sized(List<FixtureTemplate> values, Generator.UnresolvedCombination.Reason heldBack) {
+
+        Sized {
+            values = List.copyOf(values);
+        }
+
+        static Sized all(List<FixtureTemplate> values) {
+            return new Sized(values, null);
+        }
+    }
+
+    /**
+     * Values of {@code carrier} whose count is exactly {@code size}, or none where this can build none.
+     *
+     * <p>The narrower of the two promises about a count. A caller holding a line drawn on one needs
+     * the count itself and not a value that merely clears it: a row at {@code String.length = 5} is a
+     * row carrying five characters, and four or six is a row at some other edge. {@link #holding}
+     * reads the same build for what it asks, and neither is written in terms of the other.
+     *
+     * <p>Which is why nothing is the answer at a size of none and the empty value is the answer at a
+     * size of zero. A rule asking a collection to hold at least none of anything has asked for no
+     * value in particular; a line drawn at zero is the edge the empty one stands on, and it is a
+     * value like any other.
+     *
+     * <p>And why what was built is counted rather than taken on trust. A set of three is three values
+     * no two of which are equal, which a type of two values has not got; the two that exist are a
+     * proposal for a floor and are not the count asked for here, and offering them would put a row of
+     * two under a line drawn at three.
+     */
+    static Sized ofSize(Type carrier, int size, Symbols symbols, Set<TypeName> expanding) {
+        if (size == 0) {
+            return Sized.all(carrier == Type.STRING ? List.of(FixtureTemplate.string(""))
+                    : carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
+                            || carrier instanceof Type.MapOf
+                                    ? List.of(FixtureTemplate.collection(List.of())) : List.of());
+        }
+        Built built = sized(carrier, size, symbols, expanding);
+        return new Sized(built.exactly(size), built.heldBack());
+    }
+
+    /**
+     * Why no value of {@code carrier} counting exactly {@code size} was built, or null where one was.
+     *
+     * <p>The same decision {@link #ofSize} reads, asked for its other half, so that what could not be
+     * built and why are one answer given twice rather than two answers that may disagree. Whenever
+     * that one offers nothing this names a reason: a caller left to supply its own default for the
+     * silence would be deciding again what this is here to answer.
+     */
+    static Generator.UnresolvedCombination.Reason reasonForSize(Type carrier, int size,
+                                                                Symbols symbols) {
+        Sized made = ofSize(carrier, size, symbols, Set.of());
+        if (!made.values().isEmpty()) {
+            return null;
+        }
+        return made.heldBack() == null
+                ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : made.heldBack();
+    }
+
+    /**
+     * What to put to the decoder at a position a rule gives a floor of {@code least}, or nothing where
+     * this can build nothing.
+     *
+     * <p>Proposals and not witnesses, which is the whole of the difference from {@link #ofSize}. What
+     * comes back holds the floor where the type has that much to give and falls short of it where the
+     * type does not, and either way it is the decoder that answers — so a caller reading this as
+     * "values of at least {@code least}" is reading a promise nothing here makes.
      *
      * <p>The minimum itself and not one element. Recognising {@code >= 3} and then offering a list of
      * one would refuse the row for the reason the empty list was refused, having read the rule and not
      * used it.
+     *
+     * <p>So a value is built at the minimum, and a value short of it is offered too where the type has
+     * no more to give: it is the value the rule refuses, put to the decoder so that the refusal is the
+     * decoder's and is said in its terms. Both of those are this method's reading of the build, not
+     * {@link #ofSize}'s — a caller with a line to stand on takes that one, where a set the type has
+     * too few values for comes back as nothing at all. The two read one build and neither is written
+     * in terms of the other, so a cheaper value for a floor cannot move a line.
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
                                          Set<TypeName> expanding) {
-        return decide(carrier, least, symbols, expanding).proposals();
+        return least <= 0 ? List.of() : sized(carrier, least, symbols, expanding).all();
     }
 
     /**
@@ -78,24 +155,50 @@ final class Witnesses {
      * <p>The same decision {@link #holding} reads, asked for its other half. Written once because the
      * two have to agree: a reader was told a search stopped short of pairings nothing had asked to
      * build, back when this was a second reading of the same conditions.
+     *
+     * <p>Not {@link #reasonForSize}, for the same reason the two halves above are not one method. A
+     * floor nothing was built for is a position offering what it ordinarily offers, and naming a
+     * reason there would put "nothing composes one" under every position that has no floor at all.
      */
     static Generator.UnresolvedCombination.Reason heldBackFor(Type carrier, int least, Symbols symbols) {
-        return decide(carrier, least, symbols, Set.of()).heldBack();
+        return least <= 0 ? null : sized(carrier, least, symbols, Set.of()).heldBack();
     }
 
-    /** What a value of {@code carrier} holding {@code least} comes to: what was built, and what was
+    /**
+     * A value that was built, and how many of whatever counts it it turned out to hold.
+     *
+     * <p>Carried rather than assumed. A string of five characters is built by writing five and a list
+     * of five by repeating one, but a set of five is five values no two of which are equal and the
+     * type may not have five — so what was asked for and what was made are two numbers, and only the
+     * caller that needs them equal is entitled to require it.
+     */
+    private record Made(FixtureTemplate value, int count) {}
+
+    /** What a value of {@code carrier} counting {@code size} comes to: what was built, and what was
      * not. */
-    private record Built(List<FixtureTemplate> proposals,
+    private record Built(List<Made> proposals,
                          Generator.UnresolvedCombination.Reason heldBack) {
 
         static final Built NONE = new Built(List.of(), null);
 
-        static Built of(List<FixtureTemplate> proposals) {
+        static Built of(List<Made> proposals) {
             return new Built(List.copyOf(proposals), null);
+        }
+
+        /** Those holding exactly {@code size}, which is what a line drawn at a count is met by. */
+        List<FixtureTemplate> exactly(int size) {
+            return proposals.stream().filter(each -> each.count() == size)
+                    .map(Made::value).toList();
+        }
+
+        /** All of them, which is what a floor to clear is offered: one short of the floor is a value
+         * the decoder refuses for the reason the floor was written, and that is an answer. */
+        List<FixtureTemplate> all() {
+            return proposals.stream().map(Made::value).toList();
         }
     }
 
-    private static Built decide(Type carrier, int least, Symbols symbols, Set<TypeName> expanding) {
+    private static Built sized(Type carrier, int least, Symbols symbols, Set<TypeName> expanding) {
         if (carrier == null || least <= 0) {
             return Built.NONE;
         }
@@ -105,7 +208,7 @@ final class Witnesses {
         if (carrier == Type.STRING) {
             return least > MOST_CHARACTERS
                     ? new Built(List.of(), Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE)
-                    : Built.of(List.of(FixtureTemplate.string("x".repeat(least))));
+                    : Built.of(List.of(new Made(FixtureTemplate.string("x".repeat(least)), least)));
         }
         if (!(carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
                 || carrier instanceof Type.MapOf)) {
@@ -117,23 +220,24 @@ final class Witnesses {
         }
         // A list may hold the same element as many times as it needs to.
         if (carrier instanceof Type.ListOf list) {
-            List<FixtureTemplate> out = new ArrayList<>();
+            List<Made> out = new ArrayList<>();
             for (FixtureTemplate each : proposalsFor(list.element(), symbols, expanding)) {
                 List<FixtureTemplate> elements = new ArrayList<>();
                 for (int i = 0; i < least; i++) {
                     elements.add(each);
                 }
-                out.add(FixtureTemplate.collection(elements));
+                out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
             }
             return Built.of(out);
         }
         // A set of three is three elements no two of which are equal, and a map of three is three
         // entries no two of which share a key. The values under a map's keys are free to repeat.
         if (carrier instanceof Type.SetOf set) {
-            List<FixtureTemplate> out = new ArrayList<>();
+            List<Made> out = new ArrayList<>();
             for (FixtureTemplate seed : proposalsFor(set.element(), symbols, expanding)) {
-                out.add(FixtureTemplate.collection(
-                        distinctFrom(seed, set.element(), least, symbols, expanding)));
+                List<FixtureTemplate> elements =
+                        distinctFrom(seed, set.element(), least, symbols, expanding);
+                out.add(new Made(FixtureTemplate.collection(elements), elements.size()));
             }
             return Built.of(out);
         }
@@ -143,7 +247,7 @@ final class Witnesses {
         if (keys.isEmpty() || values.isEmpty()) {
             return Built.NONE;
         }
-        List<FixtureTemplate> out = new ArrayList<>();
+        List<Made> out = new ArrayList<>();
         // Every pair, nearest first. A key's rules and a value's are answered together or not at all —
         // the pair is inside one position, so no search outside can put a key's second proposal beside
         // a value's first — and taking them in step would offer only the pairs whose two proposals
@@ -159,7 +263,7 @@ final class Witnesses {
                         : distinctFrom(keys.get(i), map.key(), least, symbols, expanding)) {
                     entries.add(FixtureTemplate.entry(key, value));
                 }
-                out.add(FixtureTemplate.collection(entries));
+                out.add(new Made(FixtureTemplate.collection(entries), entries.size()));
             }
         }
         return new Built(out, keys.size() * values.size() > out.size()
@@ -305,7 +409,7 @@ final class Witnesses {
 
     /** The value under every name the position wears, which is how it is written where the position
      * declares a newtype rather than what the newtype carries. */
-    private static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
+    static FixtureTemplate wrapped(Type type, FixtureTemplate bare, Symbols symbols) {
         if (!(type instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)
                 || !data.newtype()) {
             return bare;

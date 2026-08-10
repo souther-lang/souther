@@ -97,10 +97,14 @@ public final class Generator {
              * Nothing here knows how to compose a value of the shape asked for.
              *
              * <p>Apart from {@code NO_REPRESENTATIVE}, which says the position has no values. This
-             * says the search has no way to write one — a string of a given length is the case
-             * (#528) — and that is a fact about this compiler rather than about the model. Told
-             * apart because the first licenses "no value can be written there" and this one does
-             * not: the edge may be the easiest row in the file to write by hand.
+             * says the search has no way to write one — a collection of more elements than a row is
+             * worth carrying is the case — and that is a fact about this compiler rather than about
+             * the model. Told apart because the first licenses "no value can be written there" and
+             * this one does not: the edge may be the easiest row in the file to write by hand.
+             *
+             * <p>Which is why nothing decides this from the shape of the question. A reason read off
+             * the kind of term outlives whatever made it true, and says a value cannot be composed
+             * while the same generation composes one in the row above.
              */
             NOTHING_COMPOSES_ONE,
             /** Every value tried was refused at construction. */
@@ -290,36 +294,32 @@ public final class Generator {
                     UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
         String label = axis.term() + " = " + written(obligation.value());
-        // A line on something taken of the value is not met by writing that number at the position:
-        // a length of five is a string of five characters, and nothing here composes one (#528).
-        // Said as having no value to offer rather than by handing the decoder an integer where a
-        // string goes — which it refuses, and "every value tried was refused" would then report an
-        // opinion the decoder never had about a boundary a row could easily meet.
-        if (!(axis.term() instanceof NumericTerm.ValueOf)) {
-            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
-        }
-        FixtureTemplate at = valueOf(obligation.value(), axis.type(), subject.symbols());
-        if (at == null) {
-            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.NO_REPRESENTATIVE));
+        Edge edge = edgeOf(axis, obligation.value(), subject.symbols());
+        if (edge.values().isEmpty()) {
+            return new BoundaryAttempt.Unresolved(
+                    new UnresolvedCombination(List.of(label), edge.reason()));
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
         // What the rest of the row has to sit beside. A field of a record is not chosen from its
         // own type once another field of that record is fixed: the rule relating them says what
         // is left, and taking the bottom of the type's range instead is how a boundary that can
         // be written came back as one every value tried was refused at.
-        BigDecimal settledAt = numberOf(obligation.value());
-        Map<String, BigDecimal> settled = settledAt == null ? Map.of()
-                : Map.of(axis.path().toString(), settledAt);
+        Map<String, BigDecimal> settled = edge.settledAt() == null ? Map.of()
+                : Map.of(axis.path().toString(), edge.settledAt());
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             Map<String, List<FixtureTemplate>> here =
                     TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
-                            ? Map.of(axis.path().toString(), List.of(at)) : Map.of();
+                            ? Map.of(axis.path().toString(), edge.values()) : Map.of();
             Outcome tried = valueAt(subject, p, here, settled, check);
             if (tried.value() == null) {
+                // Where the refusal is of the values this edge offered, what the edge held back
+                // outranks it: values that were never built were not among the ones refused.
+                UnresolvedCombination.Reason why =
+                        !here.isEmpty() && tried.reason()
+                                == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                                ? edge.refused() : tried.reason();
                 return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), tried.reason(), tried.detail()));
+                        new UnresolvedCombination(List.of(label), why, tried.detail()));
             }
             inputs.add(tried.value());
         }
@@ -1053,6 +1053,79 @@ public final class Generator {
             }
         }
         return null;
+    }
+
+    /**
+     * What a row is to carry where a boundary is drawn: the values to try there, why there are none
+     * where there are none, and the number the position itself is thereby settled at.
+     *
+     * <p>The last is a number only sometimes. A line on the content of a location settles that
+     * location at it, and what the rest of the record may hold is read from the rules relating them;
+     * a line on a count taken of a location settles no number inside it, and saying it did would tell
+     * the rest of the row that a string's length is the number the string holds.
+     */
+    private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
+                        BigDecimal settledAt, UnresolvedCombination.Reason heldBack) {
+
+        Edge {
+            values = List.copyOf(values);
+        }
+
+        static Edge none(UnresolvedCombination.Reason why) {
+            return new Edge(List.of(), why, null, null);
+        }
+
+        /**
+         * What to report where every value offered here was refused.
+         *
+         * <p>Not always that they were refused. Where the values are some of the values and the rest
+         * were never built, the search stopping is the more of the two facts, and the one a reader
+         * would act on: another value of this edge may be the one that builds.
+         */
+        UnresolvedCombination.Reason refused() {
+            return heldBack == null ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED : heldBack;
+        }
+    }
+
+    /**
+     * The values that stand on {@code value}'s edge of {@code axis}.
+     *
+     * <p>Which values those are is the term's question. The content of a location is the number
+     * written at it; a count taken of a location is met by whatever carries that count, and what
+     * carries a count is {@link Witnesses}'s to answer — asked rather than decided here, so that a
+     * value it learns to build is a boundary this reaches without being told again.
+     */
+    private static Edge edgeOf(Axis axis, ObservedValue value, Symbols symbols) {
+        if (!(axis.term() instanceof NumericTerm.SizeOf)) {
+            FixtureTemplate at = valueOf(value, axis.type(), symbols);
+            return at == null ? Edge.none(UnresolvedCombination.Reason.NO_REPRESENTATIVE)
+                    : new Edge(List.of(at), null, numberOf(value), null);
+        }
+        int size = countOf(value);
+        if (size < 0) {
+            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
+        Type carrier = TypeOps.base(axis.type(), symbols);
+        Witnesses.Sized built = Witnesses.ofSize(carrier, size, symbols, Set.of());
+        if (built.values().isEmpty()) {
+            return Edge.none(Witnesses.reasonForSize(carrier, size, symbols));
+        }
+        List<FixtureTemplate> out = new ArrayList<>();
+        for (FixtureTemplate each : built.values()) {
+            out.add(Witnesses.wrapped(axis.type(), each, symbols));
+        }
+        return new Edge(out, null, null, built.heldBack());
+    }
+
+    /** {@code value} as a count of things, or -1 where it is not one. A count is whole and no larger
+     * than the values there are to count, so a number outside that is a size nothing carries. */
+    private static int countOf(ObservedValue value) {
+        BigDecimal number = numberOf(value);
+        if (number == null || number.stripTrailingZeros().scale() > 0
+                || number.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
+            return -1;
+        }
+        return number.intValue();
     }
 
     /** A boundary value written the way the position takes it: bare where the position is a number,
