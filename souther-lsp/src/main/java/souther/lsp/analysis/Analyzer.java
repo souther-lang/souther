@@ -482,7 +482,7 @@ public final class Analyzer {
                 adequacy.branches() == null ? null : adequacy.branches().get(behavior);
         if (branch != null
                 && branch.status() == souther.compiler.observe.MeasurementStatus.COMPLETE) {
-            parts.add("branch " + branch.covered().size() + "/" + branch.all().size());
+            parts.add("branch " + branch.coveredObligations() + "/" + branch.obligations());
         }
         return String.join(" · ", parts);
     }

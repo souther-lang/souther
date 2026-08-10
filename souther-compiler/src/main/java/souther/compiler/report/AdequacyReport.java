@@ -653,8 +653,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             return;
         }
         boolean decided = branch.status() == MeasurementStatus.COMPLETE;
-        out.append(String.format("    branch      %d/%d%s%n", branch.covered().size(),
-                branch.all().size(), decided ? "" : "   (undecided: a row was not read)"));
+        out.append(String.format("    branch      %d/%d%s%n", branch.coveredObligations(),
+                branch.obligations(), decided ? "" : "   (undecided: a row was not read)"));
         // The position alone: an arm is part of a body, and a body is written in the module's own
         // source, which the section this is under already names. Only a row can be somewhere else.
         // Named only where every row was read: an arm a row that never finished might have gone
@@ -939,8 +939,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         }
         ObjectNode out = behavior.putObject("branch");
         measured(out, branch.status(), branch.reason());
-        out.put("arms", branch.all().size());
-        out.put("covered", branch.covered().size());
+        out.put("arms", branch.obligations());
+        out.put("covered", branch.coveredObligations());
         // Only where every row was read. An arm a row that never finished might have gone through is
         // undecided, and a field called `unreached` holding it says something that is not so — which
         // reading `status` beside it does not undo.

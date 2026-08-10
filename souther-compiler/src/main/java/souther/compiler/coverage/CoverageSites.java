@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourceRef;
+import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.TypeName;
 
 import java.nio.charset.StandardCharsets;
@@ -47,17 +48,36 @@ public final class CoverageSites {
     public static final int NO_SITE = -1;
 
     /**
-     * One arm.
+     * What a row is owed for, which is not the same as where one runs.
      *
-     * @param index       what identifies it in this run — the probe number, and what a hit set holds
+     * <p>A non-recursive helper is spliced into each body that calls it, so one arm the author wrote
+     * is several arms in the tree that runs. Each of those is emitted and probed on its own, and each
+     * is asked separately whether anything can reach it — so the occurrences stay apart everywhere
+     * below. What they are not is several things to write rows for: covering the same arm through a
+     * second call site establishes nothing the first did not. This is the key those occurrences are
+     * one under.
+     *
+     * <p>Per behavior, because the measurement is per behavior. Two behaviors calling one helper each
+     * owe its arms, and a row written for one of them is not a row written for the other.
+     *
+     * @param part which arm of the fork — its place among the fork's arms, or a comparison's place in
+     *             the condition it is one of. The origin names the fork, and a fork holds several
+     */
+    public record Obligation(String behavior, CoverageOrigin origin, int part) {}
+
+    /**
+     * One arm, as it stands in the tree that runs.
+     *
+     * @param index       what identifies it in this run — the probe number, and what a hit set holds.
+     *                    One per occurrence: the emitter lights this one, and the reachability
+     *                    analysis proves things about this one
      * @param ordinal     where it comes in its behavior, for display
-     * @param fingerprint what the arm is made of, ignoring where it is written. Kept for a later
-     *                    version to match one run's sites against another's, and not used as identity
-     *                    here: two structurally identical arms in one behavior have the same one, and
-     *                    mixing the position back in would change it whenever a line is added above.
+     * @param obligation  what a row would be owed for, which several occurrences share
+     * @param fingerprint what the arm is made of, ignoring where it is written. Not identity: two
+     *                    structurally identical arms in one behavior have the same one
      */
     public record Site(String behavior, Kind kind, String label, SourceRef at,
-                       int index, int ordinal, String fingerprint) {
+                       int index, int ordinal, Obligation obligation, String fingerprint) {
 
         public enum Kind {
             /** The arm an {@code if} takes when its condition holds. */
@@ -108,7 +128,15 @@ public final class CoverageSites {
      * {@code GuardRef} at all — there is nothing left for a row to reach, and a reference with two
      * absent sides would report the line as never met however the model is exercised.
      */
-    public record GuardRef(String behavior, int siteIndexThen, int siteIndexElse, SourceRef at) {}
+    public record GuardRef(String behavior, CoverageOrigin origin, int siteIndexThen,
+                           int siteIndexElse, SourceRef at) {
+
+        /** The fork this is one occurrence of. Two calls of one helper give two of these, and a line
+         * drawn on the condition is one line however many of them there are. */
+        public Obligation fork() {
+            return new Obligation(behavior, origin, 0);
+        }
+    }
 
     /**
      * Every site of a module, and how to find the ones belonging to a node.
@@ -221,8 +249,10 @@ public final class CoverageSites {
          * an {@code unreachable} is E1911 and states nothing, so an arm only such a row could go
          * through is an arm no row will ever be recorded in.
          */
-        private int armOf(Site.Kind kind, String label, Core owner, Core arm, boolean reachable) {
-            return reachable && NormalReturn.of(arm) ? site(kind, label, owner, arm) : NO_SITE;
+        private int armOf(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part,
+                          Core arm, boolean reachable) {
+            return reachable && NormalReturn.of(arm)
+                    ? site(kind, label, owner, origin, part, arm) : NO_SITE;
         }
 
         /**
@@ -255,10 +285,12 @@ public final class CoverageSites {
          * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
          * @param arm   the arm's body, which says what the arm is made of and not where it is
          */
-        private int site(Site.Kind kind, String label, Core owner, Core arm) {
+        private int site(Site.Kind kind, String label, Core owner, CoverageOrigin origin, int part,
+                         Core arm) {
             int index = sites.size();
             sites.add(new Site(behavior, kind, label, new SourceRef(sourceId, owner.pos()),
-                    index, ordinal++, Fingerprint.of(kind, label, arm)));
+                    index, ordinal++, new Obligation(behavior, origin, part),
+                    Fingerprint.of(kind, label, arm)));
             return index;
         }
 
@@ -314,15 +346,15 @@ public final class CoverageSites {
                 case Core.NewData nd -> nd.inits().forEach(init -> walk(init.value(), inside));
                 case Core.If iff -> {
                     walk(iff.cond(), inside);
-                    int then = armOf(Site.Kind.THEN, "then", iff, iff.then(), inside);
+                    int then = armOf(Site.Kind.THEN, "then", iff, iff.origin(), 0, iff.then(), inside);
                     walk(iff.then(), inside);
-                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.els(), inside);
+                    int els = armOf(Site.Kind.ELSE, "else", iff, iff.origin(), 1, iff.els(), inside);
                     walk(iff.els(), inside);
                     byNode.put(iff, new int[] {then, els});
                     if (then != NO_SITE || els != NO_SITE) {
-                        guards.add(new GuardRef(behavior, then, els,
+                        guards.add(new GuardRef(behavior, iff.origin(), then, els,
                                 new SourceRef(sourceId, iff.pos())));
-                        comparisons(iff.cond());
+                        comparisons(iff.cond(), iff.origin(), new int[] {0});
                     }
                 }
                 case Core.Match m -> {
@@ -330,7 +362,8 @@ public final class CoverageSites {
                     int[] arms = new int[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, arm.body(), inside);
+                        arms[i] = armOf(Site.Kind.CASE, label(arm), m, m.origin(), i, arm.body(),
+                                inside);
                         walk(arm.body(), inside);
                     }
                     byNode.put(m, arms);
@@ -338,11 +371,13 @@ public final class CoverageSites {
                 case Core.IfConstructed ic -> {
                     ic.construct().inits().forEach(init -> walk(init.value(), inside));
                     int[] arms = new int[1 + ic.els().size()];
-                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.then(), inside);
+                    arms[0] = armOf(Site.Kind.CONSTRUCTED, "constructed", ic, ic.origin(), 0,
+                            ic.then(), inside);
                     walk(ic.then(), inside);
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
-                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, arm.body(), inside);
+                        arms[i + 1] = armOf(Site.Kind.DEPARTURE, label(arm), ic, ic.origin(), i + 1,
+                                arm.body(), inside);
                         walk(arm.body(), inside);
                     }
                     byNode.put(ic, arms);
@@ -365,11 +400,11 @@ public final class CoverageSites {
          * built out of and what the reader of lines walks. Anything else is where the condition's
          * operands stop.
          */
-        private void comparisons(Core condition) {
+        private void comparisons(Core condition, CoverageOrigin origin, int[] part) {
             if (condition instanceof Core.Binary binary
                     && (binary.op() == Ast.BinOp.AND || binary.op() == Ast.BinOp.OR)) {
-                comparisons(binary.left());
-                comparisons(binary.right());
+                comparisons(binary.left(), origin, part);
+                comparisons(binary.right(), origin, part);
                 return;
             }
             // Numbered once. A node reached twice is one comparison written once, and a second number
@@ -377,9 +412,12 @@ public final class CoverageSites {
             // and would be reported as one.
             if (condition instanceof Core.Binary comparison
                     && !byComparison.containsKey(comparison)) {
+                // Its place in the condition, counted as the walk meets it. Two copies of one
+                // condition are walked the same way, so the same comparison of each gets the same
+                // number and the line read off it is one line.
                 byComparison.put(comparison,
-                        site(Site.Kind.COMPARISON, comparison.op().toString(), comparison,
-                                comparison));
+                        site(Site.Kind.COMPARISON, comparison.op().toString(), comparison, origin,
+                                part[0]++, comparison));
             }
         }
 

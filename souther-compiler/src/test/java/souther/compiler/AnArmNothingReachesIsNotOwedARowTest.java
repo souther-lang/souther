@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.numeric.Endpoint;
@@ -241,12 +242,15 @@ class AnArmNothingReachesIsNotOwedARowTest {
 
     private static CoverageSites.Site arm(int index) {
         return new CoverageSites.Site("classify", CoverageSites.Site.Kind.THEN, "then", null,
-                index, index, "f" + index);
+                index, index,
+                new CoverageSites.Obligation("classify", CoverageOrigin.written("t", index), 0),
+                "f" + index);
     }
 
     /** A reachability that proves arm 0 unreachable: nothing at or above 50 is a value of [0, 10]. */
     private static GuardReachability proving() {
-        GuardEdge edge = GuardEdge.above(new CoverageSites.GuardRef("classify", 0, 1, null),
+        GuardEdge edge = GuardEdge.above(
+                new CoverageSites.GuardRef("classify", CoverageOrigin.written("t", 0), 0, 1, null),
                 0, new NumericTerm.ValueOf(TermPath.of("pair")), BigDecimal.valueOf(50), true);
         return GuardReachability.of(List.of(edge),
                 Map.of(new NumericTerm.ValueOf(TermPath.of("pair")),

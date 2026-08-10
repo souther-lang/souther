@@ -90,7 +90,8 @@ class ProbeMappingTest {
         CoverageSites.Site extra = real.sites().get(0);
         List<CoverageSites.Site> longer = new java.util.ArrayList<>(real.sites());
         longer.add(new CoverageSites.Site(extra.behavior(), extra.kind(), "phantom", extra.at(),
-                real.sites().size(), real.sites().size(), extra.fingerprint()));
+                real.sites().size(), real.sites().size(), extra.obligation(),
+                extra.fingerprint()));
         CoverageSites.Plan overcounted =
                 new CoverageSites.Plan(longer, real.guards(), real.byNode(), real.byComparison());
 

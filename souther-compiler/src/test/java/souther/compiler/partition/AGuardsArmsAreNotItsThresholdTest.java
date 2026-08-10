@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.types.CoverageOrigin;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Symbols;
@@ -143,7 +144,7 @@ class AGuardsArmsAreNotItsThresholdTest {
     // --- what the bounds prove about an arm --------------------------------------------------------
 
     private static final CoverageSites.GuardRef ONE_GUARD =
-            new CoverageSites.GuardRef("pick", 0, 1, null);
+            new CoverageSites.GuardRef("pick", CoverageOrigin.written("t", 0), 0, 1, null);
 
     private static GuardEdge above(long value, boolean inclusive) {
         return GuardEdge.above(ONE_GUARD, 0, new NumericTerm.ValueOf(TermPath.of("n")),
