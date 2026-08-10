@@ -151,13 +151,114 @@ public final class FixtureReader {
      */
     BuiltFixture buildFixture(Ast.Expr written, BoundaryOutput out) {
         Type outType = out.type();
-        // The one builder a written value goes through, whichever side wrote it: it knows a
-        // construction from a literal, a collection, and a value a helper answered with — which the
-        // decoder route does not, and a stand-in built the other way stated nothing for a fake whose
-        // row applies a helper (the shape of issue #214, on the other side).
-        Object value = builtExpected(written, out);
+        Object value = builtStandIn(written, out);
         TypeName was = caseOfValue(value, outType);
         return new BuiltFixture(was != null ? was : constructedCase(written), value);
+    }
+
+    /**
+     * The whole value {@code written} states, admitted at the output it stands in for.
+     *
+     * <p>Built the way an expected value is, and then held to what an expected value is not held to.
+     * A row may expect a case the behavior does not answer with — that disagreement is what the row
+     * reports — so {@link #builtExpected} reads what the row wrote and leaves the rest to the
+     * comparison. A stand-in is the dependency's answer while the row runs, so a value of another
+     * type is not a disagreement to report but a fixture that cannot be built. Admitting it here is
+     * what keeps the model from being handed a value it could not have been given.
+     */
+    private Object builtStandIn(Ast.Expr written, BoundaryOutput out) {
+        FixtureShape whole = FixtureShape.ofWholeAnswer(out);
+        TypeName asserted = constructedCase(written);
+        if (asserted != null) {
+            // Through the case the row named, not the one the output declares: a row naming another
+            // type builds that type and is refused for being it, rather than being read as the
+            // output and refused for how it is written.
+            return admitted(built(written, FixtureShape.of(Type.ref(asserted), symbols)), out, whole);
+        }
+        Object answer = helperAnswer(written, new LinkedHashSet<>());
+        if (answer != null) {
+            // Already built. Reading it back through the output's decoder would state nothing for a
+            // stand-in written as an application, so what is left to ask of it is the form it is in
+            // and whether it is what the dependency answers with.
+            neutral.requireWrittenForm(answer, whole == null ? null : whole.type());
+            return admitted(answer, out, whole);
+        }
+        if (whole != null) {
+            // A literal, read as the output is written rather than as itself — the decode a row's
+            // input goes through, which is what makes `2` an `Amount` where the dependency answers
+            // with one.
+            return built(written, whole);
+        }
+        // An answer of several types has no one decoder, so the value is read as written and what
+        // admits it is which case it turned out to be.
+        return admitted(raw(written), out, null);
+    }
+
+    /**
+     * {@code value} where the output it stands in for admits it, throwing where it does not.
+     *
+     * <p>Two rules, because an output is one of two things. Where the whole answer is one shape, a
+     * value is admitted by being represented as that shape. Where it is several types, no one decoder
+     * reads it and what admits a value is being one of the cases — the question the expected side
+     * asks as E1904, asked of a value rather than of the name a row wrote.
+     */
+    private Object admitted(Object value, BoundaryOutput out, FixtureShape whole) {
+        if (whole == null) {
+            if (caseOfValue(value, out.type()) == null) {
+                throw new FixtureException("a `" + nameOfBuilt(value) + "` is not one of the cases `"
+                        + Type.show(out.type()) + "` answers with");
+            }
+            return value;
+        }
+        if (!representedBy(value, whole)) {
+            throw new FixtureException("a `" + nameOfBuilt(value) + "` does not stand in for `"
+                    + Type.show(out.type()) + "`");
+        }
+        return value;
+    }
+
+    /** Whether {@code value} is how {@code shape} is represented at run time, its elements included:
+     *  a collection of the right container holding what its element shape is not is not that shape. */
+    private boolean representedBy(Object value, FixtureShape shape) {
+        return switch (shape) {
+            case FixtureShape.Scalar s -> represents(TypeName.primitive(s.scalar().type()), value);
+            // A sum has no class of its own — its values are instances of its cases — so what
+            // represents it is any of the leaves it holds, which for a type that is not a sum is
+            // the type itself.
+            case FixtureShape.Nominal n -> caseOfValue(value, n.type()) != null;
+            case FixtureShape.ListOf l -> value instanceof List<?> els && each(els, l.element());
+            case FixtureShape.SetOf s -> value instanceof Set<?> els && each(els, s.element());
+            case FixtureShape.MapOf m -> value instanceof Map<?, ?> entries
+                    && each(entries.keySet(), m.key()) && each(entries.values(), m.value());
+        };
+    }
+
+    private boolean each(java.util.Collection<?> values, FixtureShape element) {
+        for (Object value : values) {
+            if (!representedBy(value, element)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** What a built value is, named as the language names it, for a message about the type it is not.
+     *  A generated class is its type, so the simple name is the name it was declared under. */
+    private static String nameOfBuilt(Object value) {
+        if (value == null) {
+            return "missing value";
+        }
+        for (LeafScalar scalar : LeafScalar.values()) {
+            if (represents(TypeName.primitive(scalar.type()), value)) {
+                return scalar.type().shown();
+            }
+        }
+        return switch (value) {
+            case Map<?, ?> _ -> "Map";
+            case Set<?> _ -> "Set";
+            case List<?> _ -> "List";
+            default -> value.getClass().getSimpleName();
+        };
     }
 
     /**
@@ -185,6 +286,9 @@ public final class FixtureReader {
     /** Whether {@code value} is how {@code candidate} is represented at run time: the class a data
      * case is generated as, and for a primitive case the class its values arrive in. */
     private static boolean represents(TypeName candidate, Object value) {
+        if (value == null) {
+            return false;   // nothing is how a type is represented; an absent value has its own reader
+        }
         String carried = switch (candidate.name()) {
             case "Int" -> "java.lang.Long";
             case "String" -> "java.lang.String";
@@ -219,6 +323,11 @@ public final class FixtureReader {
      * row's expectation cannot be built — the caller reports that as the fixture error it is, rather
      * than comparing against nothing. */
     Object builtExpected(Ast.Expr expected, BoundaryOutput out) {
+        // A collection output has no case name to decode against, so the behavior's answer is what
+        // says which of `List`/`Set`/`Map` the written list means and what its elements are — the
+        // same decision a collection argument's position makes. An answer of several types is not
+        // one shape, and nothing here writes a collection of them.
+        FixtureShape whole = FixtureShape.ofWholeAnswer(out);
         TypeName asserted = constructedCase(expected);
         if (asserted != null) {
             // The case is what the row wrote rather than what the position admitted — a row may name
@@ -228,17 +337,20 @@ public final class FixtureReader {
         }
         Object answer = helperAnswer(expected, new LinkedHashSet<>());
         if (answer != null) {
+            // Taken as it stands: nothing encloses it, so it is not read back. What it turned out to
+            // be may still disagree with the behavior, which is the row's to report — but the form it
+            // is in is not, and an application is held to the same one wherever it stands.
+            neutral.requireWrittenForm(answer, whole == null ? null : whole.type());
             return answer;
         }
-        // A collection output has no case name to decode against, so the behavior's answer is what
-        // says which of `List`/`Set`/`Map` the written list means and what its elements are — the
-        // same decision a collection argument's position makes. An answer of several types is not
-        // one shape, and nothing here writes a collection of them.
-        FixtureShape whole = FixtureShape.ofWholeAnswer(out);
         if (whole != null && isCollection(whole)) {
             return built(expected, whole);
         }
-        return raw(expected);   // a literal expected value
+        // A literal expected value, read at the position it is written in rather than as itself. It
+        // is not decoded — a row may expect what the behavior does not answer with, and that
+        // disagreement is what it reports — but how a value of that type is written is settled by the
+        // position all the same, so a temporal expected as text is refused here as it is anywhere.
+        return raw(expected, whole == null ? null : whole.type());
     }
 
     /**
@@ -539,7 +651,7 @@ public final class FixtureReader {
         return switch (e) {
             case Ast.IntLit i -> i.value();
             case Ast.DecimalLit d -> d.value();
-            case Ast.StringLit s -> s.value();
+            case Ast.StringLit s -> text(s, expected);
             case Ast.BoolLit b -> b.value();
             case Ast.Neg n -> negate(raw(n.operand()));
             case Ast.Binary bin -> fold(bin);
@@ -567,6 +679,21 @@ public final class FixtureReader {
             }
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
+    }
+
+    /**
+     * A written string, which is a {@code String} — and at a position that declares a temporal, is
+     * not one of those.
+     *
+     * <p>Which positions those are is {@link NeutralForm#temporalUnder}, which the reading of a value
+     * a helper returned asks too: a row reaches the neutral form both ways, and the rule is about the
+     * form.
+     */
+    private Object text(Ast.StringLit s, Type expected) {
+        if (neutral.temporalUnder(expected) instanceof Type.Prim temporal) {
+            throw NeutralForm.notWrittenAsATemporal(temporal, s.value());
+        }
+        return s.value();
     }
 
     /**
@@ -863,13 +990,11 @@ public final class FixtureReader {
         if (c.args().size() != 1) {
             throw new FixtureException("`" + c.written() + "` takes one argument");
         }
-        // a newtype over a temporal (`data 貸出日 = Date`) wraps the parsed value, so its written
-        // string is read here as it would be for a bare `Date("...")`
-        String base = neutral.newtypeBase(c.written());
-        if (("Date".equals(base) || "DateTime".equals(base))
-                && c.args().get(0) instanceof Ast.StringLit lit) {
-            return CallElaborator.parseTemporal(base, lit.value(), c.pos());
-        }
+        // A newtype over a temporal (`data 貸出日 = Date`) wraps a temporal, so what it takes is one:
+        // `貸出日(Date("2026-07-25"))`, which is what a model body writes (a bare string there is
+        // E1317) and what the generator writes for it. There is no reading of the argument here that
+        // this position has and the rest of the language does not.
+        //
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe

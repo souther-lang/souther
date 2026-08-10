@@ -78,7 +78,10 @@ class CompileDateLiteralTest {
     }
 
     @Test
-    void aDateNewtypeTakesAWrittenDateInAFixture() throws Exception {
+    void aDateNewtypeTakesTheDateItWrapsInAFixture() throws Exception {
+        // What it wraps, written as it is written anywhere: a newtype takes a value of its base, and
+        // a `Date` is `Date("…")`. The reader used to take the base's written string here as well,
+        // which no other position accepts and a model body is refused for (E1317).
         Compiler.compile("""
                 module demo
 
@@ -92,8 +95,30 @@ class CompileDateLiteralTest {
 
                 example repeatBack
                     | "a written date survives the newtype" :
-                        (Loan { on = 貸出日("2026-07-01") }) -> Echo { on = 貸出日("2026-07-01") }
+                        (Loan { on = 貸出日(Date("2026-07-01")) })
+                            -> Echo { on = 貸出日(Date("2026-07-01")) }
                 """);
+    }
+
+    @Test
+    void aDateNewtypeDoesNotTakeTheBareStringItsBaseIsWrittenFrom() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data 貸出日 = Date
+                data Loan = { on: 貸出日 }
+                data Echo = { on: 貸出日 }
+
+                behavior repeatBack : (l: Loan) -> Echo constructs Echo
+
+                let repeatBack (l) = Echo { on = l.on }
+
+                example repeatBack
+                    | "a bare string" :
+                        (Loan { on = 貸出日("2026-07-01") }) -> Echo { on = 貸出日(Date("2026-07-01")) }
+                """));
+
+        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
     }
 
     @Test
