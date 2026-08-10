@@ -79,6 +79,27 @@ public enum Carrier {
         };
     }
 
+    /**
+     * The count as this carrier can actually hold it, or null where it holds nothing there.
+     *
+     * <p>Not every number between two of this carrier's values is one of them. A date-time is dense
+     * in the sense that matters to a strict bound — there is no step to sharpen one onto — and the
+     * values it can be written as still sit on a grid, at the nanosecond. Halfway between two
+     * adjacent ones is a number and not a date-time.
+     *
+     * <p>Asked wherever a count is about to stand for a value. Left unasked, a class open at both
+     * ends between two adjacent moments offered the number between them, which was written back as
+     * one of the ends — a row labelled for a class it is not in.
+     */
+    public java.math.BigDecimal onTheGrid(java.math.BigDecimal count) {
+        return switch (this) {
+            // A whole number, a decimal and a day count are held as they are: the ranges and the
+            // values are the same numbers.
+            case WHOLE, DENSE, DATE -> count;
+            case MOMENT -> DateTimes.secondOf(DateTimes.written(count));
+        };
+    }
+
     /** How the values beside a boundary on this carrier are found. */
     public BoundaryDomain intervals() {
         return switch (this) {

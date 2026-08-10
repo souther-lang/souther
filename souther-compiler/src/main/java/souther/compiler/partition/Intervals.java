@@ -144,7 +144,7 @@ final class Intervals {
             };
             if (inside == null) {
                 classes.add(PartitionClass.ungeneratable(id, range.label(written), is,
-                        "no value of this range can be written without a smallest step"));
+                        "no value this position can hold lies inside this range"));
                 continue;
             }
             List<FixtureTemplate> values = standingIn(of, inside, type, wrapper, carrier, symbols);
@@ -172,10 +172,19 @@ final class Intervals {
      * values do.
      */
     private static BigDecimal representative(Interval range, Carrier carrier) {
-        return Endpoint.valueBetween(
+        BigDecimal between = Endpoint.valueBetween(
                 range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
                 range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
                 carrier.spacing());
+        if (between == null) {
+            return null;
+        }
+        // What the carrier can hold, and then whether the range still holds it. Spacing answers what
+        // a strict bound may be sharpened onto and is not a promise that every number between two
+        // values is one — asking it for both is how a class open at both ends came to offer the
+        // value at one of its ends.
+        BigDecimal held = carrier.onTheGrid(between);
+        return held != null && range.holds(held) ? held : null;
     }
 
     /**

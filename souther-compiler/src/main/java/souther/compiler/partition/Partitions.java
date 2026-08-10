@@ -1317,8 +1317,17 @@ public final class Partitions {
     /** A number the position holds, or null where it holds none. The ends decide it, so nothing here
      * reads one of them as a number and loses whether the range reaches it. */
     private static BigDecimal inside(NumericDomain.Bounds within, Carrier carrier) {
-        return within == null ? BigDecimal.ZERO
-                : Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
+        if (within == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal between = Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
+        if (between == null) {
+            return null;
+        }
+        // On the carrier's own grid, and then still inside. A number between two values it can hold
+        // is not always one of them (see Carrier#onTheGrid).
+        BigDecimal held = carrier.onTheGrid(between);
+        return held != null && within.admits(held) ? held : null;
     }
 
     /**

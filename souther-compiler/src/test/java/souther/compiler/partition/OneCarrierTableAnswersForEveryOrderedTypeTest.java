@@ -13,6 +13,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What each ordered type is measured at, written out rather than left to be inferred.
@@ -181,6 +182,19 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                 guard x < DateTime("2026-08-01T00:00:00.000000001") else Ok
                 guard x < DateTime("2026-08-01T00:00:00.000000002") else No
                 Ok }
+
+            behavior openOnBothSidesDense : (x: Decimal) -> Verdict
+                constructs Ok, No
+            let openOnBothSidesDense (x) = { guard x <= 1.0m else Ok
+                guard x < 2.0m else No
+                Ok }
+
+            behavior openOnBothSidesMoment : (x: DateTime) -> Verdict
+                constructs Ok, No
+            let openOnBothSidesMoment (x) = {
+                guard x <= DateTime("2026-08-01T00:00:00.000000001") else Ok
+                guard x < DateTime("2026-08-01T00:00:00.000000002") else No
+                Ok }
             """;
 
     /**
@@ -278,6 +292,41 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             assertEquals(all.get("guard" + carrier + "Bare"), all.get("guard" + carrier + "Wrapped"),
                     carrier + ": a newtype is the value it carries");
         }
+    }
+
+    /**
+     * A class open at both ends offers a value of its own or none.
+     *
+     * <p>The pair of the test above, and the half of it that spacing alone gets wrong. Between two
+     * decimals a whole apart there is a decimal; between two moments a nanosecond apart there is a
+     * number and no date-time, because what a date-time can be written as sits on a grid at the
+     * nanosecond however dense the carrier is for the purpose of sharpening a strict bound.
+     *
+     * <p>Read at the row and not at the count. What went wrong was not an arithmetic error — the
+     * number offered was between the two ends — it was that writing it back landed on one of them,
+     * so the row was labelled for a class it is not in, which is a row whose failure would show up
+     * as the behavior answering with the wrong case.
+     */
+    @Test
+    void aClassOpenAtBothEndsOffersAValueOfItsOwnOrNone() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+
+        String dense = souther.compiler.report.GeneratedRows.of(
+                compilation, "example.matrix", "openOnBothSidesDense", true);
+        assertTrue(dense.contains("1.0 < x < 2.0"), dense);
+        assertFalse(dense.contains("no value this position can hold"),
+                "a decimal lies between two decimals a whole apart: " + dense);
+
+        String moment = souther.compiler.report.GeneratedRows.of(
+                compilation, "example.matrix", "openOnBothSidesMoment", true);
+        assertTrue(moment.contains("no row for `x=2026-08-01T00:00:00.000000001 < x <"
+                        + " 2026-08-01T00:00:00.000000002`"),
+                "nothing lies strictly between two adjacent moments: " + moment);
+        assertFalse(moment.contains(
+                        "< x < 2026-08-01T00:00:00.000000002 x x = 2026-08-01T00:00:00.000000002"),
+                "and no row is offered for that class carrying the value at its far end: " + moment);
     }
 
     /** What the measures answered for each named behavior. */
