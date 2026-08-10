@@ -125,11 +125,12 @@ public final class StructuralCost {
      * What {@code root} costs with what it names substituted into it, counted only as far as it has
      * to be.
      *
-     * <p>Stopped one past the bound rather than finished. What is being asked is which side of the
-     * bound this falls on, and a module whose values compose without end — a chain of ten thousand,
-     * each naming the one before — is a question that can be answered after two hundred and
-     * fifty-seven of them. Counting it out would walk the whole chain to say what the first stretch
-     * of it already said.
+     * <p>Stopped at the first way down that goes past the bound, rather than finished — and past it
+     * by as much as that way down took, which an expanded application can make its argument count
+     * at once. What is being asked is which side of the bound this falls on, and a module whose
+     * values compose without end — a chain of ten thousand, each naming the one before — is a
+     * question that can be answered a few hundred of them in. Counting it out would walk the whole
+     * chain to say what the first stretch of it already said.
      *
      * <p>A name already being substituted is not substituted again. Reaching the bound is not
      * enough to come back from a value defined as itself: {@code let v = v} is a body that is

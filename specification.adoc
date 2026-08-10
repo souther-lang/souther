@@ -3653,7 +3653,7 @@ The model author does not write this type name in Souther source; they only writ
 
 A block is counted in the steps its statements take. Everything a statement is followed by is written inside what that statement introduced, so a block of statements and an expression written that deep are the same structure said two ways, and what a statement holds is counted from where that statement stands rather than from the block's end.
 
-A step is not always a binding. A `+guard+` introduces no name and is one step, since what follows it is written inside the case it settles; an ordinary `+let+` is one; a `+let+` written with a pattern is what that pattern costs.
+A step is not always a binding. A `+guard+` introduces no name and is one step, since what follows it is written inside the case it settles; an ordinary `+let+` is one; a `+let+` written with a pattern is one per binding that pattern introduces.
 
 A pattern that is a name costs nothing beyond the name it binds. Any other pattern takes a value apart, and binds the value and each part taken out of it: a tuple binds the value and each of its elements, a record the value and one per field it names, a case the value and whatever its inner pattern binds, each of those counted the same way through a pattern written inside one.
 
