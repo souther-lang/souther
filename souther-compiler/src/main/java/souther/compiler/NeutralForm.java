@@ -406,6 +406,41 @@ final class NeutralForm {
         }
     }
 
+    /**
+     * Refuses a value that is not in the form a fixture writes at {@code position}, without reading it
+     * back.
+     *
+     * <p>For where nothing encloses a helper's application — the whole of an expected value, or the
+     * whole of a stand-in — and the value it answered with is taken as it stands rather than
+     * re-materialised ({@link #of}). Being unable to read a value back is not the same as its form
+     * being wrong, and only the second is a rule, so this holds the rule and asks nothing else.
+     *
+     * <p>The rule is {@link #temporalUnder}'s, and a container is walked because a position's element
+     * type is part of what it says: a written {@code [ "…" ]} at a {@code List<DateTime>} is refused
+     * where the element type travels with it, and a helper answering with that same list is the same
+     * fixture. The walk stops at anything nominal — a generated value's fields are the types they were
+     * declared as, so there is nothing there a fixture could have written wrongly.
+     */
+    void requireWrittenForm(Object live, Type position) {
+        if (live instanceof String text && temporalUnder(position) instanceof Type.Prim temporal) {
+            throw notWrittenAsATemporal(temporal, text);
+        }
+        Type opened = open(position);
+        if (live instanceof Map<?, ?> entries && opened instanceof Type.MapOf map) {
+            for (Map.Entry<?, ?> e : entries.entrySet()) {
+                requireWrittenForm(e.getKey(), map.key());
+                requireWrittenForm(e.getValue(), map.value());
+            }
+            return;
+        }
+        Type element = elementOf(opened);
+        if (element != null && live instanceof Iterable<?> elements) {
+            for (Object e : elements) {
+                requireWrittenForm(e, element);
+            }
+        }
+    }
+
     /** What a fixture that wrote text where a temporal stands is told, wherever it wrote it. */
     static FixtureException notWrittenAsATemporal(Type.Prim temporal, String text) {
         return new FixtureException("a `" + temporal.shown() + "` is written `" + temporal.shown()

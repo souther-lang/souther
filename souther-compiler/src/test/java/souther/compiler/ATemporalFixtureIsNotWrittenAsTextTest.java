@@ -76,6 +76,25 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
             let text (s: String) = s
             """;
 
+    private static final String ANSWERS = """
+            module answers exposing ( Stamp, Stamps, at, all )
+
+            data Stamp = { at: DateTime }
+            data Stamps = { at: List<DateTime> }
+
+            behavior at : (s: Stamp) -> DateTime
+            let at (s) = s.at
+
+            behavior all : (s: Stamps) -> List<DateTime>
+            let all (s) = s.at
+
+            let text (s: String) = s
+
+            let texts (s: String) : List<String> = [ s ]
+
+            let itself (d: DateTime) = d
+            """;
+
     private static final String INJECTED = """
             module clock exposing ( Stamp, now, stampAt )
 
@@ -234,6 +253,33 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
                 """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
     }
 
+    @Test
+    void aHelperAnsweringForTheWholeExpectationDoesNotWriteATemporalAsText() {
+        // Where a helper answers the whole expectation there is nothing enclosing it, so its value is
+        // taken as it stands rather than read back. What it is may still disagree with the behavior —
+        // that is the row's to report — but the form it is in is this rule's, and it is one rule
+        // whether the application is the whole of the expectation or part of it.
+        refused(ANSWERS + """
+
+                example at
+                    | "a helper's text" : (Stamp { at = DateTime("2026-07-20T09:00") })
+                        -> text("2026-07-20T09:00")
+                """, "E1903", ExampleMessage.TheExpectedValueCouldNotBeBuilt.class);
+    }
+
+    @Test
+    void aHelperAnsweringForTheWholeExpectationDoesNotWriteTemporalsAsTextInACollection() {
+        // A written `[ "…" ]` at a `List<DateTime>` is refused because the element type travels with
+        // the position. A helper answering with the same list is the same fixture, so it is refused
+        // for the same reason.
+        refused(ANSWERS + """
+
+                example all
+                    | "a helper's texts" : (Stamps { at = [ DateTime("2026-07-20T09:00") ] })
+                        -> texts("2026-07-20T09:00")
+                """, "E1903", ExampleMessage.TheExpectedValueCouldNotBeBuilt.class);
+    }
+
     // --- what still writes one ------------------------------------------------------------------
 
     @Test
@@ -292,6 +338,16 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example stampAt
                     | "a helper's date-time" : (noon(DateTime("2026-07-20T09:00"))) -> Stamp
+                """));
+    }
+
+    @Test
+    void aHelperAnsweringForTheWholeExpectationWithATemporalStillWritesOne() {
+        assertDoesNotThrow(() -> Compiler.compile(ANSWERS + """
+
+                example at
+                    | "a helper's date-time" : (Stamp { at = DateTime("2026-07-20T09:00") })
+                        -> itself(DateTime("2026-07-20T09:00"))
                 """));
     }
 

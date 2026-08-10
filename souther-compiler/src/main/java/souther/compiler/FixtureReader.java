@@ -178,8 +178,9 @@ public final class FixtureReader {
         Object answer = helperAnswer(written, new LinkedHashSet<>());
         if (answer != null) {
             // Already built. Reading it back through the output's decoder would state nothing for a
-            // stand-in written as an application, so what is left to ask of it is whether it is what
-            // the dependency answers with.
+            // stand-in written as an application, so what is left to ask of it is the form it is in
+            // and whether it is what the dependency answers with.
+            neutral.requireWrittenForm(answer, whole == null ? null : whole.type());
             return admitted(answer, out, whole);
         }
         if (whole != null) {
@@ -322,6 +323,11 @@ public final class FixtureReader {
      * row's expectation cannot be built — the caller reports that as the fixture error it is, rather
      * than comparing against nothing. */
     Object builtExpected(Ast.Expr expected, BoundaryOutput out) {
+        // A collection output has no case name to decode against, so the behavior's answer is what
+        // says which of `List`/`Set`/`Map` the written list means and what its elements are — the
+        // same decision a collection argument's position makes. An answer of several types is not
+        // one shape, and nothing here writes a collection of them.
+        FixtureShape whole = FixtureShape.ofWholeAnswer(out);
         TypeName asserted = constructedCase(expected);
         if (asserted != null) {
             // The case is what the row wrote rather than what the position admitted — a row may name
@@ -331,13 +337,12 @@ public final class FixtureReader {
         }
         Object answer = helperAnswer(expected, new LinkedHashSet<>());
         if (answer != null) {
+            // Taken as it stands: nothing encloses it, so it is not read back. What it turned out to
+            // be may still disagree with the behavior, which is the row's to report — but the form it
+            // is in is not, and an application is held to the same one wherever it stands.
+            neutral.requireWrittenForm(answer, whole == null ? null : whole.type());
             return answer;
         }
-        // A collection output has no case name to decode against, so the behavior's answer is what
-        // says which of `List`/`Set`/`Map` the written list means and what its elements are — the
-        // same decision a collection argument's position makes. An answer of several types is not
-        // one shape, and nothing here writes a collection of them.
-        FixtureShape whole = FixtureShape.ofWholeAnswer(out);
         if (whole != null && isCollection(whole)) {
             return built(expected, whole);
         }

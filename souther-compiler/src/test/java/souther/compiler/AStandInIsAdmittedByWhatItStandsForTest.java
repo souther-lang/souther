@@ -81,6 +81,19 @@ class AStandInIsAdmittedByWhatItStandsForTest {
             let bill (a, quote) = Receipt { total = quote(a) }
             """;
 
+    private static final String COLLECTION = """
+            module bags exposing ( Bag, sizes, hold )
+
+            data Bag = { ns: List<Int> }
+
+            behavior sizes : () -> List<Int>
+
+            behavior hold : () -> Bag
+                depends on sizes
+                constructs Bag
+            let hold (sizes) = Bag { ns = sizes() }
+            """;
+
     private static Diagnostic only(String model) {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(model));
         assertEquals(1, e.diagnostics().size(), "one row, one diagnostic: " + e.getMessage());
@@ -153,6 +166,31 @@ class AStandInIsAdmittedByWhatItStandsForTest {
 
                 example run
                     | "a case of the union" : () with ask = Ok { n = 1 } -> Ok { n = 1 }
+                """));
+    }
+
+    @Test
+    void aWithHoldingAnotherElementTypeDoesNotStandInForACollectionOutput() {
+        // The container is the one the dependency answers with and what it holds is not, so being a
+        // `List` is not being this one. A helper answers here because a written list would be read
+        // through the output's own element type and never arrive holding anything else.
+        refusedAsAStandIn(COLLECTION + """
+
+                let texts (s: String) : List<String> = [ s ]
+
+                example hold
+                    | "another element" : () with sizes = texts("a") -> Bag { ns = [ 1 ] }
+                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
+    }
+
+    @Test
+    void aWithHoldingTheOutputsElementTypeStandsInForACollectionOutput() {
+        assertDoesNotThrow(() -> Compiler.compile(COLLECTION + """
+
+                let ns (n: Int) : List<Int> = [ n ]
+
+                example hold
+                    | "the output's element" : () with sizes = ns(1) -> Bag { ns = [ 1 ] }
                 """));
     }
 
