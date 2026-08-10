@@ -83,6 +83,16 @@ a second one, and it is applied to the whole copy — the literals were exempt f
 for no reason anyone wrote down, so a `Date("…")` inside a prelude helper reported at a line of
 `souther.list` while everything around it reported at the call.
 
+What a rewrite answers is what a name means, and it says nothing about where the name is. Every
+method that answers one — `Var.denoting`, the callee `Resolve` settles, the spelling `HelperNames`
+qualifies — carries the extent across rather than taking it from the name again. A name is written
+over exactly the characters that spell it in every case but one, so a rewrite that rebuilds it is
+right until an author writes `(price)`.
+
+Within an application, what is applied and what the application is are two extents. A rewrite that
+puts another library name in a call leaves the arguments where they are, so handing the call's extent
+to the callee would underline them for a report about the name.
+
 A name a pass chooses is written nowhere, and the constructors say so. Taking a spelling and a
 position — `WrittenName.of(name, pos)` — reads the spelling as if it were the source at that place,
 which it is for a token the parser just read and is not for a library name a rewrite reached for or a
@@ -90,7 +100,15 @@ canonical form a copy rebuilt. `Var.respelled` and `FieldAccess.restamped` are w
 and the `Apply` constructors that take a spelling build one. A name the author applied is handed over
 as the `Var` it is, occurrence and all.
 
-`Elaborator.region` and `Elaborator.width` are deleted.
+A `WrittenName` is in one of two states and not three. Written: a spelling and the places it is
+spelled. Not written: an anchor and neither. Segments without a spelling was the third, and it read as
+unwritten to every caller that asked and as written to every caller that underlined — which is what a
+qualified name half of which a pass minted used to be.
+
+`Elaborator.region` and `Elaborator.width` are deleted, and so is the last reader that carried an
+extent as a position and a count: the example machinery marked a row and its stand-in with
+`Region.ofWidth`, which ends on the line it began on however far the value ran. A statement carries
+the region.
 
 ### What was weighed
 
@@ -120,7 +138,8 @@ it. There is no default: a pass that mints a node writes `null` and says so, the
 `Var` is the one kind whose extent is not its own component in the ordinary case — its constructor
 takes it from the `WrittenName` it holds, because a name is the whole of that expression. It is a
 component all the same, since a parenthesized name is one expression written over more characters
-than the name is, and the constructor refuses a region that does not contain the name's own.
+than the name is, and the constructor refuses a region that does not contain the name's own — or that
+is absent while the name it holds is written somewhere, a name being in no expression at all.
 
 `HumanRenderer` draws one caret under a region that ends on a later line, as it did before. The
 extent an expression now carries is right for a multi-line expression and what a terminal draws under

@@ -1409,6 +1409,10 @@ public interface Ast {
                 throw new IllegalArgumentException("`" + written.canonical() + "` denotes " + denotes
                         + " and says nothing about how this module reaches it");
             }
+            if (written.region() != null && region == null) {
+                throw new IllegalArgumentException("`" + written.canonical()
+                        + "` is written somewhere and the expression it is was written nowhere");
+            }
             if (!Region.encloses(region, written.region())) {
                 throw new IllegalArgumentException("`" + written.canonical()
                         + "` is written outside the expression it is");
@@ -1525,14 +1529,14 @@ public interface Ast {
          * reach name, and nothing would say so.
          */
         public Var denoting(ValueName resolved, ReachName reachedAs) {
-            return new Var(written, resolved, reachedAs);
+            return new Var(written, resolved, reachedAs, region);
         }
 
         /** The same name denoting {@code resolved}, reached as it already was — for a pass that
          * changes what a name says about where its construction came from and not which declaration
          * it reaches. */
         public Var denoting(ValueName resolved) {
-            return new Var(written, resolved, reachedAs);
+            return new Var(written, resolved, reachedAs, region);
         }
 
         @Override
@@ -1610,9 +1614,14 @@ public interface Ast {
          * there. A name the author applied is passed as the {@link Var} it is, which is where its
          * occurrence is; building one from a spelling and a position measures the spelling at the
          * anchor, and the two are the same number only until they are not.
+         *
+         * <p>{@code region} is the application's and is not handed to the callee. What the callee
+         * covers is its own — a rewrite that puts another name in a call leaves the arguments where
+         * they are, so a report about what is applied would otherwise underline them too. A caller
+         * that has the callee's extent builds the {@link Var} itself and passes it.
          */
         public Apply(String fn, List<Expr> args, SourcePos pos, Region region) {
-            this(Var.respelled(fn, null, null, pos, region), args, ConstructionOrigin.own(), pos,
+            this(Var.respelled(fn, null, null, pos, null), args, ConstructionOrigin.own(), pos,
                     region);
         }
 
@@ -1620,7 +1629,7 @@ public interface Ast {
          * writing into reaches it. */
         public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
                      ConstructionOrigin origin, SourcePos pos, Region region) {
-            this(Var.respelled(fn, denotes, reachedAs, pos, region), args, origin, pos, region);
+            this(Var.respelled(fn, denotes, reachedAs, pos, null), args, origin, pos, region);
         }
 
         /** Whether what this applies is a name. A reader that wants the name itself matches on

@@ -681,8 +681,13 @@ public final class Resolve {
      * here — the same pair, from the same place, as a name standing on its own. */
     private Ast.Expr applied(Ast.Apply call, Bindings bound) {
         ValueName denotes = answered(call.name(), calledName(call, bound));
-        Ast.Var name = new Ast.Var(call.name(), denotes,
-                ReachName.of(denotes, call.written(), values.module()));
+        // Answered rather than rebuilt: what the callee means is settled here and where it is
+        // written is not this pass's to decide. Building one from the name would take its extent
+        // from the characters that spell it, which is short of what a parenthesized callee covers.
+        Ast.Var name = call.function() instanceof Ast.Var applied
+                ? applied.denoting(denotes, ReachName.of(denotes, call.written(), values.module()))
+                : new Ast.Var(call.name(), denotes,
+                        ReachName.of(denotes, call.written(), values.module()));
         return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos(),
                 call.region());
     }

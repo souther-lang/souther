@@ -173,6 +173,29 @@ class AnExpressionIsUnderlinedOverWhatWasWrittenTest {
     }
 
     /**
+     * A name in parentheses is one expression written over more characters than the name is, so the
+     * two places it holds are two answers and not one.
+     *
+     * <p>The kind most likely to lose them. Every other kind carries its extent as a component of its
+     * own, and a name carries where it is written already — which is what a rewrite that answers what
+     * the name means reaches for when it rebuilds one. Resolution answers every name in a body, so a
+     * name that took its extent from its spelling would lose the brackets on the way through.
+     */
+    @Test
+    void aParenthesizedNameIsUnderlinedOverItsParentheses() {
+        String source = """
+                module demo
+
+                behavior s : (a: Int, b: String) -> String
+
+                let s (a, b) =
+                    String.append(b, (a))
+                """;
+
+        assertEquals("(a)", underlined(source, primary(source)));
+    }
+
+    /**
      * An expression written over several lines has both ends and says so. What a terminal draws under
      * one of these is the renderer's, and it draws one caret today; what the region says is the
      * compiler's, and a published one is read by an editor that can mark every line of it.

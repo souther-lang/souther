@@ -542,9 +542,12 @@ public final class HelperInliner {
             // an argument the rewrite supplies, which no one wrote
             args.add(new Ast.IntLit(supplied, call.pos(), null));
         }
-        return new Ast.Apply(rewrite.target().qualified(), rewrite.target(),
-                new ReachName.OfLibrary(rewrite.target()), args, ConstructionOrigin.own(),
-                call.pos(), call.region());
+        // The library name this reaches for is the pass's; where it stands is the callee's.
+        return new Ast.Apply(
+                Ast.Var.respelled(rewrite.target().qualified(), rewrite.target(),
+                        new ReachName.OfLibrary(rewrite.target()), call.function().pos(),
+                        call.function().region()),
+                args, ConstructionOrigin.own(), call.pos(), call.region());
     }
 
     /** Inlines a recursive helper's own body, expanding the non-recursive helper calls it makes while

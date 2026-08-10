@@ -70,6 +70,14 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
             throw new IllegalArgumentException(
                     "`" + canonical + "` is written somewhere and is anchored somewhere else");
         }
+        // And there are two states, not three. Segments without a spelling was the third: a name
+        // nobody wrote holding the places some of it was written at, which reads as unwritten to
+        // every caller that asks and as written to every caller that underlines.
+        if (spelling == null && !segments.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "`" + canonical + "` is spelled nowhere and is written in " + segments.size()
+                            + " places");
+        }
         for (Region segment : segments) {
             if (!Objects.equals(segment.start().sourceId(), segments.get(0).start().sourceId())) {
                 throw new IllegalArgumentException("`" + canonical + "` is written in one file");
@@ -259,9 +267,11 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
      */
     public WrittenName then(WrittenName member) {
         String joined = canonical + "." + member.canonical();
+        // A part nobody wrote makes the whole unwritten, and what is left is somewhere to complain
+        // at. Keeping the written part's places would leave a name that answers "no one wrote this"
+        // and underlines the half of it that somebody did.
         if (!authored() || !member.authored()) {
-            return new WrittenName(joined, null, segments,
-                    segments.isEmpty() ? anchor : null);
+            return new WrittenName(joined, null, List.of(), pos());
         }
         List<Region> both = new ArrayList<>(segments);
         both.addAll(member.segments);
