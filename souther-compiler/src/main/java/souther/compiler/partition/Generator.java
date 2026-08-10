@@ -1085,14 +1085,13 @@ public final class Generator {
                     : new Edge(List.of(at), null, numberOf(value));
         }
         int size = countOf(value);
+        if (size < 0) {
+            return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
+        }
         Type carrier = TypeOps.base(axis.type(), symbols);
-        List<FixtureTemplate> built = size < 0 ? List.of()
-                : Witnesses.ofSize(carrier, size, symbols, Set.of());
+        List<FixtureTemplate> built = Witnesses.ofSize(carrier, size, symbols, Set.of());
         if (built.isEmpty()) {
-            UnresolvedCombination.Reason why = size < 0 ? null
-                    : Witnesses.reasonForSize(carrier, size, symbols);
-            return Edge.none(why == null
-                    ? UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : why);
+            return Edge.none(Witnesses.reasonForSize(carrier, size, symbols));
         }
         List<FixtureTemplate> out = new ArrayList<>();
         for (FixtureTemplate each : built) {

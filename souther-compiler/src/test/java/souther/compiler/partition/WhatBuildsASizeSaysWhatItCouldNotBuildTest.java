@@ -67,10 +67,51 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
                 Witnesses.reasonForSize(Type.STRING, 100_000, NONE));
     }
 
-    /** A carrier nothing counts has no size to build at, and that is not a limit being reached. */
+    /** A carrier nothing counts has no size to build at, and says which silence that is. */
     @Test
-    void aCarrierNothingCountsHasNoReasonToGive() {
+    void aCarrierNothingCountsSaysNothingComposesOne() {
         assertEquals(List.of(), Witnesses.ofSize(Type.INT, 3, NONE, Set.of()));
-        assertEquals(null, Witnesses.reasonForSize(Type.INT, 3, NONE));
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                Witnesses.reasonForSize(Type.INT, 3, NONE));
+    }
+
+    /**
+     * A set is as many values as the count asks for, no two of them equal, or it is nothing.
+     *
+     * <p>The type may not have that many. Two booleans are what a floor of three is offered, since a
+     * value the rule refuses is an answer the decoder gives in the rule's own terms; they are not
+     * three of anything, and a line drawn at three met by a row of two is a row standing somewhere
+     * else. What is asked for and what was made are two numbers here, and the caller that needs them
+     * equal is the one that checks.
+     */
+    @Test
+    void aSetIsNothingWhereTheTypeHasFewerValuesThanTheCountAsksFor() {
+        Type set = new Type.SetOf(Type.BOOL);
+
+        assertEquals(List.of("[true, false]"), Witnesses.ofSize(set, 2, NONE, Set.of()).stream()
+                .map(FixtureTemplate::text).toList());
+        assertEquals(List.of(), Witnesses.ofSize(set, 3, NONE, Set.of()));
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                Witnesses.reasonForSize(set, 3, NONE));
+    }
+
+    /** A floor goes on being offered what the type has, which is the value its rule refuses. */
+    @Test
+    void aFloorIsStillOfferedTheValueTheTypeCanReach() {
+        assertEquals(List.of("[true, false]"),
+                Witnesses.holding(new Type.SetOf(Type.BOOL), 3, NONE, Set.of()).stream()
+                        .map(FixtureTemplate::text).toList());
+    }
+
+    /** A map counts its entries, and a key that cannot be told from the others is not one more. */
+    @Test
+    void aMapIsNothingWhereItsKeysRunOutBeforeTheCount() {
+        Type map = new Type.MapOf(Type.BOOL, Type.INT);
+
+        assertTrue(!Witnesses.ofSize(map, 2, NONE, Set.of()).isEmpty(),
+                "two keys are two the type has");
+        assertEquals(List.of(), Witnesses.ofSize(map, 3, NONE, Set.of()));
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                Witnesses.reasonForSize(map, 3, NONE));
     }
 }
