@@ -510,11 +510,19 @@ public final class Resolve {
 
     private Ast.DecRef decRef(Ast.DecRef ref) {
         return switch (ref) {
+            case Ast.DecRef.Bare b -> bareDecRef(b);
+            case Ast.OptionDecRef o -> new Ast.OptionDecRef(bareDecRef(o.element()), o.pos());
+        };
+    }
+
+    /** Resolving keeps the shape it was given, so what an optional holds stays what an optional may
+     *  hold. Split here for that reason and not to say anything new about the arms. */
+    private Ast.DecRef.Bare bareDecRef(Ast.DecRef.Bare ref) {
+        return switch (ref) {
             case Ast.PrimDecRef p -> p;
             case Ast.DataDecRef d -> new Ast.DataDecRef(type(d.typeName()), d.pos());
             case Ast.ListDecRef l -> new Ast.ListDecRef(decRef(l.element()), l.pos());
             case Ast.SetDecRef s -> new Ast.SetDecRef(decRef(s.element()), s.pos());
-            case Ast.OptionDecRef o -> new Ast.OptionDecRef(decRef(o.element()), o.pos());
             // the key is already the classification the checker made, carrying a resolved name
             case Ast.MapDecRef m -> new Ast.MapDecRef(decRef(m.value()), m.key(), m.pos());
         };
@@ -567,6 +575,13 @@ public final class Resolve {
     }
 
     private Ast.EncElem encElem(Ast.EncElem e) {
+        return switch (e) {
+            case Ast.EncElem.Bare b -> bareEncElem(b);
+            case Ast.OptionElemEnc o -> new Ast.OptionElemEnc(bareEncElem(o.elem()), o.pos());
+        };
+    }
+
+    private Ast.EncElem.Bare bareEncElem(Ast.EncElem.Bare e) {
         return switch (e) {
             case Ast.PrimEnc p -> p;
             case Ast.DataEnc d -> new Ast.DataEnc(type(d.typeName()), d.pos());

@@ -1196,7 +1196,16 @@ final class CodecGen {
                 code.invokedynamic(setFromListCallSite());                   // Function: List -> Set
                 code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);  // Decoder<I, Set<T>> (dedup)
             }
-            case Ast.OptionDecRef _ -> throw new IllegalStateException("optional is only supported as a direct object field");
+            // An optional standing where there is no key to be missing — a member, a map's value.
+            // There null is the whole of what absence is (spec [#absence-is-written-as-null]), so
+            // the element decoder is the present one made null-tolerant and lifted into an Option.
+            // A field's optional never reaches here: its key is read by `nullableField` instead.
+            case Ast.OptionDecRef o -> {
+                emitDecoderObject(code, o.element(), src);
+                code.invokestatic(srcListOwner(src), "nullable", MTD_nullableDec);
+                code.invokedynamic(optionOfNullableCallSite());              // Function: Object -> Option
+                code.invokeinterface(CD_RDecoder, "map", MTD_Rdecoder_map);  // Decoder<I, Option<T>>
+            }
             case Ast.MapDecRef mp -> {
                 emitDecoderObject(code, mp.value(), src);
                 code.invokestatic(srcListOwner(src), "map", MTD_mapDec);   // Decoder<I, Map<String,V>>
@@ -1671,6 +1680,12 @@ final class CodecGen {
                 code.invokedynamic(orderingCallSite("sortedArray"));        // Encoder<Object, Object>
                 code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
             }
+            // no key to omit here, so an absent member is written null
+            case Ast.OptionElemEnc o -> {
+                pushElemEncoder(code, o.elem());                            // Encoder<T, Object>
+                code.invokedynamic(encodeAsFunctionCallSite());             // Function<T, Object>
+                code.invokedynamic(optionElemEncoderCallSite());            // Encoder<Option<T>, Object>
+            }
             case Ast.MapElemEnc m -> {
                 pushElemEncoder(code, m.value());
                 code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);
@@ -1730,6 +1745,47 @@ final class CodecGen {
                 MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
                 impl,
                 MTD_Representations_sorted);
+    }
+
+    /** {@code Option::ofNullable} as a {@code Function}, for {@code Decoder.map} to lift a
+     *  null-tolerant decoder's answer into an {@code Option}. */
+    private static DynamicCallSiteDesc optionOfNullableCallSite() {
+        // Option is a sealed interface, so its static factory is an interface method reference
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.INTERFACE_STATIC, CD_Option, "ofNullable", MTD_ofNullable);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MTD_ofNullable);                                         // (Object) -> Option
+    }
+
+    /** An {@code Encoder}'s own {@code encode} as a {@code Function}, capturing the encoder already
+     *  on the stack. The kernel does not know the boundary library's types, so what it is handed is
+     *  a function rather than an encoder ({@code Options.encodedOrNull}). */
+    private static DynamicCallSiteDesc encodeAsFunctionCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.INTERFACE_VIRTUAL, CD_REncoder, "encode", MTD_Rencode);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function, CD_REncoder),             // captures the encoder
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MTD_Rencode);                                            // (Object) -> Object
+    }
+
+    /** {@code opt -> Options.encodedOrNull(inner, opt)} as an {@code Encoder}, capturing the present
+     *  value's encoder as a function: an absent member is written null. */
+    private static DynamicCallSiteDesc optionElemEncoderCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Options, "encodedOrNull", MTD_encodedOrNull);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder, CD_Function),             // captures the function
+                MTD_Rencode,                                             // samMethodType: (Object) -> Object
+                impl,
+                MethodTypeDesc.of(CD_Object, CD_Option));                // (Option) -> Object
     }
 
     /** {@code Sets::toList} as a {@code Function}, so a nested Set reaches the list encoder. */

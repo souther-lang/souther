@@ -813,21 +813,30 @@ public interface Ast {
     }
 
     /** The decoder referenced by a bind: a primitive, another data's {@code .decoder}, or a list. */
-    sealed interface DecRef extends Ast
-            permits PrimDecRef, DataDecRef, ListDecRef, SetDecRef, OptionDecRef, MapDecRef {}
+    sealed interface DecRef extends Ast permits DecRef.Bare, OptionDecRef {
 
-    record PrimDecRef(LeafScalar kind, SourcePos pos) implements DecRef {}
+        /** A reference that is not an optional. What the distinction is for is the one position that
+         *  requires it: what an optional decodes. Absence has one form wherever it stands, so an
+         *  optional under an optional has two forms for three values and is not written
+         *  (spec {@code [#what-has-no-external-representation]}). */
+        sealed interface Bare extends DecRef
+                permits PrimDecRef, DataDecRef, ListDecRef, SetDecRef, MapDecRef {}
+    }
 
-    record DataDecRef(Name typeName, SourcePos pos) implements DecRef {}
+    record PrimDecRef(LeafScalar kind, SourcePos pos) implements DecRef.Bare {}
+
+    record DataDecRef(Name typeName, SourcePos pos) implements DecRef.Bare {}
 
     /** {@code list(<elementDecRef>)} */
-    record ListDecRef(DecRef element, SourcePos pos) implements DecRef {}
+    record ListDecRef(DecRef element, SourcePos pos) implements DecRef.Bare {}
 
     /** {@code set(<elementDecRef>)} — a list decoder deduplicated into a Set on decode (ADR-0009). */
-    record SetDecRef(DecRef element, SourcePos pos) implements DecRef {}
+    record SetDecRef(DecRef element, SourcePos pos) implements DecRef.Bare {}
 
-    /** An optional field decoder: absent/null becomes {@code None}, present decodes {@code element}. */
-    record OptionDecRef(DecRef element, SourcePos pos) implements DecRef {}
+    /** An optional decoder. Under a key, a missing key or {@code null} is {@code None}; standing as
+     *  an element or a map's value, where there is no key to be missing, {@code null} is the whole
+     *  of it. Either way a present value decodes through {@code element}. */
+    record OptionDecRef(DecRef.Bare element, SourcePos pos) implements DecRef {}
 
     /** A {@code Map<K, T>} decoder: each object value is decoded with {@code value}, and each of the
      * object's string keys through {@code key}.
@@ -836,7 +845,7 @@ public interface Ast {
      * the representations the boundary admits, and nothing else — not a list, not an option — so the
      * type says as much and a reader that switches on it needs no arm for what cannot be there. It is
      * also the classification the checker already made, carried here rather than worked out again. */
-    record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef {}
+    record MapDecRef(DecRef value, MapKeyRepresentation key, SourcePos pos) implements DecRef.Bare {}
 
     /** A primitive field decoder kind. */
     /** A statement in a single-value decoder body. */
@@ -931,22 +940,33 @@ public interface Ast {
     /** How to encode a list/set/map element: a primitive, another data's {@code .encode}, or another
      * collection — a collection may hold a collection ({@code Map<String, List<商品ID>>}), so the
      * element encoder nests as deeply as the type does. */
-    sealed interface EncElem extends Ast permits PrimEnc, DataEnc, ListElemEnc, SetElemEnc, MapElemEnc {}
+    sealed interface EncElem extends Ast permits EncElem.Bare, OptionElemEnc {
 
-    record PrimEnc(LeafScalar kind, SourcePos pos) implements EncElem {}
+        /** An element encoder that is not an optional, for the reason {@link DecRef.Bare} carries. */
+        sealed interface Bare extends EncElem
+                permits PrimEnc, DataEnc, ListElemEnc, SetElemEnc, MapElemEnc {}
+    }
 
-    record DataEnc(Name typeName, SourcePos pos) implements EncElem {}
+    record PrimEnc(LeafScalar kind, SourcePos pos) implements EncElem.Bare {}
+
+    record DataEnc(Name typeName, SourcePos pos) implements EncElem.Bare {}
 
     /** A {@code List<T>} element, each {@code T} encoded by {@code elem}. */
-    record ListElemEnc(EncElem elem, SourcePos pos) implements EncElem {}
+    record ListElemEnc(EncElem elem, SourcePos pos) implements EncElem.Bare {}
 
     /** A {@code Set<T>} element: listed, then each element encoded by {@code elem}, as {@link SetEnc}
      * does for a field. */
-    record SetElemEnc(EncElem elem, SourcePos pos) implements EncElem {}
+    record SetElemEnc(EncElem elem, SourcePos pos) implements EncElem.Bare {}
 
     /** A {@code Map<K, V>} element, each value encoded by {@code value} and each key by {@code key},
      * as {@link MapEnc} does for a field. */
-    record MapElemEnc(EncElem value, MapKeyRepresentation key, SourcePos pos) implements EncElem {}
+    record MapElemEnc(EncElem value, MapKeyRepresentation key, SourcePos pos) implements EncElem.Bare {}
+
+    /** An optional standing where there is no key to omit — a collection's element, a map's value.
+     * {@code None} is written {@code null} and {@code Some(v)} through {@code elem}
+     * (spec {@code [#absence-is-written-as-null]}). A field's optional is {@link OptionRaw}, which
+     * omits its key instead. */
+    record OptionElemEnc(EncElem.Bare elem, SourcePos pos) implements EncElem {}
 
     record RawEntry(String key, RawExpr value, SourcePos pos) implements Ast {}
 

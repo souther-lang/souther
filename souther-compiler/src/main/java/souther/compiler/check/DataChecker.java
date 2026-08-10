@@ -838,6 +838,14 @@ public final class DataChecker {
                 }
                 checkEncElem(m.value(), mo.value(), pos, symbols);
             }
+            // an absent member is written null, so the element encoder is one level above what the
+            // option holds, as the type is
+            case Ast.OptionElemEnc o -> {
+                if (!(elemType instanceof Type.OptionOf oo)) {
+                    throw elemEncMismatch("Option", elemType, pos);
+                }
+                checkEncElem(o.elem(), oo.element(), pos, symbols);
+            }
         }
     }
 

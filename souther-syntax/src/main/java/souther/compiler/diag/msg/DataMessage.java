@@ -95,10 +95,13 @@ public sealed interface DataMessage extends Message {
     record ADataTakesTheStandardLibraryQualifier(String data) implements DataMessage, Reported {}
 
     @Code(DiagnosticCode.E1311)
-    record NoCodecCanBeDerived(String data, String why) implements DataMessage, Reported {}
+    /** {@code carries} is the part of the field's type that had no external representation, which is
+     *  not always the whole of it — the field is what the caret is on and the part is what has to
+     *  change. */
+    record NoCodecCanBeDerived(String data, String carries) implements DataMessage, Reported {}
 
     @Code(DiagnosticCode.E1311)
-    record ATupleHasNoExternalRepresentation(String data, String what) implements DataMessage, Reported {}
+    record ATupleHasNoExternalRepresentation(String data, String carries) implements DataMessage, Reported {}
 
     @Code(DiagnosticCode.E1011)
     record ADataIsAlreadyDefined(String data) implements DataMessage, Reported {}
