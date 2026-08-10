@@ -61,6 +61,21 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
             let keep (s) = s
             """;
 
+    private static final String HELPERS = """
+            module helpers exposing ( Stamp, stampAt, keep )
+
+            data Stamp = { at: DateTime }
+
+            behavior stampAt : (d: DateTime) -> Stamp
+                constructs Stamp
+            let stampAt (d) = Stamp { at = d }
+
+            behavior keep : (s: Stamp) -> Stamp
+            let keep (s) = s
+
+            let text (s: String) = s
+            """;
+
     private static final String INJECTED = """
             module clock exposing ( Stamp, now, stampAt )
 
@@ -176,6 +191,49 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
                 """, "E1908", ExampleMessage.TheFakeCouldNotBeBuilt.class);
     }
 
+    @Test
+    void aStringDoesNotWriteAnOptionalTemporalField() {
+        // A `?` field holds the value itself, so what may stand there is what may stand at the type
+        // it holds. Opening a newtype and stopping at an optional would leave the rule closed for one
+        // way of writing a position and open for the other.
+        refused("""
+                module optional exposing ( Stamp, keep )
+
+                data Stamp = { at: DateTime? }
+
+                behavior keep : (s: Stamp) -> Stamp
+                let keep (s) = s
+                """ + """
+
+                example keep
+                    | "text" : (Stamp { at = "2026-07-20T09:00" })
+                        -> Stamp { at = DateTime("2026-07-20T09:00") }
+                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+    }
+
+    @Test
+    void aHelperAnsweringWithAStringDoesNotWriteATemporal() {
+        // A row reaches the form a decoder reads two ways: from what the author wrote, and from a
+        // value a helper returned. The rule is about the form, so it holds of both — a helper's
+        // answer used to arrive as itself and be parsed by the decoder it was handed to.
+        refused(HELPERS + """
+
+                example stampAt
+                    | "a helper's text" : (text("2026-07-20T09:00")) -> Stamp
+                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+    }
+
+    @Test
+    void aHelperAnsweringWithAStringDoesNotWriteATemporalField() {
+        // The same where the application stands inside a construction, so the rule is not one that
+        // holds only of a whole fixture.
+        refused(HELPERS + """
+
+                example keep
+                    | "a helper's text in a field" : (Stamp { at = text("2026-07-20T09:00") }) -> Stamp
+                """, "E1903", ExampleMessage.AnInputCouldNotBeBuilt.class);
+    }
+
     // --- what still writes one ------------------------------------------------------------------
 
     @Test
@@ -199,6 +257,41 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example stampAt
                     | "a stand-in" : () with now = DateTime("2026-07-20T09:00") -> Stamp
+                """));
+    }
+
+    @Test
+    void anOptionalTemporalStillTakesOneAndStillTakesNone() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module optionalok exposing ( Stamp, keep )
+
+                data Stamp = { at: DateTime? }
+
+                behavior keep : (s: Stamp) -> Stamp
+                let keep (s) = s
+
+                example keep
+                    | "a date-time" : (Stamp { at = DateTime("2026-07-20T09:00") })
+                        -> Stamp { at = DateTime("2026-07-20T09:00") }
+                    | "none" : (Stamp { at = None }) -> Stamp { at = None }
+                """));
+    }
+
+    @Test
+    void aHelperAnsweringWithATemporalStillWritesOne() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module helperok exposing ( Stamp, stampAt )
+
+                data Stamp = { at: DateTime }
+
+                behavior stampAt : (d: DateTime) -> Stamp
+                    constructs Stamp
+                let stampAt (d) = Stamp { at = d }
+
+                let noon (d: DateTime) = d
+
+                example stampAt
+                    | "a helper's date-time" : (noon(DateTime("2026-07-20T09:00"))) -> Stamp
                 """));
     }
 

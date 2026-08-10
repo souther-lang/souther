@@ -9,8 +9,10 @@ import souther.compiler.types.TypeName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a value looks like in the form a derived decoder reads — the *neutral* form an {@code example}
@@ -54,7 +56,16 @@ final class NeutralForm {
      *               read back
      */
     Object of(Object live, Type position, String helper) {
-        if (live == null || isScalar(live)) {
+        if (live == null) {
+            return live;
+        }
+        if (isScalar(live)) {
+            // A scalar is already its own neutral form, except that a temporal's is the parsed value
+            // and text is what a boundary carries one as. Asked here rather than left to the decoder,
+            // which reads that text too and would take a helper's `String` for a date-time.
+            if (live instanceof String text && temporalUnder(position) instanceof Type.Prim temporal) {
+                throw notWrittenAsATemporal(temporal, text);
+            }
             return live;
         }
         Type opened = open(position);
@@ -362,6 +373,44 @@ final class NeutralForm {
 
     static Type open(Type t) {
         return t instanceof Type.OptionOf o ? open(o.element()) : t;
+    }
+
+    /**
+     * The temporal {@code position} is, through whatever stands between — an optional holds the value
+     * itself, a newtype wraps what it is written from — or null where it is not a temporal at all.
+     *
+     * <p>A date is written {@code Date("2026-07-25")} and a date-time {@code DateTime("…")}, and the
+     * compiler parses the text where it stands, so a temporal is already parsed by the time it is a
+     * fixture. The derived decoders read ISO text as well, because that is how one crosses a boundary,
+     * and what a boundary carries a value as is not a second way to write a fixture.
+     *
+     * <p>Here because both directions a row reaches the neutral form by have to ask it: what the
+     * author wrote, and what a helper returned. Stated on one side and read from the other, the two
+     * would answer differently about the same position.
+     */
+    Type.Prim temporalUnder(Type position) {
+        Set<TypeName> through = new LinkedHashSet<>();
+        Type at = open(position);
+        while (true) {
+            if (at instanceof Type.Prim prim) {
+                return prim == Type.Prim.DATE || prim == Type.Prim.DATETIME ? prim : null;
+            }
+            if (!(at instanceof Type.Ref ref) || !through.add(ref.name())) {
+                return null;
+            }
+            Ast.TypeRef base = newtypeBaseType(ref.name());
+            if (base == null) {
+                return null;
+            }
+            at = open(shapeOf(base));
+        }
+    }
+
+    /** What a fixture that wrote text where a temporal stands is told, wherever it wrote it. */
+    static FixtureException notWrittenAsATemporal(Type.Prim temporal, String text) {
+        return new FixtureException("a `" + temporal.shown() + "` is written `" + temporal.shown()
+                + "(\"" + text + "\")`; a string is how one arrives from outside, not how a fixture"
+                + " writes it");
     }
 
     /** Whether a value is a neutral scalar, so it can be shown as written rather than by class name. */

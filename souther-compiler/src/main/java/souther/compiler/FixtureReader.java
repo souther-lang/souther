@@ -680,41 +680,15 @@ public final class FixtureReader {
      * A written string, which is a {@code String} — and at a position that declares a temporal, is
      * not one of those.
      *
-     * <p>A date is written {@code Date("2026-07-25")} and a date-time {@code DateTime("…")}, and the
-     * compiler parses the text where it stands, so a fixture carries a temporal already parsed. The
-     * derived decoders read ISO text as well, because that is how a temporal arrives over JSON and
-     * out of a JDBC row. What a boundary carries a value as is not a second way to write a fixture,
-     * so a fixture reaching one of those decoders is not admitted by what they additionally read.
+     * <p>Which positions those are is {@link NeutralForm#temporalUnder}, which the reading of a value
+     * a helper returned asks too: a row reaches the neutral form both ways, and the rule is about the
+     * form.
      */
     private Object text(Ast.StringLit s, Type expected) {
-        Type.Prim temporal = temporalUnder(expected);
-        if (temporal != null) {
-            throw new FixtureException("a `" + temporal.shown() + "` is written `"
-                    + temporal.shown() + "(\"" + s.value() + "\")`; a string is how one arrives from"
-                    + " outside, not how a fixture writes it");
+        if (neutral.temporalUnder(expected) instanceof Type.Prim temporal) {
+            throw NeutralForm.notWrittenAsATemporal(temporal, s.value());
         }
         return s.value();
-    }
-
-    /** The temporal {@code position} is, through however many newtypes wrap one, or null where it is
-     *  not a temporal at all. A newtype's fixture is its base written as a fixture, so the rule about
-     *  how a temporal is written reaches every position that ends at one. */
-    private Type.Prim temporalUnder(Type position) {
-        Set<TypeName> through = new LinkedHashSet<>();
-        Type at = position;
-        while (true) {
-            if (at instanceof Type.Prim prim) {
-                return prim == Type.Prim.DATE || prim == Type.Prim.DATETIME ? prim : null;
-            }
-            if (!(at instanceof Type.Ref ref) || !through.add(ref.name())) {
-                return null;
-            }
-            Ast.TypeRef base = neutral.newtypeBaseType(ref.name());
-            if (base == null) {
-                return null;
-            }
-            at = neutral.shapeOf(base);
-        }
     }
 
     /**
