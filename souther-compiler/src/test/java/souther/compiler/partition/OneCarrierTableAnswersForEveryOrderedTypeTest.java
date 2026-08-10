@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -167,6 +168,19 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             behavior boundStage  : (x: StageI)  -> Ok
                 constructs Ok
             let boundStage (x) = Ok
+
+            behavior twoLinesDense : (x: Decimal) -> Verdict
+                constructs Ok, No
+            let twoLinesDense (x) = { guard x < 1.0m else Ok
+                guard x < 2.0m else No
+                Ok }
+
+            behavior twoLinesMoment : (x: DateTime) -> Verdict
+                constructs Ok, No
+            let twoLinesMoment (x) = {
+                guard x < DateTime("2026-08-01T00:00:00.000000001") else Ok
+                guard x < DateTime("2026-08-01T00:00:00.000000002") else No
+                Ok }
             """;
 
     /**
@@ -296,5 +310,30 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
                     "the comparison relates it to another position rather than dividing it";
             case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
         };
+    }
+
+    /**
+     * How the values step is the carrier's answer, and only the carrier's.
+     *
+     * <p>The class between two lines has a value in it where the values are dense, whatever they are
+     * dense in: two decimals a whole apart and two moments a nanosecond apart both leave a range
+     * holding something. Asked as "is this the decimal" it was a second spelling of the question,
+     * and a carrier dense without being that one answered no — the range came back holding no value,
+     * which is what a whole step would leave and not what the values do.
+     */
+    @Test
+    void howTheValuesStepIsAskedOfTheCarrier() {
+        for (String behavior : List.of("twoLinesDense", "twoLinesMoment")) {
+            Compilation compilation = Compilation.ofSource(MODEL, "Main");
+            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.answerEverything();
+            String block = souther.compiler.report.GeneratedRows.of(
+                    compilation, "example.matrix", behavior, true);
+
+            assertFalse(block.contains("no value of this range can be written"),
+                    behavior + ": the range between the two lines holds a value: " + block);
+            assertEquals(3, block.lines().filter(line -> line.contains(" : (")).count(),
+                    behavior + ": a row for each of the three classes: " + block);
+        }
     }
 }

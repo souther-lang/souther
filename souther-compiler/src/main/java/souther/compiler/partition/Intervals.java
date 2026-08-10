@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Endpoint;
-import souther.compiler.numeric.Granularity;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -122,7 +121,6 @@ final class Intervals {
      */
     static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
                                           Symbols symbols) {
-        boolean decimal = of.decimal(type, symbols);
         // What the numbers in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = Carrier.of(of, type, symbols);
@@ -137,7 +135,7 @@ final class Intervals {
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
             String id = of + "/" + range.label(written);
-            BigDecimal inside = representative(range, decimal);
+            BigDecimal inside = representative(range, carrier);
             Classifier is = v -> switch (of.read(v)) {
                 case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
                 case NumericTerm.Reading.Missing missing ->
@@ -163,13 +161,21 @@ final class Intervals {
         return of instanceof NumericTerm.SizeOf size ? size.measure().qualified() : "value";
     }
 
-    /** A value inside a range, or null where it holds none. Asked of the ends, which is where whether
-     * the range holds the value it stops at is written down. */
-    private static BigDecimal representative(Interval range, boolean decimal) {
+    /**
+     * A value inside a range, or null where it holds none. Asked of the ends, which is where whether
+     * the range holds the value it stops at is written down.
+     *
+     * <p>How the values step is the carrier's to say and is asked of it. Carried as "is it a decimal"
+     * it was a second spelling of the same fact, and a carrier that is dense without being the
+     * decimal — a date-time — answered no to it: the range between two moments a nanosecond apart
+     * came back as one holding no value, which is what a whole step would leave and not what the
+     * values do.
+     */
+    private static BigDecimal representative(Interval range, Carrier carrier) {
         return Endpoint.valueBetween(
                 range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
                 range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
-                decimal ? Granularity.DENSE : Granularity.DISCRETE);
+                carrier.spacing());
     }
 
     /**

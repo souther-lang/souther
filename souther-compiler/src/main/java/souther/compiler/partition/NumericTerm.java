@@ -95,16 +95,6 @@ public sealed interface NumericTerm {
         };
     }
 
-    /**
-     * Whether this term's values are decimals, which is a question about the term and only sometimes
-     * about the position: a size is a whole number whatever it is a size of.
-     *
-     * @param positionType what {@link #path()} is declared as
-     */
-    default boolean decimal(Type positionType, Symbols symbols) {
-        return Carrier.of(this, positionType, symbols) == Carrier.DENSE;
-    }
-
     /** How the values beside a boundary on this term are found. A size steps like an {@code Int}. */
     default BoundaryDomain intervals(Type positionType, Symbols symbols) {
         Carrier carrier = Carrier.of(this, positionType, symbols);
