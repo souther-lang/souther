@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.NameMessage;
@@ -233,9 +234,12 @@ public final class CallElaborator {
             (Type.mentions(stated[i], BottomInfer::answersNoValue) ? bottoms : stating).add(i);
         }
         stating.addAll(bottoms);
+        // What an argument settles, and not whether it fits: that is required of each argument once
+        // the substitution is complete, and required there because that is where the argument itself
+        // is in hand. A refusal from here would name the argument in words and point at the callee,
+        // the two being as far apart as an argument list is long.
         for (int i : stating) {
-            TypeOps.unify(params.get(i), stated[i], bind, ctx.symbols(),
-                    call.pos(), "argument " + (i + 1) + " of " + call.written());
+            TypeOps.bindVars(params.get(i), stated[i], bind, ctx.symbols());
         }
         return bind;
     }
@@ -686,20 +690,22 @@ public final class CallElaborator {
             throw CompileException.of(Diagnostic
                             .at(call.name().region()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
-        parseTemporal(call.written(), lit.value(), call.pos());
+        parseTemporal(call.written(), lit.value(), Elaborator.region(lit));
         return isDate ? Type.DATE : Type.DATETIME;
     }
 
-    /** Parses a written temporal, reporting a malformed one against {@code pos}. Returns the parsed
-     * value so the backend and the example verifier share this one reading of the text. */
-    public static Object parseTemporal(String fn, String text, SourcePos pos) {
+    /** Parses a written temporal, reporting a malformed one against {@code at} — the text the
+     * message quotes, which is the part of the form a reader cannot work out from the message.
+     * Returns the parsed value so the backend and the example verifier share this one reading of
+     * the text. */
+    public static Object parseTemporal(String fn, String text, Region at) {
         try {
             return fn.equals("Date")
                     ? java.time.LocalDate.parse(text)
                     : java.time.LocalDateTime.parse(text);
         } catch (java.time.format.DateTimeParseException _) {
             throw CompileException.of(Diagnostic
-                            .at(pos, fn.length()).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
+                            .at(at).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
         }
     }
 

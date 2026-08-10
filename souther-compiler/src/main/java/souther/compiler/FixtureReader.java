@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CallElaborator;
+import souther.compiler.check.Elaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Limits;
@@ -974,7 +975,7 @@ public final class FixtureReader {
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
                 throw new FixtureException("`" + c.written() + "` takes one written string");
             }
-            return CallElaborator.parseTemporal(c.written(), lit.value(), c.pos());
+            return CallElaborator.parseTemporal(c.written(), lit.value(), Elaborator.region(lit));
         }
         if (!neutral.isNewtype(c.written())) {
             String reached = helperKey(c);
