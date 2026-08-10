@@ -55,6 +55,7 @@ class AConstructIsFlatUpToTheCanonicalWidthTest {
                 new Site("import name list",
                         """
                         module fmtprobe exposing ( f )
+
                         import some.place ( alphaName%s, betaName )
                         """,
                         "import"),

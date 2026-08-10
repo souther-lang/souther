@@ -74,6 +74,7 @@ class TheCanonicalFormBreaksAtTheEnclosingStructureTest {
                         """,
                         """
                         module fmtprobe exposing ( f )
+
                         import some.other.place (
                             alphaName,
                             betaName,
@@ -130,7 +131,10 @@ class TheCanonicalFormBreaksAtTheEnclosingStructureTest {
                         ): Receipt = accountIdentifier
                         """),
 
-                new Shape("return type union",
+                // A signature that does not fit gives way at the parameter list first: the union
+                // after the arrow breaks only where the line the `)` leaves it on is still too
+                // narrow for it. The two are one decision and this is the order it takes.
+                new Shape("behavior signature",
                         """
                         module fmtprobe exposing ( judge )
 
@@ -145,10 +149,35 @@ class TheCanonicalFormBreaksAtTheEnclosingStructureTest {
                         """
                         module fmtprobe exposing ( judge )
 
-                        behavior judge : (code: Code) -> AcceptedOutcome
-                            | RefusedOutcome
-                            | DeferredOutcome
-                            | EscalatedOutcome
+                        behavior judge : (
+                            code: Code
+                        ) -> AcceptedOutcome | RefusedOutcome | DeferredOutcome | EscalatedOutcome
+                        """),
+
+                // The same signature with a union too wide for that line, which is where the second
+                // half of the order shows: the parameters have already given way and the union has
+                // to break as well, at its own `|`.
+                new Shape("return type union",
+                        """
+                        module fmtprobe exposing ( judge )
+
+                        behavior judge : (code: Code) -> AcceptedByTheUnderwriter | RefusedByTheUnderwriter | DeferredForManualReview | EscalatedToTheManager
+                        """,
+                        """
+                        module fmtprobe exposing ( judge )
+
+                        behavior judge : (code: Code) -> AcceptedByTheUnderwriter | RefusedByTheUnderwriter |
+                            DeferredForManualReview | EscalatedToTheManager
+                        """,
+                        """
+                        module fmtprobe exposing ( judge )
+
+                        behavior judge : (
+                            code: Code
+                        ) -> AcceptedByTheUnderwriter
+                            | RefusedByTheUnderwriter
+                            | DeferredForManualReview
+                            | EscalatedToTheManager
                         """),
 
                 new Shape("sum cases",

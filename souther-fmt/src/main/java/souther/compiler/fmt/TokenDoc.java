@@ -32,13 +32,17 @@ sealed interface TokenDoc {
     TokenDoc NIL = new Nil();
 
     /** Two tokens on one line, with whatever the rule says between them. */
-    TokenDoc GAP = new Gap(Break.NEVER);
+    TokenDoc GAP = new Gap(Break.NEVER, true);
 
     /** A boundary the layout may break, and which holds the rule's answer where it does not. */
-    TokenDoc SOFT_GAP = new Gap(Break.MAY);
+    TokenDoc SOFT_GAP = new Gap(Break.MAY, true);
 
     /** A boundary the layout always breaks. It has no unbroken form, so the rule is not asked. */
-    TokenDoc HARD_GAP = new Gap(Break.ALWAYS);
+    TokenDoc HARD_GAP = new Gap(Break.ALWAYS, true);
+
+    /** A break that leaves a line with nothing on it, which is what a blank line is. Written before
+     *  the boundary that opens the next line, so the two together are one blank line. */
+    TokenDoc BLANK_LINE = new Gap(Break.ALWAYS, false);
 
     /** Writes nothing, and the group holding it is never laid out flat — {@link Doc#MUST_BREAK}. */
     TokenDoc MUST_BREAK = new MustBreak();
@@ -102,7 +106,14 @@ sealed interface TokenDoc {
     record Vacant(Place place, SyntaxKind construct, TokenDoc open, TokenDoc close, int indent)
             implements TokenDoc {}
 
-    record Gap(Break policy) implements TokenDoc {}
+    /**
+     * A boundary between two tokens, and whether the break it may write indents the line it opens.
+     *
+     * <p>Every boundary but one does. The exception is the break that leaves a blank line: the line
+     * it opens has nothing on it, so it has no indent to write, and writing one would leave spaces
+     * on a line a reader sees as empty and an editor strips.
+     */
+    record Gap(Break policy, boolean indents) implements TokenDoc {}
 
     record Concat(List<TokenDoc> parts) implements TokenDoc {}
 
@@ -131,8 +142,15 @@ sealed interface TokenDoc {
      */
     static TokenDoc at(Place place, TokenDoc doc) {
         Opening opening = place.opening();
-        return concat(opening.boundary(), new Carries(place, Carrier.ABOVE), opening.opener(),
-                new At(place, doc));
+        TokenDoc written = concat(opening.boundary(), new Carries(place, Carrier.ABOVE),
+                opening.opener(), new At(place, doc));
+        // A place with a line of its own can be written below as well as above, and the slot is
+        // outside the place because what is written below it is not part of it. A place the
+        // construct runs into has no such line: a comment there would have the rest of the line
+        // written inside it, which is the same reason it cannot be written above one.
+        return opening.opensALine()
+                ? concat(written, new Carries(place, Carrier.BELOW))
+                : written;
     }
 
     /** What the place carries at the end of the line it ends. Written where the construct holding
