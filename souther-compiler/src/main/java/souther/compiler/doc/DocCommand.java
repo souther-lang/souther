@@ -42,10 +42,21 @@ public final class DocCommand {
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, Caller caller, ClassLoader loader) {
+        return run(args, out, err, Documents.on(caller, loader));
+    }
+
+    /**
+     * The same, over a set of documents that was read already.
+     *
+     * <p>Reading them is what this command costs, and a caller that answers more than one question
+     * from them reads them once. A one-shot invocation makes a set and lets it go with the process;
+     * a server that stays up holds one for as long as it is asked.
+     */
+    static int run(String[] args, PrintStream out, PrintStream err, Documents documents) {
         // Taken together, because the names they publish are one name space and a name resolving
         // against it is what a search asks first. Which document a name reaches is settled by the
         // two of them being held at once, not by the order this reads them.
-        Documents documents = Documents.on(caller, loader);
+        Caller caller = documents.caller();
         SpecDocument spec = documents.spec();
         LibraryDocs shipped = documents.shipped();
         if (args.length == 0) {

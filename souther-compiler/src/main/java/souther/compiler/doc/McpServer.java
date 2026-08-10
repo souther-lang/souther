@@ -260,8 +260,18 @@ public final class McpServer {
     private McpServer() {}
 
     public static int serve(InputStream in, OutputStream out) {
+        return serve(in, out, McpServer.class.getClassLoader());
+    }
+
+    /** The same, over the doc sets {@code loader} carries. */
+    static int serve(InputStream in, OutputStream out, ClassLoader loader) {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         PrintWriter writer = new PrintWriter(out, true, StandardCharsets.UTF_8);
+        // What this session answers from. The specification and the shipped doc sets do not move
+        // while the process is up, so they are read here rather than for each question: built per
+        // request, a server that is asked a hundred of them parses the specification a hundred
+        // times. It lives as long as the loop below does and goes when it does.
+        Documents documents = Documents.on(Caller.MCP, loader);
         try {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -279,7 +289,7 @@ public final class McpServer {
                 if (id == null) {
                     continue; // A notification expects silence, whatever its method.
                 }
-                writer.println(JSON.writeValueAsString(respond(request, id)));
+                writer.println(JSON.writeValueAsString(respond(request, id, documents)));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -287,7 +297,7 @@ public final class McpServer {
         return 0;
     }
 
-    private static ObjectNode respond(JsonNode request, JsonNode id) {
+    private static ObjectNode respond(JsonNode request, JsonNode id, Documents documents) {
         String method = request.get("method") == null ? "" : request.get("method").asString();
         return switch (method) {
             case "initialize" -> result(id, initializeResult(request.get("params")));
@@ -301,7 +311,7 @@ public final class McpServer {
                     yield error(id, -32602, invalid);
                 }
                 try {
-                    yield result(id, call(request.get("params")));
+                    yield result(id, call(request.get("params"), documents));
                 } catch (RuntimeException e) {
                     yield result(id, failed(e.getClass().getSimpleName()
                             + (e.getMessage() == null ? "" : ": " + e.getMessage())));
@@ -415,7 +425,7 @@ public final class McpServer {
      * <p>The command is told it is answering an MCP client, so that what it offers next is a tool
      * call rather than a shell command the caller has no way to run.
      */
-    private static ObjectNode call(JsonNode params) {
+    private static ObjectNode call(JsonNode params, Documents documents) {
         String tool = params == null || params.get("name") == null ? "" : params.get("name").asString();
         JsonNode arguments = params == null ? null : params.get("arguments");
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
@@ -427,12 +437,12 @@ public final class McpServer {
                         ? new String[]{"--search", argument(arguments, "term")}
                         : new String[]{"--search", argument(arguments, "term"),
                                 "--limit", String.valueOf(limit.asInt())};
-                yield DocCommand.run(args, stream, stream, Caller.MCP);
+                yield DocCommand.run(args, stream, stream, documents);
             }
             case "doc_read" -> {
                 String name = argument(arguments, "name");
                 yield DocCommand.run(name.isEmpty() ? new String[]{} : new String[]{name},
-                        stream, stream, Caller.MCP);
+                        stream, stream, documents);
             }
             case "stdlib_api" -> {
                 String name = argument(arguments, "name");
