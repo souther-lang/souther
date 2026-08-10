@@ -315,4 +315,63 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
                 .findFirst().orElseThrow(
                         () -> new AssertionError("no boundary at " + value + " of " + behavior));
     }
+
+    /**
+     * A line on a temporal, which nothing could compose a row at.
+     *
+     * <p>The same two answers on the carriers the numbers above do not cover. A rule this reads
+     * bounds the value and a rule beside it refuses the value at that bound, so the line exists and
+     * the row does not — and which of the two failed decides what an author is told to do about it.
+     * Read here on both temporal carriers, because they reach the generator by different writers and
+     * a count written where a temporal belongs is refused by the decoder with nothing said about why.
+     */
+    private static final String TEMPORAL_EDGE_NOTHING_COMPOSED = """
+            module example.temporal
+
+            data Cutoff = Date
+                invariant value >= Date("2026-01-01") && value /= Date("2026-01-01")
+            data Moment = DateTime
+                invariant value >= DateTime("2026-01-01T00:00:00")
+                    && value /= DateTime("2026-01-01T00:00:00")
+
+            data Ok
+
+            behavior onADate : (c: Cutoff) -> Ok
+                constructs Ok
+            let onADate (c) = Ok
+
+            behavior onAMoment : (m: Moment) -> Ok
+                constructs Ok
+            let onAMoment (m) = Ok
+
+            example onADate
+                | "some" : (Cutoff(Date("2026-06-01"))) -> Ok
+
+            example onAMoment
+                | "some" : (Moment(DateTime("2026-06-01T00:00:00"))) -> Ok
+            """;
+
+    @Test
+    void aTemporalEdgeNothingComposedIsTheSearchsFailureAndNotTheModelsSilence() {
+        for (String[] each : new String[][] {
+                {"onADate", "c = 2026-01-01"}, {"onAMoment", "m = 2026-01-01T00:00:00"}}) {
+            BoundaryAssessment at = assessmentAt(TEMPORAL_EDGE_NOTHING_COMPOSED,
+                    "example.temporal", each[0], each[1].substring(each[1].indexOf('=') + 2));
+
+            assertInstanceOf(BoundaryAssessment.Attempt.Unresolved.class, at.attempt(),
+                    each[0] + ": the search came back with nothing");
+
+            Compilation compilation =
+                    Compilation.ofSource(TEMPORAL_EDGE_NOTHING_COMPOSED, "Main");
+            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.answerEverything();
+            String block = souther.compiler.report.GeneratedRows.of(
+                    compilation, "example.temporal", each[0], true);
+
+            assertTrue(block.contains("no row for `" + each[1] + "`"), block);
+            assertTrue(block.contains("does not make the combination impossible"), block);
+            assertFalse(block.contains("not derivable"),
+                    "the rule that drew the line is two lines above: " + block);
+        }
+    }
 }
