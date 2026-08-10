@@ -4359,7 +4359,14 @@ Reported at the pattern (<<an-or-pattern-binds-the-sum-and-opens-nothing>>). Wha
 The match branches disagree: Submitted vs Int.
 ----
 
-Reported at the `+match+` (<<branches-agree-on-a-type>>). It answers with one value, so its arms produce one type; a union of what they produce is written by declaring it.
+Reported at the arm the arms stopped joining at (<<branches-agree-on-a-type>>). A `+match+` answers with one value, so its arms produce one type; a union of what they produce is written by declaring it.
+
+An `+if+` names both of its branches, there being two of them and each with a type of its own. An `+else+` answering per clause (<<attempt-departures>>) has more, and joins them as a list joins its elements — so it is reported as a list is, at the arm the join was refused at, with the join of the branches before it stated rather than pointed at:
+
+[,text]
+----
+This branch produces Int. The preceding branches produce Blue | Red.
+----
 
 [#e1301]
 === Use of null
@@ -4514,11 +4521,18 @@ Reported at the value (<<a-value-has-the-type-its-position-requires>>). The rule
 
 [,text]
 ----
-The elements of this list do not all have the same type.
-Hint: One element is Amount and another is Int; make every element the same type.
+This element has type Int. The preceding elements have type Amount.
+Hint: Make every element the same type — widen them to a sum they are cases of, or convert the one that differs.
 ----
 
-Reported at the list (<<a-lists-elements-have-one-type>>). A list is `+List<T>+` for a single `+T+`; a sequence of several types is a list of a sum they are cases of.
+Reported at the element the elements stopped joining at (<<a-lists-elements-have-one-type>>). A list is `+List<T>+` for a single `+T+`; a sequence of several types is a list of a sum they are cases of. What that element conflicts with is the join of the elements before it. That is one element's type only where one element has been read, which is a fact about how long the list is and not about where the type came from — so it is stated rather than pointed at, and `+[1, "x", 2]+` and `+[1, 2, "x"]+` are reported the one way.
+
+`{plus}{plus}` reaches the same rule from two written operands rather than from an accumulator, so each list is pointed at and the message names neither type:
+
+[,text]
+----
+`++` joins two lists into one, so the elements of both must have one type.
+----
 
 [#e1319]
 === An operator is given types it is not defined for
