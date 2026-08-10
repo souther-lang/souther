@@ -134,14 +134,27 @@ class AnOptionThatIsWrittenIsOneTheRunReadsTest {
         assertTrue(said.err().contains("`--search`"), said.err());
     }
 
+    /**
+     * Counted in hits, and asked of a term the specification says a great many times. A hit is
+     * several lines — the section and the context under it — so counting lines measures how much
+     * each hit had to say rather than how many were shown, and a term with two hits answers the
+     * same text under either limit. That is how this passed here and failed on CI.
+     */
     @Test
     void limitWithSearchIsTheLineThatWasMeant() {
-        Said said = run("doc", "--search", "newtype", "--limit", "2");
-        Said all = run("doc", "--search", "newtype", "--limit", "0");
+        Said said = run("doc", "--search", "type", "--limit", "2");
+        Said all = run("doc", "--search", "type", "--limit", "0");
 
         assertEquals(0, said.code(), said.err());
-        assertTrue(said.out().lines().count() < all.out().lines().count(),
-                said.out() + " against " + all.out());
+        assertTrue(hits(all) > 2, "a term with no more hits than the limit measures nothing: " + all.out());
+        assertTrue(hits(said) < hits(all), said.out() + " against " + all.out());
+    }
+
+    /** What the search answered, without the lines quoted under each one or the count of the rest. */
+    private static long hits(Said said) {
+        return said.out().lines()
+                .filter(line -> !line.startsWith("    ") && !line.startsWith("… "))
+                .count();
     }
 
     /**
