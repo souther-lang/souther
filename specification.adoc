@@ -409,6 +409,84 @@ A dependency is a dependency however it is written, so a cycle closed by a quali
 
 `+exposing+` lists what a module declares and does not re-export a name it imported. A module downstream of an integration module names an upstream type through the module that declares it, so the integration module translates a type it consumes rather than republishing it.
 
+[#grammar]
+== Grammar
+
+Where each of the language's written forms is given — its concrete syntax, and where to look each part of it up.
+
+A form is stated with the construct it belongs to, once, where a reader of that construct meets it. This is the index that reaches those statements and not a second copy of them: a form written here as well would be a second place to keep in step, and the two would disagree the first time one of them moved.
+
+A row is a form, or a rule about one, together with what kind of thing it is and the section that gives it. The kinds divide in two. A token, a delimiter and an operator are sets the compiler holds, so what is listed here is checked against them. A production, a constraint and an association are the specification's own: no set the compiler enumerates says which `+then+` an `+else+` closes, and those rows are held by whatever states them.
+
+The full formal grammar (BNF) is deferred (<<future-work>>).
+
+[cols="3,1,2",separator=!,role="syntax-inventory"]
+!===
+!Form or rule !Kind !Given in
+
+!a name !lexical form !<<future-work>>
+!a string literal !lexical form !<<string-literal>>
+!an integer and a `+Decimal+` literal !lexical form !<<numeric-literal>>
+!a `+Date+` and a `+DateTime+` literal !lexical form !<<temporal-literal>>
+!a type variable (`+'a+`) !lexical form !<<type-variables>>
+!a comment !lexical form !<<comment>>
+!the reserved words !token !<<reserved-words>>
+!`+==+` `+/=+` `+<+` `+<=+` `+>+` `+>=+` !operator !<<reserved-words>>
+!`+&&+` `+||+` !operator !<<reserved-words>>
+!`{plus}` `+-+` `+*+` `+/+` !operator !<<reserved-words>>
+!`{plus}{plus}` !operator !<<reserved-words>>
+!`+{+` `+}+` `+(+` `+)+` `+[+` `+]+` !delimiter !<<delimiters>>
+!`+:+` `+,+` !delimiter !<<delimiters>>
+!`+=+` !delimiter !<<delimiters>>
+!`+|+` !delimiter !<<delimiters>>
+!`+->+` !delimiter !<<delimiters>>
+!`+.+` and `+...+` !delimiter !<<record-literal>>
+!`+?+` !delimiter !<<optional>>
+!`+>->+` !delimiter !<<sequential-composition>>
+!`+|>+` !delimiter !<<pipe>>
+!a module header !production !<<modules>>
+!an `+import+` !production !<<imports>>
+!an `+exposing+` clause !production !<<exposed-values>>
+!a qualified name !production !<<qualified-reference>>
+!a product `+data+` and its fields !production !<<product-data>>
+!a field spread !production !<<field-spread>>
+!a sum `+data+` !production !<<sum-data>>
+!a unit `+data+` !production !<<unit-data>>
+!a newtype !production !<<newtype>>
+!an `+invariant+` clause !production !<<invariant-declaration>>
+!a behavior's signature !production !<<behavior-io>>
+!a `+constructs+` clause !production !<<constructs>>
+!a `+depends on+` clause !production !<<depends-on>>
+!a definition (`+let+` at the top level) !production !<<fn-declaration>>
+!a binding (`+let+` in a block) !production !<<let>>
+!a lambda and a block !production !<<blocks>>
+!a record literal !production !<<record-literal>>
+!a list literal and a guard comprehension !production !<<stdlib-list>>
+!a tuple !production !<<tuple>>
+!a type in a type position, a function type among them !production !<<a-type-is-written-in-a-type-position>>
+!an `+if+` !production !<<if>>
+!a `+match+` and its arms !production !<<match>>
+!a `+guard+` !production !<<guard>>
+!an attempted construction !production !<<attempted-construction>>
+!a departure per clause !production !<<attempt-departures>>
+!an `+unreachable+` !production !<<unreachable>>
+!a binding pattern !production !<<binding-patterns>>
+!a `+>->+` composition !production !<<sequential-composition>>
+!an `+example+` and its rows !production !<<examples>>
+!a `+fake+` !production !<<example-fakes>>
+!an `+examples for+` file !production !<<example-placement>>
+!an `+if+` is written with both of its branches !constraint !<<if>>
+!a string literal ends on the line it began on !constraint !<<string-literal>>
+!a `+,+`-separated list MAY carry a trailing `+,+` !constraint !<<delimiters>>
+!an anonymous union is not written in a narrow type position !constraint !<<an-anonymous-union-is-not-written-in-a-narrow-type-position>>
+!a postfix `+?+` is not written inside another type !constraint !<<an-optional-is-not-written-inside-another-type>>
+!`+|+` binds more loosely than `+->+` !association !<<delimiters>>
+!`+->+` is right-associative !association !<<delimiters>>
+!`+|>+` binds most loosely, and to the left !association !<<pipe>>
+!`+>->+` is associative !association !<<type-routing>>
+!which `+match+` an arm belongs to !association !<<match>>
+!===
+
 [#reserved-words]
 == Reserved words
 
@@ -416,10 +494,10 @@ A dependency is a dependency however it is written, so a cycle closed by a quali
 ----
 module   import    exposing
 data     invariant
-behavior constructs depends on
+behavior constructs depends
 match    with      as
 let      if        then     else
-guard
+guard    unreachable
 true     false
 ----
 
@@ -439,21 +517,34 @@ Lists: `+[+` `+]+` (literal and guard comprehension), `{plus}{plus}` (concatenat
 
 There is no type name that carries an invariant violation. A violation inside the domain aborts, so no value needs to be carried (<<algebraic-types>>, <<violation-destination>>).
 
+[#comment]
+=== Comments
+
+A comment begins at `+//+` and runs to the end of the line. The line ends it, and nothing else does.
+
+[,text]
+----
+let a = 1   // the rest of this line is a comment
+----
+
+There is no block comment. `+/*+` is not a form: the characters read as the operators they are, and a text written that way does not compile. A `+//+` inside a string literal is part of the literal (<<string-literal>>), the literal having begun first.
+
 [#delimiters]
 === Delimiters and disambiguation
 
 The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and precedence needed for reading and writing are fixed here.
 
-What a text MUST be for the compiler to read it is stated with each construct, and a text that is not is refused where the reading stops. Seven places it can stop, kept apart because a reader looking one up is asking about a different part of the language:
+What a text MUST be for the compiler to read it is stated with each construct, and a text that is not is refused where the reading stops. Where the reading can stop is kept apart, because a reader looking one up is asking about a different part of the language, and each place names where the forms it is about are given (<<grammar>> indexes them all):
 
-* [[declaration-syntax]]a declaration — the module header, a top-level `+data+`, `+behavior+` or `+let+`, a behavior's signature, a `+depends on+` clause — MUST be written in the form given for it;
-* [[expression-syntax]]an expression MUST be written in the form given for it, and a block MUST end in one;
+[role="reading-stops"]
+* [[declaration-syntax]]a declaration MUST be written in the form given for it: the module header (<<modules>>), a top-level `+data+` (<<product-data>>, <<sum-data>>, <<unit-data>>, <<newtype>>), a behavior's signature (<<behavior-io>>), a top-level `+let+` (<<fn-declaration>>), a `+constructs+` clause (<<constructs>>), a `+depends on+` clause (<<depends-on>>);
+* [[expression-syntax]]an expression MUST be written in the form given for it, and a block MUST end in one (<<blocks>>, <<block-expression>>): a literal below, a record literal (<<record-literal>>), a list (<<stdlib-list>>), a tuple (<<tuple>>), an `+if+` (<<if>>), a `+match+` (<<match>>), a `+guard+` (<<guard>>), an `+unreachable+` (<<unreachable>>), an application (<<fn>>), a pipe (<<pipe>>);
 * [[pattern-syntax]]a pattern MUST be written in the form given for the thing it destructures (<<binding-patterns>>, <<match>>);
-* [[examples-syntax]]an `+example+`, a `+fake+` and an `+examples for+` file MUST be written in the form given for them (<<examples>>);
-* [[literal-syntax]]a literal MUST be written in the form given for its type (<<primitives>>, <<temporal-literal>>);
+* [[examples-syntax]]an `+example+`, a `+fake+` and an `+examples for+` file MUST be written in the form given for them (<<examples>>, <<example-fakes>>, <<example-placement>>);
+* [[literal-syntax]]a literal MUST be written in the form given for its type: an integer and a `+Decimal+` (<<numeric-literal>>), a `+String+` (<<string-literal>>), a `+Date+` and a `+DateTime+` (<<temporal-literal>>);
 * [[an-anonymous-union-is-not-written-in-a-narrow-type-position]]an anonymous union MUST NOT be written as a data field's type, a type argument, or a tuple's member. Those three read the narrower type production, so a `+|+` following the type is recognized in order to be refused and is not built as part of the type standing there — which is what lets the refusal name the form rather than the delimiter the form displaced. Where an anonymous union *is* read, and the one position that reads one and refuses it, are <<union-intersection>>;
 * [[an-optional-is-not-written-inside-another-type]]a postfix `+?+` MUST NOT be written inside another type — as a type argument or a tuple's member. `+?+` marks where an optional is *made*, which is a data field being given its value (<<optional>>), and no position inside a type is one. This is not a privilege the core keeps (<<core-privileges-stay-in-the-core>>): `+List<T?>+` is written nowhere, and an optional a collection holds is named `+List<Option<T>>+`;
-* [[the-source-is-made-of-tokens]]the text MUST be made of tokens the language has. This one is answered before anything is parsed, so it says nothing about where in the language the text was — a character that begins nothing, and a `+'+` with no name after it, are the two ways to reach it.
+* [[the-source-is-made-of-tokens]]the text MUST be made of tokens the language has (<<reserved-words>>, <<type-variables>>). This one is answered before anything is parsed, so it says nothing about where in the language the text was — a character that begins nothing, and a `+'+` with no name after it, are the two ways to reach it.
 
 * Both `+data+` declaration fields and record-literal `+TypeName { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+name: type+`; a literal binds a value, so `+name = value+` (`+:+` = has this type, `+=+` = is defined as this). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>). A clause's name follows the same rule as everything else named with `+=+` — it is defined as that rule, so `+invariant nonEmpty = List.length(value) >= 1+` (<<invariant-clause-name>>).
 * Argument lists and the enumerations in `+constructs+` / `+depends on+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<depends-on>>).
@@ -519,6 +610,7 @@ DateTime     // date-time. ISO 8601. java.time.LocalDateTime
 
 `+Date+` / `+DateTime+` correspond to the spec DSL's `+Date+` / `+DateTime+`. Value construction goes through a Decoder (from an ISO 8601 string). The current time is not obtained in the language; it is declared as a behavior with no implementation (<<injected-behavior>>).
 
+[#numeric-literal]
 ==== Numeric literals
 
 An integer literal is written as `+500+` and is `+Int+`. A `+Decimal+` literal takes an `+m+` suffix — `+500m+`, `+1.5m+`, `+0.5m+`. A fractional literal without `+m+`, such as `+1.5+`, is an error. Souther has no binary floating-point type and defaults fractions to `+Decimal+` (exact decimal), so `+Int+` and `+Decimal+` MUST be made explicit at the literal.
@@ -2825,6 +2917,8 @@ A binding may carry its type, `+let x: T = v+`. The type is optional — a bindi
 ----
 if condition then expression1 else expression2
 ----
+
+Both branches are written. An `+if+` MUST have its `+else+`, so no `+if+` is left one-armed and an `+else+` closes the nearest `+then+` that is still open: `+if a then if b then c else d else e+` gives `+d+` to the inner `+if+` and `+e+` to the outer one. A branch taken only when the condition fails is written `+guard ... else+`, whose other arm is the rest of the body (<<guard>>).
 
 `+if+` is an expression. If both branch types agree, its type is that type; if they are different data, it is a sum of both (`+if c then Submitted{...} else AwaitingPreApproval{...}+` is `+Submitted | AwaitingPreApproval+`). A mismatch between primitives is a compile error.
 
@@ -5840,7 +5934,8 @@ var result = handle.apply(rawInput);
 
 The language core is implemented. The following are future extensions — distinct from what is permanently absent (<<out-of-scope>>).
 
-* A full formal grammar (BNF). The key delimiters and precedence are stated ahead in <<delimiters>>.
+* A full formal grammar (BNF). The key delimiters and precedence are stated ahead in <<delimiters>>, and where each written form is given is <<grammar>>.
+* What a name may be made of. An identifier may be written in any script and is NFC-normalized before binding (<<modules>>); which characters one may begin and continue with is not fixed here.
 * Incremental compilation.
 
 [#non-functional]
