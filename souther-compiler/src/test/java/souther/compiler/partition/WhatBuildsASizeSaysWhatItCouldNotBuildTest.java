@@ -15,10 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The two promises about a count, kept apart.
  *
  * <p>A caller with a line drawn at a count needs that count; a caller with a floor to clear needs a
- * value above it. The second is answered by asking for the first today, and the point of writing them
- * as two is that it need not stay that way. Held here rather than through the report, because a size
- * larger than a row is worth carrying is one the measure calls undecided before the generator is
- * asked, so the report has no way to show which half of the answer was given.
+ * value above it. They read one build and neither is written in terms of the other, so what they have
+ * in common is a property of the builder and not a promise either makes to the other.
+ *
+ * <p>Held here rather than through the report, because a count larger than a row is worth carrying is
+ * one the measure calls undecided before the generator is asked, and the report has no way to show
+ * which half of the answer was given.
  */
 class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
 
@@ -27,7 +29,7 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     @Test
     void aStringOfTheSizeAskedForIsBuilt() {
         assertEquals(List.of("\"xxx\""),
-                Witnesses.ofSize(Type.STRING, 3, NONE, Set.of()).stream()
+                Witnesses.ofSize(Type.STRING, 3, NONE, Set.of()).values().stream()
                         .map(FixtureTemplate::text).toList());
     }
 
@@ -39,10 +41,10 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     @Test
     void aSizeOfZeroIsTheEmptyValue() {
         assertEquals(List.of("\"\""),
-                Witnesses.ofSize(Type.STRING, 0, NONE, Set.of()).stream()
+                Witnesses.ofSize(Type.STRING, 0, NONE, Set.of()).values().stream()
                         .map(FixtureTemplate::text).toList());
         assertEquals(List.of("[]"),
-                Witnesses.ofSize(new Type.ListOf(Type.INT), 0, NONE, Set.of()).stream()
+                Witnesses.ofSize(new Type.ListOf(Type.INT), 0, NONE, Set.of()).values().stream()
                         .map(FixtureTemplate::text).toList());
     }
 
@@ -56,13 +58,13 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     @Test
     void aFloorOfNoneAsksForNothingWhereASizeOfZeroAsksForTheEmptyValue() {
         assertEquals(List.of(), Witnesses.holding(Type.STRING, 0, NONE, Set.of()));
-        assertTrue(!Witnesses.ofSize(Type.STRING, 0, NONE, Set.of()).isEmpty());
+        assertTrue(!Witnesses.ofSize(Type.STRING, 0, NONE, Set.of()).values().isEmpty());
     }
 
     /** A count past what a row is worth carrying is one nothing composes, and says which it is. */
     @Test
     void aSizeNoRowWouldCarrySaysNothingComposesOne() {
-        assertEquals(List.of(), Witnesses.ofSize(Type.STRING, 100_000, NONE, Set.of()));
+        assertEquals(List.of(), Witnesses.ofSize(Type.STRING, 100_000, NONE, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 Witnesses.reasonForSize(Type.STRING, 100_000, NONE));
     }
@@ -70,7 +72,7 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     /** A carrier nothing counts has no size to build at, and says which silence that is. */
     @Test
     void aCarrierNothingCountsSaysNothingComposesOne() {
-        assertEquals(List.of(), Witnesses.ofSize(Type.INT, 3, NONE, Set.of()));
+        assertEquals(List.of(), Witnesses.ofSize(Type.INT, 3, NONE, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 Witnesses.reasonForSize(Type.INT, 3, NONE));
     }
@@ -88,9 +90,9 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     void aSetIsNothingWhereTheTypeHasFewerValuesThanTheCountAsksFor() {
         Type set = new Type.SetOf(Type.BOOL);
 
-        assertEquals(List.of("[true, false]"), Witnesses.ofSize(set, 2, NONE, Set.of()).stream()
+        assertEquals(List.of("[true, false]"), Witnesses.ofSize(set, 2, NONE, Set.of()).values().stream()
                 .map(FixtureTemplate::text).toList());
-        assertEquals(List.of(), Witnesses.ofSize(set, 3, NONE, Set.of()));
+        assertEquals(List.of(), Witnesses.ofSize(set, 3, NONE, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 Witnesses.reasonForSize(set, 3, NONE));
     }
@@ -108,9 +110,9 @@ class WhatBuildsASizeSaysWhatItCouldNotBuildTest {
     void aMapIsNothingWhereItsKeysRunOutBeforeTheCount() {
         Type map = new Type.MapOf(Type.BOOL, Type.INT);
 
-        assertTrue(!Witnesses.ofSize(map, 2, NONE, Set.of()).isEmpty(),
+        assertTrue(!Witnesses.ofSize(map, 2, NONE, Set.of()).values().isEmpty(),
                 "two keys are two the type has");
-        assertEquals(List.of(), Witnesses.ofSize(map, 3, NONE, Set.of()));
+        assertEquals(List.of(), Witnesses.ofSize(map, 3, NONE, Set.of()).values());
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                 Witnesses.reasonForSize(map, 3, NONE));
     }

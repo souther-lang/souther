@@ -60,12 +60,30 @@ final class Witnesses {
     private static final int MOST_PAIRINGS = 64;
 
     /**
+     * Values of a count, and whether they are all the values of it there were.
+     *
+     * <p>Two halves of one answer. A caller reading only the first says every value was refused where
+     * some were never built, which is a different thing to tell an author and a different thing for a
+     * measure to record.
+     */
+    record Sized(List<FixtureTemplate> values, Generator.UnresolvedCombination.Reason heldBack) {
+
+        Sized {
+            values = List.copyOf(values);
+        }
+
+        static Sized all(List<FixtureTemplate> values) {
+            return new Sized(values, null);
+        }
+    }
+
+    /**
      * Values of {@code carrier} whose count is exactly {@code size}, or none where this can build none.
      *
-     * <p>The primitive the other two are asked through, because it is the narrower promise. A caller
-     * holding a line drawn on a count needs the count itself and not a value that merely clears it:
-     * a row at {@code String.length = 5} is a row carrying five characters, and four or six is a row
-     * at some other edge.
+     * <p>The narrower of the two promises about a count. A caller holding a line drawn on one needs
+     * the count itself and not a value that merely clears it: a row at {@code String.length = 5} is a
+     * row carrying five characters, and four or six is a row at some other edge. {@link #holding}
+     * reads the same build for what it asks, and neither is written in terms of the other.
      *
      * <p>Which is why nothing is the answer at a size of none and the empty value is the answer at a
      * size of zero. A rule asking a collection to hold at least none of anything has asked for no
@@ -77,15 +95,15 @@ final class Witnesses {
      * proposal for a floor and are not the count asked for here, and offering them would put a row of
      * two under a line drawn at three.
      */
-    static List<FixtureTemplate> ofSize(Type carrier, int size, Symbols symbols,
-                                        Set<TypeName> expanding) {
+    static Sized ofSize(Type carrier, int size, Symbols symbols, Set<TypeName> expanding) {
         if (size == 0) {
-            return carrier == Type.STRING ? List.of(FixtureTemplate.string(""))
+            return Sized.all(carrier == Type.STRING ? List.of(FixtureTemplate.string(""))
                     : carrier instanceof Type.ListOf || carrier instanceof Type.SetOf
                             || carrier instanceof Type.MapOf
-                                    ? List.of(FixtureTemplate.collection(List.of())) : List.of();
+                                    ? List.of(FixtureTemplate.collection(List.of())) : List.of());
         }
-        return sized(carrier, size, symbols, expanding).exactly(size);
+        Built built = sized(carrier, size, symbols, expanding);
+        return new Sized(built.exactly(size), built.heldBack());
     }
 
     /**
@@ -98,12 +116,12 @@ final class Witnesses {
      */
     static Generator.UnresolvedCombination.Reason reasonForSize(Type carrier, int size,
                                                                 Symbols symbols) {
-        if (!ofSize(carrier, size, symbols, Set.of()).isEmpty()) {
+        Sized made = ofSize(carrier, size, symbols, Set.of());
+        if (!made.values().isEmpty()) {
             return null;
         }
-        Generator.UnresolvedCombination.Reason held =
-                sized(carrier, size, symbols, Set.of()).heldBack();
-        return held == null ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : held;
+        return made.heldBack() == null
+                ? Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE : made.heldBack();
     }
 
     /**
@@ -114,14 +132,12 @@ final class Witnesses {
      * one would refuse the row for the reason the empty list was refused, having read the rule and not
      * used it.
      *
-     * <p>Which is why this asks for exactly the minimum: the cheapest value that clears a floor is the
-     * one standing on it. That is this method's choice and not the other's promise — a caller wanting
-     * the floor cleared some other way changes the request made here, and a caller that asked for a
-     * count goes on getting the count.
-     *
-     * <p>And why a value short of the minimum is offered where the type has no more to give. It is
-     * the value the rule refuses, put to the decoder so that the refusal is the decoder's and said in
-     * its terms; the caller with a line to stand on takes {@link #ofSize} and gets nothing here.
+     * <p>So a value is built at the minimum, and a value short of it is offered too where the type has
+     * no more to give: it is the value the rule refuses, put to the decoder so that the refusal is the
+     * decoder's and is said in its terms. Both of those are this method's reading of the build, not
+     * {@link #ofSize}'s — a caller with a line to stand on takes that one, where a set the type has
+     * too few values for comes back as nothing at all. The two read one build and neither is written
+     * in terms of the other, so a cheaper value for a floor cannot move a line.
      */
     static List<FixtureTemplate> holding(Type carrier, int least, Symbols symbols,
                                          Set<TypeName> expanding) {

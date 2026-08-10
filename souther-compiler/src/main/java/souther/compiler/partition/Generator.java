@@ -312,8 +312,14 @@ public final class Generator {
                             ? Map.of(axis.path().toString(), edge.values()) : Map.of();
             Outcome tried = valueAt(subject, p, here, settled, check);
             if (tried.value() == null) {
+                // Where the refusal is of the values this edge offered, what the edge held back
+                // outranks it: values that were never built were not among the ones refused.
+                UnresolvedCombination.Reason why =
+                        !here.isEmpty() && tried.reason()
+                                == UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED
+                                ? edge.refused() : tried.reason();
                 return new BoundaryAttempt.Unresolved(
-                        new UnresolvedCombination(List.of(label), tried.reason(), tried.detail()));
+                        new UnresolvedCombination(List.of(label), why, tried.detail()));
             }
             inputs.add(tried.value());
         }
@@ -1059,14 +1065,25 @@ public final class Generator {
      * the rest of the row that a string's length is the number the string holds.
      */
     private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
-                        BigDecimal settledAt) {
+                        BigDecimal settledAt, UnresolvedCombination.Reason heldBack) {
 
         Edge {
             values = List.copyOf(values);
         }
 
         static Edge none(UnresolvedCombination.Reason why) {
-            return new Edge(List.of(), why, null);
+            return new Edge(List.of(), why, null, null);
+        }
+
+        /**
+         * What to report where every value offered here was refused.
+         *
+         * <p>Not always that they were refused. Where the values are some of the values and the rest
+         * were never built, the search stopping is the more of the two facts, and the one a reader
+         * would act on: another value of this edge may be the one that builds.
+         */
+        UnresolvedCombination.Reason refused() {
+            return heldBack == null ? UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED : heldBack;
         }
     }
 
@@ -1082,22 +1099,22 @@ public final class Generator {
         if (!(axis.term() instanceof NumericTerm.SizeOf)) {
             FixtureTemplate at = valueOf(value, axis.type(), symbols);
             return at == null ? Edge.none(UnresolvedCombination.Reason.NO_REPRESENTATIVE)
-                    : new Edge(List.of(at), null, numberOf(value));
+                    : new Edge(List.of(at), null, numberOf(value), null);
         }
         int size = countOf(value);
         if (size < 0) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }
         Type carrier = TypeOps.base(axis.type(), symbols);
-        List<FixtureTemplate> built = Witnesses.ofSize(carrier, size, symbols, Set.of());
-        if (built.isEmpty()) {
+        Witnesses.Sized built = Witnesses.ofSize(carrier, size, symbols, Set.of());
+        if (built.values().isEmpty()) {
             return Edge.none(Witnesses.reasonForSize(carrier, size, symbols));
         }
         List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : built) {
+        for (FixtureTemplate each : built.values()) {
             out.add(Witnesses.wrapped(axis.type(), each, symbols));
         }
-        return new Edge(out, null, null);
+        return new Edge(out, null, null, built.heldBack());
     }
 
     /** {@code value} as a count of things, or -1 where it is not one. A count is whole and no larger

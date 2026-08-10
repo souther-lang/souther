@@ -183,8 +183,8 @@ final class Intervals {
             return List.of();
         }
         List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each
-                : Witnesses.ofSize(TypeOps.base(type, symbols), inside.intValue(), symbols, Set.of())) {
+        for (FixtureTemplate each : Witnesses
+                .ofSize(TypeOps.base(type, symbols), inside.intValue(), symbols, Set.of()).values()) {
             out.add(Witnesses.wrapped(type, each, symbols));
         }
         return List.copyOf(out);
