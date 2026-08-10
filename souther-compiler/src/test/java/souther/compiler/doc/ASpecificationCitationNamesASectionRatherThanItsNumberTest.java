@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -49,9 +50,29 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
     /**
      * A section number written where a citation goes — {@code spec <number>}, with or without the
      * word {@code section} between them, and whether the number names a chapter or a subsection.
+     *
+     * <p>The section sign is allowed for and refused rather than left out. Now that a citation is
+     * spelled {@code §} and a name, writing {@code §} and the old number is the likeliest way to
+     * write a number, and it is the one form neither rule would otherwise see: it is not a name, so
+     * nothing fails to resolve, and it is not a bare number either.
      */
     private static final Pattern BY_NUMBER = Pattern.compile(
-            "\\b[Ss]pec(?:ification)?s?\\s+(?:sections?\\s+)?[0-9]+(?:\\.[0-9]+)*");
+            "\\b[Ss]pec(?:ification)?s?\\s+(?:sections?\\s+)?§?[0-9]+(?:\\.[0-9]+)*");
+
+    /**
+     * A citation with the word {@code spec} left off — a bare number in parentheses, carrying on
+     * from a full citation earlier in the same comment. Nineteen of them survived the sweep that
+     * only looked for the word, four in one Javadoc paragraph.
+     *
+     * <p>Asked of comment lines in Java and Souther sources alone. There a parenthesised number
+     * that carries a dot is a section and nothing else — the sweep that found these turned up no
+     * other kind. Prose elsewhere writes a version and a decimal the same way.
+     */
+    private static final Pattern ELIDED = Pattern.compile(
+            "\\((\\d+\\.\\d+(?:\\s*,\\s*\\d+(?:\\.\\d+)?)*)\\)");
+
+    /** Where a comment starts, in the two source languages the elided form was written in. */
+    private static final Pattern COMMENT = Pattern.compile("^\\s*(\\*|//|/\\*)");
 
     /**
      * The files that say why a section number is not a citation, and so have to write one, with how
@@ -87,9 +108,20 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
     void theOnlySectionNumbersLeftAreTheOnesSayingWhyNotToWriteOne() {
         SortedMap<String, Integer> written = new TreeMap<>();
         for (Map.Entry<String, String> file : sources().entrySet()) {
+            String path = file.getKey();
             Matcher cited = BY_NUMBER.matcher(file.getValue());
             while (cited.find()) {
-                written.merge(file.getKey(), 1, Integer::sum);
+                written.merge(path, 1, Integer::sum);
+            }
+            if (!elidable(path)) {
+                continue;
+            }
+            for (String line : file.getValue().split("\n", -1)) {
+                Matcher elided = COMMENT.matcher(line).find()
+                        ? ELIDED.matcher(line) : ELIDED.matcher("");
+                while (elided.find()) {
+                    written.merge(path, 1, Integer::sum);
+                }
             }
         }
 
@@ -98,6 +130,34 @@ class ASpecificationCitationNamesASectionRatherThanItsNumberTest {
         // mistake is a file making it.
         assertEquals(new TreeMap<>(SAYS_WHY_NOT_TO), written,
                 "a section number is a position rather than a name; cite the anchor by its name");
+    }
+
+    /**
+     * Both shapes the rule refuses, held against the rule itself rather than against the tree. The
+     * tree passing says nothing about what the rule would catch, and the shape worth pinning is the
+     * one that reads as a citation: the section sign with the old number behind it.
+     *
+     * <p>The word and the number are joined here rather than written together, so this file holds
+     * neither shape and the rule holds over it like any other.
+     */
+    @Test
+    void aNumberIsRefusedWhetherOrNotItIsWrittenAsIfItWereAName() {
+        String word = "spec";
+
+        assertTrue(BY_NUMBER.matcher(word + " 13.1").find(), "a number on its own");
+        assertTrue(BY_NUMBER.matcher(word + " §13.1").find(), "a number spelled as if it were a name");
+        assertTrue(BY_NUMBER.matcher(word + " section 20").find(), "a chapter, said in words");
+        assertTrue(ELIDED.matcher("carried on from the citation above (13.1)").find(),
+                "a second reference with the word left off");
+
+        assertFalse(BY_NUMBER.matcher(word + " §fn-declaration").find(), "a name is not a number");
+        assertFalse(ELIDED.matcher("runs in O(1) amortized").find(), "nor is a complexity");
+        assertFalse(ELIDED.matcher("builds Amount(500)").find(), "nor an argument");
+    }
+
+    /** Whether {@code path} is a source whose comments are read for the elided form. */
+    private static boolean elidable(String path) {
+        return path.endsWith(".java") || path.endsWith(".sou");
     }
 
     /**
