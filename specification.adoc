@@ -660,7 +660,7 @@ Instant      // a moment on the timeline, to the nanosecond. ISO 8601 in UTC. ja
 
 [[a-local-temporal-is-held-to-the-second]]`+Date+`, `+Time+` and `+DateTime+` are *local*: they say what a calendar and a clock read, and carry no zone. `+Time+` and `+DateTime+` are held to the second and MUST NOT carry a fraction of one — written text that has one is <<e1322>>, and text arriving at a boundary that has one is a decode failure at that path (<<decoder-error>>). Neither drops it: a value that cannot be read back is a value nothing downstream can tell from the one that was sent.
 
-[[an-instant-carries-what-a-timestamp-said]]`+Instant+` is a moment on the timeline rather than a reading of a clock, and is held to the nanosecond, which is what an outside timestamp says. It has no year, no month and no hour: naming one needs a zone, and the language names none. So `+Instant+` has *no standard-library operations at all* (<<stdlib-instant>>), and this is a rule rather than a gap — there is nothing to read a part with and nothing to build one from parts either, so the two directions are absent together. What a model does with one it does without a library: two compare (<<primitives>>), one keys a `+Map+` (<<collections>>), one is written as a literal (<<temporal-literal>>), and turning one into a `+DateTime+` is a behavior with no implementation, the zone being supplied from outside as the current time is (<<injected-behavior>>). A boundary takes an `+Instant+` written with a numeric offset and answers the moment it names, which is the same moment the `+Z+` form of it names; source takes the `+Z+` form only (<<temporal-literal>>). Neither is a zone.
+[[an-instant-carries-what-a-timestamp-said]]`+Instant+` is a moment on the timeline rather than a reading of a clock, and is held to the nanosecond, which is what an outside timestamp says. It has no year, no month and no hour: naming one needs a zone, and the language names none. So `+Instant+` has *no calendar decomposition* (<<stdlib-instant>>), and this is a rule rather than a gap — there is nothing to read a part with and nothing to build one from parts either, so the two directions are absent together. That its module is empty is the smaller fact: what the missing zone rules out is the calendar, and an operation that stays on the timeline would need none. What a model does with one it does without a library: two compare (<<primitives>>), one keys a `+Map+` (<<collections>>), one is written as a literal (<<temporal-literal>>), and turning one into a `+DateTime+` is a behavior with no implementation, the zone being supplied from outside as the current time is (<<injected-behavior>>). A boundary takes an `+Instant+` written with a numeric offset and answers the moment it names, which is the same moment the `+Z+` form of it names; source takes the `+Z+` form only (<<temporal-literal>>). Neither is a zone.
 
 [#numeric-literal]
 ==== Numeric literals
@@ -3711,7 +3711,7 @@ fromParts  hour  minute  second
 
 `+Time+` is a time of day to the second, with no date and no zone (<<primitives>>) — what a model holds when it names an opening hour, where writing a `+DateTime+` would invent a day the domain does not have. `+hour+` / `+minute+` / `+second+` read the parts as Ints, and `+fromParts(hour, minute, second)+` reads three back into a `+Time+`, answering `+NotATime+` for hour 24, minute 60 and the leap second.
 
-There is no time arithmetic. Adding to a time of day has to say what happens at midnight — whether 23:30 plus an hour is 00:30 or is nothing — and that is a decision about a domain rather than about a clock. A model that needs it holds a `+DateTime+` and adds there, where the day is present to carry the answer.
+There is no time arithmetic. Adding to a time of day has to say what happens at midnight — whether 23:30 plus an hour is 00:30 or is nothing — and that is a decision about a domain rather than about a clock. A model that holds the day as well adds on the `+DateTime+`, where the day is there to carry the answer. A model that holds only a time of day says what crossing midnight means as a rule of its own — telling it to hold a `+DateTime+` instead would have it invent a date, which is the thing a `+Time+` exists to avoid.
 
 [#stdlib-datetime]
 === DateTime
@@ -3732,7 +3732,7 @@ addMinutes  addHours  addDays  minutesBetween  toDate  toTime  fromDateAndTime
 ----
 ----
 
-`+Instant+` has no operations, and the empty list above is the rule rather than a section waiting to be filled (<<an-instant-carries-what-a-timestamp-said>>). It has no parts to read without a zone, so it has none to be built from either, and the two directions are absent together.
+`+Instant+` has no operations, and the empty list above is not a section waiting to be filled: it has no parts to read without a zone, so it has none to be built from either, and the two directions are absent together (<<an-instant-carries-what-a-timestamp-said>>). What the missing zone rules out is the *calendar*. An operation that stays on the timeline — the elapsed time between two, a shift along it — needs no zone, and none is here because nothing has asked for one.
 
 A model still holds one, compares two (<<primitives>>), keys a `+Map+` by one (<<collections>>) and writes one as a literal (<<temporal-literal>>). To read one as a local date-time it declares a behavior with no implementation and the Java side supplies the zone, the way the current time is supplied (<<injected-behavior>>):
 
@@ -4663,12 +4663,15 @@ Reported at the read (<<a-field-read-is-declared-by-the-value>>). A sum exposes 
 `2026-07-01T09:30:45.123` is finer than a second, and a `DateTime` holds no fraction of one. Write
 it to the second, or use `Instant` where the sub-second reading is the point.
 
-`2026-07-01T09:30:45+09:00` carries an offset. An `Instant` is written in UTC —
-`Instant("2026-07-01T00:30:45Z")` — because the language names no zone; a zone belongs to the
-boundary.
+`2026-07-01T09:30:45+09:00` carries an offset. It names the same moment
+`Instant("2026-07-01T00:30:45Z")` names, and that is how an `Instant` is written. A boundary reads
+either.
+
+`2026-06-30T23:59:60Z` names a leap second. The language has no moment for one, and reading it as
+the second before would answer a different moment than the text says.
 ----
 
-Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text is spelled out so it can be read at compile time, which is what lets malformed text be refused here instead of at run time. The same code covers the two ways written text can say more than its type holds: a fraction of a second where the type is held to the second (<<a-local-temporal-is-held-to-the-second>>), and an offset where the type names no zone (<<an-instant-carries-what-a-timestamp-said>>).
+Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text is spelled out so it can be read at compile time, which is what lets malformed text be refused here instead of at run time. The same code covers three more refusals, and they are not one kind of thing. A fraction of a second, and a leap second, are text saying something the type cannot hold — the first a reading finer than the type keeps (<<a-local-temporal-is-held-to-the-second>>), the second a moment the language does not have (<<a-leap-second-is-no-moment>>). A numeric offset is neither: it names exactly the moment the `+Z+` form of it names, and is refused only because a written value is written the way the value is written back (<<temporal-literal>>). A boundary reads the offset form and refuses the other two.
 
 This code is about *writing* a temporal. Parts that name no moment are not this: they are values rather than text, so `+Date.fromParts+` answers `+NotADate+` at the position that built them (<<a-temporal-built-from-parts-is-refused-where-the-parts-name-none>>).
 

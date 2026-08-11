@@ -24,5 +24,7 @@ let minute (t: Time): Int = intrinsic "time.minute"
 let second (t: Time): Int = intrinsic "time.second"
 // There is no time arithmetic here. Adding to a time of day has to say what happens at midnight —
 // whether 23:30 plus an hour is 00:30 or is nothing — and that is a decision about the domain
-// rather than about the clock. A model that needs it holds a `DateTime` and adds there, where the
-// day is present to carry the answer.
+// rather than about the clock. A model holding the day as well adds on the `DateTime`, where the
+// day is there to carry the answer; one holding only a time of day says what crossing midnight
+// means as a rule of its own, since taking a `DateTime` to get the arithmetic would have it invent
+// a date — which is what this type exists to avoid.

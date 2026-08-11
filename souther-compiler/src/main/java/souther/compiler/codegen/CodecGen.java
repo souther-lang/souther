@@ -6,6 +6,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
+import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -902,14 +903,6 @@ final class CodecGen {
         }
     }
 
-    /** Raoh's code for text whose shape is wrong, so a fraction of a second is reported as the same
-     *  kind of failure at the same path as a date that does not parse. */
-    private static final String SUB_SECOND_CODE = "invalid_format";
-
-    private static final String SUB_SECOND_MESSAGE = "holds no fraction of a second";
-
-    private static final String LEAP_SECOND_MESSAGE = "names a leap second, which is no moment here";
-
     /** {@code Temporals::notALeapSecond} as a {@code Predicate}, for the text refinement below. */
     private static final DynamicCallSiteDesc NOT_A_LEAP_SECOND = DynamicCallSiteDesc.of(
             BSM_METAFACTORY, "test",
@@ -928,20 +921,6 @@ final class CodecGen {
                     "toTheSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));           // instantiated
 
-    /** The Raoh leaf factory each temporal is parsed by. An exhaustive expression rather than a name
-     * passed in by the caller: the two switches that emit a leaf are statements, which javac does not
-     * hold to covering an enum, so the one place that has to name every temporal is this. */
-    private static String temporalFactory(Type.Prim temporal) {
-        return switch (temporal) {
-            case DATE -> "date";
-            case TIME -> "time";
-            case DATETIME -> "dateTime";
-            case INSTANT -> "iso8601";
-            case INT, STRING, BOOL, DECIMAL, RAW ->
-                    throw new IllegalStateException(temporal.shown() + " is not a temporal");
-        };
-    }
-
     /**
      * Emits a temporal leaf decoder from text: Raoh's string leaf, refined, parsed, refined again.
      *
@@ -957,25 +936,26 @@ final class CodecGen {
      * written form is held to UTC (spec §temporal-literal, §a-leap-second-is-no-moment).
      */
     private void emitTemporalFromText(CodeBuilder code, ClassDesc leafOwner, Type.Prim temporal) {
+        TemporalRule rule = TemporalRule.of(temporal);
         emitStringLeaf(code, leafOwner);
-        if (temporal == Type.Prim.INSTANT) {
+        if (rule.guardsText()) {
             code.invokedynamic(NOT_A_LEAP_SECOND);
-            code.loadConstant(SUB_SECOND_CODE);
-            code.loadConstant(LEAP_SECOND_MESSAGE);
+            code.loadConstant(TemporalRule.REFUSED);
+            code.loadConstant(TemporalRule.LEAP_SECOND);
             code.invokevirtual(CD_StringDecoder, "refine", MTD_refineString);
         }
-        code.invokevirtual(CD_StringDecoder, temporalFactory(temporal), MTD_leafTemporal);
+        code.invokevirtual(CD_StringDecoder, rule.factory(), MTD_leafTemporal);
         emitToTheSecond(code, temporal);
     }
 
     /** Holds a {@code Time} and a {@code DateTime} to the second, after the parse that produced one. */
     private void emitToTheSecond(CodeBuilder code, Type.Prim temporal) {
-        if (temporal != Type.Prim.TIME && temporal != Type.Prim.DATETIME) {
+        if (!TemporalRule.of(temporal).guardsValue()) {
             return;
         }
         code.invokedynamic(TO_THE_SECOND);
-        code.loadConstant(SUB_SECOND_CODE);
-        code.loadConstant(SUB_SECOND_MESSAGE);
+        code.loadConstant(TemporalRule.REFUSED);
+        code.loadConstant(TemporalRule.SUB_SECOND);
         code.invokevirtual(CD_TemporalDecoder, "refine", MTD_refineTemporal);
     }
 
@@ -992,7 +972,7 @@ final class CodecGen {
             emitTemporalFromText(code, CD_JsonDecoders, temporal);
             return;
         }
-        code.invokestatic(srcLeafOwner(src), temporalFactory(temporal), MTD_leafTemporal);
+        code.invokestatic(srcLeafOwner(src), TemporalRule.of(temporal).factory(), MTD_leafTemporal);
         emitToTheSecond(code, temporal);
     }
 

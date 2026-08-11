@@ -4,9 +4,12 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.TypeMessage;
 
+import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -25,13 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link ATemporalIsBuiltFromThePartsAModelHoldsTest} goes through fields only, which is exactly why
  * it did not catch this.
  *
- * <p>The paths walked are the ones this compiler builds the parse for: a JSON field, and a map key
- * from every source. The neutral factory is Raoh's own — it takes a real temporal as itself and
- * parses text with {@code Instant::parse} inside itself, where nothing here can stand — so a Java
- * caller handing that factory the text of a leap second still reaches the moment before it. That is
- * the Java side of the boundary meeting the contract (ADR-0006), and it is the one place this rule
- * is not enforced rather than merely untested; {@link #aLeapSecondReachesTheNeutralFactoryUnread}
- * holds it where it is so a Raoh that closes it shows up here.
+ * <p>The paths walked are the ones this compiler builds the parse for: a JSON field, a map key from
+ * every source, and the runner's own decoders, which read a top-level argument and were a third
+ * copy of the policy until they were made to read the one table ({@code TemporalRule}).
+ *
+ * <p>One path is not covered and is not a decision: the bare-value factory is Raoh's own and parses
+ * text inside itself, where nothing here can stand. A leap second handed to it as text still reaches
+ * the moment before it, against the rule the specification states, so
+ * {@link #aLeapSecondIsRefusedAtTheNeutralDecoderToo} is written as the rule and disabled rather
+ * than written as the behaviour and passing.
  */
 class ATemporalHoldsTheSameRuleAtEveryPathTest {
 
@@ -72,17 +77,28 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
     }
 
     /**
-     * And where it is not: Raoh's neutral factory parses text itself.
+     * The one path where it is not refused, written as the rule says it should be and disabled.
      *
-     * <p>Written as it is rather than as it should be. A leap second handed to the bare-value decoder
-     * as text still becomes the second before it, because the parse is inside a factory this compiler
-     * calls rather than builds. Held here so that closing it — a Raoh that refuses one, or a
-     * combinator that lets the text be refined first — fails this test rather than passing silently.
+     * <p>A leap second handed to the bare-value decoder as text still reaches the moment before it.
+     * The parse is inside {@code ObjectDecoders.iso8601()}, which takes a real {@code Instant} as
+     * itself and parses a {@code String} with {@code Instant::parse}; Raoh has no combinator that
+     * lets the text be refined before that, and nothing on this side can stand between them.
+     *
+     * <p>Written as an assertion of the rule rather than of the behaviour, and disabled, because the
+     * rule is what the specification says
+     * (<<a-leap-second-is-no-moment>>: refused where it is written <em>and where it arrives</em>) and
+     * a test asserting the other thing would make a violation look like a decision. It turns green
+     * when Raoh refuses a leap second, which is where the fix belongs: an {@code iso8601()} that
+     * answers an {@code Instant} after losing the fact that the text named a second it does not have
+     * is answering about a different moment.
      */
     @Test
-    void aLeapSecondReachesTheNeutralFactoryUnread() throws Exception {
-        assertTrue(decoded(AT_A_FIELD, fieldsWith("at", "2026-06-30T23:59:60Z")).isOk(),
-                "if this now refuses, the neutral path has been closed and this test should say so");
+    @org.junit.jupiter.api.Disabled("needs a Raoh that refuses a leap second, or one that lets the "
+            + "text be refined before it parses — see the note on this method")
+    void aLeapSecondIsRefusedAtTheNeutralDecoderToo() throws Exception {
+        net.unit8.raoh.Result<?> r = decoded(AT_A_FIELD, fieldsWith("at", "2026-06-30T23:59:60Z"));
+        assertTrue(!r.isOk(), "a leap second must not be admitted at a bare-value field");
+        assertTrue(String.valueOf(r).contains("names a leap second"), String.valueOf(r));
     }
 
     /** And what each path still takes, so the refusals are not a boundary that stopped working. */
@@ -176,6 +192,60 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
         return base.keySet().stream().collect(java.util.stream.Collectors.toMap(
                 k -> k, k -> k.equals(key) ? value : base.get(k)));
     }
+
+    /**
+     * {@code souther run}, whose decoders are built in Java rather than emitted.
+     *
+     * <p>A top-level argument does not go through a data's generated decoder, so this is where the
+     * rules went missing next: a bare {@code Time} took {@code 09:00:00.5} and a bare {@code Instant}
+     * took a leap second, both refused a field away. Walked over a bare position and a top-level map
+     * for each, because those are the two shapes the runner builds a decoder for.
+     */
+    @Test
+    void theRunnerReadsATopLevelArgumentUnderTheSameRules() throws Exception {
+        Path file = dir.resolve("toplevel.sou");
+        Files.writeString(file, """
+                module demo
+
+                data Out = { n: Int }
+
+                behavior atATime : (t: Time) -> Out constructs Out
+                let atATime (t) = Out { n = Time.hour(t) }
+
+                behavior atAMoment : (dt: DateTime) -> Out constructs Out
+                let atAMoment (dt) = Out { n = 1 }
+
+                behavior atAnInstant : (at: Instant) -> Out constructs Out
+                let atAnInstant (at) = Out { n = 1 }
+
+                behavior keyedByTime : (m: Map<Time, Int>) -> Out constructs Out
+                let keyedByTime (m) = Out { n = Map.size(m) }
+                """);
+
+        for (String[] refused : new String[][] {
+                {"atATime", "\"09:00:00.5\"", "holds no fraction of a second"},
+                {"atAMoment", "\"2026-07-01T09:00:00.123\"", "holds no fraction of a second"},
+                {"atAnInstant", "\"2026-06-30T23:59:60Z\"", "names a leap second"},
+                {"keyedByTime", "{\"09:00:00.5\": 1}", "holds no fraction of a second"}}) {
+            Exception e = assertThrows(Exception.class,
+                    () -> Runner.run(file, refused[0], refused[1]),
+                    refused[0] + " must not take " + refused[1]);
+            assertTrue(String.valueOf(e.getMessage()).contains(refused[2]),
+                    refused[0] + ": " + e.getMessage());
+        }
+
+        for (String[] taken : new String[][] {
+                {"atATime", "\"09:00:00\""},
+                {"atAMoment", "\"2026-07-01T09:00:00\""},
+                {"atAnInstant", "\"2026-07-01T09:00:00Z\""},
+                {"keyedByTime", "{\"09:00:00\": 1}"}}) {
+            assertTrue(Runner.run(file, taken[0], taken[1]).contains("\"n\""),
+                    taken[0] + " must still take " + taken[1]);
+        }
+    }
+
+    @TempDir
+    Path dir;
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 

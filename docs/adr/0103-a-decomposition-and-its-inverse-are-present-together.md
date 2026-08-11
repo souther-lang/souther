@@ -75,10 +75,15 @@ determines it, so reading the first loses nothing; what source refuses is the *s
 written value is written the way the value is written back. An offset is a displacement from UTC and
 a zone is a place with rules about when its offset changes; this language names neither, and saying
 so keeps the door open for either to be added later as its own type. `Instant` is admitted as the type that keeps a sub-second reading and
-an absolute moment, and it has **no operations at all**: naming its year or its hour needs a zone,
-the language names no zone, so there is nothing to read a part with and nothing to build one from
-parts either. The two directions are absent together, which is what keeps `Instant` from being the
-hole `Date` was. A model holds one, compares two, keys a `Map` by one, and declares a behavior with
+an absolute moment, and it has **no calendar decomposition**: naming its year or its hour needs a
+zone, the language names no zone, so there is nothing to read a part with and nothing to build one
+from parts either. The two directions are absent together, which is what keeps `Instant` from being
+the hole `Date` was.
+
+`souther.instant` is empty, and that is a smaller claim than the one above. What the zone rules out
+is the calendar; elapsed time between two instants, or a shift along the timeline, needs no zone and
+is not ruled out by anything here. None is added because nothing asks for one yet, and adding an
+operation of that kind later is a library growing rather than this decision being reversed. A model holds one, compares two, keys a `Map` by one, and declares a behavior with
 no implementation to get a `DateTime` back — the same way it gets the current time.
 
 ## Consequences
@@ -89,8 +94,11 @@ the older number would be told a value crosses that no longer does. It widened t
 `Instant` are shapes an older compiler has no type for.
 
 **The resolution of a local temporal is one second, chosen and not inherited.** A business rule is
-stated in dates, hours and minutes; a domain that needs to tell two events a millisecond apart is
-asking about the timeline rather than about a clock reading, and that is `Instant`. Fixing the
+stated in dates, hours and minutes, and one second is the resolution this language gives a local
+temporal. That is a decision about resolution and not about which type a sub-second reading belongs
+to: a deadline at 09:00:00.500 is a wall-clock value and would want a finer `Time`, not an `Instant`
+— reaching for `Instant` there would ask a model for a date and a zone it does not have. Should a
+sub-second local semantics be wanted, what is reconsidered is this resolution. Fixing the
 resolution is also what gives `Time` and `DateTime` a smallest step, which is what lets a boundary
 row be asked for beside a line on one — a dense carrier can only report *not derivable* there.
 
