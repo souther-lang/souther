@@ -734,6 +734,23 @@ public final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     private void walk(Core e, Known k, Denotations at, int depth) {
+        Core.LetIn standing = bindingInValueIn(e);
+        if (standing != null) {
+            // A call this analysis expanded is a binding holding what it was given, and where that
+            // binding stands inside a value — under a field read, under one side of a comparison —
+            // it is not one the walk steps into. What it holds is then a name nothing has entered,
+            // which denotes nothing: the chain off it names no location, and a construction over a
+            // term nothing can name is owed no clause at all. Entered here, what is left is the tree
+            // the source would have written with a `let`, which is the tree the rest of this walk
+            // already reads — so a construction moved into a helper reads the terms its caller's
+            // guards settled, which is what the expansion is for.
+            if (!(standing.value() instanceof Core.Block)) {
+                walk(standing.value(), k, at, depth);
+            }
+            Entered in = bindLet(standing, k, at);
+            walk(without(e, Set.of(standing), standing.body()), in.known(), in.at(), depth);
+            return;
+        }
         ConditionalSite site = conditionalValueIn(e);
         if (site != null && depth < BRANCHES_OPENED) {
             // A conditional in a value position is one of its two branches, and which one is decided
@@ -1287,6 +1304,38 @@ public final class InvariantChecker {
             return (c, k, at) ->
                     c.enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
         }
+    }
+
+    /**
+     * The first binding standing inside a value {@code e} is handed, or {@code null} where it is
+     * handed none. What those values are is the same account as {@link #conditionalValueIn}'s: a
+     * binding the walk steps into next is one it enters itself.
+     */
+    private static Core.LetIn bindingInValueIn(Core e) {
+        return switch (e) {
+            case Core.If iff -> bindingIn(iff.cond());
+            case Core.IfConstructed ic -> bindingIn(ic.construct());
+            case Core.LetIn li -> bindingIn(li.value());
+            case Core.Match m -> bindingIn(m.scrutinee());
+            default -> bindingIn(e);
+        };
+    }
+
+    /** The first binding standing inside {@code e} at any depth, {@code e} itself excluded — it is
+     * the value being read, and a binding at its head is where the walk goes next. A closure's body
+     * is not looked into: it is read where the closure is applied, and what its parameter holds is
+     * decided there. */
+    private static Core.LetIn bindingIn(Core e) {
+        if (e instanceof Core.Block) {
+            return null;
+        }
+        Core.LetIn[] found = new Core.LetIn[1];
+        Core.forEachChild(e, child -> {
+            if (found[0] == null) {
+                found[0] = child instanceof Core.LetIn li ? li : bindingIn(child);
+            }
+        });
+        return found[0];
     }
 
     /**

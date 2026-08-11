@@ -132,6 +132,13 @@ final class Terms {
             // here as one value rather than as arithmetic over two.
             case Core.Binary b when b.op() == Ast.BinOp.MUL ->
                     scale(affine(b.left(), leaf), affine(b.right(), leaf));
+            // A newtype's `.value` read off something that is not a place: what it wraps is what it
+            // is, which is the rule a location is keyed by ({@link #pathKey}) read of a computed
+            // value too. Without it `f(x).value` is one value where the same call given a name is
+            // the arithmetic its body wrote — a name deciding what can be said of an expression.
+            case Core.FieldAccess fa when rootBinding(fa.target()) == null
+                    && !Location.isStep(fa.target().type(), fa.field(), symbols) ->
+                    affine(fa.target(), leaf);
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what an
             // arithmetic helper becomes, so reading through it is reading the arithmetic the author
             // wrote.
