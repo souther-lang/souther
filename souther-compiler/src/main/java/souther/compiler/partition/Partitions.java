@@ -854,44 +854,15 @@ public final class Partitions {
         return List.of(FixtureTemplate.record(record, chosen));
     }
 
-    /**
-     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
-     * require none.
-     *
-     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
-     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
-     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
-     * and a size chained after the mapping that drops duplicates would count the wrong things — and
-     * that absence is a fact about the decoder rather than about what the rule says.
-     */
+    /** How many of whatever counts a value the rules on it require it to hold, read where the rules
+     * are: {@link DeclaredBounds#leastCountOf}. */
     static int leastHeld(Type type, Symbols symbols) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return 0;
-        }
-        DeclaredBounds.Bounds sized = DeclaredBounds.of(type, symbols, Carrier.WHOLE, counts);
-        if (sized == null || sized.min() == null) {
-            return 0;
-        }
-        return CountDomain.leastFrom(sized.min().at());
+        return DeclaredBounds.leastCountOf(type, symbols);
     }
 
-    /**
-     * The same, where the record the position sits in has a rule about it too.
-     *
-     * <p>The higher of the two, because both are rules the construction has to satisfy. A value
-     * clearing one and not the other is refused as surely as one clearing neither, so reading either
-     * alone offers a value something refuses — which is the whole of #650 read from the other side:
-     * the type's floor was the only one a position was ever asked for, and a field whose floor was
-     * its record's got the value that holds nothing.
-     *
-     * <p>Both readings end at {@link Counts#leastFrom}, so what a floor comes to as a count is
-     * settled once. A second reading here could put a record's {@code > 3} at three while the type's
-     * came to four, and the two would disagree about one rule written twice.
-     */
+    /** The same, where the record the position sits in has a rule about it too. */
     static int leastHeld(Type type, Symbols symbols, FieldDomains.Held held) {
-        return Math.max(leastHeld(type, symbols),
-                held == null ? 0 : CountDomain.leastFrom(held.bounds().min()));
+        return DeclaredBounds.leastCountOf(type, symbols, held);
     }
 
     /**

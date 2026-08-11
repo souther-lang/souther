@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Place;
 import souther.compiler.types.Type;
@@ -118,6 +119,49 @@ public final class DeclaredBounds {
             }
         }
         return new Bounds(min, max, carrier);
+    }
+
+    /**
+     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
+     * require none.
+     *
+     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
+     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
+     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
+     * and a size chained after the mapping that drops duplicates would count the wrong things — and
+     * that absence is a fact about the decoder rather than about what the rule says.
+     *
+     * <p>What is being counted follows from the type. A string's rule reaches this as readily as a
+     * list's, and comes back a floor on characters; a caller reading every floor above zero as a
+     * collection that cannot be empty would be answering a question this did not.
+     */
+    public static int leastCountOf(Type type, Symbols symbols) {
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        if (counts == null) {
+            return 0;
+        }
+        Bounds sized = of(type, symbols, Carrier.WHOLE, counts);
+        if (sized == null || sized.min() == null) {
+            return 0;
+        }
+        return CountDomain.leastFrom(sized.min().at());
+    }
+
+    /**
+     * The same, where the record the position sits in has a rule about it too.
+     *
+     * <p>The higher of the two, because both are rules the construction has to satisfy. A value
+     * clearing one and not the other is refused as surely as one clearing neither, so a reader taking
+     * either alone offers a position a value something refuses: ask only the type and a field whose
+     * floor is its record's is handed the value that holds nothing.
+     *
+     * <p>Both readings end at {@link CountDomain#leastFrom}, so what a floor comes to as a count is
+     * settled once. A second reading here could put a record's {@code > 3} at three while the type's
+     * came to four, and the two would disagree about one rule written twice.
+     */
+    public static int leastCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
+        return Math.max(leastCountOf(type, symbols),
+                held == null ? 0 : CountDomain.leastFrom(held.bounds().min()));
     }
 
     private DeclaredBounds() {}
