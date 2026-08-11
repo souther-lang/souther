@@ -39,6 +39,11 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             data Auto
             data Manual
 
+            data Prospecting
+            data Qualified
+            data Won
+            data Stage = Prospecting | Qualified | Won
+
             behavior alone : (r: Request) -> Auto | Manual
                 constructs Auto, Manual
             let alone (r) = if r.cost <= 100000 then Auto else Manual
@@ -65,9 +70,9 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
             let byDateTime (at) =
                 if at < DateTime("2026-01-01T00:00:00") then Auto else Manual
 
-            behavior byText : (month: String) -> Auto | Manual
-                constructs Auto, Manual
-            let byText (month) = if month < "2026-01" then Auto else Manual
+            behavior byCase : (s: Qualified) -> Auto | Manual
+                constructs Auto, Manual, Won
+            let byCase (s) = if s < Won then Auto else Manual
 
             behavior nothingCompared : (r: Request) -> Auto | Manual
                 constructs Auto, Manual
@@ -78,8 +83,8 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
 
             data Cutoff = Date
                 invariant value >= Date("2026-01-01")
-            data Month = String
-                invariant value >= "2020-01"
+            data Stepped = Int
+                invariant value >= 1 + 1
             data Amount = Int
                 invariant value >= 100
 
@@ -87,9 +92,9 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
                 constructs Auto
             let boundedByADate (c) = Auto
 
-            behavior boundedByText : (m: Month) -> Auto | Manual
+            behavior boundedByAnUnreadableEnd : (m: Stepped) -> Auto | Manual
                 constructs Auto
-            let boundedByText (m) = Auto
+            let boundedByAnUnreadableEnd (m) = Auto
 
             behavior boundedByANumber : (a: Amount) -> Auto | Manual
                 constructs Auto
@@ -168,12 +173,19 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         assertFalse(block.contains("not derivable: r.cost"), block);
     }
 
-    /** A carrier no line can be drawn on is still said as that. */
+    /**
+     * A carrier no line can be drawn on is still said as that.
+     *
+     * <p>A position declared as one case of an enumeration. It is ordered — the comparison is on the
+     * sum's order and typechecks — and it ranges over one value, so the sum's places are not its
+     * own and no line divides it (ADR-0090). The ordered types that do carry a line are read;
+     * this sentence is what is left for the values that do not.
+     */
     @Test
     void aCarrierNoLineIsDrawnOnSaysThat() {
-        String block = blockOf("byText");
+        String block = blockOf("byCase");
 
-        assertTrue(block.contains("not read: month"), block);
+        assertTrue(block.contains("not read: s"), block);
         assertTrue(block.contains("no line can be drawn on"), block);
     }
 
@@ -196,11 +208,11 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
      */
     @Test
     void aPositionBoundedByARuleThisCouldNotReadIsSaidToBeUnread() {
-        String block = blockOf("boundedByText");
+        String block = blockOf("boundedByAnUnreadableEnd");
 
         assertFalse(block.contains("not derivable: m"), block);
         assertTrue(block.contains("not read: m"), block);
-        assertTrue(block.contains("no line can be drawn on"), block);
+        assertTrue(block.contains("does not read"), block);
     }
 
     /**

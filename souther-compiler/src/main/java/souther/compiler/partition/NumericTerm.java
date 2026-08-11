@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.Incompleteness;
@@ -110,7 +111,7 @@ public sealed interface NumericTerm {
         if (carrier == null) {
             return new Reading.NotNumber();
         }
-        Count read = carrier.countOf(at);
+        Place read = carrier.placeOf(at);
         return read == null ? new Reading.NotNumber() : new Reading.Number(read);
     }
 
@@ -136,7 +137,7 @@ public sealed interface NumericTerm {
     /** The count at a value, keeping why there is none where there is none. */
     sealed interface Reading {
 
-        record Number(Count value) implements Reading {}
+        record Number(Place value) implements Reading {}
 
         /** There was no value to read, and this is what stopped there being one. */
         record Missing(Incompleteness.Code code) implements Reading {}

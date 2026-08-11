@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.observe.ObservedValue;
 
@@ -24,9 +25,9 @@ import java.util.Optional;
  */
 public interface BoundaryDomain {
 
-    Optional<Count> successor(Count at);
+    Optional<Place> successor(Place at);
 
-    Optional<Count> predecessor(Count at);
+    Optional<Place> predecessor(Place at);
 
     /**
      * How the counts beside a boundary on {@code carrier} are found.
@@ -43,21 +44,21 @@ public interface BoundaryDomain {
         Granularity spacing = carrier.spacing();
         return new BoundaryDomain() {
             @Override
-            public Optional<Count> successor(Count at) {
+            public Optional<Place> successor(Place at) {
                 // A carrier with no smallest step has no next count: whether the value after a
                 // date-time is a second, a millisecond or a nanosecond later is a decision nobody has
                 // taken, and inventing an epsilon would test a rule the model never stated.
-                return spacing == Granularity.DISCRETE ? held(at.plus(1)) : Optional.empty();
+                return spacing == Granularity.DISCRETE ? held(Count.number(at).plus(1)) : Optional.empty();
             }
 
             @Override
-            public Optional<Count> predecessor(Count at) {
-                return spacing == Granularity.DISCRETE ? held(at.minus(1)) : Optional.empty();
+            public Optional<Place> predecessor(Place at) {
+                return spacing == Granularity.DISCRETE ? held(Count.number(at).minus(1)) : Optional.empty();
             }
 
             /** Only where the carrier holds it. A step off the end of what a carrier counts is not a
              * value beside anything, and it reaches here the same way from every caller that steps. */
-            private Optional<Count> held(Count at) {
+            private Optional<Place> held(Place at) {
                 return Optional.ofNullable(carrier.onTheGrid(at));
             }
         };
@@ -66,12 +67,12 @@ public interface BoundaryDomain {
     /** Nothing has a neighbour here: the position is on no carrier at all. */
     BoundaryDomain NONE = new BoundaryDomain() {
         @Override
-        public Optional<Count> successor(Count at) {
+        public Optional<Place> successor(Place at) {
             return Optional.empty();
         }
 
         @Override
-        public Optional<Count> predecessor(Count at) {
+        public Optional<Place> predecessor(Place at) {
             return Optional.empty();
         }
     };

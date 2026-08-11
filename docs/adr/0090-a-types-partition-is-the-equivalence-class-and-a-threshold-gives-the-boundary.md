@@ -89,13 +89,28 @@ A position no rule measures keeps its own name. A `String` nothing says anything
 derivable and is reported as the position, because naming its length there would put a term in the
 report that nobody wrote.
 
-One carrier says which values carry a line, and every reader asks it. A line is drawn on an `Int`, a
-`Decimal`, a `Date`, a `DateTime` and an enumeration, and on a single-value newtype over any of
-them; a `String` is ordered and is not measured, having no count to embed into. The carriers are
+One carrier says which values carry a line, and every reader asks it. A line is drawn on every
+ordered value: an `Int`, a `Decimal`, a `Date`, a `DateTime`, a `String`, an enumeration, and a
+single-value newtype over any of them. The carriers are
 matched exhaustively wherever a count is read or written, so one added stops the build at every
 place that would otherwise answer for it by omission, and the primitives are matched exhaustively
 where a type is classified, so a primitive added stops it there. A newtype is reduced to its base
 before either is asked.
+
+A `String` is the one carrier with no count under it, and what that costs is the value beside a line
+and nothing else. It was left out of the measure entirely instead, on the strength of the count: the
+algebra held every ordered value as one number, and a string has none to embed into. But three of the
+four things a measure produces need only the order — the line, the classes either side of it, and the
+row at the line — and only the fourth, the row just below, needs a value the language does not name.
+A carrier with no step already gets that answer; a `Decimal` and a `DateTime` have had it all along.
+So the place a value sits on its carrier's order and the number it counts to are separate, and only
+the second is a number.
+
+A position that is one case of an enumeration, or a union of some of them, is not a carrier. It is
+comparable on its sum's order — that is the wider question the type checker asks — and it ranges over
+less than that order, so a line drawn from the sum's places would ask for a row at a value the
+position cannot hold. Measuring such a position would need the carrier to hold the admitted values
+beside the full order, and nothing needs that yet.
 
 What an enumeration counts to is the place its case takes in the declaration, which is the order the
 values have (spec §primitives). That count never leaves the carrier: an ordinal is a small integer,

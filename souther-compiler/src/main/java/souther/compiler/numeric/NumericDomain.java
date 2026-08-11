@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import souther.compiler.numeric.Place;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -350,7 +351,7 @@ public final class NumericDomain {
     private boolean proveBaseLe(LinearForm g, boolean strict) {
         Endpoint hiG = upperBound(g);
         if (hiG != null) {
-            int s = hiG.at().signum();
+            int s = at(hiG).signum();
             // An end at zero the form's own bounds do not reach proves the strict form: nothing the
             // domain admits gets there, which is what `g < 0` asks.
             if (s < 0 || (s == 0 && (!strict || !hiG.inclusive()))) {
@@ -362,7 +363,7 @@ public final class NumericDomain {
             Endpoint diffBound = closedDiff(ab[0], ab[1]);     // proven upper bound on (a - b)
             if (diffBound != null) {
                 Count bound = Count.of(g.constant().negate());   // want a - b <= -const
-                int s = diffBound.at().compareTo(bound);
+                int s = at(diffBound).compareTo(bound);
                 if (s < 0 || (s == 0 && (!strict || !diffBound.inclusive()))) {
                     return true;
                 }
@@ -387,7 +388,7 @@ public final class NumericDomain {
             if (b == null) {
                 return null;   // unbounded in the contributing direction
             }
-            acc = acc.plus(b.at().times(k));
+            acc = acc.plus(at(b).times(k));
             inclusive &= b.inclusive();
         }
         return new Endpoint(acc, inclusive);
@@ -407,7 +408,7 @@ public final class NumericDomain {
             if (d == null) {
                 continue;
             }
-            best = Endpoint.upper(best, new Endpoint(b.getValue().at().plus(d.at()),
+            best = Endpoint.upper(best, new Endpoint(at(b.getValue()).plus(at(d)),
                     b.getValue().inclusive() && d.inclusive()));
         }
         return best;
@@ -425,7 +426,7 @@ public final class NumericDomain {
             if (d == null) {
                 continue;
             }
-            best = Endpoint.lower(best, new Endpoint(b.getValue().at().minus(d.at()),
+            best = Endpoint.lower(best, new Endpoint(at(b.getValue()).minus(at(d)),
                     b.getValue().inclusive() && d.inclusive()));
         }
         return best;
@@ -444,6 +445,20 @@ public final class NumericDomain {
         return bottom ? new Bounds(null, null) : new Bounds(bestLo(atom), bestHi(atom));
     }
 
+    /**
+     * The count an end is at.
+     *
+     * <p>Every end this holds was built from a number here, so this is a statement of that and not a
+     * check on a caller: an atom is a position the rules relate arithmetically, and a position whose
+     * values are not numbers has no atom to be related through.
+     */
+    private static Count at(Endpoint end) {
+        if (!(end.at() instanceof Count count)) {
+            throw new IllegalStateException("an atom's end is not a number: " + end);
+        }
+        return count;
+    }
+
     /** What an atom's values are known to lie between. A {@code null} end is unbounded there. */
     public record Bounds(Endpoint min, Endpoint max) {
 
@@ -453,7 +468,7 @@ public final class NumericDomain {
 
         /** Whether {@code at} is inside both ends — asked of the ends, because whether an end is one
          * of the counts it stops at is what the number alone does not say. */
-        public boolean admits(Count at) {
+        public boolean admits(Place at) {
             return (min == null || Endpoint.someValueLiesBetween(min, Endpoint.inclusive(at)))
                     && (max == null || Endpoint.someValueLiesBetween(Endpoint.inclusive(at), max));
         }
@@ -537,7 +552,7 @@ public final class NumericDomain {
     /** An upper bound on {@code -f} read as a lower bound on {@code f}. Turning it around moves the
      * value and not whether it is reached. */
     private static Endpoint negOrNull(Endpoint v) {
-        return v == null ? null : new Endpoint(v.at().negate(), v.inclusive());
+        return v == null ? null : new Endpoint(at(v).negate(), v.inclusive());
     }
 
     /** The domain with every fact about {@code atom} dropped — what an assignment leaves behind of
@@ -609,8 +624,8 @@ public final class NumericDomain {
             Endpoint cycle = row.getValue().get(row.getKey());
             // `a - a` is zero, so a cycle bounding it below zero is a contradiction — and so is one
             // bounding it at zero without admitting it.
-            if (cycle != null && (cycle.at().signum() < 0
-                    || (cycle.at().signum() == 0 && !cycle.inclusive()))) {
+            if (cycle != null && (at(cycle).signum() < 0
+                    || (at(cycle).signum() == 0 && !cycle.inclusive()))) {
                 return false;
             }
         }
@@ -663,7 +678,7 @@ public final class NumericDomain {
                 for (Map.Entry<String, Endpoint> hop : hops) {
                     // A path reaches its end only where every hop on it does.
                     Endpoint candidate = new Endpoint(
-                            toThrough.at().plus(hop.getValue().at()),
+                            at(toThrough).plus(at(hop.getValue())),
                             toThrough.inclusive() && hop.getValue().inclusive());
                     Endpoint known = edge(d, a, hop.getKey());
                     if (known == null || Endpoint.upper(known, candidate) == candidate) {

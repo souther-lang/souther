@@ -36,8 +36,8 @@ public final class Dates {
     }
 
     /** The date {@code day} counts to, written the way a model writes one. */
-    public static String written(Count day) {
-        return LocalDate.ofEpochDay(day.at().longValueExact()).toString();
+    public static String written(Place day) {
+        return LocalDate.ofEpochDay(Count.number(day).at().longValueExact()).toString();
     }
 
     private Dates() {}

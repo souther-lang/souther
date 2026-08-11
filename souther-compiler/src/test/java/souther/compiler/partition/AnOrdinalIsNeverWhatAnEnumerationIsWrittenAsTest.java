@@ -44,9 +44,9 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
     void aCaseCountsToWhereItIsDeclaredAndComesBackAsItself() {
         Carrier.Ordinal stage = carrier();
 
-        assertEquals(Count.of(0), stage.countOf(
+        assertEquals(Count.of(0), stage.placeOf(
                 new ObservedValue.Unit(new TypeName("example.stage", "Prospecting"))));
-        assertEquals(Count.of(2), stage.countOf(
+        assertEquals(Count.of(2), stage.placeOf(
                 new ObservedValue.Unit(new TypeName("example.stage", "Won"))));
         assertEquals(new ObservedValue.Unit(new TypeName("example.stage", "Qualified")),
                 stage.valueOf(Count.of(1)));
@@ -62,8 +62,8 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
      */
     @Test
     void aCaseThisEnumerationDoesNotListHasNoPlaceOnIt() {
-        assertNull(carrier().countOf(new ObservedValue.Unit(new TypeName("elsewhere", "Won"))));
-        assertNull(carrier().countOf(new ObservedValue.Integer(1)),
+        assertNull(carrier().placeOf(new ObservedValue.Unit(new TypeName("elsewhere", "Won"))));
+        assertNull(carrier().placeOf(new ObservedValue.Integer(1)),
                 "a number is not a case, whatever the ordinal of a case happens to be");
     }
 

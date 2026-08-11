@@ -6,6 +6,7 @@ import souther.compiler.check.FieldDomains;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -333,7 +334,7 @@ public final class Generator {
         // own type once another field of that record is fixed: the rule relating them says what
         // is left, and taking the bottom of the type's range instead is how a boundary that can
         // be written came back as one every value tried was refused at.
-        Map<String, Count> settled = edge.settledAt() == null ? Map.of()
+        Map<String, Place> settled = edge.settledAt() == null ? Map.of()
                 : Map.of(axis.path().toString(), edge.settledAt());
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             Map<String, List<FixtureTemplate>> here =
@@ -651,11 +652,11 @@ public final class Generator {
      * it, and that is the one the row will carry, so the rest of the record can be chosen beside it;
      * a position still holding several is not settled at all and nothing is claimed of it.
      */
-    private static Map<String, Count> settledIn(Map<String, List<FixtureTemplate>> decided) {
-        Map<String, Count> out = new LinkedHashMap<>();
+    private static Map<String, Place> settledIn(Map<String, List<FixtureTemplate>> decided) {
+        Map<String, Place> out = new LinkedHashMap<>();
         decided.forEach((path, candidates) -> {
             if (candidates.size() == 1) {
-                Count number = writtenNumber(candidates.get(0).value());
+                Place number = writtenNumber(candidates.get(0).value());
                 if (number != null) {
                     out.put(path, number);
                 }
@@ -673,13 +674,13 @@ public final class Generator {
      * record's rules what is left beside it, and those rules are read over the positions the
      * projection holds — which the temporal ones are not yet.
      */
-    private static Count writtenNumber(Ast.Expr written) {
+    private static Place writtenNumber(Ast.Expr written) {
         return switch (written) {
             case Ast.IntLit i -> Count.of(i.value());
             case Ast.DecimalLit d -> Count.of(d.value());
             case Ast.Neg n -> {
-                Count inner = writtenNumber(n.operand());
-                yield inner == null ? null : inner.negate();
+                Place inner = writtenNumber(n.operand());
+                yield inner == null ? null : Count.number(inner).negate();
             }
             case Ast.Apply a when a.args().size() == 1 -> writtenNumber(a.args().get(0));
             case null, default -> null;
@@ -689,7 +690,7 @@ public final class Generator {
     /** One parameter's value, with the positions the caller fixed already decided. */
     private static Outcome valueAt(Subject subject, int p,
                                    Map<String, List<FixtureTemplate>> decided,
-                                   Map<String, Count> settled,
+                                   Map<String, Place> settled,
                                    Map<String, souther.compiler.types.TypeName> shapes,
                                    CandidateCheck check) {
         Choices choices = choicesOf(subject.types().get(p),
@@ -763,7 +764,7 @@ public final class Generator {
      */
     private static Outcome conditioned(Subject subject, int p,
                                        Map<String, List<FixtureTemplate>> decided,
-                                       Map<String, Count> settled,
+                                       Map<String, Place> settled,
                                        Map<String, souther.compiler.types.TypeName> shapes,
                                        CandidateCheck check) {
         Type type = subject.types().get(p);
@@ -829,7 +830,7 @@ public final class Generator {
      */
     private static FixtureTemplate descend(Subject subject, int p, List<Position> positions, int index,
                                            Map<String, FixtureTemplate> chosen,
-                                           Map<String, Count> settled,
+                                           Map<String, Place> settled,
                                            Map<String, List<FixtureTemplate>> decided,
                                            Map<String, souther.compiler.types.TypeName> shapes,
                                            CandidateCheck check, Budget budget) {
@@ -844,7 +845,7 @@ public final class Generator {
         Position position = positions.get(index);
         for (FixtureTemplate candidate : candidatesAt(subject, p, position, settled, decided)) {
             chosen.put(position.path(), candidate);
-            Count number = writtenNumber(candidate.value());
+            Place number = writtenNumber(candidate.value());
             if (number != null) {
                 settled.put(position.path(), number);
             }
@@ -864,7 +865,7 @@ public final class Generator {
 
     /** What one position can take, given what the positions before it took. */
     private static List<FixtureTemplate> candidatesAt(Subject subject, int p, Position position,
-                                                      Map<String, Count> settled,
+                                                      Map<String, Place> settled,
                                                       Map<String, List<FixtureTemplate>> decided) {
         List<FixtureTemplate> fixed = decided.get(position.path());
         if (fixed != null) {
@@ -955,7 +956,7 @@ public final class Generator {
      */
     private static Choices choicesOf(Type type, TermPath at, Symbols symbols,
                                      Map<String, List<FixtureTemplate>> decided,
-                                     Map<String, Count> settled,
+                                     Map<String, Place> settled,
                                      Map<String, souther.compiler.types.TypeName> shapes) {
         List<String> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
@@ -975,14 +976,16 @@ public final class Generator {
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
      * them: from the value itself, with the parameter dropped. */
-    private static Map<String, Count> under(TermPath root, Map<String, Count> settled) {
+    private static Map<String, Count> under(TermPath root, Map<String, Place> settled) {
         if (settled.isEmpty()) {
             return Map.of();
         }
         Map<String, Count> out = new LinkedHashMap<>();
         String prefix = root + ".";
-        settled.forEach((path, number) -> {
-            if (path.startsWith(prefix)) {
+        // The numbers among them. A projection relates positions arithmetically, so a position whose
+        // places are not numbers settles nothing there.
+        settled.forEach((path, at) -> {
+            if (path.startsWith(prefix) && at instanceof Count number) {
                 out.put(path.substring(prefix.length()), number);
             }
         });
@@ -1161,7 +1164,7 @@ public final class Generator {
      * the rest of the row that a string's length is the number the string holds.
      */
     private record Edge(List<FixtureTemplate> values, UnresolvedCombination.Reason reason,
-                        Count settledAt, UnresolvedCombination.Reason heldBack) {
+                        Place settledAt, UnresolvedCombination.Reason heldBack) {
 
         Edge {
             values = List.copyOf(values);
@@ -1191,7 +1194,7 @@ public final class Generator {
      * carries a count is {@link Witnesses}'s to answer — asked rather than decided here, so that a
      * value it learns to build is a boundary this reaches without being told again.
      */
-    private static Edge edgeOf(Axis axis, Carrier carrier, Count at, Symbols symbols) {
+    private static Edge edgeOf(Axis axis, Carrier carrier, Place at, Symbols symbols) {
         if (!(axis.term() instanceof NumericTerm.SizeOf)) {
             // Written by the carrier the line was drawn on, and wearing every name the position
             // declares. Read off the boundary's own shape instead, a count on one carrier could be

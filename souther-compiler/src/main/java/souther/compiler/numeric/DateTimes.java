@@ -57,7 +57,7 @@ public final class DateTimes {
     }
 
     /** Whether {@code count} is one of the counts a date-time can be written as. */
-    public static boolean holds(Count count) {
+    public static boolean holds(Place count) {
         return count.compareTo(MIN) >= 0 && count.compareTo(MAX) <= 0;
     }
 
@@ -77,9 +77,10 @@ public final class DateTimes {
     /** The date-time {@code count} counts to, written the way a model writes one. A count carrying a
      * fraction is floored rather than written as a date-time no model could have named, which is
      * what lets the round-trip that asks whether this carrier holds a count answer no. */
-    public static String written(Count count) {
+    public static String written(Place count) {
         LocalDateTime at = LocalDateTime.ofEpochSecond(
-                count.at().setScale(0, RoundingMode.FLOOR).longValueExact(), 0, ZoneOffset.UTC);
+                Count.number(count).at().setScale(0, RoundingMode.FLOOR).longValueExact(),
+                0, ZoneOffset.UTC);
         return at.format(WRITTEN);
     }
 

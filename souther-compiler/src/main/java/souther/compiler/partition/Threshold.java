@@ -1,6 +1,6 @@
 package souther.compiler.partition;
 
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 
 /**
  * A value a behavior compares an input against, and which side of it the value itself falls on.
@@ -17,7 +17,7 @@ import souther.compiler.numeric.Count;
  *                          the boundary by one and asks for a row that proves nothing.
  * @param origin           the guard that drew it
  */
-public record Threshold(NumericTerm term, Count value, boolean valueBelongsBelow,
+public record Threshold(NumericTerm term, Place value, boolean valueBelongsBelow,
                         OriginRef.GuardOrigin origin) {
 
     /** Where the value this line is drawn on sits. Not what the line is drawn on: that is
