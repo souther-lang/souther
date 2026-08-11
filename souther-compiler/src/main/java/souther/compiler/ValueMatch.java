@@ -12,25 +12,25 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Whether what a row asserted and what a behavior answered are the same value, and where they are not.
+ * Whether what a row stated and what a behavior answered are the same value, and where they are not.
  *
- * <p>Both sides are structured values ({@link ObservedValue}), and neither is read as the other. What
- * a row asserted carries the names the row wrote; what came back carries the names its classes were
- * declared under. Two values differ when their names differ as much as when their contents do, and
- * saying which is the whole reason this is not {@code Values.equal} over the run-time objects: those
- * are compared as values of one type, and the question here is whether they are of one type at all.
+ * <p>The two sides are not one kind of thing and are not read as one. {@link Asserted} is what a row
+ * wrote, carrying the names and the forms the row wrote them under; {@link ObservedValue} is what a
+ * value turned out to be. Two values differ when their types differ as much as when their contents
+ * do, and saying which is the whole reason this is not {@code Values.equal} over the run-time
+ * objects: those are compared as values of one type, and the question here is whether they are of one
+ * type at all.
  *
- * <p>{@code position} is semantic context and never a conversion target. It answers one question the
- * values cannot answer about themselves — an {@link ObservedValue.Sequence} is a {@code List} and a
- * {@code Set} alike, and which one it is decides whether order is part of being the same value. It
- * never supplies a name: the position a child is read at comes from the type its <em>parent value</em>
- * declared, so a field of a {@code Receipt} is read at what {@code Receipt} declares and not at what
- * the surrounding expectation happened to be written for.
+ * <p>{@code position} is what the behavior's declaration says stands here, so it says what the
+ * <em>answer</em> is: an {@link ObservedValue.Sequence} is a {@code List} and a {@code Set} alike, and
+ * which one it is comes from the type that produced it. It says nothing about what the row wrote. A
+ * row that wrote which collection it meant is held to that, and one that did not — {@code [ 1 ]} is
+ * how both are written — is read at what the answer is, since there is nothing else for it to be.
  */
 final class ValueMatch {
 
     /** Where the two differ, the path it is at, and which of the two questions it fails. */
-    record Mismatch(String path, Reason reason, ObservedValue asserted, ObservedValue observed) {}
+    record Mismatch(String path, Reason reason, Asserted asserted, ObservedValue observed) {}
 
     /**
      * Why two values are not the same value.
@@ -40,7 +40,8 @@ final class ValueMatch {
      * not the same disagreement as writing the wrong number.
      */
     enum Reason {
-        /** The two are of different types — a name against another name, or against no name at all. */
+        /** The two are of different types — a name against another name, a list against a set, or
+         *  against no name at all. */
         TYPE,
         /** One type, different contents. */
         VALUE,
@@ -61,19 +62,33 @@ final class ValueMatch {
     }
 
     /** Null where the two are the same value. */
-    Mismatch compare(ObservedValue asserted, ObservedValue observed, Type position) {
+    Mismatch compare(Asserted asserted, ObservedValue observed, Type position) {
         return at("$", asserted, observed, position);
     }
 
-    private Mismatch at(String path, ObservedValue a, ObservedValue o, Type position) {
-        if (a.unread() != null || o.unread() != null) {
+    private Mismatch at(String path, Asserted a, ObservedValue o, Type position) {
+        if (o.unread() != null) {
             return new Mismatch(path, Reason.UNREADABLE, a, o);
         }
-        if (a instanceof ObservedValue.Absent || o instanceof ObservedValue.Absent) {
-            return a instanceof ObservedValue.Absent && o instanceof ObservedValue.Absent
+        return switch (a) {
+            case Asserted.Value(ObservedValue v) -> leaf(path, a, v, o);
+            case Asserted.Built built -> constructed(path, a, built, o);
+            case Asserted.Elements elements -> sequence(path, a, elements, o, position);
+            case Asserted.Entries entries -> mapping(path, a, entries, o, position);
+        };
+    }
+
+    /** A value with no parts against one. Absence is neither a type nor a value of one: a position
+     *  holds nothing or holds something, and that is its own answer. */
+    private Mismatch leaf(String path, Asserted a, ObservedValue v, ObservedValue o) {
+        if (v.unread() != null) {
+            return new Mismatch(path, Reason.UNREADABLE, a, o);
+        }
+        if (v instanceof ObservedValue.Absent || o instanceof ObservedValue.Absent) {
+            return v instanceof ObservedValue.Absent && o instanceof ObservedValue.Absent
                     ? null : new Mismatch(path, Reason.ABSENCE, a, o);
         }
-        return switch (a) {
+        return switch (v) {
             case ObservedValue.Bool x -> o instanceof ObservedValue.Bool y
                     ? same(path, x.value() == y.value(), a, o) : new Mismatch(path, Reason.TYPE, a, o);
             case ObservedValue.Integer x -> o instanceof ObservedValue.Integer y
@@ -91,17 +106,13 @@ final class ValueMatch {
                     ? same(path, x.iso().equals(y.iso()), a, o) : new Mismatch(path, Reason.TYPE, a, o);
             case ObservedValue.Unit x -> o instanceof ObservedValue.Unit y && x.type().equals(y.type())
                     ? null : new Mismatch(path, Reason.TYPE, a, o);
-            case ObservedValue.Constructed x -> constructed(path, x, o);
-            case ObservedValue.Sequence x -> o instanceof ObservedValue.Sequence y
-                    ? sequence(path, x, y, position) : new Mismatch(path, Reason.TYPE, a, o);
-            case ObservedValue.Mapping x -> o instanceof ObservedValue.Mapping y
-                    ? mapping(path, x, y, position) : new Mismatch(path, Reason.TYPE, a, o);
-            case ObservedValue.Absent _, ObservedValue.Unknown _, ObservedValue.Truncated _ ->
+            case ObservedValue.Constructed _, ObservedValue.Sequence _, ObservedValue.Mapping _,
+                    ObservedValue.Absent _, ObservedValue.Unknown _, ObservedValue.Truncated _ ->
                     new Mismatch(path, Reason.UNREADABLE, a, o);
         };
     }
 
-    private static Mismatch same(String path, boolean equal, ObservedValue a, ObservedValue o) {
+    private static Mismatch same(String path, boolean equal, Asserted a, ObservedValue o) {
         return equal ? null : new Mismatch(path, Reason.VALUE, a, o);
     }
 
@@ -110,24 +121,21 @@ final class ValueMatch {
      * a {@code Receipt} whose {@code total} the row wrote as a number and one whose {@code total} is
      * an {@code AmountN} are not one value written two ways.
      */
-    private Mismatch constructed(String path, ObservedValue.Constructed a, ObservedValue o) {
-        if (!(o instanceof ObservedValue.Constructed b)) {
+    private Mismatch constructed(String path, Asserted a, Asserted.Built built, ObservedValue o) {
+        if (!(o instanceof ObservedValue.Constructed b) || !built.type().equals(b.type())) {
             return new Mismatch(path, Reason.TYPE, a, o);
         }
-        if (!a.type().equals(b.type())) {
-            return new Mismatch(path, Reason.TYPE, a, o);
-        }
-        Set<String> names = new LinkedHashSet<>(a.fields().keySet());
+        Set<String> names = new LinkedHashSet<>(built.fields().keySet());
         names.addAll(b.fields().keySet());
         for (String name : names) {
-            ObservedValue x = a.field(name);
+            Asserted x = built.fields().get(name);
             ObservedValue y = b.field(name);
             if (x == null || y == null) {
                 return new Mismatch(path + "." + name, Reason.SHAPE, a, o);
             }
             // The child's position comes from what this value's own type declares that field to be,
-            // so nothing outside the value supplies a name for what stands under it.
-            Mismatch under = at(path + "." + name, x, y, fieldType(a.type(), name));
+            // so nothing outside the value supplies one for what stands under it.
+            Mismatch under = at(path + "." + name, x, y, fieldType(built.type(), name));
             if (under != null) {
                 return under;
             }
@@ -143,26 +151,38 @@ final class ValueMatch {
     }
 
     /**
-     * Two sequences, ordered or not as the position says. A {@code List} is its elements in order and
-     * a {@code Set} is its elements, and the values cannot tell the two apart — a sequence is how each
-     * of them is read back.
+     * Two sequences, ordered or not as what they are says. A {@code List} is its elements in order and
+     * a {@code Set} is its elements; the answer is whichever its declaration made it, and the row is
+     * whichever it wrote — a row that wrote neither is read at the answer's, since {@code [ 1 ]} is
+     * how both are written and states no preference between them.
      */
-    private Mismatch sequence(String path, ObservedValue.Sequence a, ObservedValue.Sequence b,
+    private Mismatch sequence(String path, Asserted a, Asserted.Elements xs, ObservedValue o,
                               Type position) {
+        if (!(o instanceof ObservedValue.Sequence ys)) {
+            return new Mismatch(path, Reason.TYPE, a, o);
+        }
         Type open = NeutralForm.open(position);
+        Asserted.Container answered = open instanceof Type.SetOf ? Asserted.Container.SET
+                : open instanceof Type.ListOf ? Asserted.Container.LIST : Asserted.Container.UNSTATED;
+        if (xs.stated() != Asserted.Container.UNSTATED && answered != Asserted.Container.UNSTATED
+                && xs.stated() != answered) {
+            return new Mismatch(path, Reason.TYPE, a, o);
+        }
+        Asserted.Container reading = xs.stated() != Asserted.Container.UNSTATED ? xs.stated() : answered;
         Type element = switch (open) {
             case Type.ListOf l -> l.element();
             case Type.SetOf s -> s.element();
             case null, default -> null;
         };
-        if (a.elements().size() != b.elements().size()) {
-            return new Mismatch(path, Reason.SHAPE, a, b);
+        if (xs.elements().size() != ys.elements().size()) {
+            return new Mismatch(path, Reason.SHAPE, a, o);
         }
-        if (open instanceof Type.SetOf) {
-            return unordered(path, a.elements(), b.elements(), element, a, b);
+        if (reading == Asserted.Container.SET) {
+            return unordered(path, xs.elements(), ys.elements(), element, a, o);
         }
-        for (int i = 0; i < a.elements().size(); i++) {
-            Mismatch under = at(path + "[" + i + "]", a.elements().get(i), b.elements().get(i), element);
+        for (int i = 0; i < xs.elements().size(); i++) {
+            Mismatch under = at(path + "[" + i + "]", xs.elements().get(i), ys.elements().get(i),
+                    element);
             if (under != null) {
                 return under;
             }
@@ -171,10 +191,10 @@ final class ValueMatch {
     }
 
     /** A set: each element of one stands for one of the other, and which one is not part of the value. */
-    private Mismatch unordered(String path, List<ObservedValue> xs, List<ObservedValue> ys, Type element,
-                               ObservedValue a, ObservedValue o) {
+    private Mismatch unordered(String path, List<Asserted> xs, List<ObservedValue> ys, Type element,
+                               Asserted a, ObservedValue o) {
         List<ObservedValue> left = new ArrayList<>(ys);
-        for (ObservedValue x : xs) {
+        for (Asserted x : xs) {
             boolean found = false;
             for (int i = 0; i < left.size(); i++) {
                 if (at(path, x, left.get(i), element) == null) {
@@ -195,15 +215,19 @@ final class ValueMatch {
      * everything else here is compared by, which a hash lookup would answer with Java's equality — and
      * a key written under a name is not the base it wraps.
      */
-    private Mismatch mapping(String path, ObservedValue.Mapping a, ObservedValue.Mapping b, Type position) {
+    private Mismatch mapping(String path, Asserted a, Asserted.Entries xs, ObservedValue o,
+                             Type position) {
+        if (!(o instanceof ObservedValue.Mapping ys)) {
+            return new Mismatch(path, Reason.TYPE, a, o);
+        }
         Type open = NeutralForm.open(position);
         Type key = open instanceof Type.MapOf m ? m.key() : null;
         Type value = open instanceof Type.MapOf m ? m.value() : null;
-        if (a.entries().size() != b.entries().size()) {
-            return new Mismatch(path, Reason.SHAPE, a, b);
+        if (xs.entries().size() != ys.entries().size()) {
+            return new Mismatch(path, Reason.SHAPE, a, o);
         }
-        List<ObservedValue.Entry> left = new ArrayList<>(b.entries());
-        for (ObservedValue.Entry entry : a.entries()) {
+        List<ObservedValue.Entry> left = new ArrayList<>(ys.entries());
+        for (Asserted.Entry entry : xs.entries()) {
             int found = -1;
             for (int i = 0; i < left.size(); i++) {
                 if (at(path, entry.key(), left.get(i).key(), key) == null) {
@@ -212,7 +236,7 @@ final class ValueMatch {
                 }
             }
             if (found < 0) {
-                return new Mismatch(path, Reason.SHAPE, a, b);
+                return new Mismatch(path, Reason.SHAPE, a, o);
             }
             ObservedValue.Entry match = left.remove(found);
             Mismatch under = at(path + "[" + rendering.show(entry.key()) + "]", entry.value(),

@@ -22,6 +22,56 @@ final class ValueRendering {
         this.neutral = neutral;
     }
 
+    /** What a row wrote, as it wrote it. */
+    String show(Asserted a) {
+        return switch (a) {
+            case Asserted.Value(ObservedValue v) -> show(v);
+            case Asserted.Built built -> {
+                List<String> names = new ArrayList<>(built.fields().keySet());
+                names.sort(String::compareTo);
+                if (names.equals(List.of("value")) && neutral.isNewtype(built.type())) {
+                    yield built.type().name() + "(" + show(built.fields().get("value")) + ")";
+                }
+                List<String> out = new ArrayList<>();
+                for (String name : names) {
+                    out.add(name + " = " + show(built.fields().get(name)));
+                }
+                yield out.isEmpty() ? built.type().name()
+                        : built.type().name() + " { " + String.join(", ", out) + " }";
+            }
+            case Asserted.Elements elements -> {
+                List<String> out = new ArrayList<>();
+                for (Asserted e : elements.elements()) {
+                    out.add(show(e));
+                }
+                String written = out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]";
+                // A row that said which collection it wrote is shown saying it, so a mismatch between
+                // a set and a list of the same elements does not read as two of the same thing.
+                yield elements.stated() == Asserted.Container.SET ? "Set.fromList(" + written + ")"
+                        : written;
+            }
+            case Asserted.Entries entries -> {
+                List<String> out = new ArrayList<>();
+                for (Asserted.Entry e : entries.entries()) {
+                    out.add("(" + show(e.key()) + ", " + show(e.value()) + ")");
+                }
+                String written = out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]";
+                yield entries.stated() ? "Map.fromList(" + written + ")" : written;
+            }
+        };
+    }
+
+    /** What a row wrote is, named as the language names it. */
+    String typeShown(Asserted a) {
+        return switch (a) {
+            case Asserted.Value(ObservedValue v) -> typeShown(v);
+            case Asserted.Built built -> built.type().name();
+            case Asserted.Elements elements ->
+                    elements.stated() == Asserted.Container.SET ? "a set" : "a collection";
+            case Asserted.Entries _ -> "a map";
+        };
+    }
+
     /** The value as a row would write it. */
     String show(ObservedValue v) {
         return switch (v) {

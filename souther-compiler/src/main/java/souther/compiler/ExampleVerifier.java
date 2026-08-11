@@ -661,7 +661,7 @@ public final class ExampleVerifier {
         // Build the expected value before running: a row whose expectation cannot be built states no
         // expectation, and comparing a result against a value nothing built reported a mismatch
         // against an empty expected value — a wrong answer for a row that was right.
-        ObservedValue asserted;
+        Asserted asserted;
         try {
             asserted = fixtures.caseOnly(row.expected()) != null ? null
                     : fixtures.assertedExpected(row.expected(), sig.out());

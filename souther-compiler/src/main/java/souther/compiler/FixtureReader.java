@@ -364,9 +364,16 @@ public final class FixtureReader {
      *     construction stands in.</li>
      * <li>A finished node may be decoded as its own written type, never as the position it stands
      *     in.</li>
-     * <li>What renders a value reads the names it wears. An encoder writes the representation a value
-     *     crosses a boundary in, which is not that.</li>
+     * <li>What a construction states of itself is the form's and not the position's: which collection
+     *     a row wrote, that a map's keys are distinct, that a record has a value for every field it
+     *     has. The position answers only what the form leaves open — {@code [ ]} is how a list and a
+     *     set are both written, and nothing else about it is.</li>
+     * <li>What renders a value reads the names and forms it wears. An encoder writes the
+     *     representation a value crosses a boundary in, which is not that.</li>
      * </ol>
+     *
+     * <p>The third is the second read at the level of the whole rather than the part. A row's
+     * expectation is what it wrote, and what it wrote is more than the names in it.
      *
      * <p>{@code position} is the type the enclosing value declares here, and what it may decide is
      * bounded by the above: it resolves what the written text does not say on its own — whether
@@ -374,20 +381,20 @@ public final class FixtureReader {
      * is what keeps {@code Amount("x")} a fixture that cannot be built while leaving
      * {@code Receipt { total = 1 }} a value of its own to disagree with what came out.
      */
-    ObservedValue assertedExpected(Ast.Expr expected, BoundaryOutput out) {
+    Asserted assertedExpected(Ast.Expr expected, BoundaryOutput out) {
         return asserted(expected, out.type());
     }
 
-    private ObservedValue asserted(Ast.Expr e, Type position) {
+    private Asserted asserted(Ast.Expr e, Type position) {
         return switch (e) {
             // No position is read for these: a literal is the value it spells, and the arithmetic
             // over literals is folded where it is written.
             case Ast.IntLit _, Ast.DecimalLit _, Ast.BoolLit _, Ast.Neg _, Ast.Binary _ ->
-                    structured(raw(e, null, Admission.UNHELD));
+                    new Asserted.Value(structured(raw(e, null, Admission.UNHELD)));
             // A `String` is a `String` wherever it is written. That a temporal position takes a
             // temporal is a fact about the answer, so a row writing one as text disagrees with what
             // came out rather than stating a fixture that could not be built.
-            case Ast.StringLit s -> new ObservedValue.Text(s.value());
+            case Ast.StringLit s -> new Asserted.Value(new ObservedValue.Text(s.value()));
             case Ast.Var v -> assertedName(v, position);
             case Ast.LetIn let -> {
                 BindingId binding = let.binder().id();
@@ -406,11 +413,12 @@ public final class FixtureReader {
         };
     }
 
-    private ObservedValue assertedName(Ast.Var v, Type position) {
+    private Asserted assertedName(Ast.Var v, Type position) {
         return switch (v.denotes()) {
-            case ValueName.Builtin b when b.name().equals("None") -> new ObservedValue.Absent();
+            case ValueName.Builtin b when b.name().equals("None") ->
+                    new Asserted.Value(new ObservedValue.Absent());
             case ValueName.OfType named when symbols.get(named.type()) instanceof Ast.UnitData ->
-                    new ObservedValue.Unit(named.type());
+                    new Asserted.Value(new ObservedValue.Unit(named.type()));
             case ValueName.Local local -> {
                 Ast.Expr held = bindings.get(local.id());
                 if (held == null) {
@@ -428,7 +436,7 @@ public final class FixtureReader {
             }
             // `Map.empty` / `Set.empty`: which of the two an empty collection is, is not in the text.
             case ValueName.Stdlib lib when Prelude.isEmptyCollectionValue(lib.qualified()) ->
-                    emptyAt(position);
+                    emptyAt(position, lib.qualified());
             case null, default ->
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
         };
@@ -436,7 +444,7 @@ public final class FixtureReader {
 
     /** A name's body, read as the name stands rather than re-read at some other position, with the
      *  cycle check every expansion goes through. */
-    private ObservedValue assertedUnder(ValueName named, Ast.Expr body, Type position) {
+    private Asserted assertedUnder(ValueName named, Ast.Expr body, Type position) {
         if (expanding.contains(named)) {
             List<String> cycle = new ArrayList<>();
             expanding.forEach(open -> cycle.add(open.name()));
@@ -452,10 +460,16 @@ public final class FixtureReader {
         }
     }
 
-    private static ObservedValue emptyAt(Type position) {
+    /** {@code Map.empty} / {@code Set.empty}, which say which collection they are, against {@code []},
+     *  which does not and takes the position's answer. */
+    private static Asserted emptyAt(Type position, String named) {
+        if (named != null) {
+            return named.startsWith("Map.") ? new Asserted.Entries(true, List.of())
+                    : new Asserted.Elements(Asserted.Container.SET, List.of());
+        }
         return NeutralForm.open(position) instanceof Type.MapOf
-                ? new ObservedValue.Mapping(List.of())
-                : new ObservedValue.Sequence(List.of());
+                ? new Asserted.Entries(false, List.of())
+                : new Asserted.Elements(Asserted.Container.UNSTATED, List.of());
     }
 
     /**
@@ -463,14 +477,14 @@ public final class FixtureReader {
      * declares it to be — which is where the name under it comes from, and it is this value's own
      * type that says so rather than whatever encloses it.
      */
-    private ObservedValue assertedRecord(Ast.NewData nd, Type position) {
+    private Asserted assertedRecord(Ast.NewData nd, Type position) {
         TypeName built = nd.typeName().denotes();
         Map<String, Ast.TypeRef> declared = neutral.fieldTypes(built);
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
             return assertedNewtype(built, nd.inits().get(0).value(), nd.typeName().written());
         }
-        Map<String, ObservedValue> fields = ObservedValue.fields();
+        Map<String, Asserted> fields = new LinkedHashMap<>();
         for (Ast.Var ref : nd.spreads()) {
             String spread = ref.name();
             Ast.Expr value = ref.denotes() instanceof ValueName.Local local
@@ -480,11 +494,11 @@ public final class FixtureReader {
             }
             // A spread copies the fields of a value of another type, which is how the language writes
             // one record from another. What it copies was written at that value's own positions.
-            if (!(asserted(value, null) instanceof ObservedValue.Constructed copied)) {
+            if (!(asserted(value, null) instanceof Asserted.Built copied)) {
                 throw new FixtureException("`" + spread
                         + "` is not a record, so it has no fields to spread");
             }
-            for (Map.Entry<String, ObservedValue> f : copied.fields().entrySet()) {
+            for (Map.Entry<String, Asserted> f : copied.fields().entrySet()) {
                 if (declared.containsKey(f.getKey())) {
                     fields.put(f.getKey(), f.getValue());
                 }
@@ -493,32 +507,53 @@ public final class FixtureReader {
         for (Ast.FieldInit fi : nd.inits()) {
             fields.put(fi.name(), asserted(fi.value(), neutral.shapeOf(declared.get(fi.name()))));
         }
-        // A field the construction leaves out is absent, so a reading of it answers "empty" rather
-        // than "not there" — the same rule the observation of a built value is read under.
-        for (String name : declared.keySet()) {
-            fields.putIfAbsent(name, new ObservedValue.Absent());
+        // Leaving a field out is how an optional is written empty, and it is only that: a position
+        // that holds a value takes one, so a construction missing a required field states no value of
+        // its own type at all. What is written empty is present here as absence rather than left out,
+        // so reading it answers "empty" instead of "not there" — the same rule the observation of a
+        // built value is read under.
+        for (Map.Entry<String, Ast.TypeRef> f : declared.entrySet()) {
+            if (fields.containsKey(f.getKey())) {
+                continue;
+            }
+            if (!(neutral.shapeOf(f.getValue()) instanceof Type.OptionOf)) {
+                throw new FixtureException("`" + built.name() + "` has no value for `" + f.getKey()
+                        + "`, which is not optional");
+            }
+            fields.put(f.getKey(), new Asserted.Value(new ObservedValue.Absent()));
         }
-        return new ObservedValue.Constructed(built, fields);
+        return new Asserted.Built(built, fields);
     }
 
-    private ObservedValue assertedApply(Ast.Apply c, Type position) {
+    private Asserted assertedApply(Ast.Apply c, Type position) {
         Type.Prim written = Type.Prim.named(c.reaches());
         if (written != null && written.temporal()) {
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
                 throw new FixtureException("`" + c.written() + "` takes one written string");
             }
-            return structured(CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt()));
+            return new Asserted.Value(
+                    structured(CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt())));
         }
+        // `Set.fromList` and `Map.fromList` say which collection the row wrote, where `[ … ]` does
+        // not. The elements are read at what this collection holds, which the position says, and
+        // which collection it is is the row's own.
         if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())) {
             if (c.args().size() != 1) {
                 throw new FixtureException("`" + c.written() + "` takes one argument");
             }
-            return asserted(c.args().get(0), position);
+            if (!(c.args().get(0) instanceof Ast.ListLit listed)) {
+                throw new FixtureException("`" + c.written() + "` takes a written list");
+            }
+            return "Map.fromList".equals(c.reaches())
+                    ? assertedEntries(listed, position, true)
+                    : new Asserted.Elements(Asserted.Container.SET,
+                            assertedElements(listed, position));
         }
         if (appliedHelper(c) instanceof Applied helper) {
-            // A helper produced a value of its own type, so what it answered is already a value and
-            // is read as one. Nothing about the position enters.
-            return structured(answered(c, helper));
+            // A helper produced a value of its own type, so what it answered is read as the value it
+            // is — which collection it is included, since that too is what the row stated and not
+            // what the position holds. Nothing about the position enters.
+            return assertedLive(answered(c, helper));
         }
         if (!neutral.isNewtype(c.written())) {
             String reached = helperKey(c);
@@ -542,65 +577,173 @@ public final class FixtureReader {
      * the invariant a newtype declares — neither of which is a disagreement with the behavior. The
      * decoder run here is this node's, never the enclosing position's: what comes back is used for
      * the one field of this value, and nothing outside it was consulted to choose it.
+     *
+     * <p>Whether it is run is decided by what this newtype wraps and not by how the argument was
+     * spelled. A scalar is settled by the value standing there however it got there, so a literal and
+     * a helper's answer are one case; reading only the first made {@code Positive(-1)} a fixture that
+     * could not be built and {@code Positive(neg(1))} a disagreement. Where it wraps something with
+     * parts, its decoder would read those parts at what this newtype declares, which is the reading
+     * this whole walk exists to remove — so the parts stand as they were written.
      */
-    private ObservedValue assertedNewtype(TypeName built, Ast.Expr argument, String written) {
+    private Asserted assertedNewtype(TypeName built, Ast.Expr argument, String written) {
         Type base = neutral.shapeOf(neutral.newtypeBaseType(built));
-        Map<String, ObservedValue> field = ObservedValue.fields();
-        if (writtenLiteral(argument)) {
+        Map<String, Asserted> field = new LinkedHashMap<>();
+        if (scalar(base)) {
             // The value is built here, through this newtype's own decoder over its own base: that is
             // what refuses `Amount("x")` and what runs the invariant a newtype declares, neither of
             // which is a disagreement with the behavior. The type the decoder is chosen from is this
             // node's, and the argument is read at the base this node declares — nothing enclosing it
             // was consulted for either.
             Object inner = neutral.shaped(raw(argument, base, Admission.HELD), base);
-            ObservedValue whole = structured(decode(FixtureShape.of(Type.ref(built), symbols), inner));
-            if (whole instanceof ObservedValue.Constructed c && c.field("value") != null) {
-                return c;
-            }
-            field.put("value", whole);
-            return new ObservedValue.Constructed(built, field);
+            return assertedLive(decode(FixtureShape.of(Type.ref(built), symbols), inner));
         }
         field.put("value", asserted(argument, base));
-        return new ObservedValue.Constructed(built, field);
+        return new Asserted.Built(built, field);
     }
 
-    /** Whether the expression is a value spelled out where it stands, rather than one something else
-     *  has to be run or read to produce. Only these are put through a newtype's own decoder: anything
-     *  else already states a value of its own type, and reading it back would ask a decoder to recover
-     *  what it is. */
-    private static boolean writtenLiteral(Ast.Expr e) {
-        return e instanceof Ast.IntLit || e instanceof Ast.DecimalLit || e instanceof Ast.StringLit
-                || e instanceof Ast.BoolLit || e instanceof Ast.Neg || e instanceof Ast.Binary;
+    /** Whether a type is one whose values have no parts, so a value of it is settled by the one value
+     *  standing there and a decoder for it reads no position but its own. */
+    private static boolean scalar(Type type) {
+        Type open = NeutralForm.open(type);
+        return open instanceof Type.Prim
+                || (open instanceof Type.Ref r && r.name().isPrimitive());
     }
 
     /**
-     * A written list, which is a list, a set, or a map's entries. Which one is not in the text — the
-     * three are written alike — so the position answers it, and answers nothing else: what stands at
-     * each element is read at what this collection holds, under the name the element itself wrote.
+     * A written list, which is a list, a set, or a map's entries. Which one it is is the one thing
+     * the text does not say — the three are written alike — so the position answers that, and answers
+     * nothing else: what stands at each element is read at what this collection holds, under the name
+     * the element itself wrote.
      */
-    private ObservedValue assertedCollection(Ast.ListLit l, Type position) {
-        Type open = NeutralForm.open(position);
-        if (open instanceof Type.MapOf m) {
-            List<ObservedValue.Entry> entries = new ArrayList<>();
-            for (Ast.Expr el : l.elements()) {
-                if (!(el instanceof Ast.Tuple t) || t.elements().size() != 2) {
-                    throw new FixtureException("a map's entries are written `(key, value)`");
-                }
-                entries.add(new ObservedValue.Entry(asserted(t.elements().get(0), m.key()),
-                        asserted(t.elements().get(1), m.value())));
-            }
-            return new ObservedValue.Mapping(entries);
-        }
-        Type element = switch (open) {
+    private Asserted assertedCollection(Ast.ListLit l, Type position) {
+        return NeutralForm.open(position) instanceof Type.MapOf
+                ? assertedEntries(l, position, false)
+                : new Asserted.Elements(Asserted.Container.UNSTATED, assertedElements(l, position));
+    }
+
+    private List<Asserted> assertedElements(Ast.ListLit l, Type position) {
+        Type element = switch (NeutralForm.open(position)) {
             case Type.ListOf list -> list.element();
             case Type.SetOf set -> set.element();
             case null, default -> null;
         };
-        List<ObservedValue> out = new ArrayList<>();
+        List<Asserted> out = new ArrayList<>();
         for (Ast.Expr el : l.elements()) {
             out.add(asserted(el, element));
         }
-        return new ObservedValue.Sequence(out);
+        return out;
+    }
+
+    /**
+     * A map's entries.
+     *
+     * <p>Two keys that are one key state no map, so a row writing them has written nothing for the
+     * comparison to disagree with. Which two those are is asked of the keys as the row wrote them —
+     * reading them into what the position declares its keys to be is the coercion this walk exists to
+     * remove, and it would call {@code 1} and {@code AmountN(1)} one key.
+     */
+    private Asserted assertedEntries(Ast.ListLit l, Type position, boolean stated) {
+        Type open = NeutralForm.open(position);
+        Type key = open instanceof Type.MapOf m ? m.key() : null;
+        Type value = open instanceof Type.MapOf m ? m.value() : null;
+        ValueMatch same = new ValueMatch(neutral, new ValueRendering(neutral));
+        List<Asserted.Entry> entries = new ArrayList<>();
+        for (Ast.Expr el : l.elements()) {
+            if (!(el instanceof Ast.Tuple t) || t.elements().size() != 2) {
+                throw new FixtureException("a map's entries are written `(key, value)`");
+            }
+            Asserted written = asserted(t.elements().get(0), key);
+            for (Asserted.Entry already : entries) {
+                if (same.compare(already.key(), flattened(written), key) == null) {
+                    throw new FixtureException("two entries are written under the one key `"
+                            + new ValueRendering(neutral).show(written) + "`");
+                }
+            }
+            entries.add(new Asserted.Entry(written, asserted(t.elements().get(1), value)));
+        }
+        return new Asserted.Entries(stated, entries);
+    }
+
+    /**
+     * What a row wrote, as the value it is, for asking whether two keys are one key.
+     *
+     * <p>The one thing this drops is which collection a sequence is, and a map's key cannot be one: a
+     * key that crosses a boundary renders as and parses from a bare string, which no collection does.
+     * So nothing a key can be loses anything here.
+     */
+    private static ObservedValue flattened(Asserted a) {
+        return switch (a) {
+            case Asserted.Value(ObservedValue v) -> v;
+            case Asserted.Built built -> {
+                Map<String, ObservedValue> fields = ObservedValue.fields();
+                built.fields().forEach((name, held) -> fields.put(name, flattened(held)));
+                yield new ObservedValue.Constructed(built.type(), fields);
+            }
+            case Asserted.Elements elements -> {
+                List<ObservedValue> out = new ArrayList<>();
+                for (Asserted e : elements.elements()) {
+                    out.add(flattened(e));
+                }
+                yield new ObservedValue.Sequence(out);
+            }
+            case Asserted.Entries entries -> {
+                List<ObservedValue.Entry> out = new ArrayList<>();
+                for (Asserted.Entry e : entries.entries()) {
+                    out.add(new ObservedValue.Entry(flattened(e.key()), flattened(e.value())));
+                }
+                yield new ObservedValue.Mapping(out);
+            }
+        };
+    }
+
+    /**
+     * A value a helper produced, read as what a row stated by writing that application.
+     *
+     * <p>An {@link ObservedValue} would do for everything but one thing: which collection a sequence
+     * is. That is left out there because the type behind an observation says it, and here the type
+     * behind it is the helper's rather than the position's — a helper answering with a {@code Set} has
+     * not stated the {@code List} the position holds. The value itself says which it is, so it is read
+     * from the value.
+     */
+    private Asserted assertedLive(Object live) {
+        if (live == null) {
+            return new Asserted.Value(new ObservedValue.Unknown("a null reached the reader"));
+        }
+        String name = NeutralForm.simpleName(live);
+        if (name.equals("Option$None")) {
+            return new Asserted.Value(new ObservedValue.Absent());
+        }
+        if (name.equals("Option$Some")) {
+            return assertedLive(ObservedValues.readOrNull(live, "value"));
+        }
+        if (live instanceof Map<?, ?> entries) {
+            List<Asserted.Entry> out = new ArrayList<>();
+            for (Map.Entry<?, ?> e : entries.entrySet()) {
+                out.add(new Asserted.Entry(assertedLive(e.getKey()), assertedLive(e.getValue())));
+            }
+            return new Asserted.Entries(true, out);
+        }
+        if (live instanceof Iterable<?> elements) {
+            List<Asserted> out = new ArrayList<>();
+            for (Object e : elements) {
+                out.add(assertedLive(e));
+            }
+            return new Asserted.Elements(live instanceof Set<?> ? Asserted.Container.SET
+                    : Asserted.Container.LIST, out);
+        }
+        TypeName type = symbols.resolve(name);
+        if (type != null && symbols.get(type) instanceof Ast.Data data) {
+            Map<String, Asserted> fields = new LinkedHashMap<>();
+            if (data.newtype()) {
+                fields.put("value", assertedLive(ObservedValues.readOrNull(live, "value")));
+            } else {
+                for (String each : neutral.fieldTypes(type).keySet()) {
+                    fields.put(each, assertedLive(ObservedValues.readOrNull(live, each)));
+                }
+            }
+            return new Asserted.Built(type, fields);
+        }
+        return new Asserted.Value(structured(live));
     }
 
     /**
@@ -1779,17 +1922,25 @@ public final class FixtureReader {
     }
 
     /** Where what a row asserted and what came back differ, or null where they are the same value. */
-    ValueMatch.Mismatch disagreement(ObservedValue asserted, Object result, Type position) {
+    ValueMatch.Mismatch disagreement(Asserted asserted, Object result, Type position) {
         return new ValueMatch(neutral, new ValueRendering(neutral))
                 .compare(asserted, structured(result), position);
     }
 
-    /** The row's rendering of a structured value, in the notation a fixture is written in. */
+    /** A value in the notation a fixture is written in — what a row wrote, or what came out. */
+    String shown(Asserted a) {
+        return new ValueRendering(neutral).show(a);
+    }
+
     String shown(ObservedValue v) {
         return new ValueRendering(neutral).show(v);
     }
 
-    /** What a structured value is, named as the language names it. */
+    /** What a value is, named as the language names it. */
+    String typeShown(Asserted a) {
+        return new ValueRendering(neutral).typeShown(a);
+    }
+
     String typeShown(ObservedValue v) {
         return new ValueRendering(neutral).typeShown(v);
     }

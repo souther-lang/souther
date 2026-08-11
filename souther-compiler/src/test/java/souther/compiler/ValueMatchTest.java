@@ -34,8 +34,31 @@ class ValueMatchTest {
         return new ValueMatch(neutral, new ValueRendering(neutral));
     }
 
+    /** A value with no parts, on either side. */
     private static ObservedValue n(long v) {
         return new ObservedValue.Integer(v);
+    }
+
+    private static Asserted said(ObservedValue v) {
+        return new Asserted.Value(v);
+    }
+
+    /** What a row wrote without saying which collection it is: `[ … ]`. */
+    private static Asserted wrote(ObservedValue... elements) {
+        List<Asserted> out = new java.util.ArrayList<>();
+        for (ObservedValue e : elements) {
+            out.add(said(e));
+        }
+        return new Asserted.Elements(Asserted.Container.UNSTATED, out);
+    }
+
+    /** What a row wrote saying it: `Set.fromList([ … ])`. */
+    private static Asserted wroteASet(ObservedValue... elements) {
+        List<Asserted> out = new java.util.ArrayList<>();
+        for (ObservedValue e : elements) {
+            out.add(said(e));
+        }
+        return new Asserted.Elements(Asserted.Container.SET, out);
     }
 
     private static ObservedValue seq(ObservedValue... elements) {
@@ -47,55 +70,83 @@ class ValueMatchTest {
     private static final Type SET = Type.set(INT);
     private static final Type MAP = Type.map(INT, INT);
 
-    private static void holds(ObservedValue a, ObservedValue b, Type position) {
+    private static void holds(Asserted a, ObservedValue b, Type position) {
         assertNull(match().compare(a, b, position), "the two state the same value");
     }
 
-    private static ValueMatch.Mismatch differs(ObservedValue a, ObservedValue b, Type position) {
+    private static void holds(ObservedValue a, ObservedValue b, Type position) {
+        holds(said(a), b, position);
+    }
+
+    private static ValueMatch.Mismatch differs(Asserted a, ObservedValue b, Type position) {
         ValueMatch.Mismatch m = match().compare(a, b, position);
         assertNotNull(m, "the two state different values");
         return m;
     }
 
+    private static ValueMatch.Mismatch differs(ObservedValue a, ObservedValue b, Type position) {
+        return differs(said(a), b, position);
+    }
+
     @Test
     void aListIsItsElementsInOrder() {
-        holds(seq(n(1), n(2)), seq(n(1), n(2)), LIST);
-        assertEquals(ValueMatch.Reason.VALUE, differs(seq(n(1), n(2)), seq(n(2), n(1)), LIST).reason());
-        assertEquals("$[0]", differs(seq(n(1), n(2)), seq(n(2), n(1)), LIST).path());
+        holds(wrote(n(1), n(2)), seq(n(1), n(2)), LIST);
+        assertEquals(ValueMatch.Reason.VALUE, differs(wrote(n(1), n(2)), seq(n(2), n(1)), LIST).reason());
+        assertEquals("$[0]", differs(wrote(n(1), n(2)), seq(n(2), n(1)), LIST).path());
     }
 
     @Test
     void aSetIsItsElements() {
-        holds(seq(n(1), n(2)), seq(n(1), n(2)), SET);
-        holds(seq(n(1), n(2)), seq(n(2), n(1)), SET);
-        assertEquals(ValueMatch.Reason.SHAPE, differs(seq(n(1), n(2)), seq(n(1), n(3)), SET).reason());
+        holds(wrote(n(1), n(2)), seq(n(1), n(2)), SET);
+        holds(wrote(n(1), n(2)), seq(n(2), n(1)), SET);
+        assertEquals(ValueMatch.Reason.SHAPE, differs(wrote(n(1), n(2)), seq(n(1), n(3)), SET).reason());
     }
 
     @Test
-    void whichOfTheTwoItIsComesFromThePositionAndNowhereElse() {
-        // The one pair of sequences, read both ways. A set and a list are read back as the same kind
-        // of value, so a comparison that lost the position would answer one of these for both — and
-        // the answers differ.
-        holds(seq(n(1), n(2)), seq(n(2), n(1)), SET);
-        assertNotNull(match().compare(seq(n(1), n(2)), seq(n(2), n(1)), LIST),
+    void aRowThatSaidNothingAboutWhichCollectionIsReadAtTheAnswers() {
+        // `[ 1, 2 ]` is how a list and a set are both written, so it states no preference and the
+        // answer's own type says which reading applies. The one pair, read both ways, answers
+        // differently — a comparison that lost that would give one answer for both.
+        holds(wrote(n(1), n(2)), seq(n(2), n(1)), SET);
+        assertNotNull(match().compare(wrote(n(1), n(2)), seq(n(2), n(1)), LIST),
                 "a list is its elements in order, whatever a set of the same elements is");
     }
 
     @Test
+    void aRowThatSaidWhichCollectionItWroteIsHeldToIt() {
+        // And the other way. `Set.fromList([ 1 ])` states a set wherever it stands, so a behavior
+        // answering with a list did not answer with it — which the position must not be allowed to
+        // paper over, since it is the answer's type and not the row's.
+        holds(wroteASet(n(1), n(2)), seq(n(1), n(2)), SET);
+        assertEquals(ValueMatch.Reason.TYPE, differs(wroteASet(n(1)), seq(n(1)), LIST).reason());
+        // An empty one carries nothing at all, so it is only what the row said that tells them apart.
+        assertEquals(ValueMatch.Reason.TYPE, differs(wroteASet(), seq(), LIST).reason());
+        holds(wroteASet(), seq(), SET);
+    }
+
+    @Test
+    void aSequenceAndAMapAreNeverOneValue() {
+        assertEquals(ValueMatch.Reason.TYPE,
+                differs(new Asserted.Entries(true, List.of()), seq(), MAP).reason());
+        assertEquals(ValueMatch.Reason.TYPE,
+                differs(wroteASet(), new ObservedValue.Mapping(List.of()), MAP).reason());
+    }
+
+    @Test
     void anEmptyCollectionIsStillReadAtItsPosition() {
-        holds(seq(), seq(), LIST);
-        holds(seq(), seq(), SET);
-        holds(new ObservedValue.Mapping(List.of()), new ObservedValue.Mapping(List.of()), MAP);
+        holds(wrote(), seq(), LIST);
+        holds(wrote(), seq(), SET);
+        holds(new Asserted.Entries(false, List.of()), new ObservedValue.Mapping(List.of()), MAP);
         // An empty sequence and an empty map carry the same nothing, and are not the same value.
         assertEquals(ValueMatch.Reason.TYPE,
-                differs(seq(), new ObservedValue.Mapping(List.of()), MAP).reason());
+                differs(wrote(), new ObservedValue.Mapping(List.of()), MAP).reason());
     }
 
     @Test
     void aMapIsMatchedByKeyRatherThanLookedUpByOne() {
-        ObservedValue.Mapping a = new ObservedValue.Mapping(List.of(
-                new ObservedValue.Entry(n(1), new ObservedValue.Text("a")),
-                new ObservedValue.Entry(n(2), new ObservedValue.Text("b"))));
+        Asserted a = new Asserted.Entries(false, List.of(
+                new Asserted.Entry(said(n(1)), said(new ObservedValue.Text("a"))),
+                new Asserted.Entry(said(n(2)), said(new ObservedValue.Text("b")))));
         ObservedValue.Mapping reversed = new ObservedValue.Mapping(List.of(
                 new ObservedValue.Entry(n(2), new ObservedValue.Text("b")),
                 new ObservedValue.Entry(n(1), new ObservedValue.Text("a"))));
@@ -122,8 +173,8 @@ class ValueMatchTest {
 
     @Test
     void aDecimalKeyIsMatchedByTheAmountToo() {
-        ObservedValue.Mapping a = new ObservedValue.Mapping(List.of(
-                new ObservedValue.Entry(new ObservedValue.Decimal(new BigDecimal("1.0")), n(7))));
+        Asserted a = new Asserted.Entries(false, List.of(
+                new Asserted.Entry(said(new ObservedValue.Decimal(new BigDecimal("1.0"))), said(n(7)))));
         ObservedValue.Mapping b = new ObservedValue.Mapping(List.of(
                 new ObservedValue.Entry(new ObservedValue.Decimal(new BigDecimal("1.00")), n(7))));
         holds(a, b, Type.map(Type.Prim.named("Decimal"), INT));
@@ -135,14 +186,14 @@ class ValueMatchTest {
         TypeName amount = new TypeName("demo", "AmountN");
         ObservedValue wrapped = new ObservedValue.Constructed(amount,
                 java.util.Map.of("value", n(1)));
-        ValueMatch.Mismatch m = differs(n(1), wrapped, Type.ref(amount));
+        ValueMatch.Mismatch m = differs(said(n(1)), wrapped, Type.ref(amount));
         assertEquals(ValueMatch.Reason.TYPE, m.reason());
     }
 
     @Test
     void twoNamesOverOneBaseAreTwoTypes() {
-        ObservedValue one = new ObservedValue.Constructed(new TypeName("demo", "AmountN"),
-                java.util.Map.of("value", n(1)));
+        Asserted one = new Asserted.Built(new TypeName("demo", "AmountN"),
+                java.util.Map.of("value", said(n(1))));
         ObservedValue other = new ObservedValue.Constructed(new TypeName("demo", "OtherAmountN"),
                 java.util.Map.of("value", n(1)));
         assertEquals(ValueMatch.Reason.TYPE, differs(one, other, null).reason());
