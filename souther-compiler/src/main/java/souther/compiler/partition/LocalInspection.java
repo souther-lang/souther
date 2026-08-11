@@ -138,7 +138,7 @@ public sealed interface LocalInspection {
                 constructibleAt(PartitionClasses.of(view, symbols), view, admissible, symbols);
         TypeBounds.Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
-                : cutsOf(type, axis, own, placed == null ? null : placed.value());
+                : cutsOf(type, axis, own, placed == null ? null : placed.narrowedBy(path));
         if (classes.isEmpty() && cuts.isEmpty()) {
             return new Exhausted(reading);
         }
@@ -327,7 +327,10 @@ public sealed interface LocalInspection {
      *
      * @param bounds where the position stops, the record it sits in taken into account
      * @param own    where its own type stops, so that an end the record moved can say so
-     * @param within the record, or null at a position that is not a field of one
+     * @param within the declaration whose clause could have moved the end, or null where none did.
+     *               The declaration and not the value: the same relation can be written on the
+     *               record, on a record inside it, or on a name wrapped round either, and only the
+     *               one that wrote it has anything to answer for
      */
     private static List<Cut> cutsOf(Type type, TypeBounds.Bounds bounds, TypeBounds.Bounds own,
                                     TypeName within) {

@@ -558,6 +558,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             data Base = { a: A, b: B }
 
             data Wrapped = Base invariant value.a.value < value.b.value
+            data Held    = { w: Wrapped }
 
             data Ok = { size: Int }
 
@@ -568,6 +569,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             behavior onBare : (v: Base) -> Ok
                 constructs Ok
             let onBare (v) = Ok { size = v.a.value }
+
+            behavior onHeld : (v: Held) -> Ok
+                constructs Ok
+            let onHeld (v) = Ok { size = v.w.a.value }
             """;
 
     /**
@@ -592,6 +597,24 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
         assertEquals("invariant A (max) within Wrapped",
                 lines.get("onWrapped/v.a = 9").origin(),
                 "the wrapper moved the edge `A` drew and did not draw one");
+    }
+
+    /**
+     * And the declaration that moved it is named wherever the position is reached from.
+     *
+     * <p>`Held` holds a `Wrapped` and states nothing. The edge is still `A`'s and it was still
+     * `Wrapped`'s clause that took it in, so that is what the line says — read off the value the
+     * position sits in, it named a declaration with no clause about the pair at all, and a reader
+     * following it finds nothing there. The name is part of what tells one line from another
+     * ({@link OriginRef.Line}) and not only what is printed.
+     */
+    @Test
+    void aNarrowedEdgeNamesTheDeclarationThatMovedItAndNotTheValueItSitsIn() {
+        Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
+
+        assertEquals("invariant A (max) within Wrapped",
+                lines.get("onHeld/v.w.a = 9").origin(),
+                "the clause is `Wrapped`'s wherever a `Wrapped` is held: " + lines.keySet());
     }
 
     /** A length floor over an element type nothing inhabits. Its own module, since a declaration that

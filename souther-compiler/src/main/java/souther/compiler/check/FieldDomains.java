@@ -30,13 +30,16 @@ public final class FieldDomains {
 
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), List.of(), false, true, NumericDomain.top(),
-                    () -> true);
+            new FieldDomains(Map.of(), Map.of(), List.of(), Map.of(), false, true,
+                    NumericDomain.top(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
      * leave — see {@link #placedAt}. */
     private final List<InvariantChecker.Direct> directs;
+    /** Which declarations relate each coordinate to something else, and so could have moved where it
+     * stops — see {@link #narrowedBy}. */
+    private final Map<String, List<TypeName>> narrowers;
     /** What each field has to hold, kept apart from what each field is. Same numbers, different
      * question — see {@link Held}. */
     private final Map<String, NumericDomain.Bounds> heldByField;
@@ -51,12 +54,14 @@ public final class FieldDomains {
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
                          Map<String, NumericDomain.Bounds> heldByField,
-                         List<InvariantChecker.Direct> directs, boolean infeasible,
+                         List<InvariantChecker.Direct> directs,
+                         Map<String, List<TypeName>> narrowers, boolean infeasible,
                          boolean seeded, NumericDomain numbers,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.heldByField = heldByField;
         this.directs = directs;
+        this.narrowers = narrowers;
         this.infeasible = infeasible;
         this.seeded = seeded;
         this.numbers = numbers;
@@ -124,8 +129,9 @@ public final class FieldDomains {
         });
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
-        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.directs(),
-                seeded.numbers().isBottom(), seeded.everyClauseRead(), seeded.numbers(),
+        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.reading().directs(),
+                seeded.reading().narrowers(), seeded.numbers().isBottom(),
+                seeded.everyClauseRead(), seeded.numbers(),
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
@@ -148,6 +154,24 @@ public final class FieldDomains {
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
     public record Placed(String path, boolean measured, TypeName from, boolean lower, Endpoint end) {}
+
+    /**
+     * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
+     * null where none did.
+     *
+     * <p>Which declaration wrote the relation, and not which value the position sits in. The same
+     * relation can be written on the record, on a record inside it, or on a name wrapped round
+     * either, and an edge said to have been taken in by a declaration holding no clause about the
+     * pair sends a reader to a line that is not there.
+     *
+     * <p>The outermost where several relate it. Which of them settled the number is not a question
+     * this can answer — a bound arrives along a path through the differences and several clauses can
+     * be on it — and naming one that wrote such a clause is the whole of what is known.
+     */
+    public TypeName narrowedBy(String path) {
+        List<TypeName> from = narrowers.get(path);
+        return from == null || from.isEmpty() ? null : from.get(0);
+    }
 
     /** Every end the rules place, wherever it is. */
     public List<Placed> placed() {

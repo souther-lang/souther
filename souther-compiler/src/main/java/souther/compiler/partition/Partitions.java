@@ -661,6 +661,12 @@ public final class Partitions {
             return path.fields().isEmpty() ? List.of()
                     : domains.placedAt(String.join(".", path.fields()));
         }
+
+        /** Which declaration's clause could have moved where the coordinate at {@code path} stops. */
+        TypeName narrowedBy(TermPath path) {
+            return path.fields().isEmpty() ? null
+                    : domains.narrowedBy(String.join(".", path.fields()));
+        }
     }
 
     /** The record a position holds, through the names it is written under: a value of

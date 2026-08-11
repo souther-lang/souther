@@ -118,7 +118,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * @param bound what the coordinate is compared against
      */
     static Optional<InvariantBound> at(Ast.BinOp op, Ast.Expr bound, Carrier carrier) {
-        if (carrier == null) {
+        if (carrier == null || bound == null) {
             return Optional.empty();
         }
         Place at = carrier.literalOf(bound);

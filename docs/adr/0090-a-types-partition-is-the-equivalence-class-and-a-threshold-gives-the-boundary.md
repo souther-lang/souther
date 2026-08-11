@@ -254,6 +254,18 @@ A cut keeps every rule that drew it. One value can be an obligation several time
 that took a line in is not a second line. A relational clause and the bound it narrowed settled one
 edge together and are one obligation, named by both.
 
+The declaration named as having taken it in is the one whose clause relates the coordinate, and not
+the value the position sits in. The same relation can be written on the record, on a record inside
+it, or on a name wrapped round either, and only the one that wrote it has anything to answer for:
+read off the value, an edge a wrapper narrowed was reported as narrowed by the record under it, and a
+reader following that name finds no such clause there. It is not only what is printed — the name
+tells one line from another — so a value standing in for the provenance made two lines one wherever
+two declarations round a value each related a coordinate.
+
+Which clause of the ones that could have moved it is not asked. A bound arrives along a path through
+the differences and several clauses can be on it, so what is known is that some declaration wrote a
+relation about this coordinate, and naming one that did is the whole of it.
+
 ## Consequences
 
 The report says "no finite equivalence class can be derived here" and stops. It does not say the

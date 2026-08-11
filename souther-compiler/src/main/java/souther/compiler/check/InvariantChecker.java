@@ -29,6 +29,7 @@ import java.util.SequencedSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -250,7 +251,7 @@ public final class InvariantChecker {
      *                        turning one into an obligation has to know that
      */
     record Seeded(NumericDomain numbers, Map<String, String> atoms, Map<String, String> held,
-                  List<Direct> directs, boolean everyClauseRead) {}
+                  Reading reading, boolean everyClauseRead) {}
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
@@ -303,7 +304,8 @@ public final class InvariantChecker {
             }
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
-            return new Seeded(NumericDomain.top(), Map.of(), Map.of(), List.of(), false);
+            return new Seeded(NumericDomain.top(), Map.of(), Map.of(),
+                    new Reading(List.of(), Map.of()), false);
         }
         Map<String, String> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
@@ -322,7 +324,7 @@ public final class InvariantChecker {
         }
         // Which of the clauses place an edge, asked once the positions have names to be recognised
         // by.
-        List<Direct> directs = c.directsIn(written, at, atoms, keys, held, typeAt);
+        Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt);
         NumericDomain numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
@@ -336,7 +338,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(numbers, atoms, held, directs, read);
+        return new Seeded(numbers, atoms, held, reading, read);
     }
 
     /**
@@ -379,14 +381,13 @@ public final class InvariantChecker {
             held.put(path, counted);
         }
         // Through the names, to the value that has the fields. Each is read at the path it is worn
-        // under, since wearing a name is not being somewhere else.
+        // under, since wearing a name is not being somewhere else. How far the names reach is
+        // `TypeOps`' answer and not a second walk of its own: a declaration that wraps its own kind
+        // ends that walk, and a copy of it here is a place the two could come to disagree.
         Core inner = value;
         Type worn = type;
-        Set<TypeName> through = new HashSet<>();
-        while (TypeOps.isSingleValueNewtype(worn, symbols)
-                && through.add(((Type.Ref) worn).name())) {
-            Type under = TypeOps.fieldTypes(
-                    (Ast.Data) symbols.get(((Type.Ref) worn).name()), symbols).get("value");
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
+            Type under = TypeOps.fieldTypes(layer.data(), symbols).get("value");
             if (under == null) {
                 break;
             }
@@ -431,7 +432,21 @@ public final class InvariantChecker {
     /** A coordinate a clause reaching this value could be about. */
     private record Coordinate(String path, boolean measured, Carrier carrier) {}
 
-    private List<Direct> directsIn(List<Written> stated, Denotations at,
+    /**
+     * What the clauses of one value place on its coordinates, and which declarations relate each of
+     * them to something else.
+     *
+     * <p>The second is what says who took an edge in. A bound is moved by a clause comparing the
+     * coordinate to another, and which declaration wrote that clause is not read off the value's own
+     * name: the same relation can be written on the record, on a record inside it, or on a name
+     * wrapped round either, and only the one that wrote it has anything to answer for.
+     *
+     * @param narrowers the declarations whose clauses compare each coordinate to something without
+     *                  placing an end on it, outermost first
+     */
+    record Reading(List<Direct> directs, Map<String, List<TypeName>> narrowers) {}
+
+    private Reading directsIn(List<Written> stated, Denotations at,
                                    Map<String, String> atoms, Map<String, String> keys,
                                    Map<String, String> held, Map<String, Type> typeAt) {
         Map<String, Coordinate> byName = new LinkedHashMap<>();
@@ -449,22 +464,32 @@ public final class InvariantChecker {
         // its sizes are spaced.
         held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
-        stated.forEach(each -> direct(each.clause(), each.from(), at, byName, out));
-        return List.copyOf(out);
+        Map<String, List<TypeName>> narrowers = new LinkedHashMap<>();
+        stated.forEach(each -> direct(each.clause(), each.from(), at, byName, out, narrowers));
+        return new Reading(List.copyOf(out), Map.copyOf(narrowers));
     }
 
-    /** {@code clause}'s ends, taking a conjunction one conjunct at a time as an invariant is. */
+    /**
+     * {@code clause}'s ends and what it relates, taking a conjunction one conjunct at a time as an
+     * invariant is.
+     *
+     * <p>Both answers from one reading of the clause. A comparison either places an end on a
+     * coordinate or relates one to something else, and which of the two it did is the same question
+     * asked once — read apart, the second would be a walk that had to agree with this one about which
+     * comparisons it had already accounted for.
+     */
     private void direct(Core clause, TypeName from, Denotations at,
-                        Map<String, Coordinate> byName, List<Direct> out) {
+                        Map<String, Coordinate> byName, List<Direct> out,
+                        Map<String, List<TypeName>> narrowers) {
         if (!(clause instanceof Core.Binary bin)) {
             return;
         }
         if (bin.op() == Ast.BinOp.AND) {
-            direct(bin.left(), from, at, byName, out);
-            direct(bin.right(), from, at, byName, out);
+            direct(bin.left(), from, at, byName, out, narrowers);
+            direct(bin.right(), from, at, byName, out, narrowers);
             return;
         }
-        if (!InvariantBound.ordering(bin.op())) {
+        if (!InvariantBound.ordering(bin.op()) && bin.op() != Ast.BinOp.EQ) {
             return;
         }
         // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
@@ -477,16 +502,48 @@ public final class InvariantChecker {
             bound = bin.left();
             op = InvariantBound.flipped(op);
         }
-        if (found == null || byName.containsKey(nameOf(bound, at))) {
-            return;   // no coordinate here, or a coordinate on both sides, which divides neither
-        }
-        Ast.Expr written = Terms.asWrittenValue(bound);
-        if (written == null) {
+        // An end where the other side is a constant, and a relation everywhere else. Which it is
+        // cannot be asked of the other side's name: what a clause compares a coordinate to may be a
+        // position deeper than this names, or arithmetic over several, and neither is a number an
+        // edge can be put at. So the end is attempted and what fails to be one may have moved one.
+        Optional<InvariantBound> end = found == null || !InvariantBound.ordering(op)
+                ? Optional.empty()
+                : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
+        if (end.isEmpty()) {
+            relating(clause, from, at, byName, narrowers);
             return;
         }
         Coordinate on = found;
-        InvariantBound.at(op, written, found.carrier())
-                .ifPresent(read -> out.add(new Direct(on.path(), on.measured(), from, read)));
+        end.ifPresent(read -> out.add(new Direct(on.path(), on.measured(), from, read)));
+    }
+
+    /** Whether both sides of {@code bin} reach a coordinate, which is what makes it a relation
+     * rather than a bound. */
+    private boolean relates(Core.Binary bin, Map<String, Coordinate> byName, Denotations at) {
+        return byName.containsKey(nameOf(bin.left(), at))
+                && byName.containsKey(nameOf(bin.right(), at));
+    }
+
+    /**
+     * Files {@code from} under every coordinate this comparison could carry a bound to.
+     *
+     * <p>Every coordinate it names and not only the two it compares: a bound reaches a position
+     * along the differences, so a clause reading {@code a} is a way {@code a}'s edge can have been
+     * moved even where the number came from somewhere further off.
+     */
+    private void relating(Core clause, TypeName from, Denotations at,
+                          Map<String, Coordinate> byName,
+                          Map<String, List<TypeName>> narrowers) {
+        String named = nameOf(clause, at);
+        Coordinate found = named == null ? null : byName.get(named);
+        if (found != null) {
+            List<TypeName> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
+            if (!had.contains(from)) {
+                had.add(from);
+            }
+            return;   // a coordinate names itself and nothing under it is a coordinate of its own
+        }
+        Core.forEachChild(clause, child -> relating(child, from, at, byName, narrowers));
     }
 
     /**
