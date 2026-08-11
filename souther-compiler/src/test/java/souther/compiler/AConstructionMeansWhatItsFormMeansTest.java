@@ -34,6 +34,8 @@ class AConstructionMeansWhatItsFormMeansTest {
             data NonEmpty = List<Int>
                 invariant List.length(value) >= 1
             data Amounts = List<AmountN>
+            data Wrapped = Receipt
+            data Boxed = { held: AmountN? }
             data Receipt = { total: AmountN }
             data Held = { total: AmountN, note: String? }
             data Coded = { by: Map<String, Int> }
@@ -57,6 +59,14 @@ class AConstructionMeansWhatItsFormMeansTest {
             behavior heldAmounts : (n: Int) -> Amounts
                 constructs Amounts, AmountN
             let heldAmounts (n) = Amounts([AmountN(n)])
+
+            behavior wrappedOf : (n: Int) -> Wrapped
+                constructs Wrapped, Receipt, AmountN
+            let wrappedOf (n) = Wrapped(Receipt { total = AmountN(n) })
+
+            behavior boxedOf : (n: Int) -> Boxed
+                constructs Boxed, AmountN
+            let boxedOf (n) = Boxed { held = AmountN(n) }
 
             behavior positiveOf : (n: Int) -> Positive
                 constructs Positive
@@ -231,6 +241,45 @@ class AConstructionMeansWhatItsFormMeansTest {
                     | (1) -> Amounts([1])
                 """);
         assertTrue(why.contains("List<AmountN>"), why);
+    }
+
+    @Test
+    void whatAConstructionTakesIsAValueAtEveryDepth() {
+        // A construction takes a value, and a value has values under it. `Receipt { total = 1 }` is an
+        // expectation of its own where nothing is built from it — the number at a named field is the
+        // disagreement it reports — and is no argument at all where something is.
+        holds("""
+                example wrappedOf
+                    | (1) -> Wrapped(Receipt { total = AmountN(1) })
+                """);
+        String why = couldNotBuild("""
+                example wrappedOf
+                    | (1) -> Wrapped(Receipt { total = 1 })
+                """);
+        assertTrue(why.contains("Receipt"), why);
+        // And the same value on its own is the disagreement it is.
+        doesNotHold("""
+                example receiptOf
+                    | (1) -> Receipt { total = 1 }
+                """);
+    }
+
+    @Test
+    void anOptionalIsWhatItHoldsOrNothing() {
+        // An optional was the one position this walk did not reach, so anything written under a `?`
+        // was admitted unasked and its decoder read it as whatever the field declared.
+        holds("""
+                example boxedOf
+                    | (1) -> Boxed { held = AmountN(1) }
+                """);
+        doesNotHold("""
+                example boxedOf
+                    | (1) -> Boxed { held = 1 }
+                """);
+        doesNotHold("""
+                example boxedOf
+                    | (1) -> Boxed { held = None }
+                """);
     }
 
     @Test

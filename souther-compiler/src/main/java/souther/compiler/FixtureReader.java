@@ -622,17 +622,19 @@ public final class FixtureReader {
      * number is a disagreement about the {@code id}, not a {@code DecisionN} that cannot be built.
      */
     private boolean states(Asserted a, Type type) {
-        Type open = NeutralForm.open(type);
-        if (a instanceof Asserted.Value(ObservedValue v) && v instanceof ObservedValue.Absent) {
-            return type instanceof Type.OptionOf;
-        }
-        return switch (open) {
+        return switch (type) {
+            // An optional holds a value or holds none, and a value written at one is written at what
+            // it holds. Left out of this walk, everything under a `?` was admitted unasked.
+            case Type.OptionOf o -> absent(a) || states(a, o.element());
             case Type.Prim p -> a instanceof Asserted.Value(ObservedValue v)
                     && spells(v, TypeName.primitive(p));
             case Type.Ref r when r.name().isPrimitive() -> a instanceof Asserted.Value(ObservedValue v)
                     && spells(v, r.name());
-            case Type.Ref _, Type.Union _ -> named(a) != null
-                    && TypeOps.leafCases(open, symbols).contains(named(a));
+            case Type.Ref _, Type.Union _ -> {
+                TypeName name = named(a);
+                yield name != null && TypeOps.leafCases(type, symbols).contains(name)
+                        && parts(a, name);
+            }
             case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
                     List<Asserted> elements)
                     && stated != Asserted.Container.SET && each(elements, l.element());
@@ -650,8 +652,45 @@ public final class FixtureReader {
                 }
                 yield true;
             }
-            case null, default -> true;
+            // Nothing a fixture writes stands at one of these: a tuple is how a map's entries are
+            // written rather than a type of its own, and a function is not a value a row states.
+            case Type.TupleOf _, Type.FnOf _ -> false;
+            // A position that says nothing says nothing about what may stand at it. A variable is
+            // decided by each call, and the rest stand where a type could not be worked out at all —
+            // holding a row to any of them would be holding it to something nothing wrote.
+            case Type.Var _, Type.MetaVar _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> true;
         };
+    }
+
+    private static boolean absent(Asserted a) {
+        return a instanceof Asserted.Value(ObservedValue v) && v instanceof ObservedValue.Absent;
+    }
+
+    /**
+     * The parts of a written construction, held to what that construction declares them to be.
+     *
+     * <p>Asked because this is what a construction takes, and what a construction takes is a value.
+     * A row may write {@code Receipt { total = 1 }} as an expectation of its own — nothing is built
+     * from it there, and the number it wrote at a named field is the disagreement it reports. Handed
+     * to something that constructs, it is an argument, and there is no value of {@code Receipt} for
+     * it to be.
+     */
+    private boolean parts(Asserted a, TypeName name) {
+        if (!(a instanceof Asserted.Built built)) {
+            return true;   // a unit case carries nothing to hold
+        }
+        Ast.TypeRef base = neutral.newtypeBaseType(name);
+        if (base != null) {
+            Asserted held = built.fields().get("value");
+            return held == null || states(held, neutral.shapeOf(base));
+        }
+        for (Map.Entry<String, Ast.TypeRef> f : neutral.fieldTypes(name).entrySet()) {
+            Asserted field = built.fields().get(f.getKey());
+            if (field != null && !states(field, neutral.shapeOf(f.getValue()))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean each(List<Asserted> elements, Type element) {
