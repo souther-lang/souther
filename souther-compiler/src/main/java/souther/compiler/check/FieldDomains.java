@@ -2,10 +2,14 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.Type;
 
 import souther.compiler.numeric.Count;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -117,6 +121,39 @@ public final class FieldDomains {
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
                 () -> InvariantChecker.everyRuleRead(named, data, symbols));
+    }
+
+    /**
+     * Whether the rules leave the value at {@code path} in {@code data} able to hold nothing.
+     *
+     * <p>Asked of the domain the rules seed rather than read off the clauses. A rule removes the
+     * empty value in more ways than a floor written at the position: {@code List.length(kids.value)}
+     * counts the same thing under another spelling, {@code >= least} beside {@code least >= 1} says
+     * it through a second field, and an equality says it without stating an end a range would keep.
+     * Reading the clauses for the shapes one reader thought of leaves the rest of them saying
+     * nothing, and there is no end to the shapes. The seeding already relates all of them, so the
+     * question goes there: settle the count at none and see whether anything is left.
+     *
+     * <p>Both the record's rules and the field's own type's reach the same domain — the seeding puts
+     * each field's type in beside the clauses — so this is one reading and not two agreeing.
+     *
+     * <p>Yes where the seeding could not read the rules, and yes where the position is counted by
+     * nothing. Wide is the safe direction: what this decides is that a recursion has nowhere to
+     * bottom out, and a reader that guessed would refuse a type somebody can write.
+     *
+     */
+    public static boolean mayHoldNothingAt(TypeName named, Ast.Data data, String path,
+                                           Symbols symbols) {
+        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols);
+        String counted = seeded.held().get(path);
+        if (counted == null) {
+            return true;   // nothing counts what is there, so no rule here is about how much it holds
+        }
+        NumericDomain.LinearForm none = NumericDomain.LinearForm.atom(counted);
+        // A count is never below none, so leaving it no room above none is leaving it at none.
+        return !seeded.numbers()
+                .assume(none, NumericDomain.Rel.LE, Map.of(counted, Granularity.DISCRETE))
+                .isBottom();
     }
 
     /**

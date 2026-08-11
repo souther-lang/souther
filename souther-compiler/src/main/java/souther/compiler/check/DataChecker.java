@@ -430,12 +430,20 @@ public final class DataChecker {
     }
 
     /**
-     * Rejects a data whose construction requires constructing itself through mandatory fields with no
-     * base case — a base-less cycle is uninhabitable, so no value can ever be built. An optional
-     * ({@code ?}) field or a {@code List}/{@code Map} field is a base case ({@code None} or the empty
-     * collection breaks the cycle), so it does not count as a mandatory edge. A sum is OR-composed —
-     * a cycle routed through one may bottom out in another case — so the walk stops at a sum rather
-     * than raise a false positive.
+     * Rejects a data whose construction requires constructing itself with no base case — a base-less
+     * cycle has no value, so none can ever be built.
+     *
+     * <p>An optional ({@code ?}) is a base case: {@code None} is a value of every one of them, and
+     * the language holds it there — a newtype may not wrap an optional, so there is nowhere to
+     * write a rule that takes it away. A collection's empty value is not held like that. It
+     * is a base case while the rules on the collection admit it, and a rule about how much the
+     * collection holds takes it away, after which the recursion runs through the collection like any
+     * other mandatory one.
+     *
+     * <p>A sum is OR-composed — a cycle routed through one may bottom out in another case — so the
+     * walk stops at a sum rather than raise a false positive. It is a base case less often than that
+     * makes it look, and a sum whose every case recurses has no value either; deciding that is an
+     * inhabitance judgement rather than a walk, and nothing here claims to be one.
      */
     static void checkNoUninhabitableCycle(Ast.Module module, Symbols symbols) {
         for (Ast.Def def : module.defs()) {
@@ -449,25 +457,108 @@ public final class DataChecker {
         }
     }
 
-    /** Whether {@code target} is reachable from {@code from} through mandatory data-typed fields. A
-     * plain field of a record/newtype type is a {@link Type.Ref}; an optional, list, or map field is
-     * not, so only mandatory references form edges. */
+    /**
+     * Whether {@code target} is reachable from {@code from} through positions every value has to
+     * fill.
+     *
+     * <p>Reached one occurrence at a time rather than one type at a time, because whether a position
+     * is mandatory is not a property of the type standing there. The same {@code Kids} is an edge
+     * written as {@code kids: Kids} and no edge written as {@code kids: Kids?}, and a list that is a
+     * base case where the field's record says nothing about it stops being one where the record says
+     * it holds at least one.
+     */
     private static boolean mandatoryReaches(TypeName from, TypeName target, Symbols symbols,
                                             Set<TypeName> seen) {
         if (!(symbols.get(from) instanceof Ast.Data d)) {
             return false;   // a sum (OR-composed) or unit (field-less) breaks the mandatory chain
         }
-        for (Type ft : TypeOps.fieldTypes(d, symbols).values()) {
-            if (ft instanceof Type.Ref ref) {
-                if (ref.name().equals(target)) {
-                    return true;
-                }
-                if (seen.add(ref.name()) && mandatoryReaches(ref.name(), target, symbols, seen)) {
-                    return true;
-                }
+        Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
+        if (d.newtype()) {
+            // A newtype is one value under a name, so the walk begins at the name: the rules written
+            // there are about what the value it wraps holds, and a walk starting inside would be
+            // asking the wrapped type about a rule that was never written on it.
+            Type representation = fields.get("value");
+            return representation != null
+                    && holds(representation,
+                            FieldDomains.mayHoldNothingAt(from, d, "value", symbols),
+                            target, symbols, seen, new HashSet<>(Set.of(from)));
+        }
+        for (Map.Entry<String, Type> e : fields.entrySet()) {
+            if (e.getValue() instanceof Type.OptionOf) {
+                continue;   // read before what it holds: None is a value of it whatever that is
+            }
+            if (holds(e.getValue(),
+                    FieldDomains.mayHoldNothingAt(from, d, e.getKey(), symbols),
+                    target, symbols, seen, new HashSet<>())) {
+                return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether a value of {@code type} standing at a position that {@code mayBeEmpty} says of reaches
+     * {@code target}.
+     *
+     * <p>{@code mayBeEmpty} is about the value and not the type, so it carries across a newtype —
+     * which is the same value under another name — and is read again at a collection's element, which
+     * is a different value the rules said nothing about. Carried the other way, a rule on the outer
+     * list of a {@code List<List<Tree>>} would be read as a rule on the inner one.
+     *
+     * @param worn the names this value is already wearing, so a newtype reachable from its own
+     *             representation ends the walk rather than repeating it
+     */
+    private static boolean holds(Type type, boolean mayBeEmpty, TypeName target, Symbols symbols,
+                                 Set<TypeName> seen, Set<TypeName> worn) {
+        return switch (type) {
+            case Type.OptionOf _ -> false;
+            case Type.Ref ref -> {
+                if (ref.name().equals(target)) {
+                    yield true;
+                }
+                if (symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()) {
+                    Type representation = TypeOps.fieldTypes(data, symbols).get("value");
+                    yield representation != null && worn.add(ref.name())
+                            && holds(representation, mayBeEmpty, target, symbols, seen, worn);
+                }
+                yield seen.add(ref.name()) && mandatoryReaches(ref.name(), target, symbols, seen);
+            }
+            case Type.ListOf l -> !mayBeEmpty && contained(l.element(), target, symbols, seen, worn);
+            case Type.SetOf s -> !mayBeEmpty && contained(s.element(), target, symbols, seen, worn);
+            // The value side and only that: a map a field holds is keyed by a string (ADR-0040), so
+            // no recursion runs through a key. Widen what a key may be and this needs reading again.
+            case Type.MapOf m -> !mayBeEmpty && contained(m.value(), target, symbols, seen, worn);
+            default -> false;
+        };
+    }
+
+    /**
+     * A value a collection holds.
+     *
+     * <p>Whether it can be empty is read afresh: nothing but its own type speaks about it, there
+     * being no field for a record to have written a rule about, and what the collection has to hold
+     * is a count of these rather than a rule about any one of them.
+     *
+     * <p>The names being worn do carry, because they are how the walk ends rather than anything the
+     * rules say. A newtype holding a collection of itself would otherwise be entered again at every
+     * turn round the cycle, each time with the same floor read off the same declaration.
+     */
+    private static boolean contained(Type type, TypeName target, Symbols symbols,
+                                     Set<TypeName> seen, Set<TypeName> worn) {
+        // Rules reach it only through a name it wears: a collection written out has no declaration
+        // for anything to have been written on.
+        boolean mayBeEmpty = !(type instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data held && held.newtype())
+                || FieldDomains.mayHoldNothingAt(ref(type), heldData(type, symbols), "value", symbols);
+        return holds(type, mayBeEmpty, target, symbols, seen, worn);
+    }
+
+    private static TypeName ref(Type type) {
+        return ((Type.Ref) type).name();
+    }
+
+    private static Ast.Data heldData(Type type, Symbols symbols) {
+        return (Ast.Data) symbols.get(ref(type));
     }
 
     static void checkData(CheckContext ctx,

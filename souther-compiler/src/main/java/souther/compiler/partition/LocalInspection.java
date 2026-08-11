@@ -2,12 +2,13 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.HelperInvariants;
 import souther.compiler.check.InvariantBound;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
-import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
@@ -97,12 +98,12 @@ public sealed interface LocalInspection {
         // the length of it — so which of them the model wrote about is what decides. Read off the
         // carrier first, every rule anybody ever wrote about the length of a string would have
         // become a rule about the string.
-        TypeBounds.Bounds sized = taken == null ? null
-                : TypeBounds.of(type, symbols, Carrier.WHOLE, taken);
+        DeclaredBounds.Bounds sized = taken == null ? null
+                : DeclaredBounds.of(type, symbols, Carrier.WHOLE, taken);
         boolean bySize = sized != null && !sized.isEmpty();
         NumericTerm term = bySize ? new NumericTerm.SizeOf(taken, path) : new NumericTerm.ValueOf(path);
-        TypeBounds.Bounds own = bySize ? sized
-                : carried == null ? null : TypeBounds.of(type, symbols, carried, null);
+        DeclaredBounds.Bounds own = bySize ? sized
+                : carried == null ? null : DeclaredBounds.of(type, symbols, carried, null);
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed != null && placed.domains().infeasible();
@@ -123,7 +124,7 @@ public sealed interface LocalInspection {
         // it stops being a class of this position.
         List<PartitionClass> classes =
                 constructibleAt(PartitionClasses.of(view, symbols), view, admissible, symbols);
-        TypeBounds.Bounds axis = nothingExists ? null : axisBounds(own, projected);
+        DeclaredBounds.Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
                 : cutsOf(type, axis, own, placed == null ? null : placed.value());
         if (classes.isEmpty() && cuts.isEmpty()) {
@@ -196,7 +197,7 @@ public sealed interface LocalInspection {
         List<UnreadRule> out = new ArrayList<>();
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
+                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     BlockReason why = whyUnread(each, carried, measure);
                     // Once per position, as a comparison is: what a reader has to lift is the first
                     // limit in the way, and a second clause behind it says nothing further.
@@ -241,19 +242,19 @@ public sealed interface LocalInspection {
      * <p>So this is not what the position can hold, and reading it as that is how a cap written on
      * the record alone became invisible: see {@link TypeBounds#admissible}.
      */
-    private static TypeBounds.Bounds axisBounds(TypeBounds.Bounds own,
+    private static DeclaredBounds.Bounds axisBounds(DeclaredBounds.Bounds own,
                                                 NumericDomain.Bounds projected) {
         if (own == null || projected == null) {
             return own;
         }
         // The value moves and the names do not: a record narrowing an edge does not take it away
         // from the rule that put one there, and which record did the narrowing is said beside it.
-        return new TypeBounds.Bounds(
+        return new DeclaredBounds.Bounds(
                 own.min() == null ? null
-                        : new TypeBounds.End(Endpoint.lower(own.min().at(), projected.min()),
+                        : new DeclaredBounds.End(Endpoint.lower(own.min().at(), projected.min()),
                                 own.min().from()),
                 own.max() == null ? null
-                        : new TypeBounds.End(Endpoint.upper(own.max().at(), projected.max()),
+                        : new DeclaredBounds.End(Endpoint.upper(own.max().at(), projected.max()),
                                 own.max().from()),
                 own.carrier());
     }
@@ -265,7 +266,7 @@ public sealed interface LocalInspection {
      * @param own    where its own type stops, so that an end the record moved can say so
      * @param within the record, or null at a position that is not a field of one
      */
-    private static List<Cut> cutsOf(Type type, TypeBounds.Bounds bounds, TypeBounds.Bounds own,
+    private static List<Cut> cutsOf(Type type, DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
                                     TypeName within) {
         if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref)) {
             return List.of();
@@ -279,7 +280,7 @@ public sealed interface LocalInspection {
     }
 
     /** One end as a cut, owed once to each rule that put it there. */
-    private static void cut(Map<String, Cut> into, TypeBounds.End end, TypeBounds.End own,
+    private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
                             String clause, Carrier carrier, TypeName within) {
         if (end == null) {
             return;

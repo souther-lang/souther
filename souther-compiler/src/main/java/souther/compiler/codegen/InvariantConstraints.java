@@ -6,7 +6,6 @@ import souther.compiler.check.ConstEval;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -89,22 +88,6 @@ public final class InvariantConstraints {
     public record MapMinSize(int n) implements OfMap {}
 
     public record MapMaxSize(int n) implements OfMap {}
-
-    /** An invariant's clauses: {@code a && b} is two rules, each mappable on its own. */
-    public static List<Ast.Expr> clauses(Ast.Expr invariant) {
-        List<Ast.Expr> out = new ArrayList<>();
-        collectClauses(invariant, out);
-        return out;
-    }
-
-    private static void collectClauses(Ast.Expr e, List<Ast.Expr> out) {
-        if (e instanceof Ast.Binary bin && bin.op() == Ast.BinOp.AND) {
-            collectClauses(bin.left(), out);
-            collectClauses(bin.right(), out);
-            return;
-        }
-        out.add(e);
-    }
 
     /**
      * The Raoh constraint equivalent to {@code clause} on a newtype whose value is {@code base}, or

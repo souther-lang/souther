@@ -138,8 +138,21 @@ public final class NumericDomain {
             return d;
         }
         if (rel == Rel.NE) {
-            // `f != 0` is a disjunction, and the domain holds conjunctions of bounds. Nothing to
-            // record; what settles such a guard is the fact keyed on the comparison itself.
+            // `f != 0` is a disjunction, and the domain holds conjunctions of bounds — except where
+            // one of the two sides is already out. A count is never below none, so `count != 0` is
+            // `count > 0` and there is no disjunction left to drop: the same rule the author wrote
+            // one way rather than the other. Asked of what is known here rather than of the shape of
+            // the form, so it holds wherever a side has been established, however it was.
+            if (!f.coefs().isEmpty()) {
+                if (d.proveLe(f.negate(), false)) {
+                    return d.addLe(f.negate(), true);       // `f >= 0` was known, so `f > 0`
+                }
+                if (d.proveLe(f, false)) {
+                    return d.addLe(f, true);                // `f <= 0` was known, so `f < 0`
+                }
+            }
+            // Otherwise nothing to record; what settles such a guard is the fact keyed on the
+            // comparison itself.
             return f.coefs().isEmpty() ? d
                     : d.losing(Loss.DROPPED_DISEQUALITY, f.coefs().keySet());
         }

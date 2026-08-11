@@ -931,11 +931,27 @@ data Department =
 
 The derived codecs follow this self-reference. A nested `+{"name":"a","manager":{"name":"b"}}+` decodes to an `+OrgMember+` whose `+manager+` is again an `+OrgMember+`. Traversing a self-reference *by computation* (climbing the manager chain to the root, counting tree depth) is written with a recursive helper `+let+` (<<fn-declaration>>). `+fold+` folds only a fixed-structure `+List+`, so a self-reference of unbounded depth can be traversed only with helper recursion.
 
-A self-reference requires a *base case*. A cycle that returns to itself through required fields only (not `+?+`, not `+List+`/`+Map+`) needs its own value to construct itself, which continues indefinitely — it is not constructible. Therefore *a required self-referential cycle with no base case is a compile error*.
+A self-reference requires a *base case*: an occurrence on the cycle that has a value holding no further one. A cycle with none needs its own value to construct itself, which continues indefinitely — it is not constructible. Therefore *a self-referential cycle with no base case is a compile error*.
 
 * `+manager: OrgMember+` (no `+?+`) is a cycle with no base case. It is a compile error, not a runtime stack overflow.
-* `+manager: OrgMember?+` (optional) and `+children: List<Department>+` (list) are base cases (the cycle is cut by `+None+` / the empty list), so they are allowed.
-* A sum is an OR composition, so if a cycle passes through a sum it may bottom out in another case. The check stops at a sum and produces no false positive.
+* `+manager: OrgMember?+` is a base case. `+None+` is a value of every optional and no rule can remove it: a newtype MUST NOT wrap an optional (<<e1009>>), so there is nowhere to write one.
+* `+children: List<Department>+` is a base case where the empty list is a value the rules admit. The empty collection is not held by the language the way `+None+` is, and a rule on how much the collection holds removes it:
++
+[,souther]
+----
+data Children = List<Department>
+    invariant nonEmpty = List.length(value) >= 1
+data Department =
+    { children: Children
+    , name: String
+    } // no first value: the empty list is gone, so no Department bottoms out
+----
++
+Whether the collection may be empty is decided by whether any value satisfying the rules holds nothing, over every rule that reaches the occurrence — those written on its own type, through each name it wears, and those the record holding it writes about that field, including rules that reach it through another field. No spelling is privileged: a floor, an equality, a disequality from none and a ceiling below none all remove the empty collection, because each leaves nothing satisfying the rules that holds none. A rule stating only how many at most leaves it where it was.
+
+Which occurrence a cycle stops at is a property of the occurrence and not of the type standing there. The same `+Children+` is a base case at `+children: Children?+` and is not at `+children: Children+`. A count read at an occurrence carries through the names that value wears, and stops at what a collection holds, which is a value of its own.
+
+This decides a cycle and not inhabitance in general. A sum is an OR composition and is taken as a base case, because a cycle through one may bottom out in a case the cycle did not come through; a sum whose every case is on the cycle therefore has no value and is not reported.
 
 [#field-spread]
 === Field composition (spread)
@@ -1977,7 +1993,7 @@ Construction is done with a record literal that writes the constructed type name
 
 [[a-construction-names-a-data]]What is constructed MUST be a data. [[a-construction-names-fields-of-its-type]]A field written in the literal MUST be one that data declares, and [[a-construction-is-written-where-one-may-be]]a construction MUST be written where one is allowed — not, for instance, inside an `+invariant+`, which states a condition over a value rather than building one (<<invariant-expressions>>).
 
-[[a-data-can-be-constructed]]A data MUST be constructible at all. A self-referential data reaches itself through a mandatory field with nothing to bottom out on, so no first value of it can be built; the self-reference belongs in an optional or a list field (<<self-referential-data>>).
+[[a-data-can-be-constructed]]A data MUST be constructible at all. A self-referential data reaches itself with nothing to bottom out on, so no first value of it can be built; the self-reference belongs at an occurrence that has a base case — an optional, or a collection the rules let be empty (<<self-referential-data>>).
 
 [,text]
 ----
@@ -4220,7 +4236,7 @@ data `OrgMember` cannot be constructed: it needs a value of itself through a man
 nothing to bottom out.
 ----
 
-Reported at the declaration (<<a-data-can-be-constructed>>). Self-reference is what an org chart or a tree is made of, and it bottoms out through an optional or a list field (<<self-referential-data>>); through a mandatory one there is no first value.
+Reported at the declaration (<<a-data-can-be-constructed>>). Self-reference is what an org chart or a tree is made of, and it bottoms out at an optional, or at a collection the rules on it let be empty (<<self-referential-data>>); with neither on the cycle there is no first value.
 
 [#e1014]
 === A construction writes a field the type does not have
