@@ -44,23 +44,40 @@ import java.util.Set;
  * itself writing this switch out again wants a question of its own asked once, the way
  * {@link Carrier#ofValue} asks whether a line can be drawn, rather than a copy of this one.
  */
-public sealed interface Shape {
+public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Shape.Tuple,
+        Shape.Function, Shape.Uninhabited, Shape.Bottom, Shape.Erroneous, Shape.Undecided {
+
+    /**
+     * The shapes a position carrying a value can have.
+     *
+     * <p>A subset of the classification and not a second one: these are the same cases, grouped so
+     * that a reader over positions can be held to all of them and to nothing else. What admits a
+     * shape into it is the reader's own contract — the partition walk decides for itself, rather
+     * than deriving the set from what a signature or a field admits, because those two disagree
+     * (an {@code Option} may be a field and may not be a parameter) and neither is this question.
+     *
+     * <p>{@link Unresolved} is a member. It is a shape a position legitimately has — a declaration
+     * reachable from itself compiles — and what a reader does with it is answer that it could not
+     * be interpreted. Leaving it out would put a compiling model through a path that throws.
+     */
+    sealed interface PartitionInputShape extends Shape
+            permits Scalar, Product, Sum, Sequence, Unit, Mapping, Optional, Unresolved {}
 
     /** A primitive, written as itself. */
-    record Scalar(Type.Prim prim) implements Shape {}
+    record Scalar(Type.Prim prim) implements PartitionInputShape {}
 
     /** A data with no contents: one value, which is which case it is. */
-    record Unit(TypeName name) implements Shape {}
+    record Unit(TypeName name) implements PartitionInputShape {}
 
     /** A data with fields, and what they are. */
-    record Product(TypeName name, Map<String, Type> fields) implements Shape {
+    record Product(TypeName name, Map<String, Type> fields) implements PartitionInputShape {
         public Product {
             fields = Map.copyOf(fields);
         }
     }
 
     /** A declared sum, {@code data S = A | B}. */
-    record Sum(TypeName name) implements Shape {}
+    record Sum(TypeName name) implements PartitionInputShape {}
 
     /** A union nobody named — what a branch widened to, or a behavior's written answer. Told apart
      *  from {@link Sum} because it has no declaration to be read off. */
@@ -72,16 +89,16 @@ public sealed interface Shape {
 
     /** A {@code List} or a {@code Set}, and what it holds. Which of the two is the declared type's
      *  to say — the values are the same either way, and how they are written is not. */
-    record Sequence(Kind kind, Type element) implements Shape {
+    record Sequence(Kind kind, Type element) implements PartitionInputShape {
 
         public enum Kind { LIST, SET }
     }
 
     /** A {@code Map}, by what it is keyed by and what it holds. */
-    record Mapping(Type key, Type value) implements Shape {}
+    record Mapping(Type key, Type value) implements PartitionInputShape {}
 
     /** An {@code Option}, and what it holds when it holds anything. */
-    record Optional(Type element) implements Shape {}
+    record Optional(Type element) implements PartitionInputShape {}
 
     /** A tuple, which carries values through a computation and crosses nothing. */
     record Tuple(List<Type> elements) implements Shape {
@@ -141,5 +158,5 @@ public sealed interface Shape {
      * The interpretation was attempted and did not reach a terminal shape, which is a different
      * thing for a reader to report and a different thing for anyone to fix.
      */
-    record Unresolved(TypeName name) implements Shape {}
+    record Unresolved(TypeName name) implements PartitionInputShape {}
 }
