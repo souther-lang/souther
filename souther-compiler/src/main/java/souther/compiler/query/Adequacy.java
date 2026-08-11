@@ -1735,9 +1735,12 @@ public final class Adequacy {
      * declaration divides two ways comes back as one the model divides no way.
      *
      * <p>The names come off by {@link TypeOps#base}, and what a row wrote at the position has the same
-     * ones taken off it ({@link FixtureReader#caseUnder}) from the other end of the one walk that says
-     * how far a newtype reaches. Derived through the names and observed at them, the two sets never
-     * meet: every row lands outside the set it is counted in.
+     * ones taken off it ({@link FixtureReader#caseUnder}) — the terminal and the layers of the one walk
+     * that says how far a newtype reaches, so neither end decides for itself how far that is.
+     *
+     * <p>Both ends or neither. A denominator read through the names has no member in common with a
+     * numerator answering with the outermost of them, so every row would land outside the set it is
+     * counted in: {@code 1} of {@code 2} covered, and both of the two still owed a row.
      */
     private static Set<TypeName> inputCoverableCases(Type t, Symbols symbols) {
         return casesOfSum(TypeOps.base(t, symbols), symbols);
