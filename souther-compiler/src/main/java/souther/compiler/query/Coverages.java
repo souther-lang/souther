@@ -428,7 +428,11 @@ final class Coverages {
             Partitions.Partitioning partitioning, List<String> parameters,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked, Probe probe) {
         List<RowOutcome> rows = observed.rows();
-        List<BoundaryAssessment> out = new ArrayList<>();
+        // Keyed by the line the author drew, the way a line at a place is. A guard inside a
+        // non-recursive helper is read once per call of that helper, and the rows do not owe the same
+        // line twice for having been offered it twice — nor may one reading of it take back what
+        // another established.
+        java.util.SequencedMap<Line, BoundaryAssessment> out = new LinkedHashMap<>();
         for (BoundaryObligation each : partitioning.between()) {
             BoundaryTarget.EqualTerms line = (BoundaryTarget.EqualTerms) each.target();
             BoundaryAssessment.Coverage.Reason absent =
@@ -447,10 +451,12 @@ final class Coverages {
             boolean known = at != null
                     && partitioning.edgeIsKnownWritable(line.on())
                     && partitioning.edgeIsKnownWritable(line.against());
-            out.add(new BoundaryAssessment(each, coverage,
-                    writabilityOf(coverage, known, attempt), attempt));
+            out.merge(new Line(each.side(), each.target(), each.origin().line()),
+                    new BoundaryAssessment(each, coverage,
+                            writabilityOf(coverage, known, attempt), attempt),
+                    Coverages::whicheverSawMore);
         }
-        return List.copyOf(out);
+        return List.copyOf(out.values());
     }
 
     /** What building a row on a line between two positions came to, where one was worth building. */
@@ -466,7 +472,7 @@ final class Coverages {
                     BoundaryAssessment.Attempt.Reason.NOT_MEASURED);
         }
         if (at == null) {
-            // The rules leave the two positions no count in common. Said as the search coming to
+            // The rules leave the two positions no place in common. Said as the search coming to
             // nothing rather than as a search nobody ran: this is what was asked and what came back.
             return new BoundaryAssessment.Attempt.Unresolved(
                     new souther.compiler.partition.Generator.UnresolvedCombination(

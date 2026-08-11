@@ -155,6 +155,27 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                 | "under" : (Bronze, Gold) -> No
             """;
 
+    /** A measure of each position rather than each position. Both sides are lengths, which are whole
+     *  numbers, so the line is on the same order a number's is. */
+    private static final String MEASURED = """
+            module example.sized
+
+            data No
+            data Yes = { s: String }
+            data Result = No | Yes
+
+            behavior cmp : (a: String, b: String) -> Result
+                constructs No, Yes
+            let cmp (a, b) = {
+                guard String.length(a) > String.length(b) else No
+                Yes { s = a }
+            }
+
+            example cmp
+                | "over" : ("mmm", "b") -> Yes { s = "mmm" }
+                | "under" : ("b", "mmm") -> No
+            """;
+
     /** An expression on one side, which names no position a row can be written at. */
     private static final String NOT_A_TERM = """
             module example.offset
@@ -335,6 +356,28 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String rows = generated(NO_COMMON_COUNT);
 
         assertTrue(rows.contains("no row for `a = b`"), rows);
+        assertTrue(rows.contains("does not make the edge unwritable"), rows);
+    }
+
+    /**
+     * A line on a measure of two positions is drawn, counted, and offered no row.
+     *
+     * <p>Three answers and not one. The line is where the two lengths are equal, and the rows can be
+     * read against it; the rules prove a length both positions admit, so it is a row somebody is
+     * owed; and nothing here writes a value from a length — four is not what goes at the position,
+     * it is four characters somebody has to choose.
+     *
+     * <p>What the block says about that matters more than the absence. A search that came to nothing
+     * says so about itself: two strings of one length are the easiest row in the file to write by
+     * hand, and the sentence that licenses "no value can be written there" would be false.
+     */
+    @Test
+    void aLineOnAMeasureIsCountedAndOfferedNoRow() {
+        String report = report(MEASURED);
+        String rows = generated(MEASURED);
+
+        assertTrue(report.contains("no row is at cmp/String.length(a) = String.length(b)"), report);
+        assertTrue(rows.contains("nothing here composes a value at that edge"), rows);
         assertTrue(rows.contains("does not make the edge unwritable"), rows);
     }
 

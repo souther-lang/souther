@@ -283,9 +283,10 @@ public final class GuardThresholds {
      * count they can both hold.
      *
      * <p>Asked of the carrier and not of the type. Two operands compare only when they are of one type,
-     * and a type is not what makes a line measurable: a {@code String} is ordered and counts on
-     * nothing, and an enumeration's case is comparable on its sum's order while carrying no counts of
-     * its own. What both sides can be read as is the carrier, so that is what is required to be one.
+     * and a type is not what makes a line measurable: an enumeration's case is comparable on its sum's
+     * order while carrying no places of its own, and two newtypes of one base are two types whose
+     * values are ordered alike. What both sides can be read as is the carrier, so that is what is
+     * required to be one.
      *
      * <p>An equality is not one of these. {@code a == b} puts the whole of one arm on the line, and
      * that arm is already a row the branch measure asks for.

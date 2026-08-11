@@ -183,7 +183,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["axis", "origin", "side", "kind", "value", "hit", "knownWritable", "status"],
+            "required": ["axis", "origin", "side", "value", "hit", "knownWritable", "status"],
             "additionalProperties": false,
             "properties": {
               "axis": { "type": "string" },
@@ -191,9 +191,9 @@
               "side": { "enum": ["below", "at", "above"] },
               "kind": {
                 "enum": ["at_value", "between_positions"],
-                "description": "What this line is a line at. `at_value` is a count of the position `axis` names, which is what an invariant's bound and a guard against a constant draw. `between_positions` is a guard comparing one position against another: the line is where the two hold the same count, `axis` names the left of it and `value` the other position rather than a value. Reading `value` without reading this reads a position's name as a value."
+                "description": "What this line is a line at. `at_value` is a place of the position `axis` names, which is what an invariant's bound and a guard against a constant draw. `between_positions` is a guard comparing one position against another: the line is where the two hold the same place, `axis` names the left of it and `value` the other position rather than a value. Reading `value` without reading this reads a position's name as a value. Absent in a document written before this key existed, where every line was at a value."
               },
-              "value": { "type": "string", "description": "The other side of the line, as an author would write it: a value where `kind` is `at_value`, and the other position where it is `between_positions`. The count a row happens to satisfy such a line with belongs to that row and not to the line, so it is not written here." },
+              "value": { "type": "string", "description": "The other side of the line, as an author would write it: a value where `kind` is `at_value` or absent, and the other position where it is `between_positions`. The place a row happens to satisfy such a line with belongs to that row and not to the line, so it is not written here." },
               "hit": { "type": "boolean" },
               "knownWritable": {
                 "type": "boolean",

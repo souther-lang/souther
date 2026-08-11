@@ -236,6 +236,31 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     /**
+     * A key added since is optional, which is what keeps an older document a document of this version.
+     *
+     * <p>The schema says so in its own description: a change that removes or renames anything raises
+     * the number, and something added does not, so a report written before a key existed is still one
+     * of this version. Requiring an added key breaks that in the file that states it — every earlier
+     * document is refused by the schema it was written against.
+     *
+     * <p>Held as the keys a boundary written before {@code kind} carried, which is the shape the
+     * defect took. A key added later and required would fail here rather than on somebody's stored
+     * report, and the word test beside this one cannot see it: the words were right, and the document
+     * carrying none of them was the one refused.
+     */
+    @Test
+    void aBoundaryWrittenBeforeAKeyExistedIsStillOfThisVersion() {
+        Set<String> required = new LinkedHashSet<>();
+        for (JsonNode each : nodeAt(schema(),
+                List.of("$defs", "partition", "properties", "boundaries", "items", "required"))) {
+            required.add(each.asString());
+        }
+
+        assertEquals(Set.of("axis", "origin", "side", "value", "hit", "knownWritable", "status"),
+                required, "a boundary object written before `kind` existed carries these and no more");
+    }
+
+    /**
      * A report that carries an incompleteness says it in a word the schema allows.
      *
      * <p>The end of the same defect, from the other side. What the schema promised and what the
@@ -301,16 +326,21 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     private static Set<String> allowedAt(JsonNode schema, List<String> at) {
+        Set<String> out = new LinkedHashSet<>();
+        for (JsonNode each : nodeAt(schema, at).get("enum")) {
+            out.add(each.asString());
+        }
+        return out;
+    }
+
+    /** The node the keys lead to, which the schema is asserted to have. */
+    private static JsonNode nodeAt(JsonNode schema, List<String> at) {
         JsonNode node = schema;
         for (String key : at) {
             node = node.get(key);
             assertNotNull(node, "the schema has no " + String.join("/", at));
         }
-        Set<String> out = new LinkedHashSet<>();
-        for (JsonNode each : node.get("enum")) {
-            out.add(each.asString());
-        }
-        return out;
+        return node;
     }
 
     /** Every path in the schema that constrains a field to a list of words. */

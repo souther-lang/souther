@@ -344,8 +344,11 @@ public final class Generator {
         FixtureTemplate on = written(subject, line.on(), line.carrier(), at);
         FixtureTemplate against = written(subject, line.against(), line.carrier(), at);
         if (on == null || against == null) {
+            // What this has no way to write, and not a position with no values. The line may be the
+            // easiest row in the file to write by hand — two strings of one length are — and
+            // `NO_REPRESENTATIVE` is the answer that licenses "no value can be written there".
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
-                    UnresolvedCombination.Reason.NO_REPRESENTATIVE));
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
         }
         Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         decided.put(line.on().path().toString(), List.of(on));
