@@ -661,10 +661,10 @@ public final class ExampleVerifier {
         // Build the expected value before running: a row whose expectation cannot be built states no
         // expectation, and comparing a result against a value nothing built reported a mismatch
         // against an empty expected value — a wrong answer for a row that was right.
-        Object expectedValue;
+        ObservedValue asserted;
         try {
-            expectedValue = fixtures.caseOnly(row.expected()) != null ? null
-                    : fixtures.builtExpected(row.expected(), sig.out());
+            asserted = fixtures.caseOnly(row.expected()) != null ? null
+                    : fixtures.assertedExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
             out.add(Diagnostic.at(row.pos())
                     .say(new ExampleMessage.TheExpectedValueCouldNotBeBuilt(target.name(),
@@ -705,8 +705,10 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
-            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
-                    "aborted: " + ae.getMessage()));
+            String stated = asserted != null ? fixtures.shown(asserted)
+                    : fixtures.caseOnly(row.expected());
+            out.add(mismatch(fixtures, row, stated == null ? "the expected value" : stated,
+                    "aborted: " + ae.getMessage(), null));
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (StackExhaustedException nt) {
@@ -717,11 +719,25 @@ public final class ExampleVerifier {
         result = projected(result, sig.outputType());
         state.resultArm = symbols.resolve(NeutralForm.simpleName(result));
         state.stage = Stage.COMPARED;
-        if (!matches(fixtures, row.expected(), result, expectedValue)) {
-            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
-                    fixtures.describeActual(result)));
-            state.failed(FailurePhase.COMPARISON);
-            return;
+        String arm = fixtures.caseOnly(row.expected());
+        if (arm != null) {
+            // A bare case name asserts the arm and nothing under it, so there is no value to compare.
+            if (!NeutralForm.simpleName(result).equals(arm)) {
+                out.add(mismatch(fixtures, row, arm, fixtures.describeActual(result), null));
+                state.failed(FailurePhase.COMPARISON);
+                return;
+            }
+        } else {
+            ValueMatch.Mismatch differs = fixtures.disagreement(asserted, result, sig.outputType());
+            if (differs != null) {
+                // The whole of each side, so the two can be read against each other, and then where
+                // they part: a row that wrote a name the answer does not wear differs at one position
+                // by its type, which reading two whole values does not say on its own.
+                out.add(mismatch(fixtures, row, fixtures.shown(asserted),
+                        fixtures.shown(fixtures.structured(result)), differs));
+                state.failed(FailurePhase.COMPARISON);
+                return;
+            }
         }
         state.disposition = Disposition.HELD;
         state.failurePhase = FailurePhase.NONE;
@@ -1007,7 +1023,8 @@ public final class ExampleVerifier {
         });
     }
 
-    private Diagnostic mismatch(Ast.ExampleRow row, String expected, String actual) {
+    private Diagnostic mismatch(FixtureReader fixtures, Ast.ExampleRow row, String expected,
+                                String actual, ValueMatch.Mismatch differs) {
         // Underline the expected result (the part the row asserts), not the whole row, so the marker
         // lands on something meaningful rather than a single column at the row's start.
         SourcePos pos = row.expected() != null ? row.expected().pos() : row.pos();
@@ -1015,26 +1032,18 @@ public final class ExampleVerifier {
         Diagnostic.Builder b = Diagnostic.at(pos, width)
                 .say(new ExampleMessage.TheRowDoesNotHold())
                 .diff(actual, expected);
+        // Where the two are of different types, the values alone do not say so — a newtype and the
+        // base it wraps are written the same way by an encoder, and were reported as a mismatch
+        // between two identical renderings. So the position and the two names are said.
+        if (differs != null && differs.reason() == ValueMatch.Reason.TYPE) {
+            b.hint(new ExampleMessage.TheTwoAreOfDifferentTypes(differs.path(),
+                    fixtures.typeShown(differs.asserted()),
+                    fixtures.typeShown(differs.observed())));
+        }
         if (row.description() != null) {
             b.hint(new ExampleMessage.WhatTheRowSaid(row.description()));
         }
         return b.build();
-    }
-
-    /** Whether {@code result} matches the row's expected: a name denoting a case asserts only the
-     * arm (the concrete case class); anything else asserts the whole value, {@code expectedValue}
-     * (built before the behavior ran), by structural equality.
-     *
-     * <p>Not what {@link ExampleStatements} compares. That holds two things a person wrote against
-     * each other and reads each one's case off the text; this holds what was written against what a
-     * run produced, and a result carries no text — the class it arrived in says which case it is. */
-    private static boolean matches(FixtureReader fixtures, Ast.Expr expected, Object result,
-                            Object expectedValue) {
-        String arm = fixtures.caseOnly(expected);
-        if (arm != null) {
-            return NeutralForm.simpleName(result).equals(arm);
-        }
-        return expectedValue != null && souther.runtime.Values.equal(expectedValue, result);
     }
 
     private Set<TypeName> outCases(Type out) {

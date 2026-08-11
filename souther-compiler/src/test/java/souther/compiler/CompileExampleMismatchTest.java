@@ -73,10 +73,10 @@ class CompileExampleMismatchTest {
                     | "wrong on purpose" : (In { skus = [ Sku("apple"), Sku("apple") ] })
                         -> Out { first = Sku("pear"), counts = [ ("apple", 1) ], tags = [ "y" ] }
                 """);
-        // both sides go through the derived encoder, which writes a newtype bare — so the two read
-        // against each other rather than in two different notations
-        assertTrue(rendered.contains("first = \"apple\""), rendered);
-        assertTrue(rendered.contains("first = \"pear\""), rendered);
+        // Both sides are written the way a row writes one, so they read against each other — and a
+        // newtype keeps its name, since whether a value wears one is what the two may differ by.
+        assertTrue(rendered.contains("first = Sku(\"apple\")"), rendered);
+        assertTrue(rendered.contains("first = Sku(\"pear\")"), rendered);
         assertTrue(rendered.contains("(\"apple\", 2)"), rendered);
         assertTrue(rendered.contains("[ \"x\" ]"), rendered);
     }
@@ -110,7 +110,9 @@ class CompileExampleMismatchTest {
                 example run
                     | "two weeks on" : (In { on = Date("2026-07-01") }) -> Out { due = Date("2026-07-14") }
                 """);
-        assertTrue(rendered.contains("due = \"2026-07-15\""), rendered);
-        assertTrue(rendered.contains("due = \"2026-07-14\""), rendered);
+        // Written as the construction that builds one, so a date is never read as the text spelling
+        // it — which is the difference a row writing one as a string is reported for.
+        assertTrue(rendered.contains("due = Date(\"2026-07-15\")"), rendered);
+        assertTrue(rendered.contains("due = Date(\"2026-07-14\")"), rendered);
     }
 }

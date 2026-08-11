@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 /**
@@ -174,8 +175,12 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
     }
 
     @Test
-    void aStringDoesNotWriteAnExpectedTemporal() {
-        refused("""
+    void anExpectedTemporalWrittenAsTextDisagreesRatherThanRefuses() {
+        // Where the rule stops. An input is a value the model is given, so text at a temporal
+        // position states no value it could have been given. An expected value states nothing the
+        // model is given: a row may write what the behavior does not answer with, and a `String`
+        // where a `DateTime` came out is that disagreement — reported, and named by both types.
+        Diagnostic d = only("""
                 module reads exposing ( Stamp, at )
 
                 data Stamp = { at: DateTime }
@@ -186,7 +191,14 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
 
                 example at
                     | "text" : (Stamp { at = DateTime("2026-07-20T09:00") }) -> "2026-07-20T09:00"
-                """, "E1903", ExampleMessage.TheExpectedValueCouldNotBeBuilt.class);
+                """);
+        assertEquals("E1905", d.code(), d.said().toString());
+        assertInstanceOf(ExampleMessage.TheRowDoesNotHold.class, d.said());
+        assertTrue(d.notes().stream().anyMatch(note ->
+                        note.said() instanceof ExampleMessage.TheTwoAreOfDifferentTypes(
+                                String _, String expected, String actual)
+                                && expected.equals("String") && actual.equals("DateTime")),
+                "the row is told which two types it is between: " + d.notes());
     }
 
     @Test
@@ -254,30 +266,30 @@ class ATemporalFixtureIsNotWrittenAsTextTest {
     }
 
     @Test
-    void aHelperAnsweringForTheWholeExpectationDoesNotWriteATemporalAsText() {
-        // Where a helper answers the whole expectation there is nothing enclosing it, so its value is
-        // taken as it stands rather than read back. What it is may still disagree with the behavior —
-        // that is the row's to report — but the form it is in is this rule's, and it is one rule
-        // whether the application is the whole of the expectation or part of it.
-        refused(ANSWERS + """
+    void aHelperAnsweringForTheWholeExpectationAnswersWithItsOwnType() {
+        // A helper answered with a `String`, which is a value of its own type and not a fixture that
+        // could not be built. Whether it is what the behavior answers with is the comparison's, and
+        // the two types are what it differs by.
+        Diagnostic d = only(ANSWERS + """
 
                 example at
                     | "a helper's text" : (Stamp { at = DateTime("2026-07-20T09:00") })
                         -> text("2026-07-20T09:00")
-                """, "E1903", ExampleMessage.TheExpectedValueCouldNotBeBuilt.class);
+                """);
+        assertEquals("E1905", d.code(), d.said().toString());
     }
 
     @Test
-    void aHelperAnsweringForTheWholeExpectationDoesNotWriteTemporalsAsTextInACollection() {
-        // A written `[ "…" ]` at a `List<DateTime>` is refused because the element type travels with
-        // the position. A helper answering with the same list is the same fixture, so it is refused
-        // for the same reason.
-        refused(ANSWERS + """
+    void aHelperAnsweringACollectionForTheWholeExpectationAnswersWithItsOwnElementType() {
+        // The same at every depth. A `List<String>` is a value, and that the behavior answers with a
+        // `List<DateTime>` is what the two disagree about.
+        Diagnostic d = only(ANSWERS + """
 
                 example all
                     | "a helper's texts" : (Stamps { at = [ DateTime("2026-07-20T09:00") ] })
                         -> texts("2026-07-20T09:00")
-                """, "E1903", ExampleMessage.TheExpectedValueCouldNotBeBuilt.class);
+                """);
+        assertEquals("E1905", d.code(), d.said().toString());
     }
 
     // --- what still writes one ------------------------------------------------------------------
