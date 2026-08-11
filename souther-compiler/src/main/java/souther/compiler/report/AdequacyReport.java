@@ -2,7 +2,6 @@ package souther.compiler.report;
 
 import souther.compiler.ExampleVerifier;
 import souther.compiler.ast.Ast;
-import souther.compiler.diag.DocumentSources;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
@@ -812,7 +811,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      *
      * <p>The names are asked for here for the reason {@link #human} asks for them, and are put to a
      * different use. What this document says about a source is said with the identity the caller
-     * handed the source over as, because that is what two runs compare on and what a name is not.
+     * handed the source over as, because that is what this compilation refers to the source by, and
+     * so what makes two reasons about one file the same reason. A name is not that: it is chosen from
+     * the files in front of a reader, so it says what to show and not which source.
      * That leaves the document unreadable on its own — a position in a list says nothing to anyone who
      * does not also hold the list — so the identities are written and the {@code sources} table says
      * what each of them was, and a consumer holding neither the argument list nor the editor's
@@ -839,10 +840,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 ObjectNode g = gaps.addObject();
                 g.put("code", word(gap.code()));
                 g.put("scope", word(gap.scope()));
-                // Which subjects are a source's identity is the reason's own answer. A renderer that
-                // read the scope and decided for itself would be the same list of kinds again, kept
-                // in step with the sum by whoever remembered it was there.
-                g.put("subject", gap.carried(sources));
+                // What the subject is, is the reason's answer; that this document has now written an
+                // identity down and owes an account of it is this renderer's. The two are asked and
+                // answered in that order, and neither side holds the other's half.
+                g.put("subject",
+                        gap.sourceIdentity().map(sources::written).orElseGet(gap::subject));
                 gap.at().ifPresent(where -> at(g, where, sources));
             }
             ArrayNode behaviors = m.putArray("behaviors");

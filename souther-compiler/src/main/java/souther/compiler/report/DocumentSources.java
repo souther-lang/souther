@@ -1,4 +1,6 @@
-package souther.compiler.diag;
+package souther.compiler.report;
+
+import souther.compiler.diag.SourceNameResolver;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -9,11 +11,16 @@ import java.util.Set;
  * The sources a document writes the identities of, and what each of them is called.
  *
  * <p>A document for a machine carries what identifies a source rather than what to call it: an
- * identity is stable and is what makes two statements about the same file the same statement, and a
- * name is the shortest thing that tells one reader's files apart. Carrying the identity is right and
- * leaves the document unreadable on its own — nothing in it says which file a position in a list was.
- * So the identities are carried and the document explains them, and this is what collects the second
- * half while the first is being written.
+ * identity is what the compilation refers to the source by, and so what makes two statements about
+ * one file the same statement, while a name is the shortest thing that tells one reader's files
+ * apart and is no key at all. Carrying the identity is right and leaves the document unreadable on
+ * its own — nothing in it says which file a position in a list was. So the identities are carried and
+ * the document explains them, and this is what collects the second half while the first is being
+ * written.
+ *
+ * <p>Lives with the renderer and not with what is being rendered. What a reason is about is a fact
+ * about the reason; that a document has written it down and now owes an explanation for it is a fact
+ * about the document. The sums being rendered answer the first and never hold this.
  *
  * <p>Registered by the act of writing rather than gathered afterwards. A writer that gathered the
  * fields it knew about would be a list of the places an identity is written today, and the next field

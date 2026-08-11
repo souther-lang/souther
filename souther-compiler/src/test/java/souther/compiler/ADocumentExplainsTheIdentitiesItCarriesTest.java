@@ -24,8 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A document that names a source by an identity says what that identity was.
  *
- * <p>The identity is what the report carries, and rightly: it is what two runs compare on, and a name
- * is chosen from the files in front of one reader and is neither stable nor a key. What follows is
+ * <p>The identity is what the report carries, and rightly: it is what the compilation refers to the
+ * source by, and so what makes two reasons about one file the same reason, where a name is chosen
+ * from the files in front of one reader and is no key. What follows is
  * that the document cannot be read by anyone who does not also hold what was handed to the compile —
  * a consumer given `+"subject": "1"+` and nothing else has no way to reach the file. So the
  * identities stay and the document explains them.
@@ -179,10 +180,15 @@ class ADocumentExplainsTheIdentitiesItCarriesTest {
     /**
      * The source identities anywhere in a document.
      *
-     * <p>Read off what the schema says an identity is rather than off the places one is emitted
-     * today: an `+at+` names its source under `+sourceId+` wherever an `+at+` sits, and a reason's
-     * `+subject+` is one exactly where its `+scope+` says `+source+`. A field added later that carries
-     * one is found by the first of those without this being touched.
+     * <p>Read off the two spellings the schema gives an identity rather than off the places one is
+     * emitted today: an `+at+` names its source under `+sourceId+` wherever an `+at+` sits, and a
+     * reason's `+subject+` is one exactly where its `+scope+` says `+source+`. So a new place either
+     * of those two is written is covered without this being touched.
+     *
+     * <p>A third spelling would not be. What holds for one of those is what the writing side is for:
+     * everything that writes an identity goes through one call, and this reads back what a reader of
+     * the schema can see. If a field is ever added under a name of its own, the vocabulary here is
+     * where it has to be said.
      */
     private static List<Written> identitiesIn(JsonNode node, List<Written> into) {
         if (node.isArray()) {

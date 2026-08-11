@@ -1,6 +1,5 @@
 package souther.compiler.observe;
 
-import souther.compiler.diag.DocumentSources;
 import souther.compiler.diag.SourceNameResolver;
 
 /**
@@ -39,17 +38,18 @@ public sealed interface Target {
     String shown(SourceNameResolver names);
 
     /**
-     * The same, as a document carries it, telling {@code sources} about an identity it will have to
-     * explain.
+     * The source this is about, where what it names is one. Empty otherwise.
      *
-     * <p>Answered by the sum for the reason {@link #shown} is: a source is named by the caller and the
-     * rest are named by the author, and only the kinds know which. A document carries the identity —
-     * that is what makes two statements about one file the same statement — so this writes what
-     * {@link #subject} does, and the difference is that a source's is registered rather than merely
-     * written. A renderer deciding that for itself would be a list of the subjects that are sources,
-     * kept in step with this one by hand.
+     * <p>Which subjects are a source's identity is what the kinds differ in, so the sum answers it
+     * for the reason {@link #shown} is answered here: a source is identified by whoever handed it
+     * over and the rest are named by the author. A reader working it out from {@link #scope} would be
+     * spelling out a classification this has already made.
+     *
+     * <p>What the answer is for is not part of it. A document that has to explain the identities it
+     * writes down keeps that account where it writes them, and nothing here knows one is being
+     * written.
      */
-    String carried(DocumentSources sources);
+    java.util.Optional<String> sourceIdentity();
 
     /** Which kind of thing {@link #subject} identifies. */
     Incompleteness.Scope scope();
@@ -82,8 +82,8 @@ public sealed interface Target {
         }
 
         @Override
-        public String carried(DocumentSources sources) {
-            return behavior;
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.empty();
         }
 
         @Override
@@ -120,8 +120,8 @@ public sealed interface Target {
         }
 
         @Override
-        public String carried(DocumentSources sources) {
-            return sources.written(sourceId);
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.of(sourceId);
         }
 
         @Override
@@ -149,8 +149,8 @@ public sealed interface Target {
         }
 
         @Override
-        public String carried(DocumentSources sources) {
-            return module;
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.empty();
         }
 
         @Override
@@ -178,8 +178,8 @@ public sealed interface Target {
         }
 
         @Override
-        public String carried(DocumentSources sources) {
-            return subject();
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.empty();
         }
 
         @Override
