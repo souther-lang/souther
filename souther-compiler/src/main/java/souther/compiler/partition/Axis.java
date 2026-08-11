@@ -22,9 +22,18 @@ import java.util.Set;
  * @param excluded the ids of the classes the body says it does not answer for. Still classes — the
  *                 position's values are still divided this way, and a report says so — and not ones a
  *                 row can be written at, since reaching one is E1911
+ * @param pending  where nothing has answered for this position yet, what the structural reading
+ *                 found — and so what this position is left with if nothing else answers. Null on
+ *                 an axis that already has evidence, which needs no fallback.
+ *
+ *                 <p>Carried here rather than beside: the reason and the position it is about are
+ *                 one fact, and holding them in two lists joined afterwards by the spelling of a
+ *                 path is how a reason came to be recovered by string match. A reason travels with
+ *                 the position or it is a reason about whatever the strings happened to pair it
+ *                 with.
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, Set<String> excluded) {
+                   List<Cut> cuts, Set<String> excluded, StructuralInspection pending) {
 
     public Axis {
         classes = List.copyOf(classes);
@@ -33,13 +42,25 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     }
 
     public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                List<Cut> cuts) {
-        this(id, term, type, classes, cuts, Set.of());
+                List<Cut> cuts, Set<String> excluded) {
+        this(id, term, type, classes, cuts, excluded, null);
     }
 
-    /** A position the model does not divide. Kept, so a report can name what it could not measure. */
-    public static Axis notDerivable(AxisId id, NumericTerm term, Type type) {
-        return new Axis(id, term, type, List.of(), List.of());
+    public Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
+                List<Cut> cuts) {
+        this(id, term, type, classes, cuts, Set.of(), null);
+    }
+
+    /**
+     * A position nothing has answered for yet, and what the structural reading found.
+     *
+     * <p>Not a position the model does not divide. A rule a body writes may still draw a line on it,
+     * and only where none does is {@code found} what a report says — an absence where the structure
+     * ran out, and what stopped the reading where it did not.
+     */
+    public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
+                                 StructuralInspection found) {
+        return new Axis(id, term, type, List.of(), List.of(), Set.of(), found);
     }
 
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
@@ -57,7 +78,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
     public Axis excluding(Collection<String> ids) {
         Set<String> here = ids.stream().filter(id -> classOf(id) != null)
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        return here.isEmpty() ? this : new Axis(id, term, type, classes, cuts, here);
+        return here.isEmpty() ? this : new Axis(id, term, type, classes, cuts, here, pending);
     }
 
     /**

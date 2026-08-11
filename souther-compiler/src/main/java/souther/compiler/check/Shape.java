@@ -69,10 +69,14 @@ public sealed interface Shape permits Shape.PartitionInputShape, Shape.Cases, Sh
     /** A data with no contents: one value, which is which case it is. */
     record Unit(TypeName name) implements PartitionInputShape {}
 
-    /** A data with fields, and what they are. */
+    /** A data with fields, and what they are, in the order the declaration writes them.
+     *
+     *  <p>The order is part of the answer, not an accident of the map: what a report names first
+     *  and which field a row is built for first are read off it. So the copy keeps it — an
+     *  unordered one would leave every reader depending on a hash. */
     record Product(TypeName name, Map<String, Type> fields) implements PartitionInputShape {
         public Product {
-            fields = Map.copyOf(fields);
+            fields = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(fields));
         }
     }
 

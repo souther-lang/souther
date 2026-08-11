@@ -46,10 +46,11 @@ public sealed interface StructuralInspection {
      */
     record Leaf() implements StructuralInspection {}
 
-    /** The position is made of these, each of which is read the same way. */
+    /** The position is made of these, each of which is read the same way — in the order the
+     *  declaration writes them, which is the order they are walked and reported in. */
     record Children(Map<String, Type> under) implements StructuralInspection {
         public Children {
-            under = Map.copyOf(under);
+            under = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(under));
         }
     }
 

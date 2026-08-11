@@ -105,7 +105,6 @@ public final class Partitions {
         List<Axis> found = new ArrayList<>();
         Map<NumericTerm, NumericDomain.Bounds> domains = new LinkedHashMap<>();
         java.util.Set<NumericTerm> uncertain = new java.util.LinkedHashSet<>();
-        java.util.Set<String> stopped = new java.util.LinkedHashSet<>();
         List<UnreadRule> unread = new ArrayList<>();
         for (int i = 0; i < sig.inputTypes().size() && i < behavior.params().size(); i++) {
             // One reading per parameter, not one per record met on the way down. A clause on the
@@ -114,7 +113,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
-                    domains, uncertain, stopped, unread);
+                    domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
@@ -140,7 +139,7 @@ public final class Partitions {
         // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
         // compares it.
         List<UndividedPosition> undivided = new ArrayList<>();
-        for (UndividedPosition each : undividedIn(kept, stopped)) {
+        for (UndividedPosition each : undividedIn(kept)) {
             UndividedPosition.Reason why = unread.stream()
                     .filter(one -> one.at().equals(each.at())).map(UnreadRule::why)
                     .findFirst().orElse(null);
@@ -158,16 +157,15 @@ public final class Partitions {
      * ones the walk did not finish, which is the one thing the axes cannot say for themselves: an
      * axis that was never descended into looks exactly like one there was nothing under.
      */
-    private static List<UndividedPosition> undividedIn(List<Axis> axes,
-                                                       java.util.Set<String> stopped) {
+    private static List<UndividedPosition> undividedIn(List<Axis> axes) {
         List<UndividedPosition> out = new ArrayList<>();
         for (Axis axis : axes) {
             if (axis.measurable()) {
                 continue;
             }
-            out.add(stopped.contains(axis.path().toString())
+            out.add(axis.pending() instanceof StructuralInspection.Blocked blocked
                     ? UndividedPosition.cannotDerive(axis.path(),
-                            UndividedPosition.Reason.DEPTH_LIMIT)
+                            ReportedReason.of(blocked.why()))
                     : UndividedPosition.absent(axis.path()));
         }
         return List.copyOf(out);
@@ -306,14 +304,15 @@ public final class Partitions {
                 rules.add(each);
             }
         }
+        // The structural reason travels on the axis, so nothing is recovered from the earlier pass
+        // by matching how a path is spelled. What is still joined here is a rule this could not
+        // read, which is about a rule rather than about the position and has nowhere else to live.
         List<UndividedPosition> undivided = new ArrayList<>();
-        for (UndividedPosition each : undividedIn(out, java.util.Set.of())) {
-            UndividedPosition had = base.undivided().stream()
-                    .filter(before -> before.at().equals(each.at())).findFirst().orElse(each);
-            UndividedPosition.Reason stopped = rules.stream()
+        for (UndividedPosition each : undividedIn(out)) {
+            UndividedPosition.Reason unreadHere = rules.stream()
                     .filter(one -> one.at().equals(each.at())).map(UnreadRule::why)
                     .findFirst().orElse(null);
-            undivided.add(stopped == null ? had : had.because(stopped));
+            undivided.add(unreadHere == null ? each : each.because(unreadHere));
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
                 undivided, List.copyOf(rules), between);
@@ -526,8 +525,7 @@ public final class Partitions {
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,
                              List<Axis> out, Placed placed,
                              Map<NumericTerm, NumericDomain.Bounds> domains,
-                             java.util.Set<NumericTerm> uncertain,
-                             java.util.Set<String> stopped, List<UnreadRule> unread) {
+                             java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
         List<PartitionClass> classes = classesOf(type, symbols);
         // Which number this position is measured at, and what its rules leave that number. Asked
         // together because they are one reading: whether a rule bounds the length of a string is how
@@ -569,19 +567,19 @@ public final class Partitions {
             out.add(new Axis(id, term, type, classes, cuts));
             return;
         }
-        Map<String, Type> fields = productFields(type, symbols);
-        if (!fields.isEmpty() && depth >= MAX_DEPTH) {
-            // A record this never went into. What is under it may divide, and nothing here looked.
-            stopped.add(path.toString());
-        }
-        if (!fields.isEmpty() && depth < MAX_DEPTH) {
-            for (Map.Entry<String, Type> field : fields.entrySet()) {
+        // Local evidence is exhausted, so what is asked next is whether the position is made of
+        // positions. The answer is not a verdict: a leaf and a block are both positions still to be
+        // answered for, and each carries what it is left with if nothing answers.
+        StructuralInspection found = StructuralInspection.of(
+                PartitionInput.of(type, symbols).shape(), depth < MAX_DEPTH);
+        if (found instanceof StructuralInspection.Children children) {
+            for (Map.Entry<String, Type> field : children.under().entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
-                        placed, domains, uncertain, stopped, unread);
+                        placed, domains, uncertain, unread);
             }
             return;
         }
-        out.add(Axis.notDerivable(id, term, type));
+        out.add(Axis.pendingAt(id, term, type, found));
     }
 
     /** A position's number, what its own rules leave it, and which of those rules said nothing this
@@ -758,16 +756,6 @@ public final class Partitions {
         return intrinsic == null ? read
                 : new NumericDomain.Bounds(Endpoint.lower(read.min(), intrinsic.min()),
                         Endpoint.upper(read.max(), intrinsic.max()));
-    }
-
-    /** A record's fields, or nothing where the type is not one. A newtype is not taken apart: its
-     * {@code value} is the same position it is. */
-    private static Map<String, Type> productFields(Type type, Symbols symbols) {
-        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
-                && !data.newtype()) {
-            return TypeOps.fieldTypes(data, symbols);
-        }
-        return Map.of();
     }
 
     // --- what a type divides its values into ------------------------------------------------------
