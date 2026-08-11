@@ -37,6 +37,20 @@ public sealed interface Target {
      */
     String shown(SourceNameResolver names);
 
+    /**
+     * The source this is about, where what it names is one. Empty otherwise.
+     *
+     * <p>Which subjects are a source's identity is what the kinds differ in, so the sum answers it
+     * for the reason {@link #shown} is answered here: a source is identified by whoever handed it
+     * over and the rest are named by the author. A reader working it out from {@link #scope} would be
+     * spelling out a classification this has already made.
+     *
+     * <p>What the answer is for is not part of it. A document that has to explain the identities it
+     * writes down keeps that account where it writes them, and nothing here knows one is being
+     * written.
+     */
+    java.util.Optional<String> sourceIdentity();
+
     /** Which kind of thing {@link #subject} identifies. */
     Incompleteness.Scope scope();
 
@@ -65,6 +79,11 @@ public sealed interface Target {
         @Override
         public String shown(SourceNameResolver names) {
             return behavior;
+        }
+
+        @Override
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.empty();
         }
 
         @Override
@@ -101,6 +120,11 @@ public sealed interface Target {
         }
 
         @Override
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.of(sourceId);
+        }
+
+        @Override
         public Incompleteness.Scope scope() {
             return Incompleteness.Scope.SOURCE;
         }
@@ -125,6 +149,11 @@ public sealed interface Target {
         }
 
         @Override
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.empty();
+        }
+
+        @Override
         public Incompleteness.Scope scope() {
             return Incompleteness.Scope.MODULE;
         }
@@ -146,6 +175,11 @@ public sealed interface Target {
         @Override
         public String shown(SourceNameResolver names) {
             return subject();
+        }
+
+        @Override
+        public java.util.Optional<String> sourceIdentity() {
+            return java.util.Optional.empty();
         }
 
         @Override
