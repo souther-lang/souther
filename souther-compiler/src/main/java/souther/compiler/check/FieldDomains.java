@@ -27,9 +27,12 @@ public final class FieldDomains {
 
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), false, true, NumericDomain.top(), () -> true);
+            new FieldDomains(Map.of(), Map.of(), false, true, NumericDomain.top(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
+    /** What each field has to hold, kept apart from what each field is. Same numbers, different
+     * question — see {@link Held}. */
+    private final Map<String, NumericDomain.Bounds> heldByField;
     private final boolean infeasible;
     /** Whether the reading that produced these bounds ran to the end. Kept because it is what that
      * reading knows about itself: a walk that fell over produces the same empty domain as a value
@@ -39,10 +42,12 @@ public final class FieldDomains {
     private final java.util.function.BooleanSupplier reading;
     private volatile Boolean everyRuleRead;
 
-    private FieldDomains(Map<String, NumericDomain.Bounds> byField, boolean infeasible,
+    private FieldDomains(Map<String, NumericDomain.Bounds> byField,
+                         Map<String, NumericDomain.Bounds> heldByField, boolean infeasible,
                          boolean seeded, NumericDomain numbers,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
+        this.heldByField = heldByField;
         this.infeasible = infeasible;
         this.seeded = seeded;
         this.numbers = numbers;
@@ -91,14 +96,59 @@ public final class FieldDomains {
                 out.put(field, bounds);
             }
         });
+        // Resolved here rather than handed over as atoms. An atom is a name the seeding gave a shape
+        // and means nothing once the reading that named it is gone, so a caller holding one could
+        // only ask the domain it came from — which is this one, while it is still here.
+        Map<String, NumericDomain.Bounds> holds = new LinkedHashMap<>();
+        seeded.held().forEach((field, atom) -> {
+            if (data.newtype()) {
+                return;
+            }
+            NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
+            if (!bounds.isEmpty()) {
+                holds.put(field, bounds);
+            }
+        });
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
-        return new FieldDomains(Map.copyOf(out), seeded.numbers().isBottom(),
+        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.numbers().isBottom(),
                 seeded.everyClauseRead(), seeded.numbers(),
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
                 () -> InvariantChecker.everyRuleRead(named, data, symbols));
+    }
+
+    /**
+     * How much a value at a position has to hold, which is not what the value there is.
+     *
+     * <p>Its own type because the numbers are the same numbers. {@code >= 2} at a field is a range of
+     * that field's values where the field is a number, and a count of what it holds where a rule
+     * counts it — and a caller handed a bare {@link NumericDomain.Bounds} has nothing to stop it
+     * reading one as the other. There is one such mistake in this already: the atom a size rule
+     * bounds is the size's, and writing it under the field is how a list would come to be told it
+     * must be at least 2.
+     */
+    public record Held(NumericDomain.Bounds bounds) {
+
+        public Held {
+            if (bounds == null) {
+                throw new IllegalArgumentException("a floor with no bounds is no floor");
+            }
+        }
+    }
+
+    /**
+     * What the rules say the value at {@code path} holds, or {@code null} where they count it in no
+     * way this read.
+     *
+     * <p>Read off the measure the position's own type names ({@link NumericMeasures#takenOf}), so a
+     * field this can answer for is one whose values are counted by something. A field of a number has
+     * no such measure and is answered by {@link #at} instead; the two never speak about one field.
+     */
+    public Held heldAt(String path) {
+        NumericDomain.Bounds bounds = heldByField.get(path);
+        return bounds == null ? null : new Held(bounds);
     }
 
     /**
