@@ -70,7 +70,7 @@ public final class CallElaborator {
         }
         String name = call.written().substring(call.written().indexOf('.') + 1);
         throw needsOrdered(call.pos(), name, element,
-                name + " needs a list of ordered values (Int, String, Decimal, Date, DateTime, a"
+                name + " needs a list of ordered values (Int, String, Decimal, Date, Time, DateTime, Instant, a"
                         + " newtype over one of these, or an enumeration), but the element is "
                         + element + " — use its ordered field instead (e.g. map to it first)");
     }
@@ -529,7 +529,7 @@ public final class CallElaborator {
             return applied.result();
         }
         return switch (library ? call.reaches() : "") {
-            case "Date", "DateTime" -> {
+            case "Date", "Time", "DateTime", "Instant" -> {
                 arity(call, 1);
                 ca.type(0);   // the literal text, which temporalLiteral parses
                 yield temporalLiteral(call);
@@ -693,19 +693,21 @@ public final class CallElaborator {
                         .hint(new TypeMessage.MapToAnOrderedFieldFirst()).say(new DeclarationMessage.ItNeedsAnOrderedElement(subject, Localizable.of("kind.ordered.list"), Type.show(element))).build());
     }
 
-    /** A written date — {@code Date("2026-07-01")} / {@code DateTime("2026-07-01T09:00")}. The
-     * argument must be a string literal: the compiler parses it here, so a malformed date fails the
-     * build rather than a run (and an {@code example} fixture, which may only hold literals, can
-     * carry a date at all). A computed date comes from the boundary or from {@code Date.addDays},
-     * not from this form. */
+    /** A written temporal — {@code Date("2026-07-01")}, {@code Time("09:00")},
+     * {@code DateTime("2026-07-01T09:00")}, {@code Instant("2026-07-01T09:00:00Z")}. The argument
+     * must be a string literal: the compiler parses it here, so malformed text fails the build
+     * rather than a run (and an {@code example} fixture, which may only hold literals, can carry a
+     * temporal at all). This form spells one out; a temporal computed from values comes from the
+     * boundary, from the arithmetic, or from {@code Date.fromParts} / {@code Time.fromParts}, which
+     * answer a case where the parts name no such moment. */
     static Type temporalLiteral(Ast.Apply call) {
-        boolean isDate = "Date".equals(call.reaches());
+        Type.Prim kind = Type.Prim.named(call.reaches());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(Diagnostic
                             .at(call.appliedAt()).say(new TypeMessage.ATemporalTakesAWrittenString(call.written())).build());
         }
         parseTemporal(call.written(), lit.value(), lit.reportedAt());
-        return isDate ? Type.DATE : Type.DATETIME;
+        return kind;
     }
 
     /** Parses a written temporal, reporting a malformed one against {@code at} — the text the
@@ -713,14 +715,76 @@ public final class CallElaborator {
      * Returns the parsed value so the backend and the example verifier share this one reading of
      * the text. */
     public static Object parseTemporal(String fn, String text, Region at) {
+        Type.Prim kind = Type.Prim.named(fn);
+        Object parsed;
         try {
-            return fn.equals("Date")
-                    ? java.time.LocalDate.parse(text)
-                    : java.time.LocalDateTime.parse(text);
+            parsed = switch (kind) {
+                case DATE -> java.time.LocalDate.parse(text);
+                case TIME -> java.time.LocalTime.parse(text);
+                case DATETIME -> java.time.LocalDateTime.parse(text);
+                case INSTANT -> instantInUtc(text, at);
+                case INT, STRING, BOOL, DECIMAL, RAW ->
+                        throw new IllegalStateException("`" + fn + "` names no temporal");
+            };
         } catch (java.time.format.DateTimeParseException _) {
             throw CompileException.of(Diagnostic
                             .at(at).say(new TypeMessage.ThatIsNotATemporalOfThatKind(fn, text)).build());
         }
+        return toTheSecond(parsed, fn, text, at);
+    }
+
+    /**
+     * A written {@code Instant}: refused where it names a second that does not exist, and where it is
+     * not spelled in UTC.
+     *
+     * <p>A leap second is the substitution this type exists not to make. {@code Instant.parse} takes
+     * {@code 23:59:60} and answers {@code 23:59:59}, so a written moment the language cannot
+     * represent would become a different one with nothing saying so — the defect this whole rule is
+     * about, made by the reader that enforces it. Java hands the fact over separately
+     * ({@code DateTimeFormatter.parsedLeapSecond}), and that is what is read.
+     *
+     * <p>The {@code Z} form is the other rule and a different kind of thing. A numeric offset names
+     * the same moment — {@code 09:30+09:00} and {@code 00:30Z} are one instant, and either determines
+     * it — so it is not refused for being wrong. It is refused because a written value is written the
+     * way the value is written back (spec §fixture-is-written-not-carried), and an {@code Instant} is
+     * written in UTC. A boundary reads either form.
+     *
+     * <p>An offset is a spelling and not a zone. A zone is a place with rules about when its offset
+     * changes ({@code ZoneId}), an offset is a displacement from UTC ({@code ZoneOffset}), and this
+     * language names neither — which is why the refusal above is about the written form and not
+     * about a zone leaking in.
+     *
+     * <p>Both are asked after parsing, so text that is no instant at all is still reported as that.
+     */
+    private static java.time.Instant instantInUtc(String text, Region at) {
+        java.time.Instant parsed = java.time.Instant.parse(text);
+        if (Boolean.TRUE.equals(java.time.format.DateTimeFormatter.ISO_INSTANT.parse(text)
+                .query(java.time.format.DateTimeFormatter.parsedLeapSecond()))) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.ALeapSecondIsNotAMoment(text)).build());
+        }
+        if (!text.endsWith("Z")) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.AnInstantIsWrittenInUtc(text)).build());
+        }
+        return parsed;
+    }
+
+    /** A written time of day is spelled to the second. {@code Time} and {@code DateTime} hold no
+     * finer (spec §temporal-literal), so text carrying a fraction is refused where it stands rather
+     * than losing it on the way in. {@code Instant} is the temporal that keeps a sub-second reading,
+     * and a {@code Date} has no time of day to carry one. */
+    private static Object toTheSecond(Object parsed, String fn, String text, Region at) {
+        int nano = switch (parsed) {
+            case java.time.LocalTime t -> t.getNano();
+            case java.time.LocalDateTime d -> d.getNano();
+            default -> 0;
+        };
+        if (nano != 0) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.ATimeOfDayIsWrittenToTheSecond(fn, text)).build());
+        }
+        return parsed;
     }
 
     static void arity(Ast.Apply call, int n) {

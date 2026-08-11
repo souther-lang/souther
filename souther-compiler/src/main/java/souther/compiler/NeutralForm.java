@@ -393,7 +393,13 @@ final class NeutralForm {
         Type at = open(position);
         while (true) {
             if (at instanceof Type.Prim prim) {
-                return prim == Type.Prim.DATE || prim == Type.Prim.DATETIME ? prim : null;
+                // Which primitives are temporal is asked of each one, so a primitive added later is
+                // answered at its declaration rather than falling into the "not a temporal" side of
+                // a comparison nobody revisited.
+                return switch (prim) {
+                    case DATE, TIME, DATETIME, INSTANT -> prim;
+                    case INT, STRING, BOOL, DECIMAL, RAW -> null;
+                };
             }
             if (!(at instanceof Type.Ref ref) || !through.add(ref.name())) {
                 return null;
@@ -452,7 +458,8 @@ final class NeutralForm {
     static boolean isScalar(Object v) {
         return v instanceof String || v instanceof Long || v instanceof Boolean
                 || v instanceof BigDecimal || v instanceof java.time.LocalDate
-                || v instanceof java.time.LocalDateTime;
+                || v instanceof java.time.LocalTime || v instanceof java.time.LocalDateTime
+                || v instanceof java.time.Instant;
     }
 
     /** The case name a live value carries: its class's simple name, which is the type's own name. */

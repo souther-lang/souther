@@ -171,7 +171,9 @@ public sealed interface FixtureShape {
         return switch (key.representation()) {
             case MapKeyRepresentation.Text _ -> new Scalar(LeafScalar.STRING);
             case MapKeyRepresentation.Date _ -> new Scalar(LeafScalar.DATE);
+            case MapKeyRepresentation.Time _ -> new Scalar(LeafScalar.TIME);
             case MapKeyRepresentation.DateTime _ -> new Scalar(LeafScalar.DATETIME);
+            case MapKeyRepresentation.Instant _ -> new Scalar(LeafScalar.INSTANT);
             case MapKeyRepresentation.StringNewtype n -> new Nominal(n.name());
             case MapKeyRepresentation.UnitEnum e -> new Nominal(e.name());
         };

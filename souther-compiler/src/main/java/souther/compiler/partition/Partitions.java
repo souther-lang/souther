@@ -1051,8 +1051,14 @@ public final class Partitions {
         if (type == Type.DATE) {
             return List.of(FixtureTemplate.date("2000-01-01"));
         }
+        if (type == Type.TIME) {
+            return List.of(FixtureTemplate.time("00:00:00"));
+        }
         if (type == Type.DATETIME) {
             return List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
+        }
+        if (type == Type.INSTANT) {
+            return List.of(FixtureTemplate.instant("2000-01-01T00:00:00Z"));
         }
         // The empty one, for every collection nothing has said otherwise about. A row whose collection
         // is not what it is about should say so by carrying nothing, and where no rule counts what the

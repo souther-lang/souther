@@ -44,6 +44,8 @@ public final class ImplicitUnits {
         names.add("Raw");
         names.add("DivisionByZero");
         names.add("NotANumber");
+        names.add("NotADate");
+        names.add("NotATime");
         names.add("Some");
         names.add("None");
         return Set.copyOf(names);

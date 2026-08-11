@@ -22,11 +22,13 @@ import java.time.format.DateTimeParseException;
  * handed a written temporal can tell them apart, and {@link Dates#dayOf} and {@link #secondOf} each
  * decline the other's.
  *
- * <p><b>No adjacent value.</b> A date-time has no smallest step this language names: whether the
- * value beside a cut-over is a second, a millisecond or a nanosecond earlier is a decision nobody
- * has taken, so none is invented and the boundary beside one is reported as not derivable — the
- * same answer a {@code Decimal} gets, and for the same reason. What is between two of them is a
- * different question and has an answer, which is what lets a class still offer a row.
+ * <p><b>The adjacent value is a second away.</b> This once said a date-time had no smallest step the
+ * language named, and that whether the value beside a cut-over was a second, a millisecond or a
+ * nanosecond earlier was a decision nobody had taken. It has since been taken: a {@code DateTime} is
+ * held to the second (spec §a-local-temporal-is-held-to-the-second), so the second either side of a
+ * line is a date-time and is named. The counts are therefore whole, as day counts are in
+ * {@link Dates}, and a count with a fraction is a number and no date-time — which is what the
+ * round-trip in {@code Carrier.onTheGrid} asks this to answer.
  */
 public final class DateTimes {
 
@@ -36,22 +38,22 @@ public final class DateTimes {
     private static final DateTimeFormatter WRITTEN =
             DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss");
 
-    private static final BigDecimal NANOS = BigDecimal.valueOf(1_000_000_000L);
-
     /**
      * The first and last counts a date-time can be written as.
      *
      * <p>Where the calendar stops, which is not where the arithmetic does. A count past either is a
      * number and no date-time, and the only reader that may say so is the one that knows the two —
      * so they are named here rather than left to whatever exception the writer happens to throw.
+     *
+     * <p>Both are whole. {@code LocalDateTime.MAX} carries a fraction of a second that no
+     * {@code DateTime} can be written as, so the last one that can is the second it falls in.
      */
     public static final Count MIN = countAt(LocalDateTime.MIN);
 
     public static final Count MAX = countAt(LocalDateTime.MAX);
 
     private static Count countAt(LocalDateTime at) {
-        return Count.of(BigDecimal.valueOf(at.toEpochSecond(ZoneOffset.UTC))
-                .add(BigDecimal.valueOf(at.getNano(), 9)));
+        return Count.of(at.toEpochSecond(ZoneOffset.UTC));
     }
 
     /** Whether {@code count} is one of the counts a date-time can be written as. */
@@ -59,36 +61,26 @@ public final class DateTimes {
         return count.compareTo(MIN) >= 0 && count.compareTo(MAX) <= 0;
     }
 
-    /** The second {@code iso} counts to, or null where it is not a date-time this reads. */
+    /** The second {@code iso} counts to, or null where it is not a date-time this reads. A
+     * {@code DateTime} holds no fraction of a second, so nothing is carried below it. */
     public static Count secondOf(String iso) {
         if (iso == null || iso.indexOf('T') < 0) {
             return null;   // a date, whose step is a day
         }
         try {
-            LocalDateTime at = LocalDateTime.parse(iso);
-            return Count.of(BigDecimal.valueOf(at.toEpochSecond(ZoneOffset.UTC))
-                    .add(BigDecimal.valueOf(at.getNano(), 9)));
+            return Count.of(LocalDateTime.parse(iso).toEpochSecond(ZoneOffset.UTC));
         } catch (DateTimeParseException _) {
             return null;
         }
     }
 
-    /** The date-time {@code count} counts to, written the way a model writes one. */
+    /** The date-time {@code count} counts to, written the way a model writes one. A count carrying a
+     * fraction is floored rather than written as a date-time no model could have named, which is
+     * what lets the round-trip that asks whether this carrier holds a count answer no. */
     public static String written(Count count) {
-        BigDecimal second = count.at();
-        BigDecimal whole = second.setScale(0, RoundingMode.FLOOR);
-        BigDecimal fraction = second.subtract(whole).multiply(NANOS)
-                .setScale(0, RoundingMode.HALF_UP);
-        long seconds = whole.longValueExact();
-        long nanos = fraction.longValueExact();
-        // Rounding the fraction can reach a whole second; carrying it keeps the value the count says
-        // rather than one `LocalDateTime` would refuse.
-        if (nanos >= 1_000_000_000L) {
-            seconds += 1;
-            nanos -= 1_000_000_000L;
-        }
-        LocalDateTime at = LocalDateTime.ofEpochSecond(seconds, (int) nanos, ZoneOffset.UTC);
-        return at.getNano() == 0 ? at.format(WRITTEN) : at.toString();
+        LocalDateTime at = LocalDateTime.ofEpochSecond(
+                count.at().setScale(0, RoundingMode.FLOOR).longValueExact(), 0, ZoneOffset.UTC);
+        return at.format(WRITTEN);
     }
 
     private DateTimes() {}

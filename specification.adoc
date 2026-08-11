@@ -603,7 +603,7 @@ What crosses a decoder/encoder boundary is decided by representation, and these 
 * [[what-crosses-the-boundary-has-an-external-representation]]a value that crosses MUST have an external representation (<<what-has-no-external-representation>>). What has none cannot be a behavior's parameter or output, a data's field, or anything a codec would be derived from;
 * [[a-parameter-names-one-type]]a *behavior's* parameter MUST name a single type. An anonymous union is the shape of one behavior's answer and nobody names it (<<union-member>>), so a caller has no name to write and the input takes a declared one. This is a rule about what crosses, and not about where the form is read. A helper's parameter is not a boundary and takes one (<<a-type-is-written-in-a-type-position>>);
 * [[an-optional-does-not-stand-in-a-boundary]]an optional MUST NOT stand anywhere in a behavior's boundary shape — neither as a parameter nor as the output, and at any depth inside a collection either. A boundary carries the model's own vocabulary, and absence there is owned by the data that holds it, on a `+?+` field, or by a sum the model names (<<optional>>). The shape is read down to a named type and no further: a data carrying a `+?+` field crosses as that data;
-* [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, `+Date+`, `+DateTime+`, or an enumeration, a sum every one of whose cases is a unit data (<<collections>>). The boundary writes a key as text, and a key with no text is a key nothing can address;
+* [[a-map-that-crosses-is-keyed-by-a-text-key]]a `+Map+` that crosses MUST be keyed by something a key can be written as — `+String+`, a `+String+`-backed newtype, a temporal (`+Date+` / `+Time+` / `+DateTime+` / `+Instant+`), or an enumeration, a sum every one of whose cases is a unit data (<<collections>>). The boundary writes a key as text, and a key with no text is a key nothing can address;
 * [[a-boundary-carries-the-models-own-vocabulary]]a named type that crosses MUST be one a model declares. The language declares vocabulary of its own — the case a division by zero answers with, the rounding mode a `+Decimal+` operation takes, the reserved `+Raw+` — and those name what an operation can answer or take, not what a behavior publishes. A model that has such a case to report declares its own and names it (`+-> Int | Undivided+`), which is what keeps the behavior's protocol independent of how the language accounts for itself;
 * [[a-collection-member-supports-equality]]a `+Set+`'s element and a `+Map+`'s key MUST support equality. Both ask whether two of them are the same, and a function has no value to compare (<<equality>>).
 
@@ -633,7 +633,9 @@ An external representation may contain null, but internal data forbids null. nul
 
 [[a-field-read-is-declared-by-the-value]]A field read MUST be a field the value has. A sum has no fields of its own — its cases do — and it exposes one only where every case spreads the data declaring it (<<sum-data>>); which case a value is is not known until it is opened.
 
-[[a-temporal-value-is-written-as-a-literal]]`+Date+` and `+DateTime+` are written as literals with the text spelled out (<<temporal-literal>>), so the text can be read at compile time and refused there rather than at run time.
+[[a-temporal-value-is-written-as-a-literal]]A temporal literal MUST have its text spelled out (<<temporal-literal>>), so the text can be read at compile time and refused there rather than at run time. This says how a temporal is *written*; it does not say how one is *reached*. A temporal built from values a model holds comes from `+Date.fromParts+` / `+Time.fromParts+`, which answer a case where the parts name no such moment (<<a-temporal-built-from-parts-is-refused-where-the-parts-name-none>>).
+
+[[a-temporal-built-from-parts-is-refused-where-the-parts-name-none]]`+Date.fromParts+` and `+Time.fromParts+` MUST answer `+NotADate+` / `+NotATime+` where the Ints they are given name no day and no time of day, and MUST NOT normalise. February the 30th is not the 2nd of March here, and the 25th hour is not one o'clock the next day. They are the inverses of the part readers, so `+Date.fromParts(Date.year(d), Date.month(d), Date.day(d)) == d+` holds of every `+Date+` and `+Time.fromParts(Time.hour(t), Time.minute(t), Time.second(t)) == t+` of every `+Time+`. This is where a refusal belongs once the parts are values rather than text: the arithmetic normalises, because shifting a date by a month has to land somewhere, so a model that reaches an impossible day by adding gets a real one back and no sign that it asked for a day the calendar does not have.
 
 [[a-matches-pattern-is-a-literal-regular-expression]]`+String.matches+` takes a pattern that is a string literal and a valid regular expression. Both are read at compile time, which is the point of writing it out: a pattern computed at run time could not be checked at all.
 
@@ -647,10 +649,18 @@ Int          // signed 64-bit integer
 Decimal      // java.math.BigDecimal
 String
 Date         // date. ISO 8601. java.time.LocalDate
-DateTime     // date-time. ISO 8601. java.time.LocalDateTime
+Time         // time of day, to the second. ISO 8601. java.time.LocalTime
+DateTime     // date-time, to the second. ISO 8601. java.time.LocalDateTime
+Instant      // a moment on the timeline, to the nanosecond. ISO 8601 in UTC. java.time.Instant
 ----
 
-`+Date+` / `+DateTime+` correspond to the spec DSL's `+Date+` / `+DateTime+`. Value construction goes through a Decoder (from an ISO 8601 string). The current time is not obtained in the language; it is declared as a behavior with no implementation (<<injected-behavior>>).
+`+Date+` / `+DateTime+` correspond to the spec DSL's `+Date+` / `+DateTime+`. The current time is not obtained in the language; it is declared as a behavior with no implementation (<<injected-behavior>>).
+
+[[a-date-time-is-a-date-and-a-time]]A `+DateTime+` is a `+Date+` and a `+Time+`, and MUST be readable and writable as the two: `+DateTime.toDate+` / `+DateTime.toTime+` take it apart and `+DateTime.fromDateAndTime+` puts it back (<<stdlib-datetime>>). The last of those cannot fail — whatever could have been wrong about the parts was settled when the `+Date+` and the `+Time+` were built.
+
+[[a-local-temporal-is-held-to-the-second]]`+Date+`, `+Time+` and `+DateTime+` are *local*: they say what a calendar and a clock read, and carry no zone. `+Time+` and `+DateTime+` are held to the second and MUST NOT carry a fraction of one — written text that has one is <<e1322>>, and text arriving at a boundary that has one is a decode failure at that path (<<decoder-error>>). Neither drops it: a value that cannot be read back is a value nothing downstream can tell from the one that was sent.
+
+[[an-instant-carries-what-a-timestamp-said]]`+Instant+` is a moment on the timeline rather than a reading of a clock, and is held to the nanosecond, which is what an outside timestamp says. It has no year, no month and no hour: naming one needs a zone, and the language names none. So `+Instant+` has *no calendar decomposition* (<<stdlib-instant>>), and this is a rule rather than a gap — there is nothing to read a part with and nothing to build one from parts either, so the two directions are absent together. That its module is empty is the smaller fact: what the missing zone rules out is the calendar, and an operation that stays on the timeline would need none. What a model does with one it does without a library: two compare (<<primitives>>), one keys a `+Map+` (<<collections>>), one is written as a literal (<<temporal-literal>>), and turning one into a `+DateTime+` is a behavior with no implementation, the zone being supplied from outside as the current time is (<<injected-behavior>>). A boundary takes an `+Instant+` written with a numeric offset and answers the moment it names, which is the same moment the `+Z+` form of it names; source takes the `+Z+` form only (<<temporal-literal>>). Neither is a zone.
 
 [#numeric-literal]
 ==== Numeric literals
@@ -696,7 +706,7 @@ guard approverId == request.applicant.managerId      // two EmployeeId built sep
 
 Only *values of the same type* may be compared. Comparing different types is a compile error. A sum may also be compared with one of its *cases* (`+Rank == Staff+`): a case value is a value of its sum (case→sum is transparent, <<sum-data>>), so this is a sum-vs-sum comparison — true when the sum value is that case. Pure case membership is written this way for a case with no fields (a unit data, the usual state / role enum); a field-bearing case compared with `+==+` compares its fields too.
 
-Ordering (`+<+` `+<=+` `+>+` `+>=+`) is defined for `+Int+` (numeric), `+String+` (lexicographic), `+Decimal+` (by value, ignoring scale), and `+Date+` / `+DateTime+` (chronological). A product data has no ordering, and neither does a sum with a field-bearing case. A single-value newtype (`+data X = Y+`; <<newtype>>) over one of the ordered types *is* ordered — by the value it wraps. So is an *enumeration* — a sum every one of whose cases is a unit data (<<sum-discrimination>>) — ordered by the order its cases are declared in, which is the order a state moves through (`+Prospecting < Won+`).
+Ordering (`+<+` `+<=+` `+>+` `+>=+`) is defined for `+Int+` (numeric), `+String+` (lexicographic), `+Decimal+` (by value, ignoring scale), and `+Date+` / `+Time+` / `+DateTime+` / `+Instant+` (chronological — `+Instant+` to the nanosecond, the other three to the second, which is all they hold). A product data has no ordering, and neither does a sum with a field-bearing case. A single-value newtype (`+data X = Y+`; <<newtype>>) over one of the ordered types *is* ordered — by the value it wraps. So is an *enumeration* — a sum every one of whose cases is a unit data (<<sum-discrimination>>) — ordered by the order its cases are declared in, which is the order a state moves through (`+Prospecting < Won+`).
 
 The order belongs to the sum, not to the case value: the same unit data may be a case of two sums, which place it differently. A case value therefore takes its order from the sum it is compared with or held in (`+stage < Won+`, a `+List<Stage>+`), and a bare case value that two enumerations both list has no order of its own.
 
@@ -1094,7 +1104,7 @@ Souther has union types. They appear in three forms.
 An anonymous union is read as a type wherever a whole type is read (<<a-type-is-written-in-a-type-position>>). Being read in a position is not being admitted by it, and one of those positions refuses the form: a behavior's parameter, which names what a caller has to write (<<a-parameter-names-one-type>>). A behavior's output is the position the form is *for* — it is where a behavior's answer is shaped, and the two other forms above are written nowhere else — which is a different sentence from the only one it may stand in. To carry a sum across a behavior's input, make a named data (<<unmarked-output>>); naming it makes it sealed, with exhaustiveness checking and a JVM type (<<jvm-sum>>). Where the spec DSL writes `+(A OR B)+` in an input, the sum is named as a `+data+` and then referenced. A JVM type is generated for an output anonymous union (<<jvm-anonymous-union>>).
 
 [#union-member]
-[[a-union-member-is-nameable-in-an-arm]]A member of an anonymous union MUST be nominal and MUST tell itself apart from the other members at run time, and it MUST have a form a `+match+` arm can write. The primitives (`+Int+` / `+Bool+` / `+Decimal+` / `+String+` / `+Date+` / `+DateTime+`) and named data types meet both, a data whether this module declares it or imports it. A collection meets neither: its type argument is erased, so `+List<Order>+` and `+List<Item>+` are one type at run time and no arm could choose between them, and no arm form names one. `+Option+` and a function type are outside for the same reason. What a member may be does not depend on where the union came from — a union written as a behavior's output and one a `+>->+` composition arrived at (<<type-routing>>) are the same union.
+[[a-union-member-is-nameable-in-an-arm]]A member of an anonymous union MUST be nominal and MUST tell itself apart from the other members at run time, and it MUST have a form a `+match+` arm can write. The primitives (`+Int+` / `+Bool+` / `+Decimal+` / `+String+` / `+Date+` / `+Time+` / `+DateTime+` / `+Instant+`) and named data types meet both, a data whether this module declares it or imports it. A collection meets neither: its type argument is erased, so `+List<Order>+` and `+List<Item>+` are one type at run time and no arm could choose between them, and no arm form names one. `+Option+` and a function type are outside for the same reason. What a member may be does not depend on where the union came from — a union written as a behavior's output and one a `+>->+` composition arrived at (<<type-routing>>) are the same union.
 
 A named sum member contributes its cases and not itself, as it does in an external representation (<<sum-discrimination>>). The members a union is checked and generated from are therefore its *effective* members: every member written, with each named sum expanded to its leaves.
 
@@ -1702,7 +1712,7 @@ Source -> AST -> (fill decoder/encoder into the AST by derivation) -> type check
 
 Souther's runtime (souther-runtime) does not depend on Raoh. Only the generated bytecode and the apps using it depend on Raoh. Primitive parsing, error accumulation (Applicative), and discriminator dispatch (<<sum-discrimination>>) are handled by Raoh combinators; Souther only maps a data's shape (keys, types, discriminator, case tags) onto Raoh decoder construction.
 
-Decoders are generated per input source. Bare values / Map use raoh-core combinators, JSON `+JsonNode+` uses raoh-json, and jOOQ `+Record+` uses raoh-jooq. The skeleton (keys, types, discriminator, case tags) is common across sources; only terminal field access is swapped per source. For each exposed data, decoders are generated for the sources its shape supports. Bare values / Map and JSON are always generated. JSON temporal fields (`+Date+` / `+DateTime+`) are read as ISO 8601 strings (`+string().date()+` / `+string().dateTime()+`). jOOQ `+Record+` decoders are generated only for a flat shape with no nesting, List, or Map (scalar and newtype columns only) — a row is flat, so a nested object does not fit in one column. Unit data ignore input, so they support all sources.
+Decoders are generated per input source. Bare values / Map use raoh-core combinators, JSON `+JsonNode+` uses raoh-json, and jOOQ `+Record+` uses raoh-jooq. The skeleton (keys, types, discriminator, case tags) is common across sources; only terminal field access is swapped per source. For each exposed data, decoders are generated for the sources its shape supports. Bare values / Map and JSON are always generated. JSON temporal fields are read as ISO 8601 strings (`+string().date()+` / `+string().time()+` / `+string().dateTime()+` / `+string().iso8601()+`), and a `+Time+` and a `+DateTime+` are then held to the second: text carrying a fraction of one is a decode failure at that field's path, not a value rounded on the way in (<<a-local-temporal-is-held-to-the-second>>). jOOQ `+Record+` decoders are generated only for a flat shape with no nesting, List, or Map (scalar and newtype columns only) — a row is flat, so a nested object does not fit in one column. Unit data ignore input, so they support all sources.
 
 [#encoder]
 == Encoder
@@ -2714,7 +2724,7 @@ Building the fixtures, running the helpers they apply, applying the behavior and
 
 `+Set.fromList+` and `+Map.fromList+` are admitted because a value is ordinary code, where a list literal is a `+List+` whatever the position declares, while a row writes a set as its elements and a map as its entry pairs. They are the forms that notation stands for, so one record serves as both a value and a row. `+Map.empty+` and `+Set.empty+` are admitted for the same reason: they are what a body writes for the empty collection a row writes `+[ ]+`, and a row that could not name them would refuse the spelling the body it is exampling uses.
 
-A collection is written as a list, and its declared type says what the list means: a `+List+` keeps its order and repeats, a `+Set+` drops duplicates on decode (`+labels = [ Label("bug"), Label("bug") ]+` is one label), and a `+Map+` takes its entries as `+(key, value)+` pairs — `+counts = [ ("bug", 2), ("ui", 1) ]+` — the form `+Map.fromList+` takes (<<stdlib-map>>). A `+Date+` / `+DateTime+` takes a written temporal (`+Date("2026-07-25")+`, <<temporal-literal>>). This is what lets a rule over dates, sets, or maps be fixed by its examples rather than only by a hand-written test at the boundary.
+A collection is written as a list, and its declared type says what the list means: a `+List+` keeps its order and repeats, a `+Set+` drops duplicates on decode (`+labels = [ Label("bug"), Label("bug") ]+` is one label), and a `+Map+` takes its entries as `+(key, value)+` pairs — `+counts = [ ("bug", 2), ("ui", 1) ]+` — the form `+Map.fromList+` takes (<<stdlib-map>>). A temporal takes a written one (`+Date("2026-07-25")+`, `+Time("09:00")+`, `+DateTime("2026-07-25T09:00")+`, `+Instant("2026-07-25T00:00:00Z")+`; <<temporal-literal>>). This is what lets a rule over dates, sets, or maps be fixed by its examples rather than only by a hand-written test at the boundary.
 
 This holds wherever a value is written, not only inside a record: a behavior taking `+(lines: List<Line>)+` is exampled with `+([ Line { quantity = 1 } ])+`, one returning a `+Map+` is expected as its pairs, and a fake's value is written the same way. A collection does not need a data wrapped around it to reach an example. A map keyed by a newtype (<<collections>>) writes its keys as they are constructed (`+[ (ProductId("A-1"), 3) ]+`), and each key goes through that type's invariant like any other fixture.
 
@@ -2853,9 +2863,9 @@ A threshold says where one class ends and the next begins. A `+guard+` compares 
 
 A position whose values no rule measures still has no classes. A `+String+` nothing says anything about is *not derivable* and is named by the position, not by a length nobody wrote a rule about.
 
-[[a-line-is-drawn-where-the-values-can-carry-one]]*Which ordered values a line is drawn on is stated, and where none is drawn the position says so.* A line is drawn on an `+Int+`, a `+Decimal+`, a `+Date+`, a `+DateTime+` and an enumeration, which is ordered by the order its cases are declared in, and on a single-value newtype over any of them, which is ordered by the value it wraps (<<primitives>>). A line on an enumeration is named by its cases and never by the place a case takes in the declaration. A rule written over a `+String+` is *not read*: it is ordered and is not measured here, and the position is named as one a rule was written about that this could not draw, which is a fact about the compiler and not about the model. The two are told apart because they ask for different work: *not derivable* says the model draws no line at this position, and *not read* says it draws one this could not read (<<example-report-vocabulary>>).
+[[a-line-is-drawn-where-the-values-can-carry-one]]*Which ordered values a line is drawn on is stated, and where none is drawn the position says so.* A line is drawn on an `+Int+`, a `+Decimal+`, a `+Date+`, a `+DateTime+` and an enumeration, which is ordered by the order its cases are declared in, and on a single-value newtype over any of them, which is ordered by the value it wraps (<<primitives>>). A line on an enumeration is named by its cases and never by the place a case takes in the declaration. The value beside a line is named where the values step — a whole number, a day, a second, the next case declared — and reported as not derivable on a `+Decimal+`, which has no smallest step this language names. A rule written over a `+String+`, a `+Time+` or an `+Instant+` is *not read*: each is ordered and none is measured here — a `+Time+` and an `+Instant+` each have a count that would embed, and neither has been given one, since a carrier owes a conversion both ways and a spacing of its own and may not borrow a count that means something else — and the position is named as one a rule was written about that this could not draw, which is a fact about the compiler and not about the model. The two are told apart because they ask for different work: *not derivable* says the model draws no line at this position, and *not read* says it draws one this could not read (<<example-report-vocabulary>>).
 
-The value beside a line is a separate question from the line. It is asked for only where the values have a smallest step: a whole number and a date have a neighbour, and a `+Decimal+` and a `+DateTime+` have none — the second because which step a date-time moves in is not something this language says. A line whose neighbour does not exist is still a line and is still owed a row at the value itself.
+The value beside a line is a separate question from the line. It is asked for only where the values have a smallest step. A whole number, a date, a date-time and an enumeration have a neighbour — a `+DateTime+` is held to the second (<<a-local-temporal-is-held-to-the-second>>), which is the step it moves in — and a `+Decimal+` has none, since no smallest step is named for it and inventing one would test a rule the model never stated. A line whose neighbour does not exist is still a line and is still owed a row at the value itself.
 
 A rule is read the same way wherever it is written. An invariant's bound and a `+guard+`'s comparison draw lines on the same values, so a position bounded at a date and a position compared against one are measured alike; a rule either of them writes that this could not read is named as unread, whichever wrote it.
 
@@ -3524,7 +3534,7 @@ Guard comprehension and `{plus}{plus}` exist to transcribe conditions the spec D
 
 Each reason makes a 0- or 1-element list and concatenates. *One DSL bullet line becomes one Souther line.* The result is `+List<HighValueTravel | InsufficientAuthority | ClientCost>+`, matching the three cases of `+PreApprovalReason+`. A unit data is constructed by name alone (<<unit-data>>), so `+ClientCost+` is written directly.
 
-Note that `+applicant.rank == Staff+` cannot be written as a condition. `+==+` works only between the same type (<<primitives>>), and `+Rank+` and its case `+Staff+` are different types. Case judgment is done with `+match+`, and to make it a predicate wrap it in a helper `+let+` (the `+isStaff+` above). Ordering (`+>=+`) exists only for `+Int+` / `+String+` / `+Decimal+` / `+Date+` / `+DateTime+`, so compare `+.value+`, not `+Amount+` (a newtype) directly.
+Note that `+applicant.rank == Staff+` cannot be written as a condition. `+==+` works only between the same type (<<primitives>>), and `+Rank+` and its case `+Staff+` are different types. Case judgment is done with `+match+`, and to make it a predicate wrap it in a helper `+let+` (the `+isStaff+` above). Ordering (`+>=+`) exists only for `+Int+` / `+String+` / `+Decimal+` and the temporals, so compare `+.value+`, not `+Amount+` (a newtype) directly.
 
 ==== Operations
 
@@ -3560,7 +3570,7 @@ None of these is a compiler primitive. `+List.fold+` is a recursive `+let+` in `
 
 In the lower row, `+append(a, b)+` joins two lists and `+concat(xss)+` flattens a list of them — the same split `+String.append+` and `+String.concat+` make (<<stdlib-string>>), with `{plus}{plus}` as the common form of the first. `+contains+` folds with `+==+` so it works for comparable elements, and `+isEmpty+` looks at length. `+contains+` is the word `+Set.contains+` and `+String.contains+` use, because it is the same question; `+Map+` asks it as `+containsKey+`, which says which half of an entry is being looked for. `+sort+`, `+reverse+`, `+sum+` and `+product+` are primitives. Self-language sorting needs, besides comparison, a place to hold intermediate results, which `+fold+` does not give; `+sort+` sorts by the element's natural order.
 
-`+sum(xs)+` / `+product(xs)+` answer the total and the running product of a list of numbers. The element MUST be `+Int+` or `+Decimal+` — the two types arithmetic is defined for (<<stdlib-int>>, <<stdlib-decimal>>) — and the answer has the element's type. A newtype over one of them is not a numeric element: it declares no addition and no zero of its own, so a list of them is summed by mapping to the wrapped value first (`+sum(map(h -> h.value, hours))+`). They are primitives rather than folds because a fold written in the language would have to write its seed, and a written seed is `+0+` or `+0.0m+` — one of the two types, never both. Over the empty list the answer is that seed (`+sum([]) == 0+`, `+product([]) == 1+`, as in Elm), and which of the two comes from the position the call is written in — the field it fills, the annotated binding it feeds, the declared output it returns. A `+?+` field asks for the value it wraps rather than for an optional (<<optional>>), so it says which as a plain field does. Written where nothing states a type, it is a compile error rather than a default: choosing `+Int+` there would make a numeric-default rule out of one library function, and the annotation says what the domain meant. Written where the position states some other type, it is a type mismatch — nothing about the element is unknown, and what is wrong is that a sum does not go there. Elements MUST be an ordered value — one of the ordered types (`+Int+` / `+String+` / `+Decimal+` / `+Date+` / `+DateTime+`; <<primitives>>), a single-value newtype over one, which is ordered by the value it wraps (<<primitives>>) and carries that ordering on the JVM (<<jvm-product>>), or an enumeration, ordered by its declaration (<<primitives>>). Passing a list of product data to `+sort+` is a compile error (a product has no ordering, so it is rejected up front rather than at runtime; to sort them, map to an ordered field first with `+List.map+`, or order by that field with `+sortBy+`).
+`+sum(xs)+` / `+product(xs)+` answer the total and the running product of a list of numbers. The element MUST be `+Int+` or `+Decimal+` — the two types arithmetic is defined for (<<stdlib-int>>, <<stdlib-decimal>>) — and the answer has the element's type. A newtype over one of them is not a numeric element: it declares no addition and no zero of its own, so a list of them is summed by mapping to the wrapped value first (`+sum(map(h -> h.value, hours))+`). They are primitives rather than folds because a fold written in the language would have to write its seed, and a written seed is `+0+` or `+0.0m+` — one of the two types, never both. Over the empty list the answer is that seed (`+sum([]) == 0+`, `+product([]) == 1+`, as in Elm), and which of the two comes from the position the call is written in — the field it fills, the annotated binding it feeds, the declared output it returns. A `+?+` field asks for the value it wraps rather than for an optional (<<optional>>), so it says which as a plain field does. Written where nothing states a type, it is a compile error rather than a default: choosing `+Int+` there would make a numeric-default rule out of one library function, and the annotation says what the domain meant. Written where the position states some other type, it is a type mismatch — nothing about the element is unknown, and what is wrong is that a sum does not go there. Elements MUST be an ordered value — one of the ordered types (`+Int+` / `+String+` / `+Decimal+` / `+Date+` / `+Time+` / `+DateTime+` / `+Instant+`; <<primitives>>), a single-value newtype over one, which is ordered by the value it wraps (<<primitives>>) and carries that ordering on the JVM (<<jvm-product>>), or an enumeration, ordered by its declaration (<<primitives>>). Passing a list of product data to `+sort+` is a compile error (a product has no ordering, so it is rejected up front rather than at runtime; to sort them, map to an ordered field first with `+List.map+`, or order by that field with `+sortBy+`).
 
 The third row adds more list operations. `+distinct+` keeps the first occurrence of each element and drops later duplicates, folding a `+Set+` of what it has seen; `+partition+` splits into `+(kept, rest)+` by a predicate; `+groupBy+` buckets elements into a `+Map<'k, List<'a>>+` by a key; `+indexBy(key, xs)+` keys them one entry each into a `+Map<'k, 'a>+`, which is how a list of rows read from outside becomes something a caller looks up by key instead of scanning per lookup — two elements with the same key collapse and the later wins, as `+Map.fromList+` does, so state the key's uniqueness with `+allDistinctBy+` when it matters. `+filterMap(f, xs)+` maps and drops in one pass: `+f+` answers with an optional and only what is there joins the result, which is how an optional field becomes a plain list (`+filterMap(i -> i.assignee, issues)+`) without a stand-in value to filter on afterwards. Its step is the one stdlib signature that writes an optional as a type, `+('a) -> 'b?+` (<<algebraic-types>>). These five are self-language `+let+`s that grow their result from within `+List.fold+`. `+max+` / `+min+` return the largest / smallest as an `+Option+` — `+None+` on an empty list — and compare by natural order, so like `+sort+` the element MUST be ordered; `+find+` returns the first element satisfying a predicate as an `+Option+`. `+sortBy(key, xs)+` orders by a projected ordered key rather than the element itself: unlike `+sort+`, whose comparison is built in, its key is a runtime function value, so the sort carries an actual `+Fn+`. It is stable, so ordering by two keys is a sort by the secondary key followed by one by the primary; a key MUST be a single ordered value, not a tuple. `+max+` / `+min+` / `+find+` / `+sortBy+` are primitives (they step outside `+fold+`); there is no `+head+` — a domain reads the first element with `+List.get(0, xs)+`. `+distinct+`, `+distinctBy(key, xs)+` and `+allDistinctBy(key, xs)+` are one family under one word. `+distinctBy+` keeps the first element of each key rather than of each element; `+allDistinctBy+` holds when nothing would be dropped — the "this projection is a unique id" invariant, written directly instead of comparing a `+distinct+` of the projected keys against the length by hand. Deriving from `+fold+`, they may stand in an invariant, as `+distinct+` itself may.
 
@@ -3643,15 +3653,23 @@ not
 
 [,text]
 ----
-addDays  addMonths  addYears  daysBetween  year  month  day
+addDays  addMonths  addYears  daysBetween  year  month  day  fromParts
 ----
 
 [#temporal-literal]
-A date is written `+Date("2026-07-25")+` and a date-time `+DateTime("2026-07-25T09:00")+`. The argument MUST be a written string: the compiler parses it where it stands, so a malformed date fails the build rather than a run, and an `+example+` fixture — which holds only written values (<<example-evaluable>>) — can carry a date at all. A computed date comes from the boundary or from the arithmetic below, not from this form.
+A temporal is written as its type applied to the text: `+Date("2026-07-25")+`, `+Time("09:00")+`, `+DateTime("2026-07-25T09:00")+`, `+Instant("2026-07-25T00:00:00Z")+`. The argument MUST be a written string: the compiler parses it where it stands, so malformed text fails the build rather than a run, and an `+example+` fixture — which holds only written values (<<example-evaluable>>) — can carry a temporal at all.
 
-This is the only form, and a newtype over a temporal takes the temporal it wraps: `+data 貸出日 = Date+` is built `+貸出日(Date("2026-07-25"))+`, in a fixture as in a model body. The string alone is a `+String+` there as anywhere (<<fixture-is-written-not-carried>>).
+`+Time+` and `+DateTime+` are written to the second, and text carrying a fraction of one is <<e1322>> — they hold none, so admitting the text would drop part of it (<<a-local-temporal-is-held-to-the-second>>). `+Instant+` is written in UTC, the `+Z+` form. Text carrying a numeric offset is <<e1322>> — not because the offset is wrong, since `+09:30:00+09:00+` and `+00:30:00Z+` are one moment and either determines it, but because a written value is written the way the value is written back (<<fixture-is-written-not-carried>>) and an `+Instant+` is written in UTC. An offset is a *spelling*, not a zone: a zone is a place with rules about when its offset changes, and neither is a thing this language names. A boundary reads the offset form and answers the same moment (<<an-instant-carries-what-a-timestamp-said>>).
+
+[[a-leap-second-is-no-moment]]Text naming a leap second — a `+:60+` second — MUST be refused, where it is written and where it arrives. The language has no moment for one, and the reading that would otherwise be taken is the second before it, which is a *different* moment than the text says. This is the one place a written temporal is refused for what it means rather than for its form, and it is refused for the reason everything else in this section is: a value nothing downstream can tell from the value that was sent is worse than no value.
+
+A newtype over a temporal takes the temporal it wraps: `+data 貸出日 = Date+` is built `+貸出日(Date("2026-07-25"))+`, in a fixture as in a model body. The string alone is a `+String+` there as anywhere (<<fixture-is-written-not-carried>>).
+
+This is the only form for *writing* a temporal out. It is not the only way to *reach* one: `+fromParts+` below builds a `+Date+` from three Ints a model already holds, and answers a case where they name no day.
 
 `+Date+` is a local calendar date (<<primitives>>). Calendar arithmetic is pure and belongs in the domain, not behind an injected behavior (<<injected-behavior>>) — only reading the *current* date needs the outside world. `+addDays(n, d)+` / `+addMonths(n, d)+` / `+addYears(n, d)+` shift `+d+` by `+n+` units (`+n+` may be negative), following `+java.time.LocalDate+`, which clamps the end of a month (`+addMonths(1, 2026-01-31)+` is `+2026-02-28+`). `+daysBetween(from, to)+` is the whole days from `+from+` to `+to+`, negative when `+to+` precedes `+from+`. The date operated on is last (<<pipe>>), so `+d |> Date.addDays(3)+` reads left to right.
+
+[[a-shift-off-the-end-of-a-temporal-aborts]]A shift that leaves the range a temporal can hold MUST *abort*, as an `+Int+` overflow does (<<stdlib-int>>): it is a model bug and not a business result, so it throws `+ConstraintViolation+` and does not wrap, clamp, or answer a case (<<jvm-abort>>). A year past what a date holds and a count too large to add are one abort and not two, because what a caller can do about either is the same. This is the arithmetic and not <<a-temporal-built-from-parts-is-refused-where-the-parts-name-none>>: parts are a question about whether three numbers name a day, and a shift is a computation that ran out of room.
 
 `+year(d)+` / `+month(d)+` / `+day(d)+` read a date's parts as `+Int+`s — the month 1 to 12, the day 1 to 31. `+year+` / `+month+` / `+day+` all answer `+Int+`: `+addMonths+` counts in months, and a named month would have to be converted back before adding one. There is no `+dayOfWeek+`: neither language answers that with a bare number, so it needs a named seven-case type.
 
@@ -3663,15 +3681,65 @@ let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
 let endOfMonth (d: Date): Date = Date.addDays(0 - 1, Date.addMonths(1, monthStart(d)))
 ----
 
+`+fromParts(year, month, day)+` reads three Ints as a day, answering `+Date | NotADate+`. It is the inverse of `+year+` / `+month+` / `+day+` and normalises nothing (<<a-temporal-built-from-parts-is-refused-where-the-parts-name-none>>), so a model holding a year and a month it took in as `+Int+` can say the date they name, and is told when they name none:
+
+[,souther]
+----
+data 診療年月 =
+    { 年: Int
+    , 月: Int
+    }
+    invariant 月 >= 1 && 月 <= 12
+
+let 時効内か (m: 診療年月, 申請日: Date): Bool =
+    match Date.fromParts(m.年, m.月, 1) with
+        | Date as 診療月の初日 -> 申請日 < Date.addYears(2, Date.addMonths(1, 診療月の初日))
+        | NotADate -> false
+----
+
+One case covers both a day the calendar does not have and a year a date cannot hold, as `+NotANumber+` covers both text that is no number and a number too large to hold (<<stdlib-string>>): what a caller does with either is the same.
+
+`+NotADate+` and `+NotATime+` are written in a `+match+` arm and nowhere else, as `+DivisionByZero+` and `+NotANumber+` are (<<algebraic-types>>). They are the library's names for the library's own refusals, so a `+let+` that wants to pass one of them on to its caller names a case of its own and answers that.
+
+[#stdlib-time]
+=== Time
+
+[,text]
+----
+fromParts  hour  minute  second
+----
+
+`+Time+` is a time of day to the second, with no date and no zone (<<primitives>>) — what a model holds when it names an opening hour, where writing a `+DateTime+` would invent a day the domain does not have. `+hour+` / `+minute+` / `+second+` read the parts as Ints, and `+fromParts(hour, minute, second)+` reads three back into a `+Time+`, answering `+NotATime+` for hour 24, minute 60 and the leap second.
+
+There is no time arithmetic. Adding to a time of day has to say what happens at midnight — whether 23:30 plus an hour is 00:30 or is nothing — and that is a decision about a domain rather than about a clock. A model that holds the day as well adds on the `+DateTime+`, where the day is there to carry the answer. A model that holds only a time of day says what crossing midnight means as a rule of its own — telling it to hold a `+DateTime+` instead would have it invent a date, which is the thing a `+Time+` exists to avoid.
+
 [#stdlib-datetime]
 === DateTime
 
 [,text]
 ----
-addMinutes  addHours  addDays  minutesBetween  toDate
+addMinutes  addHours  addDays  minutesBetween  toDate  toTime  fromDateAndTime
 ----
 
-`+DateTime+` is a local date-time with no zone (<<primitives>>); the zone stays a boundary concern. `+addMinutes+` / `+addHours+` / `+addDays+` shift by their unit; `+minutesBetween(from, to)+` is the whole minutes between (negative when `+to+` precedes `+from+`); `+toDate(dt)+` drops the time of day, yielding a `+Date+`. As with `+Date+`, the date-time operated on is last (<<pipe>>).
+`+DateTime+` is a local date-time with no zone (<<primitives>>); the zone stays a boundary concern. `+addMinutes+` / `+addHours+` / `+addDays+` shift by their unit; `+minutesBetween(from, to)+` is the whole minutes between (negative when `+to+` precedes `+from+`). As with `+Date+`, the date-time operated on is last (<<pipe>>).
+
+`+toDate+` / `+toTime+` / `+fromDateAndTime+` are the three that say a `+DateTime+` is a `+Date+` and a `+Time+` (<<a-date-time-is-a-date-and-a-time>>). `+fromDateAndTime(d, t)+` cannot fail and has no case to write an arm for: whatever could have been wrong about the parts was refused where the `+Date+` and the `+Time+` were built. Its name is not `+fromParts+`, which the other two temporals use for the Ints they read — a `+DateTime+` comes apart two ways, into a date and a time or into six numbers, so `+fromParts+` would leave a reader to work out which it takes.
+
+[#stdlib-instant]
+=== Instant
+
+[,text]
+----
+----
+
+`+Instant+` has no operations, and the empty list above is not a section waiting to be filled: it has no parts to read without a zone, so it has none to be built from either, and the two directions are absent together (<<an-instant-carries-what-a-timestamp-said>>). What the missing zone rules out is the *calendar*. An operation that stays on the timeline — the elapsed time between two, a shift along it — needs no zone, and none is here because nothing has asked for one.
+
+A model still holds one, compares two (<<primitives>>), keys a `+Map+` by one (<<collections>>) and writes one as a literal (<<temporal-literal>>). To read one as a local date-time it declares a behavior with no implementation and the Java side supplies the zone, the way the current time is supplied (<<injected-behavior>>):
+
+[,souther]
+----
+behavior 地方日時 : (at: Instant) -> DateTime
+----
 
 Decoders and Encoders do not appear in Souther's syntax. Derived from a data's shape, they are generated by the ClassFile backend as Raoh Decoders / Encoders (<<codec-generation>>, <<encoder>>). Primitive parsing, error accumulation, discriminator dispatch, and encoding are handled by Raoh combinators; there is no facade on the souther-runtime side. A custom boundary codec (<<custom-codec>>) uses Raoh directly from the Java side.
 
@@ -4589,10 +4657,23 @@ Reported at the read (<<a-field-read-is-declared-by-the-value>>). A sum exposes 
 
 [,text]
 ----
-`2026-13-01` is not a Date. Write `Date("2026-07-01")` / `DateTime("2026-07-01T09:00")`.
+`2026-13-01` is not a Date. Write `Date("2026-07-01")` / `Time("09:00")` /
+`DateTime("2026-07-01T09:00")` / `Instant("2026-07-01T09:00:00Z")`.
+
+`2026-07-01T09:30:45.123` is finer than a second, and a `DateTime` holds no fraction of one. Write
+it to the second, or use `Instant` where the sub-second reading is the point.
+
+`2026-07-01T09:30:45+09:00` carries an offset. It names the same moment
+`Instant("2026-07-01T00:30:45Z")` names, and that is how an `Instant` is written. A boundary reads
+either.
+
+`2026-06-30T23:59:60Z` names a leap second. The language has no moment for one, and reading it as
+the second before would answer a different moment than the text says.
 ----
 
-Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text is spelled out so it can be read at compile time, which is what lets a malformed one be refused here instead of at run time.
+Reported at the value (<<a-temporal-value-is-written-as-a-literal>>). The text is spelled out so it can be read at compile time, which is what lets malformed text be refused here instead of at run time. The same code covers three more refusals, and they are not one kind of thing. A fraction of a second, and a leap second, are text saying something the type cannot hold — the first a reading finer than the type keeps (<<a-local-temporal-is-held-to-the-second>>), the second a moment the language does not have (<<a-leap-second-is-no-moment>>). A numeric offset is neither: it names exactly the moment the `+Z+` form of it names, and is refused only because a written value is written the way the value is written back (<<temporal-literal>>). A boundary reads the offset form and refuses the other two.
+
+This code is about *writing* a temporal. Parts that name no moment are not this: they are values rather than text, so `+Date.fromParts+` answers `+NotADate+` at the position that built them (<<a-temporal-built-from-parts-is-refused-where-the-parts-name-none>>).
 
 [#e1323]
 === A `String.matches` pattern is not a literal regular expression

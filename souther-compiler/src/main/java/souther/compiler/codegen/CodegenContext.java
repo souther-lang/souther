@@ -468,18 +468,17 @@ final class CodegenContext {
         if (!caseName.isPrimitive()) {
             return caseClass(caseName);
         }
-        return switch (caseName.name()) {
-            case "Int" -> CD_Long;
-            case "Bool" -> CD_Boolean;
-            case "Decimal" -> CD_BigDecimal;
-            case "String" -> CD_String;
-            case "Date" -> CD_LocalDate;
-            case "DateTime" -> CD_LocalDateTime;
-            // Option's `Some`/`None` are named here as well, being declared by no module, and never
-            // reach this: an Option match dispatches on the runtime Option classes, not on an arm's
-            // own name. Anything else naming no class is a resolution that should not have happened.
-            default -> throw new IllegalStateException("no class for the case " + caseName);
-        };
+        // The boxed carrier of the primitive the name spells, taken from the one table that says
+        // which class carries which primitive rather than from a second copy of it here.
+        Type.Prim prim = caseName.primitiveKind();
+        ClassDesc boxed = prim == null ? null : JvmTypes.boxedPrim(prim);
+        if (boxed != null) {
+            return boxed;
+        }
+        // Option's `Some`/`None` are named here as well, being declared by no module, and never
+        // reach this: an Option match dispatches on the runtime Option classes, not on an arm's
+        // own name. Anything else naming no class is a resolution that should not have happened.
+        throw new IllegalStateException("no class for the case " + caseName);
     }
 
     ClassDesc[] caseInterfaces(String name) {

@@ -47,7 +47,9 @@ final class JvmTypes {
                 case DECIMAL -> CD_BigDecimal;
                 case STRING -> CD_String;
                 case DATE -> CD_LocalDate;
+                case TIME -> CD_LocalTime;
                 case DATETIME -> CD_LocalDateTime;
+                case INSTANT -> CD_Instant;
                 case RAW -> null;
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
@@ -199,7 +201,9 @@ final class JvmTypes {
                 case BOOL -> ConstantDescs.CD_boolean;
                 case DECIMAL -> CD_BigDecimal;
                 case DATE -> CD_LocalDate;
+                case TIME -> CD_LocalTime;
                 case DATETIME -> CD_LocalDateTime;
+                case INSTANT -> CD_Instant;
                 // reserved: no stage produces one, so none reaches codegen
                 case RAW -> throw new IllegalStateException("no JVM carrier for Raw");
             };

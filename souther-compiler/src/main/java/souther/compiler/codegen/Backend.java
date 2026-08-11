@@ -1102,8 +1102,15 @@ public final class Backend {
      * now may name something an older compiler cannot read, since a name may hold a character
      * outside the basic plane, which the older one scanned by UTF-16 unit and refused. The same
      * number covers a later Unicode version, which admits names that were not names before.
+     *
+     * <p>Version 14 narrows what a temporal carries, and widens what the primitives are. A
+     * {@code DateTime} is held to the second, so a jar built before this accepts
+     * {@code "09:30:45.123"} at a field this compiler's decoder refuses, and a caller reading the
+     * older jar's promise would be told a value crossed that no longer does. {@code Time} and
+     * {@code Instant} are new primitives, so a jar built now may declare a boundary shape an older
+     * compiler has no type for at all.
      */
-    public static final int BOUNDARY_VERSION = 13;
+    public static final int BOUNDARY_VERSION = 14;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

@@ -2,7 +2,8 @@
 
 Status: Accepted. Amended twice — arithmetic, deferred at the time of this decision, was added later
 (see the "Arithmetic" paragraph below and spec §newtype-arithmetic / §invariant-discharge), and the
-sort family was brought onto the same reading (see "Sorting").
+sort family was brought onto the same reading (see "Sorting"). The ordered primitives are
+eight since ADR-0103, not the five this reasons about.
 
 ## Context
 
@@ -39,7 +40,7 @@ ordering, so `.value` is not written. The nominal boundary is kept by four rules
 - A non-literal value of the wrapped type is not taken implicitly: `Amount <= n` (with `n: Int`) is a
   type error — write `Amount <= Amount(n)`.
 
-Ordering additionally requires the wrapped type to be ordered (Int/String/Decimal/Date/DateTime);
+Ordering additionally requires the wrapped type to be ordered (Int/String/Decimal and the temporals — Date/DateTime when this was written, and Time/Instant since ADR-0103);
 equality works over any wrapped type. The unwrap recurses, so a newtype over a newtype
 (`Manager = Level = Int`) reaches its base. In the backend, a newtype operand of a comparison is opened
 to its wrapped value (its `value` accessor) before the primitive comparison, so `Amount <= Amount` emits
