@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Incompleteness;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,15 +17,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * is also how a reader gets told what happened on the authority of a name that may be wider than
  * the sentence — which is the defect this whole change is about, made once more one level up. So a
  * code is written out in words only where its producers have been read.
+ *
+ * <p>The subject is the part of a sentence that is not written here. A reason names what it is about
+ * as an identity, and for a source that is whatever the compile was handed it as — a position in a
+ * list under a build. What to call it is the caller's answer and arrives with the request, so what
+ * these hold is that the words come from the code and the subject comes from the caller.
  */
 class AReasonSaysOnlyWhatWasEstablishedTest {
 
     @Test
     void aSourceWithNoObservationSaysThatAndNotWhyItHadNone() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
-                Incompleteness.Scope.SOURCE, "1"));
+                Incompleteness.Scope.SOURCE, "1"), id -> "trip.sou");
 
-        assertEquals("no rows were read from `1`, so what they cover is unknown", said);
+        assertEquals("no rows were read from `trip.sou`, so what they cover is unknown", said);
+    }
+
+    /**
+     * And it says it about a file, not about the id the compile holds it under.
+     *
+     * <p>This held the id: the reason was written for source {@code 1} and the sentence was expected
+     * to read {@code `1`}. The subject was the one part of the sentence that is not written here, and
+     * pinning it made the sentence agree with the identity it was handed — which is what a report
+     * printing `` `0` `` at a person had been doing all along.
+     */
+    @Test
+    void theSubjectOfASourceIsTheNameAndNotTheId() {
+        Incompleteness gap = Incompleteness.of(Incompleteness.Code.OBSERVATION_ABSENT,
+                Incompleteness.Scope.SOURCE, "1");
+
+        String said = Reasons.said(gap, id -> "1".equals(id) ? "b/model.sou" : id);
+
+        assertTrue(said.contains("`b/model.sou`"), said);
+        assertFalse(said.contains("`1`"), "an id is not what a person is shown: " + said);
     }
 
     /** Named for the error that was caught, and it says no more than that. The runtime being off
@@ -32,7 +57,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void aLinkageFailureDoesNotClaimTheRuntimeIsMissing() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                Incompleteness.Scope.BEHAVIOR, "submit"));
+                Incompleteness.Scope.BEHAVIOR, "submit"), SourceNameResolver.identity());
 
         assertFalse(said.contains("runtime"), said);
         assertTrue(said.contains("would not link"), said);
@@ -54,7 +79,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void aLinkageFailureSaysWhatItsOneProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.LINKAGE_FAILED,
-                Incompleteness.Scope.BEHAVIOR, "submit"));
+                Incompleteness.Scope.BEHAVIOR, "submit"), SourceNameResolver.identity());
 
         assertEquals("the classes for `submit` would not link, so its rows did not run", said);
     }
@@ -71,7 +96,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     @Test
     void oneProducerLetsTheSentenceSayWhatThatProducerEstablishes() {
         String said = Reasons.said(Incompleteness.of(Incompleteness.Code.INSTRUMENTATION_ABSENT,
-                Incompleteness.Scope.MODULE, "example.trip"));
+                Incompleteness.Scope.MODULE, "example.trip"), SourceNameResolver.identity());
 
         assertEquals("the classes `example.trip` needed for arm coverage could not be made,"
                 + " so none of its rows were read", said);
@@ -89,7 +114,7 @@ class AReasonSaysOnlyWhatWasEstablishedTest {
     void noCodeIsPrintedAsItsOwnName() {
         for (Incompleteness.Code code : Incompleteness.Code.values()) {
             String said = Reasons.said(Incompleteness.of(code,
-                    Incompleteness.Scope.BEHAVIOR, "submit"));
+                    Incompleteness.Scope.BEHAVIOR, "submit"), SourceNameResolver.identity());
 
             assertNotEquals("submit (" + code.name().toLowerCase(java.util.Locale.ROOT) + ")", said,
                     code + " is printed as itself");

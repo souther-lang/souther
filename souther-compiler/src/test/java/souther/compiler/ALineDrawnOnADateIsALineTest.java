@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -42,7 +43,7 @@ class ALineDrawnOnADateIsALineTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human();
+        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
     /** The position is divided, where it used to be one nothing was established about. */

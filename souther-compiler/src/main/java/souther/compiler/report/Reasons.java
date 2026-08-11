@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Incompleteness;
 
 /**
@@ -24,6 +25,12 @@ import souther.compiler.observe.Incompleteness;
  * already done so twice: once by writing a sentence for every code without reading any producer,
  * and once by giving a linkage failure the consequence its first producer has and its other two do
  * not.
+ *
+ * <p><b>Where the words come from.</b> The sentence is written here and the subject is not. A reason
+ * names its subject as an identity, and a source id is a position in a list under a build. What to
+ * call a source is the caller's to answer and depends on which files are being read beside it, so it
+ * arrives as a {@link SourceNameResolver} rather than being read off the reason. That is the third
+ * thing this class got wrong, and it printed a file index where a file name belongs.
  */
 final class Reasons {
 
@@ -55,23 +62,24 @@ final class Reasons {
      * the block that prints it: a position it left out and a search that ended are things it did,
      * not things a measurement could not read.
      */
-    static String said(Incompleteness gap) {
+    static String said(Incompleteness gap, SourceNameResolver names) {
+        String subject = gap.shown(names);
         return switch (gap.code()) {
             case OBSERVATION_ABSENT -> String.format(
-                    "no rows were read from `%s`, so what they cover is unknown", gap.subject());
+                    "no rows were read from `%s`, so what they cover is unknown", subject);
             case LINKAGE_FAILED -> String.format(
-                    "the classes for `%s` would not link, so its rows did not run", gap.subject());
+                    "the classes for `%s` would not link, so its rows did not run", subject);
             case ROW_UNDECIDED -> String.format(
-                    "a row of `%s` did not come back, so what it covers is unknown", gap.subject());
+                    "a row of `%s` did not come back, so what it covers is unknown", subject);
             case INSTRUMENTATION_ABSENT -> String.format(
                     "the classes `%s` needed for arm coverage could not be made, so none of its"
-                            + " rows were read", gap.subject());
+                            + " rows were read", subject);
             case VALUE_UNREADABLE -> String.format(
                     "a row's value at `%s` could not be read, so which class it is in is unknown",
-                    gap.subject());
+                    subject);
             case VALUE_TRUNCATED -> String.format(
                     "the observation at `%s` was stopped by a limit, so which class it is in is"
-                            + " unknown", gap.subject());
+                            + " unknown", subject);
         };
     }
 

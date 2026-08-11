@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -50,7 +51,7 @@ class AnEdgeNothingPromisesSaysWhatWasTriedTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human();
+        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
     /** The line is still said, which is what keeps a discovered edge from disappearing. */

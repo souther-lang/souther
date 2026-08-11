@@ -580,8 +580,12 @@ public final class Analyzer {
                     || !overlaps(pointRange(lines, behavior.pos()), requested)) {
                 continue;
             }
+            // An id stands for itself here: a workspace compilation is keyed on the document URIs
+            // this server was given, so what identifies a source is already what this server calls
+            // it.
             String block = souther.compiler.report.GeneratedRows.of(compilation, module,
-                    behavior.name(), true);
+                    behavior.name(), true,
+                    souther.compiler.diag.SourceNameResolver.identity());
             if (block.isBlank()) {
                 continue;
             }

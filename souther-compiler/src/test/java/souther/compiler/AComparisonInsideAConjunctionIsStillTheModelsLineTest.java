@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
@@ -58,7 +59,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        String human = AdequacyReport.of(compilation).human();
+        String human = AdequacyReport.of(compilation).human(SourceNameResolver.identity());
         StringBuilder block = new StringBuilder();
         boolean inside = false;
         for (String line : human.split("\n", -1)) {

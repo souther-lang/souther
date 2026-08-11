@@ -12,6 +12,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceNames;
 import souther.compiler.doc.ApiCommand;
 import souther.compiler.doc.DocCommand;
@@ -360,14 +361,15 @@ public final class Main {
             boolean assessable = !assessed.modules().isEmpty();
             AdequacyReport report = assessed.only(module, behavior);
             if (assessable) {
+                SourceNameResolver names = namesOf(sources);
                 String rendered = render.json() ? report.json() + System.lineSeparator()
-                        : report.human();
+                        : report.human(names);
                 System.out.print(rendered);
                 // After the report, because the rows are what to do about what the report just said.
                 // Beside it rather than in it where the report is JSON: the rows are source, and
                 // source in the middle of a JSON document is not a document.
                 if (generate) {
-                    String rows = GeneratedRows.of(compilation, module, behavior, boundaries);
+                    String rows = GeneratedRows.of(compilation, module, behavior, boundaries, names);
                     (render.json() ? System.err : System.out).print(rows);
                 }
             }
@@ -649,11 +651,32 @@ public final class Main {
     /** What to quote for each source a diagnostic points into, read once per file, under names no
      *  two of these files share. */
     private static SourceContextResolver sourcesOf(List<Path> sources) {
-        List<String> names = SourceNames.of(sources.stream().map(Path::toString).toList());
+        List<String> names = displayNames(sources);
         return SourceContextResolver.memoized(id -> {
             int at = indexOf(sources, id);
             return at < 0 ? null : read(sources.get(at), names.get(at));
         });
+    }
+
+    /**
+     * What to call each source a report names, which is what a diagnostic calls it.
+     *
+     * <p>The report identifies a source by the id this command handed it over as — a position in the
+     * list — and the name for one is this command's answer, since only it knows which files are in
+     * front of the reader. Both renderings go through {@link #displayNames}, so a run cannot quote a
+     * line from {@code a/model.sou} and then say the rows of {@code model.sou} were not read.
+     */
+    private static SourceNameResolver namesOf(List<Path> sources) {
+        List<String> names = displayNames(sources);
+        return id -> {
+            int at = indexOf(sources, id);
+            return at < 0 ? id : names.get(at);
+        };
+    }
+
+    /** What each of these files is called in front of a reader, in the order they were given. */
+    private static List<String> displayNames(List<Path> sources) {
+        return SourceNames.of(sources.stream().map(Path::toString).toList());
     }
 
     /** Which of the files handed over a source id names, or -1 when it names none of them. */
