@@ -1724,15 +1724,48 @@ public final class Adequacy {
      * it would report the case it produced as one nothing produces.
      */
     /**
-     * The cases a position has to be covered at, which is not quite what a row's expected arm is held
-     * against ({@link TypeOps#outputCases}).
+     * The cases an input position has to be covered at: what it divides into, read through the names
+     * it writes its values under.
      *
      * <p>A position typed as one data has one case, and covering it is not a question: any row at all
      * covers it, so reporting {@code 1/1} everywhere adds a number that is never anything else. What
-     * is worth counting is a position that can be more than one thing. The arm check is wider on
-     * purpose — it uses the single name to catch a row that wrote the wrong one.
+     * is worth counting is a position that can be more than one thing — which a
+     * {@code data DecisionN = Decision} is, since its values are the cases of {@code Decision} under a
+     * name. Asked of the written type, that name is where the reading stops, and a position the
+     * declaration divides two ways comes back as one the model divides no way.
+     *
+     * <p>The names come off by {@link TypeOps#base}, and what a row wrote at the position has the same
+     * ones taken off it ({@link FixtureReader#caseUnder}) — the terminal and the layers of the one walk
+     * that says how far a newtype reaches, so neither end decides for itself how far that is.
+     *
+     * <p>Both ends or neither. A denominator read through the names has no member in common with a
+     * numerator answering with the outermost of them, so every row would land outside the set it is
+     * counted in: {@code 1} of {@code 2} covered, and both of the two still owed a row.
      */
-    private static Set<TypeName> coverableCases(Type t, Symbols symbols) {
+    private static Set<TypeName> inputCoverableCases(Type t, Symbols symbols) {
+        return casesOfSum(TypeOps.base(t, symbols), symbols);
+    }
+
+    /**
+     * The cases the output has to be covered at, which is not quite what a row's expected arm is held
+     * against ({@link TypeOps#outputCases}).
+     *
+     * <p>Not {@link #inputCoverableCases}. The two were one function on the strength of running the
+     * same way, and they are not the same question: an output written under a name is answered with
+     * that name — the arm a row states, the arm a result is read as, and the set the two are held
+     * against all say {@code DecisionN} — so counting its cases here would name arms no row may write.
+     * What a name over a sum means at an output is a question of its own and is not answered here.
+     *
+     * <p>The arm check is wider than this on purpose: it uses the single name of a position that is
+     * not a sum at all to catch a row that wrote the wrong one.
+     */
+    private static Set<TypeName> outputCoverableCases(Type t, Symbols symbols) {
+        return casesOfSum(t, symbols);
+    }
+
+    /** What a sum divides into, and nothing for a type that is not one. The one thing the two
+     *  measures above share; what tells them apart is which type each hands it. */
+    private static Set<TypeName> casesOfSum(Type t, Symbols symbols) {
         return TypeOps.isSumType(t, symbols) ? TypeOps.leafCases(t, symbols) : Set.of();
     }
 
@@ -1749,7 +1782,7 @@ public final class Adequacy {
         // The cases the output type has, less the ones only an arm nothing reaches produces. A case
         // no reachable producer answers with is not a gap in the rows.
         Set<TypeName> declaredOut = souther.compiler.partition.ProducedCases.of(
-                body, plan, reachable.reachable(), coverableCases(sig.outputType(), symbols));
+                body, plan, reachable.reachable(), outputCoverableCases(sig.outputType(), symbols));
         Set<TypeName> specified = new LinkedHashSet<>();
         Set<TypeName> observed = new LinkedHashSet<>();
         Set<TypeName> verified = new LinkedHashSet<>();
@@ -1763,7 +1796,7 @@ public final class Adequacy {
         List<Set<TypeName>> inExcluded = new ArrayList<>(ins.size());
         int[] unreadableIn = new int[ins.size()];
         for (int i = 0; i < ins.size(); i++) {
-            Set<TypeName> declared = coverableCases(ins.get(i), symbols);
+            Set<TypeName> declared = inputCoverableCases(ins.get(i), symbols);
             declaredIn.add(declared);
             inSpecified.add(new LinkedHashSet<>());
             inExecuted.add(new LinkedHashSet<>());

@@ -426,7 +426,28 @@ public final class FixtureReader {
      * spelling or nothing (issue #206).
      */
     TypeName constructedCase(Ast.Expr e) {
-        return constructedCase(e, new LinkedHashSet<>());
+        return constructedCase(e, new LinkedHashSet<>(), List.of());
+    }
+
+    /**
+     * The case a fixture supplies at a position whose values are written under {@code worn}: the same
+     * reading, with those names taken off first.
+     *
+     * <p>Which case constructed the value and which case the position it is written at sees are two
+     * questions, and only one of them is the one above. A {@code data DecisionN = Decision} is the sum
+     * it names; a row there writes {@code DecisionN(Approved { id = 1 })}, which constructs a
+     * {@code DecisionN} and supplies an {@code Approved}. Only the second is a case of the position,
+     * so only the second may be counted at it.
+     *
+     * <p>The other direction of what {@link souther.compiler.partition.Classifier#under} does to an
+     * observation, and it takes the names off on the same terms: only the ones that are there come
+     * off, so a fixture not wearing them is read as it stands rather than decided to be nothing.
+     *
+     * @param worn the names the position writes its values under, outermost first, as
+     *             {@link souther.compiler.check.TypeView} reads them off it
+     */
+    TypeName caseUnder(List<TypeName> worn, Ast.Expr e) {
+        return constructedCase(e, new LinkedHashSet<>(), worn);
     }
 
     /**
@@ -438,29 +459,44 @@ public final class FixtureReader {
      * spread holds — a spread cannot hold an expression — and that name is read where the spread is
      * copied. A closed body therefore ends in the construction, whether it was published itself or
      * named by another value that was.
+     *
+     * <p>{@code worn} are the names still to come off, which is what tells this reading from the
+     * nominal one. They come off where the fixture is the construction wearing them and nowhere else —
+     * a name is followed to what it stands for with the same names still to take off, since where the
+     * fixture is written says nothing about which of them a published value already carries.
      */
-    private TypeName constructedCase(Ast.Expr e, Set<String> followed) {
+    private TypeName constructedCase(Ast.Expr e, Set<String> followed, List<TypeName> worn) {
         return switch (e) {
             case Ast.NewData nd -> nd.typeName().denotes();
-            case Ast.Apply c when neutral.isNewtype(c.written()) -> symbols.resolveCase(c.written());
-            case Ast.LetIn let -> constructedCase(let.body(), followed);
-            case Ast.Var v -> namedCase(v, followed);
+            case Ast.Apply c when neutral.isNewtype(c.written()) -> {
+                TypeName named = symbols.resolveCase(c.written());
+                yield wears(named, c, worn)
+                        ? constructedCase(c.args().get(0), followed, worn.subList(1, worn.size()))
+                        : named;
+            }
+            case Ast.LetIn let -> constructedCase(let.body(), followed, worn);
+            case Ast.Var v -> namedCase(v, followed, worn);
             case null, default -> null;
         };
     }
 
+    /** Whether {@code c} is the outermost name still to come off, holding the one value under it. */
+    private static boolean wears(TypeName named, Ast.Apply c, List<TypeName> worn) {
+        return !worn.isEmpty() && worn.get(0).equals(named) && c.args().size() == 1;
+    }
+
     /** The case a bare name stands for: the type it denotes where it denotes one — a unit case, or a
      * case written bare — and otherwise the case the value or binding it names constructs. */
-    private TypeName namedCase(Ast.Var v, Set<String> followed) {
+    private TypeName namedCase(Ast.Var v, Set<String> followed, List<TypeName> worn) {
         return switch (v.denotes()) {
             case ValueName.OfType named -> named.type();
             case ValueName.Local local -> {
                 Ast.Expr held = bindings.get(local.id());
-                yield held == null ? null : constructedCase(held, followed);
+                yield held == null ? null : constructedCase(held, followed, worn);
             }
             case ValueName.Helper _ -> {
                 Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
-                yield body == null ? null : constructedCase(body, followed);
+                yield body == null ? null : constructedCase(body, followed, worn);
             }
             case null, default -> null;
         };
