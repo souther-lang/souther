@@ -48,6 +48,24 @@ public final class NumericMeasures {
     }
 
     /**
+     * Whether every count this operation could give is a count some value of the type has.
+     *
+     * <p>Here with the rest because it is the same question one step on: what a value of this type
+     * is counted by, and whether the number a rule leaves is a number something holds. Only a
+     * string's length is. A string of any length is written by repeating a character and a character
+     * is always to be had, so what the rules leave is what some value has.
+     *
+     * <p>Every other measure counts things that may not be there. A {@code Set<Bool>} is capped at
+     * two by how many booleans there are; a {@code List<T>} of one needs a {@code T}, and a
+     * {@code T} nothing inhabits has none. Whether such a value exists is a question about the
+     * element and not about the count, and the numeric domain has no term for it — so the range is
+     * not a proof, and a row at that edge is settled by a value rather than by an argument.
+     */
+    public static boolean everyCountHasAValue(ValueName operation) {
+        return operation.equals(ValueName.Stdlib.operation("String", "length"));
+    }
+
+    /**
      * The operation that counts what a value of {@code type} holds, or null where nothing counts it.
      *
      * <p>Which one it is follows from what the value is, so a rule read off a declaration and an

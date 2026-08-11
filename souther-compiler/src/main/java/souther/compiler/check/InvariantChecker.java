@@ -29,6 +29,7 @@ import java.util.SequencedSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -250,7 +251,7 @@ public final class InvariantChecker {
      *                        turning one into an obligation has to know that
      */
     record Seeded(NumericDomain numbers, Map<String, String> atoms, Map<String, String> held,
-                  boolean everyClauseRead) {}
+                  Reading reading, boolean everyClauseRead) {}
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
@@ -269,19 +270,37 @@ public final class InvariantChecker {
      */
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
                              Map<String, Count> settled) {
+        return seedFields(named, data, symbols, settled, _ -> false);
+    }
+
+    /**
+     * The same, with one declaration's own clauses left out.
+     *
+     * <p>What a rule did is read by asking what happens without it. Which clause moved an edge is not
+     * something the closure records — it answers with a number and not with how it got there — and
+     * this is that question put to the same reader rather than answered by a second one: seed the
+     * value again without the clauses of {@code without}, and an end that moves is an end that
+     * declaration was holding.
+     */
+    static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
+                             Map<String, Count> settled,
+                             java.util.function.Predicate<TypeName> without) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
         Denotations at = Denotations.none().locations(bindings.values());
         Known k = Known.top();
         boolean read = true;
+        List<Written> written = new ArrayList<>();
         try {
-            for (Ast.InvariantClause clause : c.clauses.of(named, data)) {
+            for (Ast.InvariantClause clause : without.test(named) ? List.<Ast.InvariantClause>of()
+                    : c.clauses.of(named, data)) {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
                 if (stated == null) {
                     read = false;
                     continue;
                 }
+                written.add(new Written(named, stated));
                 Predicates.Owed owed = c.predicates.obligations(stated, k, at, false);
                 read &= !owed.unreadable();
                 k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
@@ -295,23 +314,33 @@ public final class InvariantChecker {
                     // No depth limit here: this is the reading a boundary is derived from, and a
                     // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            k, at, 1, Integer.MAX_VALUE, new HashSet<>());
+                            k, at, 1, Integer.MAX_VALUE, new HashSet<>(),
+                            (from, clause) -> written.add(new Written(from, clause)), without);
                 }
             }
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
-            return new Seeded(NumericDomain.top(), Map.of(), Map.of(), false);
+            return new Seeded(NumericDomain.top(), Map.of(), Map.of(),
+                    new Reading(List.of(), Map.of()), false);
         }
         Map<String, String> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
         Map<String, String> held = new LinkedHashMap<>();
+        Map<String, String> keys = new LinkedHashMap<>();
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
             if (type != null) {
+                // A newtype's value is the same location as the newtype, so it is at no path of its
+                // own and its fields are the first step there is. Named `value`, every position of a
+                // record inside a newtype was filed one step deeper than anything asks for.
                 c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                        field.getKey(), type, at, symbols, 1, atoms, typeAt, held);
+                        data.newtype() ? "" : field.getKey(), type, at, symbols, 1,
+                        atoms, typeAt, held, keys);
             }
         }
+        // Which of the clauses place an edge, asked once the positions have names to be recognised
+        // by.
+        Reading reading = c.directsIn(written, at, atoms, keys, held, typeAt);
         NumericDomain numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
@@ -325,7 +354,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(numbers, atoms, held, read);
+        return new Seeded(numbers, atoms, held, reading, read);
     }
 
     /**
@@ -335,13 +364,29 @@ public final class InvariantChecker {
      * is a position this can name. Two levels down as well as one: a clause on a record relates a
      * field of a field to something, and the bound that leaves on it is read at the path it sits at
      * rather than at the record it happens to be inside.
+     *
+     * <p>A name wrapped round a value is not a step of the path ({@link Location#isStep}), which is
+     * the rule the rest of this already reads by: the atom of {@code w.value.n} <em>is</em> the atom
+     * of {@code w.n}, so naming the position {@code w.value.n} files it under a path nothing asks
+     * about. Counted as a step, a wrapper was where the walk stopped, and every position under one
+     * went unnamed — so the clauses of a record inside a newtype reached the domain and nothing could
+     * ask for what they left.
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, String> atoms, Map<String, Type> typeAt,
-                      Map<String, String> held) {
+                      Map<String, String> held, Map<String, String> keys) {
         String atom = terms.atomOf(value, at);
         if (atom != null) {
             atoms.put(path, atom);
+        }
+        // What the position is called, which every position has and only some are numbers. An
+        // enumeration is ordered and carries no atom, so a clause bounding one is recognised by this
+        // and by nothing above it.
+        String key = terms.bodyKey(value, at);
+        if (key != null) {
+            keys.put(path, key);
+        }
+        if (atom != null || key != null) {
             typeAt.put(path, type);
         }
         // And what a rule counting this position spoke about, which is not what the position is. A
@@ -351,15 +396,185 @@ public final class InvariantChecker {
         if (counted != null) {
             held.put(path, counted);
         }
-        if (depth > FIELDS_SEEDED || !(type instanceof Type.Ref ref)
+        // Through the names, to the value that has the fields. Each is read at the path it is worn
+        // under, since wearing a name is not being somewhere else. How far the names reach is
+        // `TypeOps`' answer and not a second walk of its own: a declaration that wraps its own kind
+        // ends that walk, and a copy of it here is a place the two could come to disagree.
+        Core inner = value;
+        Type worn = type;
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
+            Type under = TypeOps.fieldTypes(layer.data(), symbols).get("value");
+            if (under == null) {
+                break;
+            }
+            inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
+            worn = under;
+        }
+        if (depth > FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data) || data.newtype()) {
             return;
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
-            name(new Core.FieldAccess(value, field.getKey(), field.getValue(), NOWHERE),
-                    path + "." + field.getKey(), field.getValue(), at, symbols, depth + 1,
-                    atoms, typeAt, held);
+            name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
+                    under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
+                    atoms, typeAt, held, keys);
         }
+    }
+
+    /** A field of the value at {@code path}. The root of a newtype's own reading is the value it
+     * wraps, which is at no path of its own, so its fields are the first step there is. */
+    private static String under(String path, String field) {
+        return path.isEmpty() ? field : path + "." + field;
+    }
+
+    /**
+     * One end a clause places on one coordinate of a value, and the declaration that placed it.
+     *
+     * <p>Separate from the bounds a projection leaves, because placing an edge and taking one in are
+     * separate acts (ADR-0090). {@code a < b} beside {@code b <= 10} leaves {@code a} stopping at 9
+     * and places nothing on it: that 9 is where {@code b} stops, and a position whose only limit is
+     * another position's is one the model draws no line through. Only what is here may be a line.
+     *
+     * @param path     where the coordinate sits, read from the value these are of
+     * @param measured whether the coordinate is a count taken of the position rather than its value
+     * @param from     the declaration the clause is written on, which is what names the line
+     */
+    record Direct(String path, boolean measured, TypeName from, InvariantBound bound) {}
+
+    /** One clause reaching a value, rebased onto the positions of that value, and the declaration it
+     * is written on. */
+    private record Written(TypeName from, Core clause) {}
+
+    /** A coordinate a clause reaching this value could be about. */
+    private record Coordinate(String path, boolean measured, Carrier carrier) {}
+
+    /**
+     * What the clauses of one value place on its coordinates, and which declarations relate each of
+     * them to something else.
+     *
+     * <p>The second is what says who took an edge in. A bound is moved by a clause comparing the
+     * coordinate to another, and which declaration wrote that clause is not read off the value's own
+     * name: the same relation can be written on the record, on a record inside it, or on a name
+     * wrapped round either, and only the one that wrote it has anything to answer for.
+     *
+     * @param narrowers the declarations whose clauses compare each coordinate to something without
+     *                  placing an end on it, outermost first
+     */
+    record Reading(List<Direct> directs, Map<String, List<TypeName>> narrowers) {}
+
+    private Reading directsIn(List<Written> stated, Denotations at,
+                                   Map<String, String> atoms, Map<String, String> keys,
+                                   Map<String, String> held, Map<String, Type> typeAt) {
+        Map<String, Coordinate> byName = new LinkedHashMap<>();
+        keys.forEach((path, key) -> {
+            Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
+            if (carrier != null) {
+                byName.put(key, new Coordinate(path, false, carrier));
+                String atom = atoms.get(path);
+                if (atom != null) {
+                    byName.put(atom, new Coordinate(path, false, carrier));
+                }
+            }
+        });
+        // A count is a whole number whatever it counts, so nothing about the container decides how
+        // its sizes are spaced.
+        held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
+        List<Direct> out = new ArrayList<>();
+        Map<String, List<TypeName>> narrowers = new LinkedHashMap<>();
+        stated.forEach(each -> direct(each.clause(), each.from(), at, byName, out, narrowers));
+        return new Reading(List.copyOf(out), Map.copyOf(narrowers));
+    }
+
+    /**
+     * {@code clause}'s ends and what it relates, taking a conjunction one conjunct at a time as an
+     * invariant is.
+     *
+     * <p>Both answers from one reading of the clause. A comparison either places an end on a
+     * coordinate or relates one to something else, and which of the two it did is the same question
+     * asked once — read apart, the second would be a walk that had to agree with this one about which
+     * comparisons it had already accounted for.
+     */
+    private void direct(Core clause, TypeName from, Denotations at,
+                        Map<String, Coordinate> byName, List<Direct> out,
+                        Map<String, List<TypeName>> narrowers) {
+        if (!(clause instanceof Core.Binary bin)) {
+            return;
+        }
+        if (bin.op() == Ast.BinOp.AND) {
+            direct(bin.left(), from, at, byName, out, narrowers);
+            direct(bin.right(), from, at, byName, out, narrowers);
+            return;
+        }
+        if (!InvariantBound.ordering(bin.op()) && bin.op() != Ast.BinOp.EQ) {
+            return;
+        }
+        // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
+        // says.
+        Coordinate found = byName.get(nameOf(bin.left(), at));
+        Core bound = bin.right();
+        Ast.BinOp op = bin.op();
+        if (found == null) {
+            found = byName.get(nameOf(bin.right(), at));
+            bound = bin.left();
+            op = InvariantBound.flipped(op);
+        }
+        // An end where the other side is a constant, and a relation everywhere else. Which it is
+        // cannot be asked of the other side's name: what a clause compares a coordinate to may be a
+        // position deeper than this names, or arithmetic over several, and neither is a number an
+        // edge can be put at. So the end is attempted and what fails to be one may have moved one.
+        Optional<InvariantBound> end = found == null || !InvariantBound.ordering(op)
+                ? Optional.empty()
+                : InvariantBound.at(op, Terms.asWrittenValue(bound), found.carrier());
+        if (end.isEmpty()) {
+            relating(clause, from, at, byName, narrowers);
+            return;
+        }
+        Coordinate on = found;
+        end.ifPresent(read -> out.add(new Direct(on.path(), on.measured(), from, read)));
+    }
+
+    /** Whether both sides of {@code bin} reach a coordinate, which is what makes it a relation
+     * rather than a bound. */
+    private boolean relates(Core.Binary bin, Map<String, Coordinate> byName, Denotations at) {
+        return byName.containsKey(nameOf(bin.left(), at))
+                && byName.containsKey(nameOf(bin.right(), at));
+    }
+
+    /**
+     * Files {@code from} under every coordinate this comparison could carry a bound to.
+     *
+     * <p>Every coordinate it names and not only the two it compares: a bound reaches a position
+     * along the differences, so a clause reading {@code a} is a way {@code a}'s edge can have been
+     * moved even where the number came from somewhere further off.
+     */
+    private void relating(Core clause, TypeName from, Denotations at,
+                          Map<String, Coordinate> byName,
+                          Map<String, List<TypeName>> narrowers) {
+        String named = nameOf(clause, at);
+        Coordinate found = named == null ? null : byName.get(named);
+        if (found != null) {
+            List<TypeName> had = narrowers.computeIfAbsent(found.path(), _ -> new ArrayList<>());
+            if (!had.contains(from)) {
+                had.add(from);
+            }
+            return;   // a coordinate names itself and nothing under it is a coordinate of its own
+        }
+        Core.forEachChild(clause, child -> relating(child, from, at, byName, narrowers));
+    }
+
+    /**
+     * What {@code e} is called where a coordinate is looked up.
+     *
+     * <p>{@link Terms#atomOf} first, which is what a size call is known by: the shape a size keys as
+     * is held under a name of its own, and the shape itself is not that name. Read off the shape,
+     * every rule counting a field looked like a rule about nothing.
+     *
+     * <p>Then what the position is called, for the positions that are ordered and are not numbers. An
+     * enumeration has no atom and a clause can still say where its values stop.
+     */
+    private String nameOf(Core e, Denotations at) {
+        String atom = terms.atomOf(e, at);
+        return atom != null ? atom : terms.bodyKey(e, at);
     }
 
     /**
@@ -1345,7 +1560,7 @@ public final class InvariantChecker {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>());
+        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>(), null, _ -> false);
     }
 
     /**
@@ -1360,9 +1575,18 @@ public final class InvariantChecker {
      * <p>{@code onPath} is the types entered on the way here, so a record that holds another of its
      * own kind stops rather than descending for ever. Kept per path and not for the whole walk: two
      * fields of one type are two positions and both are seeded.
+     *
+     * @param onClause told each clause as it is reached, with the declaration it is written on, or
+     *                 null where nobody is collecting. A clause governs a position from wherever it
+     *                 is written — the record the position is a field of, and the declarations under
+     *                 that record it sits inside — and this walk is where it is rebased onto the
+     *                 position it governs. A reader wanting that list has to be told here or walk the
+     *                 same descent again and rebase it a second way.
      */
     private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
-                         Set<TypeName> onPath) {
+                         Set<TypeName> onPath,
+                         java.util.function.BiConsumer<TypeName, Core> onClause,
+                         java.util.function.Predicate<TypeName> without) {
         if (depth > limit || !(root.type() instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data)
                 || !onPath.add(ref.name())) {
@@ -1379,7 +1603,11 @@ public final class InvariantChecker {
         });
         Known out = k;
         List<Quantified> quantified = new ArrayList<>();
-        for (Clauses.Stated stated : clauses.statedAt(ref.name(), data, given)) {
+        for (Clauses.Stated stated : without.test(ref.name()) ? List.<Clauses.Stated>of()
+                : clauses.statedAt(ref.name(), data, given)) {
+            if (onClause != null) {
+                onClause.accept(ref.name(), stated.expr());
+            }
             predicates.quantifiedBy(stated.expr(), at, true, quantified);
             out = predicates.assume(predicates.obligations(stated.expr(), out, at, false), out,
                     Known.Held.OF_THE_VALUE);
@@ -1389,10 +1617,11 @@ public final class InvariantChecker {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
             Core value = given.get(bindings.get("value"));
-            out = value == null ? out : seedAt(value, out, at, depth + 1, limit, onPath);
+            out = value == null ? out
+                    : seedAt(value, out, at, depth + 1, limit, onPath, onClause, without);
         } else {
             for (Core value : given.values()) {
-                out = seedAt(value, out, at, depth + 1, limit, onPath);
+                out = seedAt(value, out, at, depth + 1, limit, onPath, onClause, without);
             }
         }
         onPath.remove(ref.name());

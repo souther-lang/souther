@@ -5,7 +5,9 @@ Revised in place for #427: what a threshold is intersected with is what the *pos
 is the field's type read under the rules of the record holding it. Revised again for #510: what a
 line is drawn on is a numeric *term*, not a position — the content of a location, or a size taken of
 one. Revised again for #622: which values a term's line can be drawn on is one table, and a rule
-written over values it does not hold is reported as unread rather than dropped.
+written over values it does not hold is reported as unread rather than dropped. Revised again for
+#649: what decides whether a clause draws a line is which terms the clause reaches, not which
+declaration it is written on.
 
 ## Context
 
@@ -44,12 +46,58 @@ at this field — `startsAt < endsAt` over minutes of a day leaves `startsAt` st
 the type alone the position offers 1440, which no row can be written at, and the report cannot tell
 that gap from one worth closing.
 
-A record's rule takes an edge in and does not put one there. A position its own type leaves open stays
-one the model draws no line through: a rule between two fields is not a partition of one of them, and
-treating it as one would divide an `Int` the author never bounded. What is read of such a rule is an
-ordering of numbers and nothing else; a rule of another shape leaves the position where its type left
-it, which is the safe direction — an edge too far out is a row nobody can write, and an edge never
-moved is not one either.
+Which terms a clause reaches decides what it may do, and the declaration it is written on does not. A
+clause that bounds one term against a constant without relying on another term may place an edge
+there: `value >= 1` on a newtype, `n >= 1` on the record holding `n`, `List.length(xs) >= 1` on the
+record holding `xs`. A clause relating terms may take an existing edge in and may not place one:
+`startsAt < endsAt` moves both ends of a day without dividing either position, and
+`List.length(xs) >= minLines` is no different for counting something.
+
+Placing an edge and taking one in are two answers, and the second is about an edge the first
+produced. `data R = { a: Int, b: Int } invariant a < b invariant b <= 10` leaves `a` running to 9 and
+draws no line through it: the 9 is there because `b` stops at 10, and a position whose only limit is
+another position's is one the model draws no line through. `b` has a line at 10, which its own clause
+placed. Reading the narrowed range as the edge is the mistake this separation exists to prevent, and
+it is the same mistake the older wording prevented by naming the declaration instead.
+
+The declaration stood in for the question and stood in for it wrongly in one direction. A record
+stating a bound on one of its own fields states the rule a newtype over that field's type would
+state, so reading the declaration made a rule measured or unmeasured according to whether the
+aggregate holding it has a second field. An order with lines and a customer has to write the rule
+about its own field, and that was the spelling that disappeared — the measure rewarded wrapping every
+constrained field in a newtype of its own, which is a modelling choice and not a rule about the
+domain.
+
+A clause reaches a position from wherever it governs it: the position's own type and the names
+wrapped round it, the record the position is a field of, the declarations under that record, and the
+names wrapped round any of them. A name worn is a place the same rule can be written — `data
+NonEmptyBag = Bag invariant List.length(value.xs) >= 1` states what `Bag` could have stated about its
+own field — and leaving it out puts this whole question back one level up.
+
+Which is a fact about how a position is named rather than a list of places to look. A name wrapped
+round a value is not a step of the path: the atom of `w.value.n` *is* the atom of `w.n`, which is
+what the discharge check has always read by, so a reading that counted `value` as a step filed every
+position under a wrapper where nothing asks for it — and stopped at the wrapper rather than going
+through it. Counting it as no step reaches a wrapper at a parameter, a wrapper on a field, and a
+stack of them, because none of those is a separate case once the naming agrees.
+
+So a wrapper is read like any other governing declaration, and does all three things one does: it
+places ends, it projects ranges onto the positions under it, and it can hold a clause this could not
+read. `data Wrapped = Base invariant value.a < value.b` places no edge and still leaves `a` stopping
+one below where `b` stops. Lifted as ends alone, a wrapper's relation narrowed nothing and a guard
+beyond the narrowed range drew a line at a value no `Wrapped` holds; and an edge under a wrapper
+clause nothing could read came back certain. A line is named by the declaration the clause is written on. `data Inner = { n: Int }
+invariant n >= 1` names `Inner` at every position an `Inner` is held in, and `data Outer = { inner:
+Inner } invariant inner.n >= 5` names `Outer` where its clause is the tighter of the two. Where a
+record's own clause is the tighter, the line is the record's: `data Moved = { n: Count } invariant
+n.value >= 5` over a `Count` of at least 1 draws its line at 5 and names `Moved`, where before it
+named `Count` narrowed within `Moved`. Where two clauses place an end at one value, both name it.
+Only a clause relating terms is said beside a line rather than as one, since it moved an end another
+clause placed.
+
+What is read of any of these is an ordering of numbers and nothing else; a rule of another shape
+leaves the position where its type left it, which is the safe direction — an edge too far out is a
+row nobody can write, and an edge never moved is not one either.
 
 An edge whose rules were not all read is not a gap. Both answers were wrong: counting it asks for a
 row that may be impossible, and falling back to the type's own edge is no better, since the rule that
@@ -57,6 +105,23 @@ could not be read refuses that value as readily as the one beyond it. So it is r
 the denominator, and refuses no build — which is what ADR-0091 already does with a combination nothing
 has settled, for the same reason. What settles it is a witness rather than an argument: a row at the
 value went through the decoder, and from then on the edge is counted like any other.
+
+Nor is an edge at a count, unless every count that measure could give is one some value has. What the
+projection settles is which numbers the rules leave, and three is a number they leave whether or not
+three of the thing exist: a `Set<Bool>` is capped at two by how many booleans there are, and a
+`List<T>` of one needs a `T` that something inhabits. Whether such a value exists is a question about
+what is counted and not about the count, and the domain has no term for it. So such an edge is
+settled by a value — a row at it, or one this built — and not by an argument, which is the account an
+edge nothing has settled already gets. The projection was never entitled to say it, and it went
+unsaid only while a count could be bounded from the position's own type alone: given a second place
+to write the rule, a floor no value reaches becomes a row an author is told to write.
+
+A string's length is the one that stays proven. A string of any length is written by repeating a
+character and a character is always to be had, so what the rules leave is what some value has. The
+line has to be drawn there and not at distinctness, which is the other place it suggests itself:
+"a list repeats an element" is an answer only once there is an element, and it is wrong about a list
+of something nothing inhabits. Nor may it be drawn at every count — that takes away every
+`String.length` edge in the corpus, twenty of them, over collections that have no values.
 
 Whether the rules were all read is asked of the value and not of the position. A bound is about one
 position; a row at its edge is a whole value with that edge in it, and a rule about any other position
@@ -81,7 +146,21 @@ report of the very behavior that wrote the comparison.
 So the term is what an axis, a cut, and a coverage question are all keyed on. `ValueOf` is one term
 among them rather than the default beside a special case: keeping the plain path as the identity is
 what let three separate readers each answer "is this observation a number" and each be right about
-the positions it was written against. What is spaced like an `Int`, what its own values are, and how
+the positions it was written against.
+
+A position has one term, and which one is settled by which of them the model wrote a rule about — a
+`String` is the one value measured two ways, and a rule about its length is what makes the length the
+term. The position's own type answers first and its answer stands. A rule reaching the position from
+the value it sits in states an end on a term; it does not say which term the position is measured at,
+and letting it say so takes an axis away — a `Name` bounded on its own order, held in a record that
+bounds the length of it, would stop being measured on that order, and the line the author wrote would
+go out with nothing saying it had.
+
+Where the type chose nothing, one such rule may choose. Only one: where they arrive about both terms
+there is nothing here to choose between them, and the position is left as one nothing divides rather
+than given whichever was looked at first. That is the coarser of the two things that could be said
+and the one that claims nothing; what would settle it is a position carrying both terms, which is not
+here. What is spaced like an `Int`, what its own values are, and how
 it is read off a row are three properties of the term — a size needs no boundary domain of its own,
 and its non-negativity is its own rather than something a rule has to state.
 
@@ -172,8 +251,39 @@ Only a comparison that is the whole of a `guard`'s condition is read. A conditio
 `||` or `!` contributes no threshold.
 
 A cut keeps every rule that drew it. One value can be an obligation several times over — but a rule
-that took a line in is not a second line. The bound and the record that narrowed it settled one edge
-together and are one obligation, named by both.
+that took a line in is not a second line. A relational clause and the bound it narrowed settled one
+edge together and are one obligation, named by both.
+
+The declaration named as having taken it in is the one whose clause relates the coordinate, and not
+the value the position sits in. The same relation can be written on the record, on a record inside
+it, or on a name wrapped round either, and only the one that wrote it has anything to answer for:
+read off the value, an edge a wrapper narrowed was reported as narrowed by the record under it, and a
+reader following that name finds no such clause there. It is not only what is printed — the name
+tells one line from another — so a value standing in for the provenance made two lines one wherever
+two declarations round a value each related a coordinate.
+
+Which of them is holding the end is asked by taking each away. Having written a relation about a
+coordinate is not the same as having decided where it stops: a second relation reaching a value the
+first has already passed changes nothing, and named as the narrower it would make a line's identity
+turn on a clause that moved it nowhere. The closure answers with a number and not with how it got
+there, so the question is put to it again — seed the value without one declaration's clauses, and an
+end that moves is an end that declaration was holding.
+
+Per end, because they are two answers. One declaration can hold a minimum while another holds the
+maximum, and a single name for both is wrong about at least one of them.
+
+Where taking any one away leaves the end where it is, two or more of them are saying what the edge
+says, and each is as much the answer as the others; choosing one would invent the thing that is not
+known. Which is a reason to name them together and not a reason to name everything that was asked. A
+candidate that moves the end nowhere when it is the only one left moved it nowhere here, and it is
+out whatever the rest are doing — otherwise a clause reaching a value the coordinate had already
+passed changes a line's identity by being written, which is the defect this paragraph exists to
+prevent, coming back through the case where nobody is essential.
+
+What is left is clauses that reach an end only together. Taking those apart is a search for the
+smallest sets that suffice, and that is combinatorial; exactly which constraints a bound was derived
+from is the closure's to record and it does not. So the set is the answer there, and saying so is the
+limit of what this knows rather than something to guess past.
 
 ## Consequences
 
@@ -187,6 +297,18 @@ Reading the size terms turned 232 of those reported positions into measured ones
 `undetermined` to `not satisfied`, which is the answer they should have had: the obligations were
 always there and nothing was asking for them. No position gained a not-derivable line it did not
 have, because a term is only taken of a position some rule measures.
+
+Reading the clause wherever it is written moved four positions in `souther-examples` and the
+boundaries owed went from 75 to 78. All four are one declaration — a CRM lead whose record states
+`touches >= 1` beside a rule relating two of its dates — and the shape is the one the issue was found
+on: an aggregate with a second field has to write the rule about its own field. The corpus is thin
+evidence of how common that is rather than of whether it is right, since it has few record-stated
+bounds on input types; what it does show is that no adequacy verdict moved and nothing that was
+measured stopped being.
+
+One position left the report for it. A behavior that gained an axis pushed another past the axis
+limit, which is reported as omitted rather than dropped in silence. That is the limit doing what it
+is for, and it is worth knowing that adding lines spends that budget.
 
 Deriving the line and writing a value at it are separate abilities, and only the first is here.
 Nothing composes a string of a given length (#528), so those edges are reported as unmet with the

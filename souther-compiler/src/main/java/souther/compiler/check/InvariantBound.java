@@ -125,6 +125,39 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /**
+     * The end an ordering places on a coordinate already recognised, or empty where the comparison
+     * places none.
+     *
+     * <p>The same reading {@link #of} finishes with, entered one step later. {@link #of} recognises
+     * its coordinate by the word {@code value}, which is the only name a newtype's own clause can use
+     * for it; a clause written on the record holding a field names the field, or a size of it, or a
+     * field of a field, and which of those it named is settled before this by the naming the
+     * discharge check already does. What is left is where the comparison leaves the end, and that is
+     * one question with one answer whatever recognised the coordinate — asked again here, a strict
+     * bound would land on the neighbour in one reader and on the literal in the other.
+     *
+     * @param op    the comparison, with the coordinate on its left
+     * @param bound what the coordinate is compared against
+     */
+    static Optional<InvariantBound> at(Ast.BinOp op, Ast.Expr bound, Carrier carrier) {
+        if (carrier == null || bound == null) {
+            return Optional.empty();
+        }
+        Place at = carrier.literalOf(bound);
+        return at == null ? Optional.empty() : ordered(op, at, carrier);
+    }
+
+    /** Which comparison an operand on the right states of one on the left. */
+    static Ast.BinOp flipped(Ast.BinOp op) {
+        return mirrored(op);
+    }
+
+    /** Whether {@code op} says where values stop rather than which one a value is. */
+    static boolean ordering(Ast.BinOp op) {
+        return orders(op);
+    }
+
+    /**
      * Whether {@code clause} says where the value stops, however this reading turned out.
      *
      * <p>Two questions, and only the second was being asked. Whether a bound was read is

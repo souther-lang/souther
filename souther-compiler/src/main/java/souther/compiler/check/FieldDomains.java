@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.types.TypeName;
@@ -8,6 +9,7 @@ import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 
 import souther.compiler.numeric.Count;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,11 +31,27 @@ import java.util.Map;
  */
 public final class FieldDomains {
 
+    /**
+     * Where a newtype's own value sits, which is where the newtype sits.
+     *
+     * <p>A name worn is not a step of the path ({@link Location#isStep}), so the value under one is
+     * at no path of its own and its fields are the first step there is. Spelled here rather than as
+     * {@code ""} at each caller, which reads as a path nobody meant.
+     */
+    public static final String THE_VALUE = "";
+
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), false, true, NumericDomain.top(), () -> true);
+            new FieldDomains(Map.of(), Map.of(), List.of(), Map.of(), false, true,
+                    NumericDomain.top(), null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
+    /** The ends the record's own clauses place, which is a different question from the range they
+     * leave — see {@link #placedAt}. */
+    private final List<InvariantChecker.Direct> directs;
+    /** Which declarations relate each coordinate to something else, and so could have moved where it
+     * stops — see {@link #narrowedBy}. */
+    private final Map<String, List<TypeName>> narrowers;
     /** What each field has to hold, kept apart from what each field is. Same numbers, different
      * question — see {@link Held}. */
     private final Map<String, NumericDomain.Bounds> heldByField;
@@ -43,18 +61,32 @@ public final class FieldDomains {
      * with no rules, and a second reading asked afterwards does not take the same path. */
     private final boolean seeded;
     private final NumericDomain numbers;
+    /** What this was read from, so that it can be read again without one declaration's clauses. */
+    private final TypeName named;
+    private final Ast.Data data;
+    private final Symbols symbols;
+    private final Map<String, Count> settled;
     private final java.util.function.BooleanSupplier reading;
     private volatile Boolean everyRuleRead;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
-                         Map<String, NumericDomain.Bounds> heldByField, boolean infeasible,
-                         boolean seeded, NumericDomain numbers,
+                         Map<String, NumericDomain.Bounds> heldByField,
+                         List<InvariantChecker.Direct> directs,
+                         Map<String, List<TypeName>> narrowers, boolean infeasible,
+                         boolean seeded, NumericDomain numbers, TypeName named, Ast.Data data,
+                         Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.heldByField = heldByField;
+        this.directs = directs;
+        this.narrowers = narrowers;
         this.infeasible = infeasible;
         this.seeded = seeded;
         this.numbers = numbers;
+        this.named = named;
+        this.data = data;
+        this.symbols = symbols;
+        this.settled = settled;
         this.reading = reading;
     }
 
@@ -85,14 +117,26 @@ public final class FieldDomains {
      */
     public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
                                   Map<String, Count> settled) {
+        return of(named, data, symbols, settled, _ -> false);
+    }
+
+    /** The same, with one declaration's own clauses left out — see {@link #narrowedBy}. */
+    private static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
+                                   Map<String, Count> settled,
+                                   java.util.function.Predicate<TypeName> without) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the same position it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
         // answers were being given away by treating it as a value with nothing to say.
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, settled);
+        InvariantChecker.Seeded seeded =
+                InvariantChecker.seedFields(named, data, symbols, settled, without);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
-            if (data.newtype()) {
+            // The value itself is at no path, and its range is the one thing not worth handing back:
+            // it is the same position this is of, so there is no sibling to relate it to. What sits
+            // under it is another matter — a record inside a newtype has fields, and they are
+            // positions with ranges like any other.
+            if (field.isEmpty()) {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
@@ -105,7 +149,7 @@ public final class FieldDomains {
         // only ask the domain it came from — which is this one, while it is still here.
         Map<String, NumericDomain.Bounds> holds = new LinkedHashMap<>();
         seeded.held().forEach((field, atom) -> {
-            if (data.newtype()) {
+            if (field.isEmpty()) {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
@@ -115,12 +159,119 @@ public final class FieldDomains {
         });
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
-        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.numbers().isBottom(),
-                seeded.everyClauseRead(), seeded.numbers(),
+        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.reading().directs(),
+                seeded.reading().narrowers(), seeded.numbers().isBottom(),
+                seeded.everyClauseRead(), seeded.numbers(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
                 () -> InvariantChecker.everyRuleRead(named, data, symbols));
+    }
+
+    /**
+     * An end one clause of this record places on one coordinate of it, and the declaration that
+     * placed it.
+     *
+     * <p>Not a bound the range happens to have. {@link #at} answers what a position can hold, which
+     * every rule reaching it takes part in; this answers which clause said where it stops, which only
+     * a clause naming that one coordinate and a constant does. A line may be drawn at one of these
+     * and at nothing else (ADR-0090), so handing back the range instead would make a relational rule
+     * into a partition of a position it never mentioned.
+     *
+     * @param path     where the coordinate sits, read from the value these are of
+     * @param measured whether the coordinate is a count taken of the position rather than its value
+     * @param from     the declaration the clause is written on, which is what names the line
+     * @param lower    whether this bounds the coordinate below; otherwise above
+     */
+    public record Placed(String path, boolean measured, TypeName from, boolean lower, Endpoint end) {}
+
+    /**
+     * The declaration whose clause could have moved where the coordinate at {@code path} stops, or
+     * null where none did.
+     *
+     * <p>Which declaration wrote the relation, and not which value the position sits in. The same
+     * relation can be written on the record, on a record inside it, or on a name wrapped round
+     * either, and an edge said to have been taken in by a declaration holding no clause about the
+     * pair sends a reader to a line that is not there.
+     *
+     * <p>Several where several hold it, in one order whoever found them. Which of them settled the
+     * number is not always a question this can answer — a bound arrives along a path through the
+     * differences and clauses can reach an end only together — and where it cannot, the set is what
+     * is known and is handed over as it is.
+     */
+    public List<TypeName> narrowedBy(String path, boolean lower) {
+        List<TypeName> candidates = narrowers.get(path);
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        NumericDomain.Bounds here = byField.get(path);
+        Endpoint end = here == null ? null : lower ? here.min() : here.max();
+        if (end == null) {
+            return List.of();
+        }
+        // Which of them is holding this end, asked by taking each away. A candidate is a declaration
+        // that wrote a relation about this coordinate, which is not the same as one that decided
+        // where it stops: a second relation reaching a value the first has already passed changes
+        // nothing, and naming it would make an edge's identity turn on a clause that moved it
+        // nowhere.
+        List<TypeName> held = new ArrayList<>();
+        for (TypeName each : candidates) {
+            if (!ends(end, without(each::equals), path, lower)) {
+                held.add(each);
+            }
+        }
+        if (!held.isEmpty()) {
+            return byName(held);
+        }
+        // None on its own: two or more of them say what the edge says, and taking away any one
+        // leaves the others saying it. Which is not a reason to name one — each is as much the
+        // answer as the others — and not a reason to name all of them either. A candidate that
+        // moves this end nowhere when it is the only one left moved it nowhere here, and it is out
+        // whatever the rest of them are doing.
+        Endpoint bare = endOf(without(candidates::contains), path, lower);
+        List<TypeName> saying = new ArrayList<>();
+        for (TypeName each : candidates) {
+            if (!ends(bare, without(name -> candidates.contains(name) && !name.equals(each)),
+                    path, lower)) {
+                saying.add(each);
+            }
+        }
+        return byName(saying.isEmpty() ? candidates : saying);
+    }
+
+    /** In one order, whoever found them. Several of these are one answer and the answer is what a
+     * line is told apart by, so an order read off the walk that collected them would make two
+     * readings of one edge into two lines. */
+    private static List<TypeName> byName(List<TypeName> found) {
+        return found.stream().sorted(java.util.Comparator.comparing(TypeName::name)).toList();
+    }
+
+    private Endpoint endOf(FieldDomains read, String path, boolean lower) {
+        NumericDomain.Bounds bounds = read.byField.get(path);
+        return bounds == null ? null : lower ? bounds.min() : bounds.max();
+    }
+
+    /** Whether {@code end} is where {@code other} leaves this coordinate on the side asked for. */
+    private boolean ends(Endpoint end, FieldDomains other, String path, boolean lower) {
+        return java.util.Objects.equals(end, endOf(other, path, lower));
+    }
+
+    /** This value read again without the clauses of the declarations {@code skip} names. */
+    private FieldDomains without(java.util.function.Predicate<TypeName> skip) {
+        return of(named, data, symbols, settled, skip);
+    }
+
+    /** Every end the rules place, wherever it is. */
+    public List<Placed> placed() {
+        return directs.stream()
+                .map(each -> new Placed(each.path(), each.measured(), each.from(),
+                        each.bound().lower(), each.bound().end()))
+                .toList();
+    }
+
+    /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
+    public List<Placed> placedAt(String path) {
+        return placed().stream().filter(each -> each.path().equals(path)).toList();
     }
 
     /**

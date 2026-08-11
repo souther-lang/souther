@@ -93,9 +93,24 @@ public final class Partitions {
          * <p>False where a rule reaching the value the term is taken of was not read in full. Every
          * edge here is then where the rules this could read stop, and a rule it could not read can
          * refuse that value as easily as the one beyond it — so the edge is not known to be writable
-         * and asking for a row at it is asking for work nobody may be able to do. */
+         * and asking for a row at it is asking for work nobody may be able to do.
+         *
+         * <p>And false at a count, unless every count that measure could give is one some value has
+         * ({@link NumericMeasures#everyCountHasAValue}). What the projection settles is which numbers
+         * the rules leave, and three is a number they leave whether or not three of the thing exist:
+         * a `Set<Bool>` is capped at two, and a `List<T>` of one needs a `T` that something inhabits.
+         * The domain has no term for either, so such an edge is settled by a value rather than by an
+         * argument — a row at it, or one this built — which is the account an edge nothing has
+         * settled already gets. Read as a proof, a floor no value reaches became a row an author was
+         * told to write.
+         *
+         * <p>A string's length is the one that stays proven, because a string of any length is
+         * written by repeating a character. Declining the proof there too would take away every
+         * `String.length` edge in the corpus over collections that have no values. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return !uncertain.contains(term);
+            return !uncertain.contains(term)
+                    && !(term instanceof NumericTerm.SizeOf size
+                            && !NumericMeasures.everyCountHasAValue(size.measure()));
         }
 
         /** Only the positions the model actually divides. */
@@ -118,7 +133,8 @@ public final class Partitions {
             // each record is how `interval.startsAt < cap` stopped reaching `interval.startsAt`.
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
-                    0, symbols, found, new Placed(heldIn(type, symbols), fieldDomainsOf(type, symbols)),
+                    0, symbols, found,
+                    new Placed(readAs(type, symbols), fieldDomainsOf(type, symbols)),
                     domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
@@ -641,6 +657,19 @@ public final class Partitions {
             return path.fields().isEmpty() ? null
                     : domains.at(String.join(".", path.fields()));
         }
+
+        /** The ends the clauses reaching this value place on the coordinates at {@code path}, which
+         * is a different question from what {@link #at} leaves them. */
+        List<FieldDomains.Placed> placedAt(TermPath path) {
+            return path.fields().isEmpty() ? List.of()
+                    : domains.placedAt(String.join(".", path.fields()));
+        }
+
+        /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
+        List<TypeName> narrowedBy(TermPath path, boolean lower) {
+            return path.fields().isEmpty() ? List.of()
+                    : domains.narrowedBy(String.join(".", path.fields()), lower);
+        }
     }
 
     /** The record a position holds, through the names it is written under: a value of
@@ -659,10 +688,40 @@ public final class Partitions {
      * {@code Pair}'s clauses — read off the written name, the walk descended into the fields of a
      * record whose rules about them it had just dropped.
      */
+    /**
+     * What the rules reaching a value of {@code type} leave and place, read under the name the
+     * signature wrote.
+     *
+     * <p>The written name and not the record under it. A name wrapped round a record is a place the
+     * same rule can be written — {@code data NonEmptyBag = Bag invariant List.length(value.xs) >= 1}
+     * states what {@code Bag} could have stated about its own field — and reading the record alone
+     * drops every clause of every name round it. What those clauses leave is read at the paths the
+     * record's own positions have, since a name wrapped round a value is not a step of the path.
+     *
+     * <p>One reading and not two. A wrapper's clauses place ends, project ranges onto the record's
+     * fields, and can be ones this could not read, and all three are answers about the same value:
+     * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
+     * wrapper clause nothing could read left every edge under it looking certain.
+     */
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
-        TypeName held = heldIn(type, symbols);
-        return held != null && symbols.get(held) instanceof Ast.Data data
-                ? FieldDomains.of(held, data, symbols) : FieldDomains.NONE;
+        TypeName read = readAs(type, symbols);
+        return read != null && symbols.get(read) instanceof Ast.Data data
+                ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
+    }
+
+    /**
+     * The declaration a value of {@code type} is read under: the name the signature wrote where it
+     * names one, and the record beneath the names where it does not.
+     *
+     * <p>One name for both questions. Which declaration's rules reach the positions, and which
+     * declaration is said to have taken an edge in, are answers about the same value — read apart,
+     * an edge a wrapper narrowed was reported as narrowed by the record under it, which is a
+     * declaration that may have no clause about the pair at all.
+     */
+    private static TypeName readAs(Type type, Symbols symbols) {
+        TypeName written = nameOf(type);
+        return written != null && symbols.get(written) instanceof Ast.Data ? written
+                : heldIn(type, symbols);
     }
 
     /**

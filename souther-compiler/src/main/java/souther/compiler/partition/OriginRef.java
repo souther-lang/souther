@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.types.TypeName;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -97,9 +98,22 @@ public sealed interface OriginRef {
      * together.
      *
      * @param bound  the rule that put an edge here
-     * @param within the record whose own clauses decided where it stopped
+     * @param within the declarations whose own clauses decided where it stopped, and not the value
+     *               the position sits in: the same relation can be written on the record, on a
+     *               record inside it, or on a name wrapped round either, and only the one that wrote
+     *               it has anything to answer for. Several where taking any one of them away leaves
+     *               the end where it is, since each is then as much the answer as the others and
+     *               choosing would invent the one that is not known
      */
-    record NarrowedOrigin(OriginRef bound, TypeName within) implements OriginRef {}
+    record NarrowedOrigin(OriginRef bound, List<TypeName> within) implements OriginRef {
+
+        public NarrowedOrigin {
+            within = List.copyOf(within);
+            if (within.isEmpty()) {
+                throw new IllegalArgumentException("a bound narrowed by nothing is not narrowed");
+            }
+        }
+    }
 
     /**
      * What tells one line from another, with nothing in it that says which copy of a body the line
@@ -115,24 +129,24 @@ public sealed interface OriginRef {
      *
      * @param rule            the origin itself, for the rules that are their own line
      * @param comparison      which comparison of which fork, for a guard's line
-     * @param narrowedWithin  the record a bound was taken in by, kept so that a narrowed line stays
-     *                        apart from the bare one it narrows
+     * @param narrowedWithin  the declarations a bound was taken in by, kept so that a narrowed line
+     *                        stays apart from the bare one it narrows
      */
     record Line(OriginRef rule, souther.compiler.coverage.CoverageSites.Obligation comparison,
                 boolean valueBelongsBelow, GuardOrigin.Witness witness, boolean holdsAtTheValue,
-                boolean singles, TypeName narrowedWithin) {}
+                boolean singles, List<TypeName> narrowedWithin) {}
 
     /** The line this origin drew, said the way {@link Line} says it. */
     default Line line() {
         return switch (this) {
             case GuardOrigin g -> new Line(null, g.comparison(), g.valueBelongsBelow(), g.witness(),
-                    g.holdsAtTheValue(), g.singles(), null);
+                    g.holdsAtTheValue(), g.singles(), List.of());
             case NarrowedOrigin n -> {
                 Line inner = n.bound().line();
                 yield new Line(inner.rule(), inner.comparison(), inner.valueBelongsBelow(),
                         inner.witness(), inner.holdsAtTheValue(), inner.singles(), n.within());
             }
-            default -> new Line(this, null, false, null, false, false, null);
+            default -> new Line(this, null, false, null, false, false, List.of());
         };
     }
 
@@ -142,7 +156,9 @@ public sealed interface OriginRef {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
             case GuardOrigin g -> "guard@" + g.at().pos();
-            case NarrowedOrigin n -> n.bound().describe() + " within " + n.within().name();
+            case NarrowedOrigin n -> n.bound().describe() + " within "
+                    + n.within().stream().map(TypeName::name)
+                            .collect(java.util.stream.Collectors.joining(" or "));
         };
     }
 }

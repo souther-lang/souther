@@ -93,17 +93,30 @@ public sealed interface LocalInspection {
         // it is known that the length is the number being measured.
         Carrier carried = Carrier.ofValue(type, symbols);
         ValueName.Stdlib taken = NumericMeasures.takenOf(type, symbols);
+        // The ends the value this sits in places on this position, which its own type says nothing
+        // about. Read beside the type's own rules and not after them: a clause naming one coordinate
+        // and a constant places an end wherever it is written, so where the rule was written is not
+        // what decides whether there is a line here (ADR-0090).
+        List<souther.compiler.check.FieldDomains.Placed> stated =
+                placed == null ? List.of() : placed.placedAt(path);
         // What the rules are about, and only then what the type could carry. A position has one
         // axis, and a `String` is the one type that can be measured two ways — its own order, and
         // the length of it — so which of them the model wrote about is what decides. Read off the
         // carrier first, every rule anybody ever wrote about the length of a string would have
         // become a rule about the string.
-        DeclaredBounds.Bounds sized = taken == null ? null
+        DeclaredBounds.Bounds ofType = taken == null ? null
                 : DeclaredBounds.of(type, symbols, Carrier.WHOLE, taken);
-        boolean bySize = sized != null && !sized.isEmpty();
+        DeclaredBounds.Bounds valueOfType = carried == null ? null
+                : DeclaredBounds.of(type, symbols, carried, null);
+        if (undecidable(ofType, valueOfType, stated, taken, carried)) {
+            stated = List.of();   // rules about both coordinates and nothing here to choose between
+        }
+        boolean bySize = measuredHere(ofType, valueOfType, stated, taken, carried);
         NumericTerm term = bySize ? new NumericTerm.SizeOf(taken, path) : new NumericTerm.ValueOf(path);
-        DeclaredBounds.Bounds own = bySize ? sized
-                : carried == null ? null : DeclaredBounds.of(type, symbols, carried, null);
+        DeclaredBounds.Bounds own = bySize
+                ? DeclaredBounds.and(ofType, DeclaredBounds.placed(stated, true, Carrier.WHOLE))
+                : carried == null ? null
+                : DeclaredBounds.and(valueOfType, DeclaredBounds.placed(stated, false, carried));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed != null && placed.domains().infeasible();
@@ -126,7 +139,9 @@ public sealed interface LocalInspection {
                 constructibleAt(PartitionClasses.of(view, symbols), view, admissible, symbols);
         DeclaredBounds.Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
-                : cutsOf(type, axis, own, placed == null ? null : placed.value());
+                : cutsOf(type, axis, own,
+                        placed == null ? List.of() : placed.narrowedBy(path, true),
+                        placed == null ? List.of() : placed.narrowedBy(path, false));
         if (classes.isEmpty() && cuts.isEmpty()) {
             return new Exhausted(reading);
         }
@@ -137,6 +152,57 @@ public sealed interface LocalInspection {
                 : new CutEvidence.Present(cuts,
                         placed != null && !placed.domains().allRulesRead());
         return new Evidence(reading, classes, drawn);
+    }
+
+    /**
+     * Whether this position's one coordinate is the count taken of it rather than its value.
+     *
+     * <p>The position's own type answers first and its answer stands. A rule reaching the position
+     * from the value it sits in states an end on a coordinate; it does not say which coordinate the
+     * position is measured at, and letting it say so takes an axis away — {@code data Name = String
+     * invariant value >= "m"} held in a record that bounds the length of it would stop being measured
+     * on its own order, and the line at `m` would go without anything saying it had.
+     *
+     * <p>Where the type chose nothing, one of these rules may — and only one, which is what
+     * {@link #undecidable} has already refused.
+     */
+    private static boolean measuredHere(DeclaredBounds.Bounds ofType, DeclaredBounds.Bounds valueOfType,
+                                        List<souther.compiler.check.FieldDomains.Placed> stated,
+                                        ValueName.Stdlib taken, Carrier carried) {
+        if (stated(ofType)) {
+            return true;
+        }
+        if (stated(valueOfType)) {
+            return false;
+        }
+        return taken != null && stated(DeclaredBounds.placed(stated, true, Carrier.WHOLE));
+    }
+
+    /**
+     * Whether the rules reaching this position say where both of its coordinates stop, with its own
+     * type having said nothing about either.
+     *
+     * <p>A position has one coordinate and this is the one case with no answer. Which of a
+     * {@code String}'s two a rule is about is settled by which one the model wrote about, and here
+     * the model wrote about both from outside. Choosing either would put a line the author can read
+     * beside one they cannot see, so the position is left as one nothing divides and both rules go
+     * unread — the coarser of the two things that could be said, and the one that claims nothing.
+     *
+     * <p>Which of them a position holds is a question this does not answer, rather than one it
+     * answers badly: a position carrying both coordinates is what would settle it, and that is not
+     * here (ADR-0090).
+     */
+    private static boolean undecidable(DeclaredBounds.Bounds ofType, DeclaredBounds.Bounds valueOfType,
+                                       List<souther.compiler.check.FieldDomains.Placed> stated,
+                                       ValueName.Stdlib taken, Carrier carried) {
+        return !stated(ofType) && !stated(valueOfType)
+                && taken != null && carried != null
+                && stated(DeclaredBounds.placed(stated, true, Carrier.WHOLE))
+                && stated(DeclaredBounds.placed(stated, false, carried));
+    }
+
+    private static boolean stated(DeclaredBounds.Bounds bounds) {
+        return bounds != null && !bounds.isEmpty();
     }
 
     /**
@@ -264,24 +330,31 @@ public sealed interface LocalInspection {
      *
      * @param bounds where the position stops, the record it sits in taken into account
      * @param own    where its own type stops, so that an end the record moved can say so
-     * @param within the record, or null at a position that is not a field of one
+     * @param under  the declarations holding the lower end, and {@code over} those holding the
+     *               upper. Per end because they are separate answers: one declaration can be holding
+     *               a minimum while another holds the maximum, and one slot for both names the wrong
+     *               one for at least one of them
      */
     private static List<Cut> cutsOf(Type type, DeclaredBounds.Bounds bounds, DeclaredBounds.Bounds own,
-                                    TypeName within) {
-        if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref)) {
+                                    List<TypeName> under, List<TypeName> over) {
+        // Nothing about the shape of the position's type. An end is here because some clause placed
+        // it, and a clause naming a field of a record places one on a bare `Int` and on the length of
+        // a bare `List<Int>` as readily as on a newtype over either. Asking for a `Type.Ref` here was
+        // reading the one route an end could arrive by as the condition for having one.
+        if (bounds == null || bounds.isEmpty()) {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
         cut(byValue, bounds.min(), own == null ? null : own.min(), "min",
-                bounds.carrier(), within);
+                bounds.carrier(), under);
         cut(byValue, bounds.max(), own == null ? null : own.max(), "max",
-                bounds.carrier(), within);
+                bounds.carrier(), over);
         return List.copyOf(byValue.values());
     }
 
     /** One end as a cut, owed once to each rule that put it there. */
     private static void cut(Map<String, Cut> into, DeclaredBounds.End end, DeclaredBounds.End own,
-                            String clause, Carrier carrier, TypeName within) {
+                            String clause, Carrier carrier, List<TypeName> within) {
         if (end == null) {
             return;
         }
@@ -290,14 +363,14 @@ public sealed interface LocalInspection {
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
         for (TypeName from : end.from()) {
-            put(into, carrier, end.value(), from, clause, moved ? within : null);
+            put(into, carrier, end.value(), from, clause, moved ? within : List.<TypeName>of());
         }
     }
 
     private static void put(Map<String, Cut> into, Carrier carrier, Place at, TypeName type,
-                            String clause, TypeName narrowedBy) {
+                            String clause, List<TypeName> narrowedBy) {
         OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
-        if (narrowedBy != null) {
+        if (!narrowedBy.isEmpty()) {
             origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
         }
         OriginRef each = origin;

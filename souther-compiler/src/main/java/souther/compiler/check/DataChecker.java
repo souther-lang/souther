@@ -480,7 +480,7 @@ public final class DataChecker {
             Type representation = fields.get("value");
             return representation != null
                     && holds(representation,
-                            FieldDomains.mayHoldNothingAt(from, d, "value", symbols),
+                            FieldDomains.mayHoldNothingAt(from, d, FieldDomains.THE_VALUE, symbols),
                             target, symbols, seen, new HashSet<>(Set.of(from)));
         }
         for (Map.Entry<String, Type> e : fields.entrySet()) {
@@ -549,7 +549,8 @@ public final class DataChecker {
         // for anything to have been written on.
         boolean mayBeEmpty = !(type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data held && held.newtype())
-                || FieldDomains.mayHoldNothingAt(ref(type), heldData(type, symbols), "value", symbols);
+                || FieldDomains.mayHoldNothingAt(ref(type), heldData(type, symbols),
+                        FieldDomains.THE_VALUE, symbols);
         return holds(type, mayBeEmpty, target, symbols, seen, worn);
     }
 
