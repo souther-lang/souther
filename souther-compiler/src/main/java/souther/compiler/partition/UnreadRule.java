@@ -15,6 +15,8 @@ package souther.compiler.partition;
  * what the declaration says.
  *
  * @param at  the position, spelled the way a report names it
- * @param why what would have to change before this rule could be a line
+ * @param why what would have to change before this rule could be a line, in this compiler's own
+ *            terms. Which word a report writes for it is {@link ReportedReason}'s, so a capability
+ *            gained here need not move a published vocabulary
  */
-public record UnreadRule(TermPath at, UndividedPosition.Reason why) {}
+public record UnreadRule(TermPath at, BlockReason why) {}

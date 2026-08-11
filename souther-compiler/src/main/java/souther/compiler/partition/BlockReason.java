@@ -42,6 +42,31 @@ public sealed interface BlockReason {
      */
     record UnsupportedTraversal(Traversal traversal) implements BlockReason {}
 
+    /**
+     * A comparison naming the position is written in a form no reader here takes apart: the
+     * position inside an expression the terms do not name, or a threshold written as something
+     * other than a constant.
+     *
+     * <p>Whichever rule wrote it. An invariant's clause and a {@code guard}'s comparison are two
+     * producers of one kind of evidence (spec §example-partition), and what stopped each of them is
+     * the same fact about this compiler.
+     */
+    record UnreadComparisonForm() implements BlockReason {}
+
+    /** A comparison naming the position is against values no line is drawn on here — the carrier,
+     *  asked of the carrier. */
+    record UnreadComparisonDomain() implements BlockReason {}
+
+    /**
+     * The comparison relates two positions rather than dividing one.
+     *
+     * <p>Nothing is missing from the carrier: both sides are ordered, and a line drawn on either
+     * against a number would be read. What is missing is a class about two positions, which a
+     * partition of one is not — so a line like this is settled beside the partition rather than in
+     * it, and the position it names is left with no class of its own from this rule.
+     */
+    record ComparisonBetweenPositions() implements BlockReason {}
+
     /** What a derivation would have to be able to reach into. */
     enum Traversal {
 

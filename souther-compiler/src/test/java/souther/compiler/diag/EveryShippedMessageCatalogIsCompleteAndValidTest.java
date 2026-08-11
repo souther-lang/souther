@@ -60,7 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * shape, because the checks that read a catalog line by line are only as good as the format they
  * assume {@link Properties} was given.
  */
-class EveryShippedMessageCatalogIsCompleteAndValidTest {
+public class EveryShippedMessageCatalogIsCompleteAndValidTest {
 
     /** Where the bundle {@link Messages} reads lives, as a path under a module's resources. */
     private static final String PACKAGE = "souther/compiler/diag";
@@ -875,7 +875,7 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
     }
 
     /** Every module's main sources. Any module may name a message key. */
-    static List<Path> mainSources() throws IOException {
+    public static List<Path> mainSources() throws IOException {
         List<Path> sources = new ArrayList<>();
         for (Path root : moduleDirectories("java")) {
             try (Stream<Path> walk = Files.walk(root)) {

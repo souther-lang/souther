@@ -148,7 +148,7 @@ public final class GuardThresholds {
             List<TermPath> named = new ArrayList<>();
             mentioned(binary.left(), parameters, symbols, named);
             mentioned(binary.right(), parameters, symbols, named);
-            UndividedPosition.Reason why = why(binary, parameters, symbols);
+            BlockReason why = why(binary, parameters, symbols);
             for (TermPath each : named) {
                 if (out.stream().noneMatch(had -> had.at().equals(each))) {
                     out.add(new UnreadRule(each, why));
@@ -191,8 +191,8 @@ public final class GuardThresholds {
      * expression the terms do not name, or a threshold written as something other than a constant —
      * and each of the three is a different piece of work.
      */
-    private static UndividedPosition.Reason why(Core.Binary comparison, List<String> parameters,
-                                                Symbols symbols) {
+    private static BlockReason why(Core.Binary comparison, List<String> parameters,
+                                   Symbols symbols) {
         boolean leftNames = !mentionedIn(comparison.left(), parameters, symbols).isEmpty();
         boolean rightNames = !mentionedIn(comparison.right(), parameters, symbols).isEmpty();
         // Which limit stopped this is asked of what the sides name, not of how far the derivation
@@ -200,11 +200,11 @@ public final class GuardThresholds {
         // set of values of one — and that is as true of `x < y + 1` as of `x < y`, where reading it
         // off the derivation loses the second position entirely and answers with the carrier.
         if (leftNames && rightNames) {
-            return UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
+            return new BlockReason.ComparisonBetweenPositions();
         }
         Core named = leftNames ? comparison.left() : comparison.right();
         if (termOf(named, parameters, symbols) == null) {
-            return UndividedPosition.Reason.UNSUPPORTED_SYNTAX;   // the position is inside something
+            return new BlockReason.UnreadComparisonForm();   // the position is inside something
         }
         // The carrier, asked of the carrier. `at < DateTime(...)` stops because nothing draws a line
         // on a date-time; `p.x < 1 + 2` stops because the other side is not a form a threshold is
@@ -212,8 +212,8 @@ public final class GuardThresholds {
         // Reading this off the side that did name a position calls the second one a carrier problem
         // and sends an author after a domain that is already there.
         return orderable(named.type(), symbols)
-                ? UndividedPosition.Reason.UNSUPPORTED_SYNTAX
-                : UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+                ? new BlockReason.UnreadComparisonForm()
+                : new BlockReason.UnreadComparisonDomain();
     }
 
     private static List<TermPath> mentionedIn(Core e, List<String> parameters, Symbols symbols) {

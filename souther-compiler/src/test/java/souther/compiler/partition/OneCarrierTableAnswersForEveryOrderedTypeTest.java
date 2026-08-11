@@ -417,8 +417,10 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         for (String behavior : behaviors) {
             PartitionEvidence evidence = coverage.get(behavior);
             assertNotNull(evidence, behavior + " was measured");
+            // Through the projection a report goes through, which is what this table is of: what
+            // this compiler could not do is recorded in its own words and said in the document's.
             UndividedPosition.Reason unread = evidence.unread().isEmpty() ? null
-                    : evidence.unread().get(0).why();
+                    : ReportedReason.of(evidence.unread().get(0).why());
             out.put(behavior, new Measured(evidence.axes().size(),
                     evidence.boundaries().size(), unread));
         }

@@ -190,7 +190,7 @@ public sealed interface LocalInspection {
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                    UndividedPosition.Reason why = whyUnread(each, carried, measure);
+                    BlockReason why = whyUnread(each, carried, measure);
                     // Once per position, as a comparison is: what a reader has to lift is the first
                     // limit in the way, and a second clause behind it says nothing further.
                     if (why != null && out.isEmpty()) {
@@ -204,21 +204,20 @@ public sealed interface LocalInspection {
 
     /** What stopped one clause from being an end, or null where nothing did — either because it was
      * read, or because it is not a rule about where the value stops. */
-    private static UndividedPosition.Reason whyUnread(Ast.Expr clause, Carrier carried,
-                                                      ValueName measure) {
+    private static BlockReason whyUnread(Ast.Expr clause, Carrier carried, ValueName measure) {
         if (InvariantBound.statesAnEnd(clause, null)) {
             if (carried == null) {
                 // The value is ordered — it is compared in the clause — and this reads no line on
                 // what carries it. The carrier, asked of the carrier, as a guard's is.
-                return UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+                return new BlockReason.UnreadComparisonDomain();
             }
             return InvariantBound.of(clause, carried).isPresent()
-                    ? null : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+                    ? null : new BlockReason.UnreadComparisonForm();
         }
         if (measure != null && InvariantBound.statesAnEnd(clause, measure)) {
             // A size is a whole number whatever it is a size of, so nothing here is about a carrier.
             return InvariantBound.ofSize(clause, measure).isPresent() ? null
-                    : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+                    : new BlockReason.UnreadComparisonForm();
         }
         return null;
     }

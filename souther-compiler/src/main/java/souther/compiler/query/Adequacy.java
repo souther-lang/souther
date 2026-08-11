@@ -1569,7 +1569,8 @@ public final class Adequacy {
             // above — and the walk stopping short is the one reason that comes from neither.
             List<List<Object>> unread = new ArrayList<>();
             for (souther.compiler.partition.UnreadRule each : partition.unread()) {
-                unread.add(List.<Object>of(each.at().toString(), said(each.why())));
+                unread.add(List.<Object>of(each.at().toString(),
+                        said(souther.compiler.partition.ReportedReason.of(each.why()))));
             }
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
                 if (position.why() instanceof souther.compiler.partition.UndividedPosition.Why

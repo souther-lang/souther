@@ -12,7 +12,7 @@ package souther.compiler.partition;
  * <p>So a second surface — a diagnostic that says more than the document does — is another
  * projection beside this one rather than a change to what a reason is.
  */
-final class ReportedReason {
+public final class ReportedReason {
 
     /**
      * Deliberately coarser than what it is given. What a reader of a document is promised is which
@@ -24,12 +24,18 @@ final class ReportedReason {
      * where the collapses are visible together. No {@code default}, so a reason added and not said
      * stops the compile rather than arriving in a report as the nearest word that already existed.
      */
-    static UndividedPosition.Reason of(BlockReason reason) {
+    public static UndividedPosition.Reason of(BlockReason reason) {
         return switch (reason) {
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
             case BlockReason.DepthLimit _ -> UndividedPosition.Reason.DEPTH_LIMIT;
             case BlockReason.UnsupportedTraversal _ ->
                     UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
+            case BlockReason.UnreadComparisonForm _ ->
+                    UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
+            case BlockReason.UnreadComparisonDomain _ ->
+                    UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+            case BlockReason.ComparisonBetweenPositions _ ->
+                    UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE;
         };
     }
 

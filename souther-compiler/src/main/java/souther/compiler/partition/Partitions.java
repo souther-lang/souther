@@ -121,13 +121,13 @@ public final class Partitions {
                 excluded.at(axis.path()).stream().map(TypeName::name).toList()));
         List<Axis> kept = new ArrayList<>();
         List<OmittedAxis> omitted = new ArrayList<>();
-        int measured = 0;
+        int counted = 0;
         for (Axis axis : found) {
             if (!axis.measurable()) {
                 kept.add(axis);   // kept so a report can name what it could not measure
-            } else if (measured < MAX_AXES) {
+            } else if (counted < MAX_AXES) {
                 kept.add(axis);
-                measured++;
+                counted++;
             } else {
                 // Whether this one was carrying an obligation is decided here and not later. A cut is
                 // where a boundary comes from, and an axis dropped before `withThresholds` never gets
@@ -139,15 +139,13 @@ public final class Partitions {
         }
         // A position undivided because a rule about it went unread says that here, without waiting
         // for a body: a type bounded by a rule this cannot read is one whether or not any behavior
-        // compares it.
-        List<UndividedPosition> undivided = new ArrayList<>();
-        for (UndividedPosition each : undividedIn(kept)) {
-            UndividedPosition.Reason why = unread.stream()
-                    .filter(one -> one.at().equals(each.at())).map(UnreadRule::why)
-                    .findFirst().orElse(null);
-            undivided.add(why == null ? each : each.because(why));
+        // compares it. Nothing has compared anything yet, so what the rules came to is whether one
+        // of them was left unread — settled beside each axis, as it is once a body has spoken.
+        List<Measured> measured = new ArrayList<>();
+        for (Axis axis : kept) {
+            keep(new ArrayList<>(), measured, axis, null, unread);
         }
-        return new Partitioning(kept, omitted, domains, uncertain, undivided,
+        return new Partitioning(kept, omitted, domains, uncertain, undividedIn(measured),
                 List.copyOf(unread), List.of());
     }
 
@@ -159,13 +157,51 @@ public final class Partitions {
      * ones the walk did not finish, which is the one thing the axes cannot say for themselves: an
      * axis that was never descended into looks exactly like one there was nothing under.
      */
-    private static List<UndividedPosition> undividedIn(List<Axis> axes) {
+    /** One position, and what the rules written about it came to. Held together because the two are
+     *  read at the same place and a report is the fold of them. */
+    private record Measured(Axis axis, BodyCutInspection body) {}
+
+    /** The axis, and the body's answer about it — a line it drew, nothing, or a rule about it that
+     *  went unread. Kept beside the axis rather than looked up afterwards by how its path is
+     *  spelled. */
+    private static void keep(List<Axis> out, List<Measured> measured, Axis axis,
+                             BodyCutInspection drew, List<UnreadRule> rules) {
+        out.add(axis);
+        if (drew != null) {
+            measured.add(new Measured(axis, drew));
+            return;
+        }
+        BlockReason unread = rules.stream().filter(one -> one.at().equals(axis.path()))
+                .map(UnreadRule::why).findFirst().orElse(null);
+        measured.add(new Measured(axis, unread == null ? new BodyCutInspection.Exhausted()
+                : new BodyCutInspection.Blocked(unread)));
+    }
+
+    /**
+     * What each position is left with, folded from the two readings that were made of it.
+     *
+     * <p>Nothing is searched for here. Both answers were settled where the position was read — the
+     * structural one on the axis, the rules' one beside it — and this only says which of them a
+     * report is owed, so a reason recovered here by matching a path would be a reading happening
+     * twice.
+     *
+     * <p>The structural reason outranks the rules': where the walk could not reach into what the
+     * position holds, a rule naming something inside it is a second description of that same stop
+     * and the first is the cause (issue #626).
+     */
+    private static List<UndividedPosition> undividedIn(List<Measured> measured) {
         List<UndividedPosition> out = new ArrayList<>();
-        for (Axis axis : axes) {
+        for (Measured each : measured) {
+            Axis axis = each.axis();
             if (axis.measurable()) {
                 continue;
             }
-            out.add(axis.pending() instanceof StructuralInspection.Blocked blocked
+            if (axis.pending() instanceof StructuralInspection.Blocked blocked) {
+                out.add(UndividedPosition.cannotDerive(axis.path(),
+                        ReportedReason.of(blocked.why())));
+                continue;
+            }
+            out.add(each.body() instanceof BodyCutInspection.Blocked blocked
                     ? UndividedPosition.cannotDerive(axis.path(),
                             ReportedReason.of(blocked.why()))
                     : UndividedPosition.absent(axis.path()));
@@ -229,7 +265,17 @@ public final class Partitions {
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled,
                                               List<BoundaryObligation> between) {
+        // Both producers of one kind of evidence. What a body compared and what a type's own rules
+        // bound are read by different readers and answer the same question, so a position either of
+        // them wrote about and neither could turn into a line is named once, whichever wrote it.
+        List<UnreadRule> rules = new ArrayList<>(base.unread());
+        for (UnreadRule each : unread) {
+            if (rules.stream().noneMatch(had -> had.equals(each))) {
+                rules.add(each);
+            }
+        }
         List<Axis> out = new ArrayList<>();
+        List<Measured> measured = new ArrayList<>();
         for (Axis axis : base.axes()) {
             NumericTerm declared = axis.term();
             NumericTerm term = declared;
@@ -242,10 +288,10 @@ public final class Partitions {
                 // everything else. Ranges here would ask the rows for a distinction between the two
                 // sides of a value the behavior treats alike.
                 NumericDomain.Bounds only = domainOf(base, term);
-                out.add(new Axis(axis.id(), term, axis.type(),
+                keep(out, measured, new Axis(axis.id(), term, axis.type(),
                         singledClasses(points, term, axis.type(), only, symbols),
                         mergedPoints(axis.cuts(), points, term.carrierAt(axis.type(), symbols)))
-                        .excluding(axis.excluded()));
+                        .excluding(axis.excluded()), new BodyCutInspection.Evidence(), rules);
                 continue;
             }
             if (here.isEmpty()) {
@@ -255,7 +301,7 @@ public final class Partitions {
                 // for it to be about, and dropping the threshold would lose a line the body draws.
                 NumericTerm drawn = axis.measurable() ? null : soleTermAt(thresholds, axis.path());
                 if (drawn == null) {
-                    out.add(axis);
+                    keep(out, measured, axis, null, rules);
                     continue;
                 }
                 term = drawn;
@@ -293,31 +339,18 @@ public final class Partitions {
                             term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
-            out.add(new Axis(axis.id(), term, axis.type(),
+            //
+            // A rule read and left outside what the position holds divided nothing, and it is not
+            // a rule that went unread either: what it says was understood. So the answer there is
+            // that the rules were exhausted, which is what keeps `Blocked` meaning that a
+            // comparison could not be interpreted rather than everything that came to nothing.
+            keep(out, measured, new Axis(axis.id(), term, axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), reachable, carrier)).excluding(axis.excluded()));
-        }
-        // Both producers of one kind of evidence. What a body compared and what a type's own rules
-        // bound are read by different readers and answer the same question, so a position either of
-        // them wrote about and neither could turn into a line is named once, whichever wrote it.
-        List<UnreadRule> rules = new ArrayList<>(base.unread());
-        for (UnreadRule each : unread) {
-            if (rules.stream().noneMatch(had -> had.equals(each))) {
-                rules.add(each);
-            }
-        }
-        // The structural reason travels on the axis, so nothing is recovered from the earlier pass
-        // by matching how a path is spelled. What is still joined here is a rule this could not
-        // read, which is about a rule rather than about the position and has nowhere else to live.
-        List<UndividedPosition> undivided = new ArrayList<>();
-        for (UndividedPosition each : undividedIn(out)) {
-            UndividedPosition.Reason unreadHere = rules.stream()
-                    .filter(one -> one.at().equals(each.at())).map(UnreadRule::why)
-                    .findFirst().orElse(null);
-            undivided.add(unreadHere == null ? each : each.because(unreadHere));
+                    merged(axis.cuts(), reachable, carrier)).excluding(axis.excluded()),
+                    reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undivided, List.copyOf(rules), between);
+                undividedIn(measured), List.copyOf(rules), between);
     }
 
     /**
