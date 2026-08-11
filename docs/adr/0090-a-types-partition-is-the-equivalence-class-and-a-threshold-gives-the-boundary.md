@@ -5,7 +5,9 @@ Revised in place for #427: what a threshold is intersected with is what the *pos
 is the field's type read under the rules of the record holding it. Revised again for #510: what a
 line is drawn on is a numeric *term*, not a position — the content of a location, or a size taken of
 one. Revised again for #622: which values a term's line can be drawn on is one table, and a rule
-written over values it does not hold is reported as unread rather than dropped.
+written over values it does not hold is reported as unread rather than dropped. Revised again for
+#649: what decides whether a clause draws a line is which terms the clause reaches, not which
+declaration it is written on.
 
 ## Context
 
@@ -44,12 +46,42 @@ at this field — `startsAt < endsAt` over minutes of a day leaves `startsAt` st
 the type alone the position offers 1440, which no row can be written at, and the report cannot tell
 that gap from one worth closing.
 
-A record's rule takes an edge in and does not put one there. A position its own type leaves open stays
-one the model draws no line through: a rule between two fields is not a partition of one of them, and
-treating it as one would divide an `Int` the author never bounded. What is read of such a rule is an
-ordering of numbers and nothing else; a rule of another shape leaves the position where its type left
-it, which is the safe direction — an edge too far out is a row nobody can write, and an edge never
-moved is not one either.
+Which terms a clause reaches decides what it may do, and the declaration it is written on does not. A
+clause that bounds one term against a constant without relying on another term may place an edge
+there: `value >= 1` on a newtype, `n >= 1` on the record holding `n`, `List.length(xs) >= 1` on the
+record holding `xs`. A clause relating terms may take an existing edge in and may not place one:
+`startsAt < endsAt` moves both ends of a day without dividing either position, and
+`List.length(xs) >= minLines` is no different for counting something.
+
+Placing an edge and taking one in are two answers, and the second is about an edge the first
+produced. `data R = { a: Int, b: Int } invariant a < b invariant b <= 10` leaves `a` running to 9 and
+draws no line through it: the 9 is there because `b` stops at 10, and a position whose only limit is
+another position's is one the model draws no line through. `b` has a line at 10, which its own clause
+placed. Reading the narrowed range as the edge is the mistake this separation exists to prevent, and
+it is the same mistake the older wording prevented by naming the declaration instead.
+
+The declaration stood in for the question and stood in for it wrongly in one direction. A record
+stating a bound on one of its own fields states the rule a newtype over that field's type would
+state, so reading the declaration made a rule measured or unmeasured according to whether the
+aggregate holding it has a second field. An order with lines and a customer has to write the rule
+about its own field, and that was the spelling that disappeared — the measure rewarded wrapping every
+constrained field in a newtype of its own, which is a modelling choice and not a rule about the
+domain.
+
+A clause reaches a position from wherever it governs it: the newtype chain of the position's own
+type, the record the position is a field of, and the declarations under that record the position sits
+inside. A line is named by the declaration the clause is written on. `data Inner = { n: Int }
+invariant n >= 1` names `Inner` at every position an `Inner` is held in, and `data Outer = { inner:
+Inner } invariant inner.n >= 5` names `Outer` where its clause is the tighter of the two. Where a
+record's own clause is the tighter, the line is the record's: `data Moved = { n: Count } invariant
+n.value >= 5` over a `Count` of at least 1 draws its line at 5 and names `Moved`, where before it
+named `Count` narrowed within `Moved`. Where two clauses place an end at one value, both name it.
+Only a clause relating terms is said beside a line rather than as one, since it moved an end another
+clause placed.
+
+What is read of any of these is an ordering of numbers and nothing else; a rule of another shape
+leaves the position where its type left it, which is the safe direction — an edge too far out is a
+row nobody can write, and an edge never moved is not one either.
 
 An edge whose rules were not all read is not a gap. Both answers were wrong: counting it asks for a
 row that may be impossible, and falling back to the type's own edge is no better, since the rule that
@@ -81,7 +113,13 @@ report of the very behavior that wrote the comparison.
 So the term is what an axis, a cut, and a coverage question are all keyed on. `ValueOf` is one term
 among them rather than the default beside a special case: keeping the plain path as the identity is
 what let three separate readers each answer "is this observation a number" and each be right about
-the positions it was written against. What is spaced like an `Int`, what its own values are, and how
+the positions it was written against.
+
+A position has one term, and which one is settled by which of them the model wrote a rule about — a
+`String` is the one value measured two ways, and a rule about its length is what makes the length the
+term. Reading those rules from more declarations does not change that selection and does not give a
+position two terms. Where a position turns out to have rules about both, nothing here chooses between
+them. What is spaced like an `Int`, what its own values are, and how
 it is read off a row are three properties of the term — a size needs no boundary domain of its own,
 and its non-negativity is its own rather than something a rule has to state.
 
@@ -172,8 +210,8 @@ Only a comparison that is the whole of a `guard`'s condition is read. A conditio
 `||` or `!` contributes no threshold.
 
 A cut keeps every rule that drew it. One value can be an obligation several times over — but a rule
-that took a line in is not a second line. The bound and the record that narrowed it settled one edge
-together and are one obligation, named by both.
+that took a line in is not a second line. A relational clause and the bound it narrowed settled one
+edge together and are one obligation, named by both.
 
 ## Consequences
 
