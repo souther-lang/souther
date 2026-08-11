@@ -264,6 +264,32 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
                 "and one past it is not something anything here takes");
     }
 
+    /**
+     * And what each of them says is what is missing here.
+     *
+     * <p>The words, because the words are the contract at this point. This type's own javadoc says
+     * these are strategies that could exist and do not, and that none of them says the gap cannot
+     * be met — while the sentence for an arm said nothing composes an input for it, of a row an
+     * author writes in two lines (issue #643). A reader who writes that row must not be
+     * contradicting the report.
+     *
+     * <p>Held one by one rather than by a rule over the strings, because there is no property of a
+     * sentence that says it is about a compiler. What there is, is a person reading each of them
+     * next to what it is written for.
+     */
+    @Test
+    void eachReasonSaysWhatIsMissingHereRatherThanWhatCannotExist() {
+        assertEquals("rows here are composed for classes and for boundaries, and nothing composes"
+                        + " one for the sake of an arm",
+                GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_ARM.said());
+        assertEquals("rows here are composed from what the input positions divide into, and nothing"
+                        + " searches for one by the case it would answer with",
+                GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
+        assertEquals("no axis was derived at the position this case belongs to, so there are no"
+                        + " classes here to compose a row from",
+                GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.said());
+    }
+
     @Test
     void aCaseOfTheOutputIsNotSupported() {
         List<GenerationOutcome> outputs = filling(compiled(KIND), "example.kind", "pick").gaps()

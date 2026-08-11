@@ -45,18 +45,29 @@ public sealed interface GenerationOutcome {
          *
          * <p>Each of these is a strategy that could exist and does not. None of them says the gap
          * cannot be met, and none is read as evidence about the model.
+         *
+         * <p><b>Which the words have to carry too.</b> A sentence saying nothing composes an input
+         * for an arm is read as there being no input that reaches it, and an author who writes the
+         * row in one line has been told something false — the row for a case somebody added to an
+         * enumeration is two lines, and this said no input for it could be composed (issue #643).
+         * So each of these says what is missing here, and what a reader does about it is write the
+         * row that this cannot.
          */
         public enum Reason {
 
             /** Nothing composes an input for the sake of the path it would take through a body. */
-            NO_STRATEGY_FOR_AN_ARM("nothing here composes an input for the arm it would reach"),
+            NO_STRATEGY_FOR_AN_ARM(
+                    "rows here are composed for classes and for boundaries, and nothing composes"
+                            + " one for the sake of an arm"),
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(
-                    "nothing here searches for an input by the case it would answer with"),
+                    "rows here are composed from what the input positions divide into, and nothing"
+                            + " searches for one by the case it would answer with"),
 
             /** The position the case belongs to is not one any axis was derived at. */
-            NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to");
+            NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
+                    + " there are no classes here to compose a row from");
 
             private final String said;
 
