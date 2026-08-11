@@ -204,7 +204,12 @@ class CompileExampleBoundaryTest {
         assertNotNull(all);
         PartitionEvidence keep = all.get("keep");
 
-        assertEquals(List.of(UndividedPosition.absent(TermPath.of("note"))), keep.notDerivable(),
+        // Read rather than built to compare against. An absence is what completing a position
+        // produces and nothing outside that can make one, which is the whole of what the word is
+        // worth — so this asks the answer what it is.
+        assertEquals(1, keep.notDerivable().size());
+        assertEquals(TermPath.of("note"), keep.notDerivable().get(0).at());
+        assertTrue(keep.notDerivable().get(0).isAbsent(),
                 "the model divides it no way, which is established rather than assumed");
         assertEquals(List.of(), keep.axes());
         assertEquals(List.of(), keep.boundaries());

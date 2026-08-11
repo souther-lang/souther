@@ -9,9 +9,10 @@ package souther.compiler.partition;
  * for the line their own body draws.
  *
  * <p>So the absence is a value that has to be produced rather than the default reading of an empty
- * result. {@link Absent} is only written where the walk ran to the end and found nothing; where it
- * stopped, or where something named the position and this could not turn it into a line,
- * {@link CannotDerive} says so and carries which.
+ * result. {@link Why.Absent} is produced by {@link PendingPosition#complete} and nowhere else, from
+ * a position whose structural reading did not stop and whose rules were all read and drew nothing —
+ * which is what the word means. Where the reading stopped, or where something named the position
+ * and this could not turn it into a line, {@link Why.CannotDerive} says so and carries which.
  *
  * @param at  the position, spelled the way a report names it
  * @param why whether the model draws nothing here or this could not read what it draws
@@ -21,8 +22,38 @@ public record UndividedPosition(TermPath at, Why why) {
     /** Which of the two it is. */
     public sealed interface Why {
 
-        /** The walk finished and the model divides this position no way at all. */
-        record Absent() implements Why {}
+        /**
+         * Every producer was asked, none of them stopped, and none of them divided the position:
+         * the model divides it no way at all.
+         *
+         * <p>A class with no way to make one rather than a record, because what it says is a
+         * conclusion about a model and the only thing entitled to draw it is the completion of a
+         * {@link PendingPosition}. Anything able to write {@code new Absent()} is able to say the
+         * model divides a position no way without having asked anything, which is the sentence this
+         * whole protocol exists to stop being cheap to write.
+         */
+        final class Absent implements Why {
+
+            /** The one, reached through {@link PendingPosition#complete}. */
+            static final Absent PROVEN = new Absent();
+
+            private Absent() {}
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Absent;
+            }
+
+            @Override
+            public int hashCode() {
+                return Absent.class.hashCode();
+            }
+
+            @Override
+            public String toString() {
+                return "Absent";
+            }
+        }
 
         /** Something is written here that this did not read, so nothing is established either way. */
         record CannotDerive(Reason reason) implements Why {}
@@ -67,33 +98,14 @@ public record UndividedPosition(TermPath at, Why why) {
         UNSUPPORTED_TRAVERSAL
     }
 
-    public static UndividedPosition absent(TermPath at) {
-        return new UndividedPosition(at, new Why.Absent());
+    /** The absence, of a position that has been completed. The argument is the proof: nothing can
+     *  call this that has not asked every producer, because nothing else can make one. */
+    static UndividedPosition absentAfter(PendingPosition proven) {
+        return new UndividedPosition(proven.at(), Why.Absent.PROVEN);
     }
 
     public static UndividedPosition cannotDerive(TermPath at, Reason reason) {
         return new UndividedPosition(at, new Why.CannotDerive(reason));
-    }
-
-    /** The same position, with a reason where it had none. A position already carrying one keeps it:
-     * what stopped the walk first is what a reader has to lift first. */
-    /**
-     * The same position with {@code reason} where nothing has been said yet, and unchanged where
-     * something has.
-     *
-     * <p>Fills rather than replaces, and that is a precedence: a reason already here came from the
-     * reading that stopped at this position, and one offered now comes from a reader of some rule
-     * that names it. Where the two describe one stop they describe it from different ends — the
-     * elements of a collection cannot be reached, and a comparison naming a position inside one
-     * cannot be turned into a line — and the first is the cause.
-     *
-     * <p>Load-bearing only since the structural reading began answering with reasons of its own.
-     * Before that it answered {@link Why.Absent} everywhere but the depth limit, so whatever a rule
-     * reader offered was what a report said, and a threshold on a list element was reported as a
-     * comparison this cannot read rather than as elements this cannot reach.
-     */
-    public UndividedPosition because(Reason reason) {
-        return why instanceof Why.Absent ? cannotDerive(at, reason) : this;
     }
 
     public boolean isAbsent() {

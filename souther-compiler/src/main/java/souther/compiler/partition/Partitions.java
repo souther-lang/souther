@@ -192,19 +192,10 @@ public final class Partitions {
     private static List<UndividedPosition> undividedIn(List<Measured> measured) {
         List<UndividedPosition> out = new ArrayList<>();
         for (Measured each : measured) {
-            Axis axis = each.axis();
-            if (axis.measurable()) {
-                continue;
+            PendingPosition pending = PendingPosition.of(each.axis());
+            if (pending != null) {
+                out.add(pending.complete(each.body()));
             }
-            if (axis.pending() instanceof StructuralInspection.Blocked blocked) {
-                out.add(UndividedPosition.cannotDerive(axis.path(),
-                        ReportedReason.of(blocked.why())));
-                continue;
-            }
-            out.add(each.body() instanceof BodyCutInspection.Blocked blocked
-                    ? UndividedPosition.cannotDerive(axis.path(),
-                            ReportedReason.of(blocked.why()))
-                    : UndividedPosition.absent(axis.path()));
         }
         return List.copyOf(out);
     }
