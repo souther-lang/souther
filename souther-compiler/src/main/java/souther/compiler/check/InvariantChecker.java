@@ -1321,21 +1321,34 @@ public final class InvariantChecker {
         };
     }
 
-    /** The first binding standing inside {@code e} at any depth, {@code e} itself excluded — it is
-     * the value being read, and a binding at its head is where the walk goes next. A closure's body
-     * is not looked into: it is read where the closure is applied, and what its parameter holds is
-     * decided there. */
+    /**
+     * The first binding standing inside {@code e}, or {@code null} where none stands there.
+     *
+     * <p>Where it looks is where the value is computed on the way to {@code e}'s own value, and it
+     * stops at every place that is not: a branch, an arm, a departure and a closure's body are each
+     * read with something entered that is not entered here — the condition that chose the branch,
+     * what the arm binds, what the attempt built, what the closure was applied to. A binding lifted
+     * out of one of those would be read where none of that holds, which is a construction read
+     * against fewer facts than the source wrote it under. Each of them is where the walk goes next,
+     * and what stands inside them is found again there, under what holds there.
+     */
     private static Core.LetIn bindingIn(Core e) {
-        if (e instanceof Core.Block) {
-            return null;
-        }
-        Core.LetIn[] found = new Core.LetIn[1];
-        Core.forEachChild(e, child -> {
-            if (found[0] == null) {
-                found[0] = child instanceof Core.LetIn li ? li : bindingIn(child);
+        return switch (e) {
+            case Core.Block b -> null;
+            case Core.LetIn li -> li;
+            case Core.If iff -> bindingIn(iff.cond());
+            case Core.IfConstructed ic -> bindingIn(ic.construct());
+            case Core.Match m -> bindingIn(m.scrutinee());
+            default -> {
+                Core.LetIn[] found = new Core.LetIn[1];
+                Core.forEachChild(e, child -> {
+                    if (found[0] == null) {
+                        found[0] = bindingIn(child);
+                    }
+                });
+                yield found[0];
             }
-        });
-        return found[0];
+        };
     }
 
     /**
