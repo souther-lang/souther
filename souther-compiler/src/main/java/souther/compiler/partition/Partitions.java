@@ -25,6 +25,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -748,22 +749,106 @@ public final class Partitions {
         if (type instanceof Type.ListOf || type instanceof Type.SetOf || type instanceof Type.MapOf) {
             return List.of(FixtureTemplate.emptyCollection());
         }
+        // Absence, which every optional holds. Answered here rather than through the classes below
+        // because what the classes say about `Some` is what stands for the element, and asking that
+        // while the element is being built is the element asking for itself.
+        if (type instanceof Type.OptionOf) {
+            return List.of(FixtureTemplate.none());
+        }
         List<PartitionClass> classes = PartitionClasses.of(type, symbols);
         for (PartitionClass each : classes) {
-            // Values, not a class that could produce one. A class whose values are composed has none
-            // to hand over here, and returning its empty list would say the type has no values.
-            if (each.generatable() && !each.representatives().candidates().isEmpty()) {
-                return each.representatives().candidates();
+            List<FixtureTemplate> stands = standingFor(each.representatives(), symbols, expanding);
+            if (!stands.isEmpty()) {
+                return stands;
             }
+        }
+        // Where there were classes, they have answered. Each said nothing can be produced for it and
+        // why, and reading that and then arriving at a value another way is this deciding the classes
+        // were wrong about themselves — the answer they carry is the one an author is shown.
+        if (!classes.isEmpty()) {
+            return List.of();
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
-        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
-                && data.newtype()) {
-            return insideTheNewtype(ref.name(), symbols, within, expanding).stream()
-                    .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
+        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data) {
+            return data.newtype()
+                    ? insideTheNewtype(ref.name(), symbols, within, expanding).stream()
+                            .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList()
+                    : composed(ref.name(), symbols, expanding);
         }
         return List.of();
+    }
+
+    /**
+     * The values a recipe arrives at, whichever way it arrives at them.
+     *
+     * <p>{@code Values} and {@code Compose} are two ways of writing where a representative comes
+     * from and not two answers about whether there is one, so a reader asking for one takes both
+     * here. Read as a reader's own two questions — is it generatable, and does it hold values — a
+     * class naming a constructor answered yes and then handed over nothing, and the position it
+     * stood at was reported as one no value can be written at (issue #651).
+     */
+    static List<FixtureTemplate> standingFor(RepresentativeSource source, Symbols symbols,
+                                             java.util.Set<TypeName> expanding) {
+        return switch (source.evaluate()) {
+            case RepresentativeSource.Evaluation.Values values -> values.written();
+            case RepresentativeSource.Evaluation.Compose compose ->
+                    composed(compose.through(), symbols, expanding).stream()
+                            .map(compose::written).toList();
+            case RepresentativeSource.Evaluation.NothingProducible _ -> List.of();
+        };
+    }
+
+    /**
+     * A record composed field by field, or nothing where one of its fields has nothing to stand for
+     * it.
+     *
+     * <p>{@code expanding} carries the names this is already inside the value of, so a record
+     * reached from its own field is given up on there rather than composed forever. Path-local: a
+     * name is in it only while the value under it is being built, so a type met twice in two
+     * branches is composed in both.
+     *
+     * <p>Each field is chosen against what the record's rules leave it, which is the reading
+     * {@link FieldDomains} makes of them: the range a clause leaves the value, and the floor a
+     * clause counting it puts on what it holds. Chosen from the field's type alone, a record whose
+     * rule asks its list for two is handed one holding none, and the row it was composed for comes
+     * back as one every value tried was refused at.
+     *
+     * <p>Nothing about the clauses relating two fields, which are read where a row is searched for
+     * one position at a time. Whether the values may be held together is the decoder's answer — the
+     * same answer every other candidate this offers is put through.
+     */
+    private static List<FixtureTemplate> composed(TypeName record, Symbols symbols,
+                                                  java.util.Set<TypeName> expanding) {
+        if (expanding.contains(record) || !(symbols.get(record) instanceof Ast.Data data)) {
+            return List.of();
+        }
+        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+        if (fields.isEmpty()) {
+            return List.of();   // a unit has no fields to compose, and is named rather than built
+        }
+        java.util.Set<TypeName> inside = new LinkedHashSet<>(expanding);
+        inside.add(record);
+        Map<String, Count> settled = new LinkedHashMap<>();
+        FieldDomains left = FieldDomains.of(record, data, symbols, settled);
+        Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
+        for (Map.Entry<String, Type> field : fields.entrySet()) {
+            List<FixtureTemplate> stands = representativesHolding(field.getValue(), symbols,
+                    left.at(field.getKey()), left.heldAt(field.getKey()), inside);
+            if (stands.isEmpty()) {
+                return List.of();
+            }
+            FixtureTemplate at = stands.get(0);
+            chosen.put(field.getKey(), at);
+            // Settled, and the rules read again with it in them. A field chosen against the rules as
+            // they stand before anything is settled is chosen against `a < b` with `a` still open,
+            // which leaves `b` its whole range and takes the bottom of it.
+            if (Counts.writtenIn(at.value()) instanceof Count count) {
+                settled.put(field.getKey(), count);
+                left = FieldDomains.of(record, data, symbols, settled);
+            }
+        }
+        return List.of(FixtureTemplate.record(record, chosen));
     }
 
     /**
@@ -869,15 +954,24 @@ public final class Partitions {
     static List<FixtureTemplate> representativesHolding(Type type, Symbols symbols,
                                                         NumericDomain.Bounds within,
                                                         FieldDomains.Held held) {
+        return representativesHolding(type, symbols, within, held, java.util.Set.of());
+    }
+
+    /** The same, with the names this is already inside the value of, for the same reason
+     *  {@link #representativesOf} carries them. */
+    static List<FixtureTemplate> representativesHolding(Type type, Symbols symbols,
+                                                        NumericDomain.Bounds within,
+                                                        FieldDomains.Held held,
+                                                        java.util.Set<TypeName> expanding) {
         List<FixtureTemplate> candidates = new ArrayList<>();
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
         // inside that newtype's own name.
         for (FixtureTemplate bare : Witnesses.holding(TypeOps.base(type, symbols),
-                leastHeld(type, symbols, held), symbols, java.util.Set.of())) {
+                leastHeld(type, symbols, held), symbols, expanding)) {
             candidates.add(Witnesses.wrapped(type, bare, symbols));
         }
-        candidates.addAll(representativesOf(type, symbols, within));
+        candidates.addAll(representativesOf(type, symbols, within, expanding));
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
         for (FixtureTemplate each : candidates) {
             once.putIfAbsent(each.text(), each);

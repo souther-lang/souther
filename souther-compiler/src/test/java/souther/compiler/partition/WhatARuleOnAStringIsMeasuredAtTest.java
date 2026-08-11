@@ -173,11 +173,11 @@ class WhatARuleOnAStringIsMeasuredAtTest {
         for (Axis axis : p.axes()) {
             for (PartitionClass each : axis.classes()) {
                 classes.add(each.label());
-                stands.add(each.generatable()
-                        ? each.representatives().candidates().stream()
-                                .map(FixtureTemplate::text).map(WhatARuleOnAStringIsMeasuredAtTest::bare)
-                                .toList().toString()
-                        : "none");
+                List<FixtureTemplate> made =
+                        Partitions.standingFor(each.representatives(), symbols, java.util.Set.of());
+                stands.add(made.isEmpty() ? "none"
+                        : made.stream().map(FixtureTemplate::text)
+                                .map(WhatARuleOnAStringIsMeasuredAtTest::bare).toList().toString());
             }
             Partitions.obligationsOf(axis, symbols, p.domains().get(axis.term()))
                     .forEach(o -> owed.add(o.side() + " " + o.target().right()));

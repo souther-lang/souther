@@ -35,11 +35,11 @@ import java.util.TreeSet;
  * assertion nobody made.
  *
  * <p>What it reports is not only the rows. A combination it could produce nothing for is said out loud,
- * with which of the four things happened — one of its classes has no values at all, nothing here
- * composed one of the values it has, every value tried was refused at construction, or the search
- * stopped before deciding. A generator that returned only the rows it managed would read as though the
- * rest were covered, and one that gave the same answer to all four would send an author looking for a
- * value that does not exist while a row they could write in a line went unwritten.
+ * with which of the four things happened — the body leaves no class open at some other position,
+ * nothing here composed a value, every value tried was refused at construction, or the search stopped
+ * before deciding. A generator that returned only the rows it managed would read as though the rest
+ * were covered, and one that gave the same answer to all four would send an author looking for a value
+ * that does not exist while a row they could write in a line went unwritten.
  */
 public final class Generator {
 
@@ -120,20 +120,26 @@ public final class Generator {
                                         Optional<String> said) {
 
         public enum Reason {
-            /** One of the classes has no value that can be written for it. */
-            NO_REPRESENTATIVE,
+            /**
+             * Every class at some other position is one the body says it does not answer for, so no
+             * row reaches this combination whatever is written there.
+             *
+             * <p>About the classes a row may be written at and not about the values of the position:
+             * each of those classes has values, and what refuses them is the body. Read as a
+             * position without values, an author is sent looking for a type that has none.
+             */
+            NO_CLASS_OPEN_AT_POSITION,
             /**
              * Nothing here knows how to compose a value of the shape asked for.
              *
-             * <p>Apart from {@code NO_REPRESENTATIVE}, which says the position has no values. This
-             * says the search has no way to write one — a collection of more elements than a row is
-             * worth carrying is the case — and that is a fact about this compiler rather than about
-             * the model. Told apart because the first licenses "no value can be written there" and
-             * this one does not: the edge may be the easiest row in the file to write by hand.
+             * <p>A fact about this compiler rather than about the model — a collection of more
+             * elements than a row is worth carrying is one case of it, and a position nothing built
+             * a value at is another. Which is why no sentence read off it says a value cannot be
+             * written: the row may be the easiest one in the file to write by hand.
              *
-             * <p>Which is why nothing decides this from the shape of the question. A reason read off
-             * the kind of term outlives whatever made it true, and says a value cannot be composed
-             * while the same generation composes one in the row above.
+             * <p>And why nothing decides this from the shape of the question. A reason read off the
+             * kind of term outlives whatever made it true, and says a value cannot be composed while
+             * the same generation composes one in the row above.
              */
             NOTHING_COMPOSES_ONE,
             /** Every value tried was refused at construction. */
@@ -287,7 +293,7 @@ public final class Generator {
                 pairs.remove(seed);
                 singles.remove(seed);
                 unresolved.add(new UnresolvedCombination(labels(axes, seed),
-                        UnresolvedCombination.Reason.NO_REPRESENTATIVE));
+                        UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION));
                 continue;
             }
             Attempt built = build(subject, axes, where, check);
@@ -338,10 +344,13 @@ public final class Generator {
         return switch (obligation.target()) {
             case BoundaryTarget.AtPlace place -> probeAt(subject, place, check);
             // A line between two positions is not at a count of its own, so the one to write is
-            // handed in. Reached only through `probeBetween`, which is where the caller has it.
-            case BoundaryTarget.EqualTerms line -> new BoundaryAttempt.Unresolved(
-                    new UnresolvedCombination(List.of(line.left() + " = " + line.right()),
-                            UnresolvedCombination.Reason.NO_REPRESENTATIVE));
+            // handed in, and `probeBetween` is where the caller has it. Asked here, the count is
+            // missing rather than absent — which is this compiler calling itself wrongly, and not
+            // something established about the model. Reported as a reason it would read as the
+            // second, and an author would be told a line they can write is one nothing reaches.
+            case BoundaryTarget.EqualTerms line -> throw new IllegalStateException(
+                    "line between " + line.left() + " and " + line.right()
+                            + " was requested without a count: ask `probeBetween`");
         };
     }
 
@@ -364,7 +373,7 @@ public final class Generator {
         if (on == null || against == null) {
             // What this has no way to write, and not a position with no values. The line may be the
             // easiest row in the file to write by hand — two strings of one length are — and
-            // `NO_REPRESENTATIVE` is the answer that licenses "no value can be written there".
+            // Nothing here says the edge cannot be written at: what ran is this compiler's search.
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
                     UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
         }
@@ -425,12 +434,13 @@ public final class Generator {
     /** A row at a line drawn at one count of one position. */
     private static BoundaryAttempt probeAt(Subject subject, BoundaryTarget.AtPlace place,
                                            CandidateCheck check) {
+        // The obligation was read off this subject's axes, so one it names is one this has. A
+        // subject without it is two structures that disagree, which is not a search result and has
+        // no reading in a report.
         Axis axis = subject.axes().stream().filter(a -> a.id().equals(place.axis())).findFirst()
-                .orElse(null);
-        if (axis == null) {
-            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(),
-                    UnresolvedCombination.Reason.NO_REPRESENTATIVE));
-        }
+                .orElseThrow(() -> new IllegalStateException(
+                        "boundary names axis " + place.axis() + ", which "
+                                + "this subject has no axis at"));
         String label = place.left() + " = " + place.right();
         Edge edge = edgeOf(axis, place.carrier(), place.at(), subject.symbols());
         if (edge.values().isEmpty()) {
@@ -712,9 +722,6 @@ public final class Generator {
                     return new Attempt(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
                             Optional.of(cannot.why()));
                 }
-                case RepresentativeSource.Evaluation.NothingProduced _ -> {
-                    return Attempt.no(UnresolvedCombination.Reason.NO_REPRESENTATIVE, at);
-                }
             }
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
@@ -763,35 +770,13 @@ public final class Generator {
         Map<String, Place> out = new LinkedHashMap<>();
         decided.forEach((path, candidates) -> {
             if (candidates.size() == 1) {
-                Place number = writtenNumber(candidates.get(0).value());
+                Place number = Counts.writtenIn(candidates.get(0).value());
                 if (number != null) {
                     out.put(path, number);
                 }
             }
         });
         return out;
-    }
-
-    /**
-     * The count a fixture settles its position at, reaching through the newtype it may be wrapped in,
-     * or null where it settles none.
-     *
-     * <p>Only a written number. A temporal fixture carries its text and not its count, and it stays
-     * unsettled here rather than being read back: what a settled position is for is asking the
-     * record's rules what is left beside it, and those rules are read over the positions the
-     * projection holds — which the temporal ones are not yet.
-     */
-    private static Place writtenNumber(Ast.Expr written) {
-        return switch (written) {
-            case Ast.IntLit i -> Count.of(i.value());
-            case Ast.DecimalLit d -> Count.of(d.value());
-            case Ast.Neg n -> {
-                Place inner = writtenNumber(n.operand());
-                yield inner == null ? null : Count.number(inner).negate();
-            }
-            case Ast.Apply a when a.args().size() == 1 -> writtenNumber(a.args().get(0));
-            case null, default -> null;
-        };
     }
 
     /** One parameter's value, with the positions the caller fixed already decided. */
@@ -804,7 +789,7 @@ public final class Generator {
                 TermPath.of(subject.parameters().get(p)), subject.symbols(), decided, settled,
                 recipes);
         if (choices.missingAt() != null) {
-            return new Outcome(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
+            return new Outcome(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
                     choices.missingAt());
         }
         Outcome product = walk(subject, p, choices, recipes, check);
@@ -964,7 +949,7 @@ public final class Generator {
         Position position = positions.get(index);
         for (FixtureTemplate candidate : candidatesAt(subject, p, position, settled, decided)) {
             chosen.put(position.path(), candidate);
-            Place number = writtenNumber(candidate.value());
+            Place number = Counts.writtenIn(candidate.value());
             if (number != null) {
                 settled.put(position.path(), number);
             }

@@ -330,7 +330,7 @@ final class Witnesses {
                                                           Set<TypeName> expanding) {
         Set<String> written = new LinkedHashSet<>();
         List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : dividesInto(type, symbols)) {
+        for (FixtureTemplate each : dividesInto(type, symbols, expanding)) {
             if (out.size() >= many) {
                 return List.copyOf(out);
             }
@@ -368,12 +368,11 @@ final class Witnesses {
      * into was written here as well, and the two could differ about how far to look. The reading
      * goes through the names now and hands the values back written under them.
      */
-    private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols) {
+    private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols,
+                                                     Set<TypeName> expanding) {
         List<FixtureTemplate> out = new ArrayList<>();
         for (PartitionClass each : PartitionClasses.of(type, symbols)) {
-            if (each.generatable()) {
-                out.addAll(each.representatives().candidates());
-            }
+            out.addAll(Partitions.standingFor(each.representatives(), symbols, expanding));
         }
         return out;
     }

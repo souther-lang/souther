@@ -771,8 +771,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private static String whyUnresolved(souther.compiler.partition.Generator.UnresolvedCombination why) {
         String at = why.subject();
         return switch (why.reason()) {
-            case NO_REPRESENTATIVE -> "no value stands for " + at;
-            case NOTHING_COMPOSES_ONE -> "nothing here composes a value at " + at;
+            case NO_CLASS_OPEN_AT_POSITION -> "the body leaves no class open at " + at;
+            case NOTHING_COMPOSES_ONE -> "nothing here could build a representative for " + at;
             case ALL_CANDIDATES_REJECTED -> "every value tried at " + at + " was refused";
             case SEARCH_LIMIT -> "the search stopped before reaching " + at;
             case NOTHING_TO_BUILD_AGAINST -> "there was nothing to build a candidate against";
