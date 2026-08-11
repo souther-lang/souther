@@ -1334,6 +1334,24 @@ let build (rows) = {
 
 A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a behavior answered — is not a term, and a clause needing it is left to the run-time check.
 
+Beyond those, a term is any number the procedure can name by what computes it. `+List.sum(xs)+` is a term, and so is `+a * b+`, which the arithmetic below does not read. Naming a value says that two writings of it are one value, and says nothing else: nothing follows from `+List.sum+` being a sum, and nothing has to. A `+guard List.sum(xs) >= bill+` states a relation about that value, `+List.sum(xs) - bill+` is arithmetic over it, and the two meet because both mentions of the call are the same value. A term exists before anything is said about it, so the first guard to mention one states what it states, exactly as a later one does.
+
+[,souther]
+----
+data NonNeg = Int
+    invariant value >= 0
+data Fine
+
+behavior settle : (xs: List<Int>, bill: Int) -> NonNeg | Fine
+    constructs NonNeg, Fine
+let settle (xs, bill) = {
+    guard List.sum(xs) >= bill else Fine
+    NonNeg(List.sum(xs) - bill) // discharged: the guard is about this value
+}
+----
+
+A value the procedure cannot name all the way down is not a term. What a behavior answered is named by nothing, so neither is a size taken of it nor arithmetic over it. A value that is not a number the procedure carries is not a term either, unless a guard on the path states something about it — a string a call handed back is named by nothing a clause could be read against, and a construction from one is left to the run-time check.
+
 [,souther]
 ----
 data Q = Int
@@ -1356,7 +1374,7 @@ behavior total : (xs: List<Held>) -> Q
 let total (xs) = List.fold((acc, i) -> acc + i.q, Q(0), xs) // discharged: both are Q
 ----
 
-A binding given a location *is* that location, so `+let c = cart+` makes `+c.quantity+` the term `+cart.quantity+`. A helper is expanded by binding each argument and reading the parameter through that binding (<<invariant-discharge-representation>>), which is why a construction moved into a helper still reads the terms the caller's guards and input types settled. A binding given anything else is a term of its own; where what it was given is arithmetic over terms the procedure names the two are related, and otherwise nothing about it follows.
+A binding given a location *is* that location, so `+let c = cart+` makes `+c.quantity+` the term `+cart.quantity+`. A helper is expanded by binding each argument and reading the parameter through that binding (<<invariant-discharge-representation>>), which is why a construction moved into a helper still reads the terms the caller's guards and input types settled. A binding given anything else is the term that expression is, so a name and the expression it was given are read alike: a guard about either states the same thing about the same value, and a construction from either owes the same clauses.
 
 [,souther]
 ----
@@ -2869,7 +2887,7 @@ A type says the classes. `+Bool+` is two; an optional is `+None+` and `+Some+`; 
 
 A threshold says where one class ends and the next begins. A `+guard+` comparing an input against a constant (<<guard>>) divides the position, because both sides of that comparison hold values a row can write. A `+guard+` comparing one input against another divides neither of them and still draws a line (<<a-comparison-of-two-positions-draws-a-line-between-them>>). Thresholds at one position merge into one partition, intersected with what the position admits: an invariant of `+x >= 0+` and a guard of `+x < 10+` divide the position into `+0 <= x < 10+` and `+10 <= x+`, and nothing below zero, because nothing below zero can be constructed.
 
-[[a-boundary-is-drawn-on-a-term]]*What a line is drawn on is a term's value, which is not always a position — and being ordered is what such a value must be rather than what makes it one (<<a-line-is-drawn-where-the-values-can-carry-one>>).* The terms are the ones the discharge procedure names (<<invariant-discharge-terms>>): the content of a location, and the size of a container or a string taken of one — `+List.length+`, `+String.length+`, `+Set.size+`, `+Map.size+`. So `+data Name = String invariant String.length(value) > 0+` draws a line at a length of 1, and a `+guard String.length(t.name.value) > 3+` draws one at 3 with a 4 beside it, exactly as a bound and a guard on a number do. A line is named by the term it is drawn on — `+String.length(t.name) = 1+` — and an invariant and a guard mean the same line when they take the same measure of the same location. A size is a whole number and is never negative, and neither has to be written down: no row is asked for at a length below zero however the rules about it are phrased.
+[[boundary-coordinates]]*What a line is drawn on is a boundary coordinate, which is not always a position — and being ordered is what such a value must be rather than what makes it one (<<a-line-is-drawn-where-the-values-can-carry-one>>).* A coordinate is the content of a location — a parameter, a field chain, a newtype's wrapped value — or the size of a container or a string taken of one: `+List.length+`, `+String.length+`, `+Set.size+`, `+Map.size+`. Which values divide an input space is its own question, and this states the answer rather than borrowing one: a value some other reading of the model can point at is not thereby an axis rows are asked to cover. So `+data Name = String invariant String.length(value) > 0+` draws a line at a length of 1, and a `+guard String.length(t.name.value) > 3+` draws one at 3 with a 4 beside it, exactly as a bound and a guard on a number do. A line is named by the coordinate it is drawn on — `+String.length(t.name) = 1+` — and an invariant and a guard mean the same line when they take the same measure of the same location. A size is a whole number and is never negative, and neither has to be written down: no row is asked for at a length below zero however the rules about it are phrased.
 
 A position whose values no rule measures still has no classes. A `+String+` nothing says anything about is *not derivable* and is named by the position, not by a length nobody wrote a rule about.
 
@@ -2948,7 +2966,7 @@ A function written where a call takes one is made there and run elsewhere. Evalu
 
 *What the rows establish about a case.* `+specified+` — a row expects this case; `+observed+` — the behavior was seen to answer with it; `+verified+` — a row expected it and the behavior produced it. An input position carries `+executed+` where an output carries `+observed+` (<<example-adequacy>>).
 
-*What the rows reach of the model's own distinctions.* `+partition axes+` is how many positions the model divides at all; `+single-axis+` is how many of those positions' classes some row is in; `+pairs+` counts combinations across two positions, as counts rather than a ratio (<<example-partition>>). `+boundary+` is the lines some rule drew that a row is at, each named by the term it was drawn on (<<a-boundary-is-drawn-on-a-term>>). `+not derivable+` is a position the model draws no line through, which is a fact about the model and not a gap in the rows.
+*What the rows reach of the model's own distinctions.* `+partition axes+` is how many positions the model divides at all; `+single-axis+` is how many of those positions' classes some row is in; `+pairs+` counts combinations across two positions, as counts rather than a ratio (<<example-partition>>). `+boundary+` is the lines some rule drew that a row is at, each named by the coordinate it was drawn on (<<boundary-coordinates>>). `+not derivable+` is a position the model draws no line through, which is a fact about the model and not a gap in the rows.
 
 *Whether a measure has a number.* Three states, and the report's own word for each. `+complete+` — the measure was made and everything it reads was readable, so a gap is a gap. `+partial+` — it was made and something it reads was not, so it shows what it saw and what it could not decide; a line under a partial measure reads `+undecided+`, which is that measure's account of one thing rather than a state of its own. `+unavailable+` — there is no number.
 

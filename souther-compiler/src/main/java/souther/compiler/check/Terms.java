@@ -33,9 +33,14 @@ import java.util.Set;
  * <p>Three answers, and they are not the same question. Where a value is, is a {@link Location} and
  * is what the seeding writes about. What a value is called, is a key: two expressions with one key
  * compute one value, which is the whole of what the fact set knows. What can be said of a value, is
- * whether a clause read against it could ever be discharged — a location always can, a computed value
- * only where a rule or a guard reaches it — and it is what decides whether a construction is reported
- * at all.
+ * whether a clause read against it could ever be discharged — a location always can, and so does a
+ * number this grammar names, whatever computes it; a value of another kind only where a rule or a
+ * guard reaches it — and it is what decides whether a construction is reported at all.
+ *
+ * <p>The middle question does not wait on the third. A value is called something because it can be
+ * pointed at, and what is known of it is a separate matter that may well be nothing. Deciding the
+ * one by the other is circular where it matters most: the first guard about a value would be read
+ * under a naming that guard is what establishes.
  */
 final class Terms {
 
@@ -82,10 +87,19 @@ final class Terms {
         return e;
     }
 
-    /** The affine walk: literals and {@code +}/{@code -} compose; every other node is handed to
+    /**
+     * The affine walk: literals and {@code +}/{@code -} compose; every other node is handed to
      * {@code leaf} (which decides whether it is an atom, a location, or opaque). It takes the leaf
      * rule rather than fixing one because a binding it reads through answers with what that binding
-     * was given. */
+     * was given.
+     *
+     * <p>A node this has a rule for and cannot compose is handed to {@code leaf} as well. Reading the
+     * structure of a value and naming the value are two questions: a variable product is outside the
+     * fragment, and it is still one value, so what a guard states of it is still about the thing the
+     * clause reads. Answering the first question with {@code null} and never asking the second is
+     * what made {@code a * b} name nothing where it is written and something where it is bound —
+     * which is a name changing what can be said of an expression.
+     */
     LinearForm affine(Core raw, java.util.function.Function<Core, LinearForm> leaf) {
         Core e = asOperator(raw);
         if (e instanceof Core.PreservedCall) {
@@ -98,6 +112,13 @@ final class Terms {
                 return LinearForm.constant(folded);
             }
         }
+        LinearForm composed = composed(e, leaf);
+        return composed != null ? composed : leaf.apply(e);
+    }
+
+    /** {@code e} read as arithmetic over what {@code leaf} answers, or {@code null} where this has no
+     * rule for it or the rule it has does not compose. */
+    private LinearForm composed(Core e, java.util.function.Function<Core, LinearForm> leaf) {
         return switch (e) {
             case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Core.Decimal d -> LinearForm.constant(d.value());
@@ -107,7 +128,8 @@ final class Terms {
             case Core.Binary b when b.op() == Ast.BinOp.SUB ->
                     add(affine(b.left(), leaf), affine(b.right(), leaf), true);
             // scalar multiply by a constant (Amount * 2) is linear; `/` and a variable product are not
-            // (a divide truncates for Int, and a variable factor is non-linear), so leave those opaque.
+            // (a divide truncates for Int, and a variable factor is non-linear), so those come back
+            // here as one value rather than as arithmetic over two.
             case Core.Binary b when b.op() == Ast.BinOp.MUL ->
                     scale(affine(b.left(), leaf), affine(b.right(), leaf));
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what an
@@ -115,11 +137,11 @@ final class Terms {
             // wrote.
             case Core.LetIn li -> {
                 LinearForm bound = affine(li.value(), leaf);
-                yield bound == null ? leaf.apply(e) : affine(li.body(),
+                yield bound == null ? null : affine(li.body(),
                         n -> n instanceof Core.Read r && r.binding().equals(li.binder().id())
                                 ? bound : leaf.apply(n));
             }
-            default -> leaf.apply(e);
+            default -> null;
         };
     }
 
@@ -177,7 +199,7 @@ final class Terms {
             if (given != null) {
                 return given;
             }
-            String atom = atomOf(n, at, k);
+            String atom = atomOf(n, at);
             return atom == null ? null : LinearForm.atom(atom);
         });
     }
@@ -237,9 +259,20 @@ final class Terms {
         return subtract ? a.minus(b) : a.plus(b);
     }
 
-    /** The canonical atom key of a numeric location ({@code x}, {@code p.a}, a newtype's value) or of
-     * a size call over a nameable container, or {@code null} if {@code e} is neither. */
-    String atomOf(Core e, Denotations at, Known k) {
+    /**
+     * The canonical atom key of a numeric value: a location ({@code x}, {@code p.a}, a newtype's
+     * value), a size call over a nameable container, or anything else {@link #termKey} names — and
+     * {@code null} where the value is not a number the domain carries, or where the term grammar
+     * names it nothing. A call the representation did not keep standing is the second of those: what
+     * a behavior answered is outside that grammar, so it is no more an atom than it was.
+     *
+     * <p>An atom exists because a value can be pointed at, not because anything is known of it. Two
+     * writings of one value are one atom and so one unknown, which is the whole of what an atom
+     * asserts; what is known of it is what a guard states and nothing else. Requiring something to
+     * have been said before a value could be an atom made the first guard about a value the one that
+     * could not be read, since it was read to decide whether that value had a name at all.
+     */
+    String atomOf(Core e, Denotations at) {
         String size = sizeAtomOf(e, arg -> bodyKey(arg, at));
         if (size != null) {
             return size;
@@ -247,14 +280,7 @@ final class Terms {
         if (affineScalarBase(e.type()) == null) {
             return null;
         }
-        // A path rooted at a binding is the atom of what that binding denotes, and only where a clause
-        // could be read against it — otherwise a name would be an atom where the expression it was
-        // given is not one, and the two spellings would answer differently.
-        BindingId root = rootBinding(e);
-        if (root != null && !readable(at.of(root), k)) {
-            return null;
-        }
-        return named(pathKey(e, at), granularityOf(e.type()));
+        return named(bodyKey(e, at), granularityOf(e.type()));
     }
 
     /** {@link #sizeAtom}, with the atom it names recorded as a whole number. A size counts elements,
@@ -282,14 +308,32 @@ final class Terms {
         return name;
     }
 
-    /** {@code key}, with how its values are spaced recorded against it. */
+    /**
+     * One name this gave two kinds of number.
+     *
+     * <p>Apart from everything else the check can fall over on, and for a reason. Those are shapes it
+     * has no rule for, and answering them with silence is what fail-open means. This is the check
+     * disagreeing with itself about one of its own names: two writings it called one value are not
+     * one value, so every relation recorded under that name relates the wrong things. Swallowed, it
+     * produces a body with no findings, which is what a body with nothing to report produces.
+     */
+    static final class OneKeyTwoKinds extends IllegalStateException {
+
+        OneKeyTwoKinds(String message) {
+            super(message);
+        }
+    }
+
+    /** {@code key}, with how its values are spaced recorded against it. A key is what a value is
+     * called and a kind is what the value is, so one key is one kind: two would mean this named two
+     * values alike, and everything recorded under the name would be about neither of them. */
     private String named(String key, Granularity g) {
         if (key == null) {
             return null;
         }
         Granularity had = atomKinds.putIfAbsent(key, g);
         if (had != null && had != g) {
-            throw new IllegalStateException("atom `" + key + "` is " + had + " and " + g);
+            throw new OneKeyTwoKinds("atom `" + key + "` is " + had + " and " + g);
         }
         return key;
     }
@@ -345,17 +389,18 @@ final class Terms {
      * itself, and a container built from one by an operation the table covers names that
      * construction. Anything else names nothing.
      *
-     * <p>The restriction is what ties the flagging to what is said. A location is always named: the
-     * seeding writes about locations, so a clause reading one reads something. A container built by an
-     * operation the table covers is named, since the table is a rule about it. A computed value is
-     * named only where a guard on this path spoke about it — then, and only then, the author has
-     * stated something the clause can be read against, and leaving the construction unreported would
-     * be dropping what they said.
+     * <p>What is named. A location is: the seeding writes about locations, so a clause reading one
+     * reads something. A container built by an operation the table covers is, since the table is a
+     * rule about it. A number the term grammar names is, whatever computes it — the domain carries
+     * it, and a clause reading it reads an unknown the guards may or may not have settled. A number
+     * that grammar names nothing, such as what a behavior answered, is not. A value of any other kind
+     * is named
+     * only where a guard on this path spoke about it, since a clause reading it has otherwise nothing
+     * to be read against.
      *
-     * <p>A computed value nothing has spoken about is named by nothing, and its construction is
-     * silent. That is this check's flagging policy and not a proof: the run-time check stands for the
-     * whole of such an invariant. Widening it is a matter of naming more values here, which is where
-     * a stated result type or a stdlib rule would enter.
+     * <p>What is not named is not thereby discharged. Its construction is silent, and the silence is
+     * this check's flagging policy rather than a proof: the run-time check stands for the whole of
+     * such an invariant. Widening it is a matter of naming more values here.
      */
     String siteKey(Core e, Denotations at, Known k) {
         // A value written out is not something a guard can be written about: there is nothing to
