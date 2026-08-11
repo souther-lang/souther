@@ -77,6 +77,21 @@ public record UndividedPosition(TermPath at, Why why) {
 
     /** The same position, with a reason where it had none. A position already carrying one keeps it:
      * what stopped the walk first is what a reader has to lift first. */
+    /**
+     * The same position with {@code reason} where nothing has been said yet, and unchanged where
+     * something has.
+     *
+     * <p>Fills rather than replaces, and that is a precedence: a reason already here came from the
+     * reading that stopped at this position, and one offered now comes from a reader of some rule
+     * that names it. Where the two describe one stop they describe it from different ends — the
+     * elements of a collection cannot be reached, and a comparison naming a position inside one
+     * cannot be turned into a line — and the first is the cause.
+     *
+     * <p>Load-bearing only since the structural reading began answering with reasons of its own.
+     * Before that it answered {@link Why.Absent} everywhere but the depth limit, so whatever a rule
+     * reader offered was what a report said, and a threshold on a list element was reported as a
+     * comparison this cannot read rather than as elements this cannot reach.
+     */
     public UndividedPosition because(Reason reason) {
         return why instanceof Why.Absent ? cannotDerive(at, reason) : this;
     }
