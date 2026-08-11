@@ -26,8 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code 0} while nothing had ever been evaluated at the line each rule turns on.
  *
  * <p>Which positions those are is asked of the carrier and not of the type. Two operands compare only
- * when they are of one type, and a type is not what makes a line measurable: a {@code String} is
- * ordered and has no count to embed into, so it draws no line of this kind until it has a carrier.
+ * when they are of one type, and a type is not what makes a line measurable: two newtypes of one base
+ * are two types ordered alike and have a line, while two positions each declared as one case of an
+ * enumeration are comparable on their sum's order, range over less than it, and have none.
  */
 class ALineBetweenTwoPositionsIsStillALineTest {
 
@@ -175,6 +176,33 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                 | "over" : ("mmm", "b") -> Yes { s = "mmm" }
                 | "under" : ("b", "mmm") -> No
             """;
+
+    /** Two fields of one record whose rule leaves the line between them no value at all. Each field's
+     *  own range runs everywhere the other's does; no pair on the diagonal is in either. */
+    private static final String RULED_OUT_BY_THE_RECORD = """
+            module example.jointneg
+
+            data Pair = { a: Int, b: Int }
+                invariant a < b
+
+            data No
+            data Yes
+            data Result = No | Yes
+
+            behavior cmp : (p: Pair) -> Result
+                constructs No, Yes
+            let cmp (p) = {
+                guard p.a > p.b else No
+                Yes
+            }
+
+            example cmp
+                | "under" : (Pair { a = 1, b = 5 }) -> No
+            """;
+
+    /** The same record one character apart, whose rule does admit the diagonal. */
+    private static final String ALLOWED_BY_THE_RECORD =
+            RULED_OUT_BY_THE_RECORD.replace("invariant a < b", "invariant a <= b");
 
     /** An expression on one side, which names no position a row can be written at. */
     private static final String NOT_A_TERM = """
@@ -379,6 +407,38 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         assertTrue(report.contains("no row is at cmp/String.length(a) = String.length(b)"), report);
         assertTrue(rows.contains("nothing here composes a value at that edge"), rows);
         assertTrue(rows.contains("does not make the edge unwritable"), rows);
+    }
+
+    /**
+     * Two ranges overlapping is not two positions holding one value.
+     *
+     * <p>A place in both ranges is one each position admits on its own, and a rule relating them can
+     * refuse the pair each half would have taken. Under {@code invariant a < b} the two ranges run
+     * over each other everywhere and the diagonal holds nothing, so a projection read as a proof asks
+     * for a row that cannot exist — and {@code --strict} refuses a model for not writing it.
+     */
+    @Test
+    void aRuleRelatingTheTwoPositionsIsNotAnsweredByTheirRangesOverlapping() {
+        String report = report(RULED_OUT_BY_THE_RECORD);
+
+        assertFalse(report.contains("no row is at cmp/p.a = p.b"),
+                "the line holds no value, so no row is owed at it:\n" + report);
+        assertTrue(report.contains("not known to be writable: cmp/p.a = p.b"), report);
+    }
+
+    /**
+     * And the same rule one character apart does owe the row.
+     *
+     * <p>The pair to the case above. Without it, refusing every line under a record that relates its
+     * fields would pass just as well, and that would drop the rows the model does owe wherever an
+     * author wrote a rule of any kind.
+     */
+    @Test
+    void aRuleThatAdmitsTheDiagonalStillOwesTheRow() {
+        String report = report(ALLOWED_BY_THE_RECORD);
+
+        assertTrue(report.contains("no row is at cmp/p.a = p.b"), report);
+        assertTrue(report.contains("boundary    0/1"), report);
     }
 
     private static String report(String model) {

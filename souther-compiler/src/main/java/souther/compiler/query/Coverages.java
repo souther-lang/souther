@@ -441,22 +441,45 @@ final class Coverages {
                     ? new BoundaryAssessment.Coverage.NotMeasured(absent)
                     : verdictOf(heldBetween(line, parameters, rows,
                             (OriginRef.GuardOrigin) each.origin()), true, observed);
-            // A place both positions admit is what a row on the line writes. Read once: it is what
-            // says the line can be written on at all, and it is what a candidate would be built at.
+            // A place both positions admit is what a row on the line writes. Read once: it is what a
+            // candidate is built at, and what proves the line writable where the two are independent.
             Place at = Partitions.commonPlace(partitioning.domains(), line);
             BoundaryAssessment.Attempt attempt = attemptBetween(line, at, coverage, probe);
-            // Proven rather than searched for, where every rule about both positions was read. A
-            // count that exists under rules this read in full is one a row can carry, so no candidate
-            // has to be built for the line to be counted.
-            boolean known = at != null
-                    && partitioning.edgeIsKnownWritable(line.on())
-                    && partitioning.edgeIsKnownWritable(line.against());
             out.merge(new Line(each.side(), each.target(), each.origin().line()),
                     new BoundaryAssessment(each, coverage,
-                            writabilityOf(coverage, known, attempt), attempt),
+                            writabilityOf(coverage, provenWritable(partitioning, line, at), attempt),
+                            attempt),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
+    }
+
+    /**
+     * Whether the rules alone prove a row can be written on a line between two positions.
+     *
+     * <p>Two ranges overlapping is not two positions holding one value. A place in both is a place
+     * each of them admits *on its own*, and a rule relating them can refuse the pair that each half
+     * would have taken: under {@code data Pair = { a: Int, b: Int } invariant a < b} the ranges of
+     * {@code a} and {@code b} overlap everywhere and the line {@code a = b} has no value at all.
+     * Projecting a range and completing an assignment are two questions of one rule set, which is why
+     * {@link souther.compiler.check.FieldDomains} asks the second with the first already settled.
+     *
+     * <p>So the projection proves this only where no rule can relate the two: two positions under
+     * different parameters. A behavior's parameters are constructed one at a time and a model has no
+     * way to write a rule across them, so a value each admits is a pair both admit. Under one
+     * parameter that does not hold, and what settles the line there is a witness — a row already on
+     * it, or a value the module's own decoder took, which is the one thing here that answers whether
+     * a rule relating two fields accepts the pair.
+     *
+     * <p>Not a claim that such a line cannot be written. Nothing is counted for want of a proof, and
+     * the line is reported as one nothing has promised — which is what any other unpromised edge gets.
+     */
+    private static boolean provenWritable(Partitions.Partitioning partitioning,
+                                          BoundaryTarget.EqualTerms line, Place at) {
+        boolean independent = !line.on().path().head().equals(line.against().path().head());
+        return at != null && independent
+                && partitioning.edgeIsKnownWritable(line.on())
+                && partitioning.edgeIsKnownWritable(line.against());
     }
 
     /** What building a row on a line between two positions came to, where one was worth building. */
