@@ -101,9 +101,9 @@ final class ValueMatch {
         // answer for every reader of it. A row writing `1` where a `Decimal` came out wrote an `Int`
         // — the difference is written in the language, and reading a whole number as an amount is
         // what a boundary does and not what a row did.
-        String stated = ValueRendering.primitiveNamed(v);
-        String answered = ValueRendering.primitiveNamed(o);
-        if (stated == null || answered == null || !stated.equals(answered)) {
+        Type.Prim stated = ValueRendering.primitiveOf(v);
+        Type.Prim answered = ValueRendering.primitiveOf(o);
+        if (stated == null || stated != answered) {
             return v instanceof ObservedValue.Unit x && o instanceof ObservedValue.Unit y
                     && x.type().equals(y.type())
                     ? null : new Mismatch(path, Reason.TYPE, a, o, position);

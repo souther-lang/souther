@@ -728,7 +728,7 @@ public final class FixtureReader {
      *  is why it is not asked of a decoder: one reads a whole number where a `Decimal` stands, and a
      *  row writing `1` there wrote an `Int`. */
     private static boolean spells(ObservedValue v, TypeName name) {
-        return name.name().equals(ValueRendering.primitiveNamed(v));
+        return name.primitiveKind() != null && name.primitiveKind() == ValueRendering.primitiveOf(v);
     }
 
     private boolean each(List<Asserted> elements, Type element) {

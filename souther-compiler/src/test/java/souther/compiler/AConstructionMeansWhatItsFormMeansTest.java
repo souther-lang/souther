@@ -39,7 +39,8 @@ class AConstructionMeansWhatItsFormMeansTest {
                 invariant from <= to
             data Priced = { at: Decimal }
                 invariant at > 0m
-            data Stamped = { at: DateTime }
+            data Stamped = { from: DateTime, to: DateTime }
+                invariant from <= to
             data Boxed = { held: AmountN? }
             data Receipt = { total: AmountN }
             data Held = { total: AmountN, note: String? }
@@ -83,7 +84,8 @@ class AConstructionMeansWhatItsFormMeansTest {
 
             behavior stampedOf : (n: Int) -> Stamped
                 constructs Stamped
-            let stampedOf (n) = Stamped { at = DateTime("2026-07-20T09:00") }
+            let stampedOf (n) = Stamped { from = DateTime("2026-07-20T09:00"),
+                to = DateTime("2026-07-21T09:00") }
 
             behavior positiveOf : (n: Int) -> Positive
                 constructs Positive
@@ -337,16 +339,27 @@ class AConstructionMeansWhatItsFormMeansTest {
 
     @Test
     void oneTemporalIsNotAnother() {
-        // `Date` and `DateTime` were one written form to this reading, so a row could write either
-        // where the other stands.
+        // The four temporals were one written form to this reading, so a row could write any of them
+        // where another stands. `Stamped` carries an invariant so the gate in front of it is the one
+        // being asked: reading a `Date` as a value of a `DateTime` field is what would put it through
+        // that field's decoder and report the row for a rule about a value it never wrote.
         holds("""
                 example stampedOf
-                    | (1) -> Stamped { at = DateTime("2026-07-20T09:00") }
+                    | (1) -> Stamped { from = DateTime("2026-07-20T09:00"),
+                        to = DateTime("2026-07-21T09:00") }
                 """);
-        doesNotHold("""
+        Diagnostic d = only("""
                 example stampedOf
-                    | (1) -> Stamped { at = Date("2026-07-20") }
+                    | (1) -> Stamped { from = Date("2026-07-20"),
+                        to = DateTime("2026-07-21T09:00") }
                 """);
+        assertEquals("E1905", d.code(), d.said().toString());
+        assertTrue(d.notes().stream().anyMatch(note ->
+                        note.said() instanceof ExampleMessage.TheTwoAreOfDifferentTypes(
+                                String at, String stated, String answered)
+                                && at.equals("$.from") && stated.equals("Date")
+                                && answered.equals("DateTime")),
+                "which two temporals it is between: " + d.notes());
     }
 
     @Test

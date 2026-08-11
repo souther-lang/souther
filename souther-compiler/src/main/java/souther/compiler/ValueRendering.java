@@ -116,7 +116,7 @@ final class ValueRendering {
             case ObservedValue.Text t -> "\"" + t.value() + "\"";
             // Written as the construction a fixture writes one with, so it is never read as the text
             // that spells it — which is the difference a row writing a date as a string is told about.
-            case ObservedValue.Temporal t -> primitiveNamed(t) + "(\"" + t.iso() + "\")";
+            case ObservedValue.Temporal t -> primitiveOf(t).shown() + "(\"" + t.iso() + "\")";
             case ObservedValue.Unit u -> u.type().name();
             case ObservedValue.Absent _ -> "None";
             case ObservedValue.Constructed c -> constructed(c);
@@ -173,18 +173,19 @@ final class ValueRendering {
      * <p>A temporal is which one its text spells. An observation keeps the ISO form rather than the
      * class it arrived in, and the four spell themselves apart.
      */
-    static String primitiveNamed(ObservedValue v) {
+    static Type.Prim primitiveOf(ObservedValue v) {
         return switch (v) {
-            case ObservedValue.Bool _ -> "Bool";
-            case ObservedValue.Integer _ -> "Int";
-            case ObservedValue.Decimal _ -> "Decimal";
-            case ObservedValue.Text _ -> "String";
+            case ObservedValue.Bool _ -> Type.Prim.BOOL;
+            case ObservedValue.Integer _ -> Type.Prim.INT;
+            case ObservedValue.Decimal _ -> Type.Prim.DECIMAL;
+            case ObservedValue.Text _ -> Type.Prim.STRING;
             case ObservedValue.Temporal t -> {
                 String iso = t.iso();
                 if (iso.endsWith("Z")) {
-                    yield "Instant";
+                    yield Type.Prim.INSTANT;
                 }
-                yield iso.contains("T") ? "DateTime" : iso.contains("-") ? "Date" : "Time";
+                yield iso.contains("T") ? Type.Prim.DATETIME
+                        : iso.contains("-") ? Type.Prim.DATE : Type.Prim.TIME;
             }
             case ObservedValue.Unit _, ObservedValue.Constructed _, ObservedValue.Absent _,
                     ObservedValue.Sequence _, ObservedValue.Mapping _, ObservedValue.Unknown _,
@@ -197,9 +198,9 @@ final class ValueRendering {
      * differ by their type rather than by their contents.
      */
     String typeShown(ObservedValue v) {
-        String primitive = primitiveNamed(v);
+        Type.Prim primitive = primitiveOf(v);
         if (primitive != null) {
-            return primitive;
+            return primitive.shown();   // the one table a primitive is spelled from
         }
         return switch (v) {
             case ObservedValue.Unit u -> u.type().name();
