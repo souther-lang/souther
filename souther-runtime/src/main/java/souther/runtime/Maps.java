@@ -147,27 +147,34 @@ public final class Maps {
     }
 
     /** {@code m} with every key rewritten by {@code keyFn}, values unchanged.
-     *  The encoder uses it to render a {@code Map<商品ID, V>}'s keys bare (each key's {@code value})
-     *  before the boundary map encoder writes a {@code String}-keyed object.
+     *  The encoder uses it to render a boundary map's keys as the text they cross as, before the
+     *  map encoder writes a {@code String}-keyed object.
+     *
+     *  <p>A rendered key is a {@code String} — that is what makes a type a boundary map key at all
+     *  (ADR-0040) — so this says so and casts. {@code keyFn} comes from an encoder, which is typed
+     *  to its own external form and not to the key position, so the fact is not in its type and has
+     *  to be held here. A renderer that writes something else fails at the key it wrote, rather than
+     *  reaching {@link Representations#sortedObject} as an object with a key nothing can name.
      *
      *  <p>The result is a fresh trie indexed by the rendered keys, so it is not walked in the source
      *  map's order — a newtype key hashes as the newtype and the string it renders to hashes as a
      *  string, which are different indexes. It is not walked in the written order either: what the
      *  boundary writes is settled after this, by {@link Representations#sortedObject}. This step is
      *  about which keys the object has, not about the order they come out in. */
-    public static <K, V> Map<Object, V> mapKeys(Map<K, V> m, java.util.function.Function<K, ?> keyFn) {
-        PersistentHashMap.Builder<Object, V> out = new PersistentHashMap.Builder<>();
+    public static <K, V> Map<String, V> mapKeys(Map<K, V> m, java.util.function.Function<K, ?> keyFn) {
+        PersistentHashMap.Builder<String, V> out = new PersistentHashMap.Builder<>();
         for (Map.Entry<K, V> e : m.entrySet()) {
-            out.set(keyFn.apply(e.getKey()), e.getValue());
+            out.set((String) keyFn.apply(e.getKey()), e.getValue());
         }
         return out.build();
     }
 
     /** {@link #mapKeys} with the key function first, so a lambda can capture it and take the map per
-     *  call. A nested {@code Map<商品ID, V>} — one inside a list or another map — is encoded by a
-     *  single element encoder reused for every occurrence, which therefore has to hold the key
-     *  function rather than receive it alongside each map. */
-    public static <K, V> Map<Object, V> mapKeysWith(java.util.function.Function<K, ?> keyFn, Map<K, V> m) {
+     *  call. A nested boundary map — one inside a list or another map — is encoded by a single
+     *  element encoder reused for every occurrence, which therefore has to hold the key function
+     *  rather than receive it alongside each map. */
+    public static <K, V> Map<String, V> mapKeysWith(java.util.function.Function<K, ?> keyFn,
+                                                    Map<K, V> m) {
         return mapKeys(m, keyFn);
     }
 }

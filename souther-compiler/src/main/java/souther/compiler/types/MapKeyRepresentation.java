@@ -20,8 +20,17 @@ package souther.compiler.types;
  * <p>Nothing here says what a named key is made of. Which types may be keys is settled before this
  * is built: a newtype is one exactly when what it wraps is one, and
  * {@link souther.compiler.check.TypeOps#classifyConcreteMapKey} answers that by unwrapping. What
- * comes out is the outermost name, because that is whose codec runs. So a key over a new base is
- * admitted without a case being added here and without a reader branching again.
+ * comes out is the outermost name, because that is whose codec runs. So a wrapper over a base
+ * already admitted needs no case of its own and no reader branch: a newtype over a temporal, over
+ * an enumeration, or over another newtype arrives as the same {@link NamedKey} a newtype over
+ * {@code String} does.
+ *
+ * <p>That is the one axis this is open on, and the other is closed on purpose. A new primitive key
+ * is not admitted by anything here — the classifier answers for each primitive by name and
+ * {@link Lexical} lists the ones there are — so a primitive that rendered as a bare string without
+ * being a temporal would be a case here and a branch where a key is decoded. What that buys is that
+ * a type does not key a map merely for having a leaf codec, which {@code Int} and {@code Decimal}
+ * have.
  */
 public sealed interface MapKeyRepresentation {
 
