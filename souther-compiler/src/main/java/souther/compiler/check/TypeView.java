@@ -76,7 +76,9 @@ public record TypeView(Type declared, List<TypeOps.Layer> wrappers, Shape shape)
     private static Shape shapeOf(Type terminal, Symbols symbols) {
         return switch (terminal) {
             case Type.Prim prim -> new Shape.Scalar(prim);
-            case Type.Nothing _, Type.Never _, Type.Erroneous _ -> new Shape.Nothing();
+            case Type.Never _ -> new Shape.Uninhabited();
+            case Type.Nothing _ -> new Shape.Bottom();
+            case Type.Erroneous _ -> new Shape.Erroneous();
             case Type.Var _, Type.MetaVar _ -> new Shape.Undecided();
             case Type.Union union -> new Shape.Cases(union.members());
             case Type.ListOf list -> new Shape.Sequence(Shape.Sequence.Kind.LIST, list.element());

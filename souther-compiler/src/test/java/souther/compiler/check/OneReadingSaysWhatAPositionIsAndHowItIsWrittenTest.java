@@ -138,8 +138,21 @@ class OneReadingSaysWhatAPositionIsAndHowItIsWrittenTest {
         assertEquals(new Shape.Tuple(List.of(Type.INT, Type.STRING)),
                 view(Type.tuple(List.of(Type.INT, Type.STRING))).shape());
         assertEquals(new Shape.Undecided(), view(Type.var("'a")).shape());
-        assertEquals(new Shape.Nothing(), view(Type.NOTHING).shape());
-        assertEquals(new Shape.Nothing(), view(Type.ERRONEOUS).shape());
+    }
+
+    /**
+     * The five that are not value shapes, each answered as itself. Two say something about the
+     * values and three about this compiler, and a reader downstream may only tell them apart if
+     * they arrive apart — which is the whole reason a position nothing could read stopped being
+     * reported as one the model divides no way.
+     */
+    @Test
+    void aShapeThisCouldNotDetermineSaysWhichOfTheFiveItIs() {
+        assertEquals(new Shape.Uninhabited(), view(Type.NEVER).shape());
+        assertEquals(new Shape.Bottom(), view(Type.NOTHING).shape());
+        assertEquals(new Shape.Erroneous(), view(Type.ERRONEOUS).shape());
+        assertEquals(new Shape.Undecided(), view(Type.var("'a")).shape());
+        assertEquals(new Shape.Unresolved(symbols.own("Cyclic")), view("Cyclic").shape());
     }
 
     @Test

@@ -24,8 +24,25 @@ import java.util.Set;
  * through it, which is what left a {@code data StageN = Stage} with no classes while the line drawn
  * on the same position read straight through the name.
  *
+ * <p><b>This is a total classification, and some of its cases are not value shapes.</b> A reading
+ * that answers "a record", "a sum", "a list" for the types it knows and nothing for the rest is the
+ * defect, not the base case: what a reader does with a type it cannot interpret is decided by the
+ * reader, and every reader has decided it silently. So the failures to determine a shape are cases
+ * here, of the same standing as the shapes, and a reader answering all of them has answered every
+ * type it can be handed.
+ *
+ * <p>Which is why {@link Uninhabited}, {@link Bottom}, {@link Erroneous}, {@link Undecided} and
+ * {@link Unresolved} are five cases and not one {@code Unknown}. Two of them say something about the
+ * values — no value arrives, or the element type of an empty collection is not fixed yet — and three
+ * say something about this compiler. Collapsing them would put a reader in the position of having to
+ * tell a semantic fact from an analysis failure after the distinction was thrown away, which is the
+ * shape of the defect this exists to remove: a position nothing could read was reported as one the
+ * model divides no way.
+ *
  * <p>Nothing here says what a position divides into or what may be written at it. Those are
- * questions asked of a shape, by readers that must answer every case of it.
+ * questions asked of a shape, by readers that must answer every case of it — and a reader that finds
+ * itself writing this switch out again wants a question of its own asked once, the way
+ * {@link Carrier#ofValue} asks whether a line can be drawn, rather than a copy of this one.
  */
 public sealed interface Shape {
 
@@ -80,27 +97,49 @@ public sealed interface Shape {
         }
     }
 
+    // --- what the values are, where they are nothing --------------------------------------------
+
     /**
-     * A type variable: what stands here is decided by each application, so nothing about the values
-     * at this position is settled yet.
+     * {@code Never}: no value arrives here at all. A fact about the values and not about this
+     * compiler — an arm answering {@code unreachable} contributes none, and a position no value
+     * reaches is not a position a row could be asked for.
      *
-     * <p>Not {@link Nothing}. A variable will be some type, and a reader that meets one is early
-     * rather than at a position there is nothing to say about.
+     * <p>Told apart from every case below because those say the shape could not be worked out,
+     * whereas this is the shape: there is nothing to divide because there is nothing.
+     */
+    record Uninhabited() implements Shape {}
+
+    /**
+     * {@code Nothing}: the element type of an empty collection, which the position it flows into
+     * fixes (ADR-0028). Not yet a value shape and not a failure either — it is a shape a later
+     * position decides, so a reader that meets one is early.
+     */
+    record Bottom() implements Shape {}
+
+    // --- where this compiler could not say what the values are ----------------------------------
+
+    /**
+     * The type of something the compiler could not work out. A fact about this compilation: the
+     * module carrying it has already been told why, and nothing here may report a second thing
+     * about the position on the strength of it.
+     */
+    record Erroneous() implements Shape {}
+
+    /**
+     * A type variable: which type stands here is decided by each application, so the shape is not
+     * determined at the point this was asked.
+     *
+     * <p>Not {@link Unresolved}. Nothing was looked up and failed — there is no name yet to look up.
      */
     record Undecided() implements Shape {}
 
     /**
-     * The bottom of an empty collection, the type of an expression that answers nothing, and the
-     * type of something the compiler could not work out. Grouped because no reader tells them apart:
-     * each stands for a type rather than being one, and the module carrying the third has already
-     * been told why.
-     */
-    record Nothing() implements Shape {}
-
-    /**
      * A name that denotes no declaration this can read, or a newtype whose {@code value} it could
-     * not reach. Its own case rather than {@link Nothing}: what is missing is a declaration, which
-     * is a fact about what was resolved and not about the values at the position.
+     * not reach — a declaration reachable from itself ends the walk with the name still on.
+     *
+     * <p>Its own case because the provenance differs from {@link Undecided}: this one was looked up.
+     * The interpretation was attempted and did not reach a terminal shape, which is a different
+     * thing for a reader to report and a different thing for anyone to fix.
      */
     record Unresolved(TypeName name) implements Shape {}
 }
