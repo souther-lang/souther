@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
+import souther.compiler.check.Carrier;
 import souther.compiler.diag.Region;
+import souther.compiler.numeric.Count;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
@@ -111,6 +113,33 @@ public record FixtureTemplate(String text, Ast.Expr value) {
                 new Ast.Var(WrittenName.synthetic(type.name(), NOWHERE),
                         new ValueName.OfType(type.name(), type, ConstructionOrigin.own()),
                         new ReachName.Bare(type.name())));
+    }
+
+    /**
+     * A count written as the value it stands for, wrapped where the position wears a name.
+     *
+     * <p>The one place a count becomes something a row carries. Which literal a count is written as
+     * is the carrier's answer and is taken from it — spelled out per caller instead, a date-time's
+     * second count reached a row as an {@code Int}, and the decoder turned it down with nothing said
+     * about why.
+     *
+     * <p>Bare. How many names the value wears at the position it is going to is a different question
+     * with its own answer ({@link Witnesses#wrapped}), which walks every layer; answered here as
+     * well, it was answered one layer deep, and a value of a newtype over a newtype came back
+     * missing the name in the middle.
+     */
+    public static FixtureTemplate on(Carrier carrier, Count at) {
+        return switch (carrier) {
+            case Carrier.Whole _ -> integer(at.at().longValueExact());
+            case Carrier.Dense _ -> decimal(at.at());
+            // Written by the carrier, so the text on a row and the text in a report are the same
+            // text. Spelled here as well, the two could differ at midnight and nowhere else.
+            case Carrier.Days _ -> date(carrier.written(at));
+            case Carrier.Seconds _ -> dateTime(carrier.written(at));
+            // Naming a case builds it, which is what a row writes at such a position — never the
+            // place the case takes in its declaration.
+            case Carrier.Ordinal ordinal -> unitCase(ordinal.caseAt(at));
+        };
     }
 
     /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */

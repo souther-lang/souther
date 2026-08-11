@@ -211,7 +211,7 @@ public final class NumericDomain {
             BigDecimal bound = g.constant().negate().divide(k, mc);
             Endpoint end = kinds.get(a) == Granularity.DISCRETE
                     ? Endpoint.inclusive(whole(bound, upper, strict))
-                    : new Endpoint(bound, !strict);
+                    : new Endpoint(Count.of(bound), !strict);
             return upper ? withHi(a, end) : withLo(a, end);
         }
         String[] ab = unitDiffAtoms(c);
@@ -223,7 +223,7 @@ public final class NumericDomain {
             Endpoint end = kinds.get(ab[0]) == Granularity.DISCRETE
                     && kinds.get(ab[1]) == Granularity.DISCRETE
                     ? Endpoint.inclusive(whole(bound, true, strict))
-                    : new Endpoint(bound, !strict);
+                    : new Endpoint(Count.of(bound), !strict);
             return withDiff(ab[0], ab[1], end);
         }
         // Neither shape holds it — a sum of two lengths, say. Keeping the form as written is what lets
@@ -246,15 +246,14 @@ public final class NumericDomain {
      * @param upper  whether {@code q} bounds the atom above
      * @param strict whether the value {@code q} itself is outside what the constraint admits
      */
-    private static BigDecimal whole(BigDecimal q, boolean upper, boolean strict) {
+    private static Count whole(BigDecimal q, boolean upper, boolean strict) {
+        Count at = Count.of(q);
         if (upper) {
-            return strict
-                    ? q.setScale(0, java.math.RoundingMode.CEILING).subtract(BigDecimal.ONE)
-                    : q.setScale(0, java.math.RoundingMode.FLOOR);
+            return strict ? at.rounded(java.math.RoundingMode.CEILING).minus(1)
+                    : at.rounded(java.math.RoundingMode.FLOOR);
         }
-        return strict
-                ? q.setScale(0, java.math.RoundingMode.FLOOR).add(BigDecimal.ONE)
-                : q.setScale(0, java.math.RoundingMode.CEILING);
+        return strict ? at.rounded(java.math.RoundingMode.FLOOR).plus(1)
+                : at.rounded(java.math.RoundingMode.CEILING);
     }
 
     /** The two atoms of a unit difference {@code {a:+1, b:-1}} as {@code {a, b}}, or {@code null} if
@@ -351,7 +350,7 @@ public final class NumericDomain {
     private boolean proveBaseLe(LinearForm g, boolean strict) {
         Endpoint hiG = upperBound(g);
         if (hiG != null) {
-            int s = hiG.value().signum();
+            int s = hiG.at().signum();
             // An end at zero the form's own bounds do not reach proves the strict form: nothing the
             // domain admits gets there, which is what `g < 0` asks.
             if (s < 0 || (s == 0 && (!strict || !hiG.inclusive()))) {
@@ -362,8 +361,8 @@ public final class NumericDomain {
         if (ab != null) {
             Endpoint diffBound = closedDiff(ab[0], ab[1]);     // proven upper bound on (a - b)
             if (diffBound != null) {
-                BigDecimal bound = g.constant().negate();      // want a - b <= -const
-                int s = diffBound.value().compareTo(bound);
+                Count bound = Count.of(g.constant().negate());   // want a - b <= -const
+                int s = diffBound.at().compareTo(bound);
                 if (s < 0 || (s == 0 && (!strict || !diffBound.inclusive()))) {
                     return true;
                 }
@@ -380,7 +379,7 @@ public final class NumericDomain {
      * total exclusive.
      */
     private Endpoint upperBound(LinearForm f) {
-        BigDecimal acc = f.constant();
+        Count acc = Count.of(f.constant());
         boolean inclusive = true;
         for (Map.Entry<String, BigDecimal> e : f.coefs().entrySet()) {
             BigDecimal k = e.getValue();
@@ -388,7 +387,7 @@ public final class NumericDomain {
             if (b == null) {
                 return null;   // unbounded in the contributing direction
             }
-            acc = acc.add(k.multiply(b.value()));
+            acc = acc.plus(b.at().times(k));
             inclusive &= b.inclusive();
         }
         return new Endpoint(acc, inclusive);
@@ -408,7 +407,7 @@ public final class NumericDomain {
             if (d == null) {
                 continue;
             }
-            best = Endpoint.upper(best, new Endpoint(b.getValue().value().add(d.value()),
+            best = Endpoint.upper(best, new Endpoint(b.getValue().at().plus(d.at()),
                     b.getValue().inclusive() && d.inclusive()));
         }
         return best;
@@ -426,7 +425,7 @@ public final class NumericDomain {
             if (d == null) {
                 continue;
             }
-            best = Endpoint.lower(best, new Endpoint(b.getValue().value().subtract(d.value()),
+            best = Endpoint.lower(best, new Endpoint(b.getValue().at().minus(d.at()),
                     b.getValue().inclusive() && d.inclusive()));
         }
         return best;
@@ -452,11 +451,11 @@ public final class NumericDomain {
             return min == null && max == null;
         }
 
-        /** Whether {@code value} is inside both ends — asked of the ends, because whether an end is
-         * one of the values is what the number alone does not say. */
-        public boolean admits(BigDecimal value) {
-            return (min == null || Endpoint.someValueLiesBetween(min, Endpoint.inclusive(value)))
-                    && (max == null || Endpoint.someValueLiesBetween(Endpoint.inclusive(value), max));
+        /** Whether {@code at} is inside both ends — asked of the ends, because whether an end is one
+         * of the counts it stops at is what the number alone does not say. */
+        public boolean admits(Count at) {
+            return (min == null || Endpoint.someValueLiesBetween(min, Endpoint.inclusive(at)))
+                    && (max == null || Endpoint.someValueLiesBetween(Endpoint.inclusive(at), max));
         }
     }
 
@@ -538,7 +537,7 @@ public final class NumericDomain {
     /** An upper bound on {@code -f} read as a lower bound on {@code f}. Turning it around moves the
      * value and not whether it is reached. */
     private static Endpoint negOrNull(Endpoint v) {
-        return v == null ? null : new Endpoint(v.value().negate(), v.inclusive());
+        return v == null ? null : new Endpoint(v.at().negate(), v.inclusive());
     }
 
     /** The domain with every fact about {@code atom} dropped — what an assignment leaves behind of
@@ -610,8 +609,8 @@ public final class NumericDomain {
             Endpoint cycle = row.getValue().get(row.getKey());
             // `a - a` is zero, so a cycle bounding it below zero is a contradiction — and so is one
             // bounding it at zero without admitting it.
-            if (cycle != null && (cycle.value().signum() < 0
-                    || (cycle.value().signum() == 0 && !cycle.inclusive()))) {
+            if (cycle != null && (cycle.at().signum() < 0
+                    || (cycle.at().signum() == 0 && !cycle.inclusive()))) {
                 return false;
             }
         }
@@ -626,7 +625,7 @@ public final class NumericDomain {
     /** The tightest proven upper bound on {@code a - b}, or {@code null} if none is known. */
     private Endpoint closedDiff(String a, String b) {
         if (a.equals(b)) {
-            return Endpoint.inclusive(BigDecimal.ZERO);
+            return Endpoint.inclusive(Count.ZERO);
         }
         Map<String, Endpoint> row = closed().get(a);
         return row == null ? null : row.get(b);
@@ -664,7 +663,7 @@ public final class NumericDomain {
                 for (Map.Entry<String, Endpoint> hop : hops) {
                     // A path reaches its end only where every hop on it does.
                     Endpoint candidate = new Endpoint(
-                            toThrough.value().add(hop.getValue().value()),
+                            toThrough.at().plus(hop.getValue().at()),
                             toThrough.inclusive() && hop.getValue().inclusive());
                     Endpoint known = edge(d, a, hop.getKey());
                     if (known == null || Endpoint.upper(known, candidate) == candidate) {

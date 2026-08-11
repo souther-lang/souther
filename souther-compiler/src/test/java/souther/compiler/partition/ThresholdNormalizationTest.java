@@ -13,6 +13,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
+import souther.compiler.numeric.Count;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +96,7 @@ class ThresholdNormalizationTest {
         assertEquals(1, read.thresholds().size());
         Threshold threshold = read.thresholds().get(0);
         assertEquals("request.cost", threshold.path().toString());
-        assertEquals(new BigDecimal(100000), threshold.value());
+        assertEquals(Count.of(new BigDecimal(100000)), threshold.value());
         assertTrue(threshold.valueBelongsBelow(), "`<= c` puts c on the low side");
 
         Axis cost = axis(read.partitioning(), "request.cost");
@@ -217,13 +219,56 @@ class ThresholdNormalizationTest {
         List<BoundaryObligation> obligations = Partitions.obligationsOf(cost, read.symbols(),
                 read.partitioning().domains().get("request.cost"));
         List<String> described = obligations.stream()
-                .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
+                .map(o -> o.side() + " " + o.written()).toList();
 
         assertTrue(described.contains("AT 100000"), described.toString());
         assertTrue(described.contains("ABOVE 100001"), described.toString());
         assertTrue(described.contains("AT 0"), "the invariant's own edge is still worth a row");
         assertFalse(described.contains("ABOVE 1"),
                 "an invariant's bound has nothing on the far side to reach");
+    }
+
+    /**
+     * A line on an enumeration owes the case it is drawn at and the case beside it.
+     *
+     * <p>Written as the cases and never as the places they take in the declaration. What carries an
+     * enumeration into the algebra is the ordinal, which is 0, 1, 2 — the most plausible-looking
+     * wrong value any carrier has, and the one a reader would not catch in a report.
+     *
+     * <p>The classes are the cases and the cut adds none. {@code s < Qualified} divides the values
+     * into `{Prospecting}` and `{Qualified, Won}`, which is coarser than the three cases the type
+     * already states, so the meet of the two is the cases — the line is worth its rows and the
+     * partition it would have made is one the model had already made finer (ADR-0090).
+     */
+    @Test
+    void aLineOnAnEnumerationIsOwedAtCaseNames() {
+        Read read = read("""
+                module example.pipeline
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                data Bigger
+                data Smaller
+                data Size = Bigger | Smaller
+
+                behavior classifyStage : (s: Stage) -> Size
+                    constructs Bigger, Smaller, Qualified
+                let classifyStage (s) = {
+                    guard s < Qualified else Bigger
+                    Smaller }
+                """, "classifyStage");
+
+        Axis stage = axis(read.partitioning(), "s");
+        assertEquals(List.of("Prospecting", "Qualified", "Won"), labels(stage),
+                "the cut is the coarser partition, so the classes stay the cases");
+
+        List<String> described = Partitions.obligationsOf(stage, read.symbols(),
+                        read.partitioning().domains().get(stage.term())).stream()
+                .map(o -> o.side() + " " + o.written()).toList();
+        assertEquals(List.of("AT Qualified", "BELOW Prospecting"), described);
     }
 
     /**
@@ -253,7 +298,7 @@ class ThresholdNormalizationTest {
 
         List<String> described = Partitions.obligationsOf(amount, read.symbols(),
                 read.partitioning().domains().get(amount.path().toString())).stream()
-                .map(o -> o.side() + " " + NumericTerm.numberOf(o.value())).toList();
+                .map(o -> o.side() + " " + o.written()).toList();
         assertTrue(described.contains("AT 3000"), described.toString());
         assertTrue(described.contains("BELOW 2999"), described.toString());
     }

@@ -152,7 +152,7 @@ class NumericDomainTest {
     void aStrictLowerBoundOnADenseAtomKeepsTheValueOutOfItsOwnRange() {
         NumericDomain d = NumericDomain.top().assume(atom(A), Rel.GT, dense(A));
 
-        assertEquals(Endpoint.exclusive(BigDecimal.ZERO), d.boundsOf(A).min());
+        assertEquals(Endpoint.exclusive(Count.of(BigDecimal.ZERO)), d.boundsOf(A).min());
     }
 
     // --- strictness on a difference, which is the part a record's invariant writes -----------------
@@ -264,7 +264,7 @@ class NumericDomainTest {
         NumericDomain interval = NumericDomain.top()
                 .assume(atom(A).minus(num(3)), Rel.LT, dense(A));
 
-        assertEquals(Endpoint.exclusive(BigDecimal.valueOf(3)), interval.boundsOf(A).max());
+        assertEquals(Endpoint.exclusive(Count.of(3)), interval.boundsOf(A).max());
         assertTrue(interval.projectionIsLossless());
     }
 
@@ -274,7 +274,7 @@ class NumericDomainTest {
     void aStrictBoundOnAWholeNumberIsNoLoss() {
         NumericDomain d = NumericDomain.top().assume(atom(A).minus(num(3)), Rel.LT, whole(A));
 
-        assertEquals(Endpoint.inclusive(BigDecimal.valueOf(2)), d.boundsOf(A).max());
+        assertEquals(Endpoint.inclusive(Count.of(2)), d.boundsOf(A).max());
         assertTrue(d.projectionIsLossless());
     }
 

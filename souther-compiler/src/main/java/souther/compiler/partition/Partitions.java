@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Carrier;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -9,6 +10,7 @@ import souther.compiler.check.InvariantBound;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -223,8 +225,7 @@ public final class Partitions {
                 NumericDomain.Bounds only = domainOf(base, term);
                 out.add(new Axis(axis.id(), term, axis.type(),
                         singledClasses(points, term, axis.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points,
-                                Carrier.of(term, axis.type(), symbols)))
+                        mergedPoints(axis.cuts(), points, term.carrierAt(axis.type(), symbols)))
                         .excluding(axis.excluded()));
                 continue;
             }
@@ -255,15 +256,22 @@ public final class Partitions {
             List<Threshold> reachable = here.stream()
                     .filter(t -> domain == null || domain.admits(t.value()))
                     .toList();
-            List<PartitionClass> classes = Intervals.classesOf(
-                    Intervals.of(reachable, domain == null ? null : domain.min(),
-                            domain == null ? null : domain.max()),
-                    term, axis.type(), symbols);
             // What the term is, not what an invariant said about it. There is a bound to read only
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
-            Carrier carrier = Carrier.of(term, axis.type(), symbols);
+            Carrier carrier = term.carrierAt(axis.type(), symbols);
+            // The ranges a cut leaves, where the position has no finer partition of its own. On an
+            // enumeration it has: the cases are the classes, and `s < Qualified` divides them into
+            // `{Prospecting}` and `{Qualified, Won}`, which is coarser than the cases. The meet of
+            // the two is the case partition, so the cut adds no class — and a class list rebuilt
+            // from the ranges would take away distinctions the model already made. The line is still
+            // a line and still owes its rows; only the classes stay as they were.
+            List<PartitionClass> classes = carrier instanceof Carrier.Ordinal ? List.of()
+                    : Intervals.classesOf(
+                            Intervals.of(reachable, domain == null ? null : domain.min(),
+                                    domain == null ? null : domain.max()),
+                            term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), term, axis.type(),
@@ -302,39 +310,43 @@ public final class Partitions {
     private static List<PartitionClass> singledClasses(List<GuardThresholds.Guards.Singled> points,
                                                        NumericTerm term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
-        Carrier carrier = Carrier.of(term, type, symbols);
-        TypeName wrapper = type instanceof Type.Ref ref && TypeOps.isSingleValueNewtype(type, symbols)
-                ? ref.name() : null;
-        List<BigDecimal> values = new ArrayList<>();
+        Carrier carrier = term.carrierAt(type, symbols);
+        List<Count> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
-            if (values.stream().noneMatch(had -> had.compareTo(each.value()) == 0)) {
+            if (values.stream().noneMatch(had -> had.sameAs(each.value()))) {
                 values.add(each.value());
             }
         }
         List<PartitionClass> classes = new ArrayList<>();
-        for (BigDecimal value : values) {
-            classes.add(PartitionClass.of(term + "/= " + written(value, carrier),
-                    "= " + written(value, carrier), holding(term, at -> at.compareTo(value) == 0),
-                    RepresentativeSource.of(standing(value, wrapper, carrier))));
+        for (Count value : values) {
+            String written = carrier.written(value);
+            classes.add(PartitionClass.of(term + "/= " + written, "= " + written,
+                    holding(term, carrier, at -> at.sameAs(value)),
+                    RepresentativeSource.of(standing(type, carrier, value, symbols))));
         }
-        BigDecimal other = otherThan(values, within, carrier);
+        Count other = otherThan(values, within, carrier);
         String label = "/= " + String.join(", ",
-                values.stream().map(each -> written(each, carrier)).toList());
+                values.stream().map(carrier::written).toList());
         classes.add(other == null
                 ? PartitionClass.ungeneratable(term + "/" + label, label,
-                        holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
+                        holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
                         "nothing here composed a value of this position other than the ones"
                                 + " singled out")
                 : PartitionClass.of(term + "/" + label, label,
-                        holding(term, at -> values.stream().noneMatch(v -> v.compareTo(at) == 0)),
-                        RepresentativeSource.of(standing(other, wrapper, carrier))));
+                        holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
+                        RepresentativeSource.of(standing(type, carrier, other, symbols))));
         return List.copyOf(classes);
     }
 
-    /** A classifier that reads the term's number out of a row and answers about it. */
-    private static Classifier holding(NumericTerm term,
-                                      java.util.function.Predicate<BigDecimal> holds) {
-        return value -> switch (term.read(value)) {
+    /** A count written at a position, wearing every name that position declares. */
+    private static FixtureTemplate standing(Type type, Carrier carrier, Count at, Symbols symbols) {
+        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at), symbols);
+    }
+
+    /** A classifier that reads the term's count out of a row and answers about it. */
+    private static Classifier holding(NumericTerm term, Carrier carrier,
+                                      java.util.function.Predicate<Count> holds) {
+        return value -> switch (term.read(value, carrier)) {
             case NumericTerm.Reading.Number number -> Membership.of(holds.test(number.value()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
@@ -353,28 +365,26 @@ public final class Partitions {
      * <p>Null is this having found none and never the class being empty. Nothing here enumerates a
      * dense range, so what a caller may say about an empty answer is that it composed nothing.
      */
-    private static BigDecimal otherThan(List<BigDecimal> values, NumericDomain.Bounds within,
-                                        Carrier carrier) {
-        List<BigDecimal> stepped = new ArrayList<>();
-        for (BigDecimal from : values) {
-            stepped.add(from.add(BigDecimal.ONE));
-            stepped.add(from.subtract(BigDecimal.ONE));
+    private static Count otherThan(List<Count> values, NumericDomain.Bounds within, Carrier carrier) {
+        List<Count> stepped = new ArrayList<>();
+        for (Count from : values) {
+            stepped.add(from.plus(1));
+            stepped.add(from.minus(1));
         }
-        List<BigDecimal> inside = new ArrayList<>();
+        List<Count> inside = new ArrayList<>();
         if (within != null) {
             for (Endpoint end : List.of(within.min(), within.max())) {
                 if (end != null && end.inclusive()) {
-                    inside.add(end.value());
+                    inside.add(end.at());
                 }
             }
-            BigDecimal between = Endpoint.valueBetween(within.min(), within.max(),
-                    carrier.spacing());
+            Count between = Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
             if (between != null) {
                 inside.add(between);
             }
-            // Between the value singled out and each end, which is where a dense range still has
+            // Between the count singled out and each end, which is where a dense range still has
             // room once the ends themselves are singled out too.
-            for (BigDecimal from : values) {
+            for (Count from : values) {
                 for (Endpoint end : List.of(within.min(), within.max())) {
                     if (end != null) {
                         inside.add(Endpoint.valueBetween(Endpoint.exclusive(from), end,
@@ -385,7 +395,7 @@ public final class Partitions {
                 }
             }
         }
-        List<BigDecimal> tried = new ArrayList<>();
+        List<Count> tried = new ArrayList<>();
         if (carrier == Carrier.DENSE) {
             tried.addAll(inside);
             tried.addAll(stepped);
@@ -393,36 +403,17 @@ public final class Partitions {
             tried.addAll(stepped);
             tried.addAll(inside);
         }
-        for (BigDecimal candidate : tried) {
-            // On the carrier's grid before it is asked anything, because what is asked is about the
-            // value and the candidate is a count. Halfway between two adjacent moments is neither of
-            // them as a number and is one of them once written, so a class of everything else was
-            // offered one of the values it exists to exclude.
-            BigDecimal each = candidate == null ? null : carrier.onTheGrid(candidate);
+        for (Count candidate : tried) {
+            // On the carrier's grid before it is asked anything. Halfway between two adjacent moments
+            // is neither of them as a number and is one of them once written, so a class of
+            // everything else was offered one of the values it exists to exclude.
+            Count each = carrier.onTheGrid(candidate);
             if (each != null && (within == null || within.admits(each))
-                    && values.stream().noneMatch(v -> v.compareTo(each) == 0)) {
+                    && values.stream().noneMatch(each::sameAs)) {
                 return each;
             }
         }
         return null;
-    }
-
-    private static String written(BigDecimal value, Carrier carrier) {
-        return switch (carrier) {
-            case WHOLE, DENSE -> value.stripTrailingZeros().toPlainString();
-            case DATE -> Dates.written(value);
-            case MOMENT -> DateTimes.written(value);
-        };
-    }
-
-    private static FixtureTemplate standing(BigDecimal value, TypeName wrapper, Carrier carrier) {
-        FixtureTemplate literal = switch (carrier) {
-            case DENSE -> FixtureTemplate.decimal(value);
-            case WHOLE -> FixtureTemplate.integer(value.longValueExact());
-            case DATE -> FixtureTemplate.date(Dates.written(value));
-            case MOMENT -> FixtureTemplate.dateTime(DateTimes.written(value));
-        };
-        return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
@@ -430,12 +421,11 @@ public final class Partitions {
                                           Carrier carrier) {
         Map<String, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
-            byValue.put(same(cut.value()), cut);
+            byValue.put(cut.key(), cut);
         }
         for (GuardThresholds.Guards.Singled each : points) {
-            ObservedValue value = numeric(each.value(), carrier);
-            byValue.merge(same(value), Cut.at(value, each.origin()),
-                    (there, _) -> there.and(each.origin()));
+            Cut cut = Cut.at(carrier, each.value(), each.origin());
+            byValue.merge(cut.key(), cut, (there, _) -> there.and(each.origin()));
         }
         return List.copyOf(byValue.values());
     }
@@ -486,27 +476,13 @@ public final class Partitions {
     private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, Carrier carrier) {
         Map<String, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
-            byValue.put(same(cut.value()), cut);
+            byValue.put(cut.key(), cut);
         }
         for (Threshold each : thresholds) {
-            ObservedValue value = numeric(each.value(), carrier);
-            byValue.merge(same(value), Cut.at(value, each.origin()),
-                    (there, _) -> there.and(each.origin()));
+            Cut cut = Cut.at(carrier, each.value(), each.origin());
+            byValue.merge(cut.key(), cut, (there, _) -> there.and(each.origin()));
         }
         return List.copyOf(byValue.values());
-    }
-
-    /**
-     * What makes two cuts one cut: the number, not how it was written.
-     *
-     * <p>`+invariant value >= 0.00+` and `+guard x <= 0m+` draw one line. Keyed by the value's own
-     * spelling they are two, and then a position has two classes both holding zero — which is not a
-     * partition, and the classifier that reads a row against it has no answer — and one boundary is
-     * owed twice under one printed number.
-     */
-    private static String same(ObservedValue value) {
-        return value instanceof ObservedValue.Decimal d
-                ? "d" + d.value().stripTrailingZeros().toPlainString() : String.valueOf(value);
     }
 
     /**
@@ -525,11 +501,15 @@ public final class Partitions {
             // what is left of the type here may stop short of it or leave the value out — `low < high`
             // under one `[0, 1]` leaves `low` every value up to 1 and not 1 itself. Writing the value
             // is how an edge is met, so where the value is refused there is nothing to write.
-            boolean reachable = holds(within, cut.value());
+            //
+            // Asked of the count, so every carrier is asked the same question. Asked of the value, a
+            // date came back as a value the range could say nothing about — which read as reachable,
+            // and put a row at an edge the record refuses.
+            boolean reachable = within == null || within.admits(cut.at());
             for (OriginRef origin : cut.origins()) {
                 if (reachable) {
                     out.add(new BoundaryObligation(axis.id(), origin,
-                            BoundaryObligation.BoundarySide.AT, cut.value()));
+                            BoundaryObligation.BoundarySide.AT, cut.carrier(), cut.at()));
                 }
                 // A line that singles a value out has no neighbour to ask for: the values either
                 // side of it are one class, so a row over there is a row the class's own already is.
@@ -540,36 +520,22 @@ public final class Partitions {
                     // `value >= 10` under `x < 10` would be owed a 9. The cut itself stays either way,
                     // because the comparison is still reached by a row written at the line.
                     if (guard.valueBelongsBelow()) {
-                        domain.successor(cut.value()).filter(next -> holds(within, next))
+                        domain.successor(cut.at())
+                                .filter(next -> within == null || within.admits(next))
                                 .ifPresent(next -> out.add(new BoundaryObligation(
-                                        axis.id(), origin,
-                                        BoundaryObligation.BoundarySide.ABOVE, next)));
+                                        axis.id(), origin, BoundaryObligation.BoundarySide.ABOVE,
+                                        cut.carrier(), next)));
                     } else {
-                        domain.predecessor(cut.value()).filter(before -> holds(within, before))
+                        domain.predecessor(cut.at())
+                                .filter(before -> within == null || within.admits(before))
                                 .ifPresent(before -> out.add(new BoundaryObligation(
-                                        axis.id(), origin,
-                                        BoundaryObligation.BoundarySide.BELOW, before)));
+                                        axis.id(), origin, BoundaryObligation.BoundarySide.BELOW,
+                                        cut.carrier(), before)));
                     }
                 }
             }
         }
         return List.copyOf(out);
-    }
-
-    /** Whether a value invented one step off a line is one the position can hold. */
-    private static boolean holds(NumericDomain.Bounds within, ObservedValue value) {
-        if (within == null) {
-            return true;
-        }
-        BigDecimal number = switch (value) {
-            case ObservedValue.Integer i -> BigDecimal.valueOf(i.value());
-            case ObservedValue.Decimal d -> d.value();
-            case null, default -> null;
-        };
-        if (number == null) {
-            return true;
-        }
-        return within.admits(number);
     }
 
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
@@ -684,7 +650,7 @@ public final class Partitions {
                 // what carries it. The carrier, asked of the carrier, as a guard's is.
                 return UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
             }
-            return InvariantBound.of(clause, carried.spacing(), OrderedLiteral.on(carried)).isPresent()
+            return InvariantBound.of(clause, carried).isPresent()
                     ? null : UndividedPosition.Reason.UNSUPPORTED_SYNTAX;
         }
         if (measure != null && InvariantBound.statesAnEnd(clause, measure)) {
@@ -891,8 +857,8 @@ public final class Partitions {
      */
     private record End(Endpoint at, List<TypeName> from) {
 
-        BigDecimal value() {
-            return at.value();
+        Count value() {
+            return at.at();
         }
 
         /**
@@ -965,8 +931,7 @@ public final class Partitions {
         for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                    InvariantBound read = (measure == null
-                            ? InvariantBound.of(each, carrier.spacing(), OrderedLiteral.on(carrier))
+                    InvariantBound read = (measure == null ? InvariantBound.of(each, carrier)
                             : InvariantBound.ofSize(each, measure)).orElse(null);
                     if (read == null) {
                         continue;
@@ -1014,7 +979,7 @@ public final class Partitions {
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
         for (TypeName from : end.from()) {
-            put(into, numeric(end.value(), carrier), from, clause, moved ? within : null);
+            put(into, carrier, end.value(), from, clause, moved ? within : null);
         }
     }
 
@@ -1023,14 +988,15 @@ public final class Partitions {
         return own != null && own.compareTo(effective) != 0;
     }
 
-    private static void put(Map<String, Cut> into, ObservedValue value, TypeName type, String clause,
-                            TypeName narrowedBy) {
+    private static void put(Map<String, Cut> into, Carrier carrier, Count at, TypeName type,
+                            String clause, TypeName narrowedBy) {
         OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
         if (narrowedBy != null) {
             origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
         }
         OriginRef each = origin;
-        into.merge(String.valueOf(value), Cut.at(value, origin), (had, _) -> had.and(each));
+        Cut cut = Cut.at(carrier, at, origin);
+        into.merge(cut.key(), cut, (had, _) -> had.and(each));
     }
 
     // --- small helpers ----------------------------------------------------------------------------
@@ -1069,10 +1035,9 @@ public final class Partitions {
             return List.of();
         }
         if (type == Type.INT || type == Type.DECIMAL) {
-            BigDecimal value = inside(within, type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
-            return value == null ? List.of()
-                    : List.of(type == Type.INT ? FixtureTemplate.integer(value.longValueExact())
-                            : FixtureTemplate.decimal(value));
+            Carrier carrier = type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
+            Count at = inside(within, carrier);
+            return at == null ? List.of() : List.of(FixtureTemplate.on(carrier, at));
         }
         if (type == Type.STRING) {
             return List.of(FixtureTemplate.string("x"));
@@ -1134,9 +1099,8 @@ public final class Partitions {
             return 0;
         }
         // A count is a whole number, so the end a size bound leaves is one the rule admits.
-        BigDecimal least = sized.min().value();
-        return least.signum() <= 0 || least.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0
-                ? 0 : least.intValueExact();
+        int least = Counts.asSize(sized.min().value());
+        return least <= 0 ? 0 : least;
     }
 
     /**
@@ -1168,18 +1132,18 @@ public final class Partitions {
      * <p>Only a whole number steps. Between two decimals there is no next value, so a dense carrier
      * names the one number inside its range and no more.
      */
-    static BigDecimal numberInside(Type type, Symbols symbols, int index) {
+    static Count numberInside(Type type, Symbols symbols, int index) {
         Type base = TypeOps.numericBase(type, symbols);
         if (base == null) {
             return null;
         }
         NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), null);
-        BigDecimal from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
+        Count from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
         if (from == null || base != Type.INT) {
             return from != null && index == 0 ? from : null;
         }
-        BigDecimal stepped = from.add(BigDecimal.valueOf(index));
-        return holdsNumber(range, stepped) ? stepped : null;
+        Count stepped = from.plus(index);
+        return holdsCount(range, stepped) ? stepped : null;
     }
 
     /**
@@ -1212,15 +1176,12 @@ public final class Partitions {
             return List.copyOf(base);
         }
         NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), within);
-        BigDecimal step = displaced(range, numeric == Type.INT);
+        Carrier carrier = numeric == Type.INT ? Carrier.WHOLE : Carrier.DENSE;
+        Count step = displaced(range, carrier);
         if (step == null) {
             return List.copyOf(base);
         }
-        FixtureTemplate bare = numeric == Type.DECIMAL ? FixtureTemplate.decimal(step)
-                : FixtureTemplate.integer(step.longValueExact());
-        FixtureTemplate value = type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()
-                ? FixtureTemplate.newtype(ref.name(), bare) : bare;
+        FixtureTemplate value = standing(type, carrier, step, symbols);
         if (base.stream().anyMatch(each -> each.text().equals(value.text()))) {
             return List.copyOf(base);
         }
@@ -1228,31 +1189,31 @@ public final class Partitions {
         return List.copyOf(base);
     }
 
-    /** A second number of a range, or null where the type has none to give. */
-    private static BigDecimal displaced(NumericDomain.Bounds range, boolean whole) {
-        BigDecimal from = inside(range, whole ? Carrier.WHOLE : Carrier.DENSE);
+    /** A second count of a range, or null where the carrier has none to give. */
+    private static Count displaced(NumericDomain.Bounds range, Carrier carrier) {
+        Count from = inside(range, carrier);
         if (from == null) {
             return null;
         }
         Endpoint min = range == null ? null : range.min();
         Endpoint max = range == null ? null : range.max();
-        if (!whole) {
-            // No smallest step, so the only second value a range names is one inside both its ends —
-            // and the one already on offer is that value where the range is open below.
+        if (carrier.spacing() == Granularity.DENSE) {
+            // No smallest step, so the only second count a range names is one inside both its ends —
+            // and the one already on offer is that count where the range is open below.
             return min == null || max == null || !min.inclusive() ? null
-                    : Endpoint.valueBetween(Endpoint.exclusive(min.value()), max, Granularity.DENSE);
+                    : Endpoint.valueBetween(Endpoint.exclusive(min.at()), max, Granularity.DENSE);
         }
-        BigDecimal up = from.add(BigDecimal.ONE);
-        if (holdsNumber(range, up)) {
+        Count up = from.plus(1);
+        if (holdsCount(range, up)) {
             return up;
         }
-        BigDecimal down = from.subtract(BigDecimal.ONE);
-        return holdsNumber(range, down) ? down : null;
+        Count down = from.minus(1);
+        return holdsCount(range, down) ? down : null;
     }
 
-    /** Whether a range holds a number, with no range holding everything. */
-    private static boolean holdsNumber(NumericDomain.Bounds range, BigDecimal value) {
-        return range == null || range.admits(value);
+    /** Whether a range holds a count, with no range holding everything. */
+    private static boolean holdsCount(NumericDomain.Bounds range, Count at) {
+        return range == null || range.admits(at);
     }
 
     /**
@@ -1289,9 +1250,9 @@ public final class Partitions {
 
         Bounds own = boundsOf(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
-        BigDecimal held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
+        Count held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
         if (held != null) {
-            candidates.add(standing(held, null, own.carrier()));
+            candidates.add(FixtureTemplate.on(own.carrier(), held));
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
@@ -1319,19 +1280,19 @@ public final class Partitions {
         return List.copyOf(once.values());
     }
 
-    /** A number the position holds, or null where it holds none. The ends decide it, so nothing here
+    /** A count the position holds, or null where it holds none. The ends decide it, so nothing here
      * reads one of them as a number and loses whether the range reaches it. */
-    private static BigDecimal inside(NumericDomain.Bounds within, Carrier carrier) {
+    private static Count inside(NumericDomain.Bounds within, Carrier carrier) {
         if (within == null) {
-            return BigDecimal.ZERO;
+            return Count.ZERO;
         }
-        BigDecimal between = Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
+        Count between = Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
         if (between == null) {
             return null;
         }
-        // On the carrier's own grid, and then still inside. A number between two values it can hold
+        // On the carrier's own grid, and then still inside. A number between two counts it can hold
         // is not always one of them (see Carrier#onTheGrid).
-        BigDecimal held = carrier.onTheGrid(between);
+        Count held = carrier.onTheGrid(between);
         return held != null && within.admits(held) ? held : null;
     }
 
@@ -1363,11 +1324,10 @@ public final class Partitions {
         // instead — what is inside is already what the first tier offers.
         if (bounds == null || bounds.min() == null || bounds.max() == null
                 || !bounds.max().inclusive()
-                || bounds.max().value().compareTo(bounds.min().value()) == 0) {
+                || bounds.max().at().sameAs(bounds.min().at())) {
             return List.of();
         }
-        BigDecimal far = bounds.max().value();
-        FixtureTemplate held = standing(far, ref.name(), own.carrier());
+        FixtureTemplate held = standing(type, own.carrier(), bounds.max().at(), symbols);
         // Nothing already on offer: a range whose far edge is the number the base type stands for
         // would otherwise hold the same value twice, once in each tier.
         return representativesOf(type, symbols, within).stream()
@@ -1377,22 +1337,6 @@ public final class Partitions {
 
     private static boolean isBool(ObservedValue v, boolean expected) {
         return v instanceof ObservedValue.Bool b && b.value() == expected;
-    }
-
-    /**
-     * A number the algebra holds, written back as the kind of value the position takes.
-     *
-     * <p>The one place that turns a carrier back into a value. A date is a day count inside the
-     * ranges and a date everywhere a person reads it, and the conversion sitting here is what keeps
-     * a cut and a fixture from disagreeing about which of the two a line is drawn at.
-     */
-    private static ObservedValue numeric(BigDecimal value, Carrier carrier) {
-        return switch (carrier) {
-            case DENSE -> new ObservedValue.Decimal(value);
-            case WHOLE -> new ObservedValue.Integer(value.longValueExact());
-            case DATE -> new ObservedValue.Temporal(Dates.written(value));
-            case MOMENT -> new ObservedValue.Temporal(DateTimes.written(value));
-        };
     }
 
     private Partitions() {}

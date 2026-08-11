@@ -3,6 +3,8 @@ package souther.compiler.partition;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
+import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -68,7 +70,7 @@ public final class GuardThresholds {
          * value, and reading it as a place to cut would put a distinction between the two sides into
          * a partition the model never drew.
          */
-        public record Singled(NumericTerm term, BigDecimal value, OriginRef.GuardOrigin origin) {}
+        public record Singled(NumericTerm term, Count value, OriginRef.GuardOrigin origin) {}
 
         public Guards {
             thresholds = List.copyOf(thresholds);
@@ -344,12 +346,18 @@ public final class GuardThresholds {
                                     List<Guards.Singled> singled) {
         Core.Binary comparison = placed.comparison();
         Ast.BinOp op = comparison.op();
+        // The carrier comes from the side that named the position, so the literal on the other side
+        // is read on the carrier the line is being drawn on. A size call is an `Int` there, which is
+        // the whole-number carrier, and a position holding dates is a day count — the same answer
+        // `Carrier` gives everywhere else.
         NumericTerm term = termOf(comparison.left(), parameters, symbols);
-        BigDecimal value = constantOf(comparison.right());
+        Count value = constantOf(comparison.right(),
+                Carrier.ofValue(comparison.left().type(), symbols));
         if (term == null || value == null) {
             // `100000 >= cost` says what `cost <= 100000` says; read the position-bearing side first.
             term = termOf(comparison.right(), parameters, symbols);
-            value = constantOf(comparison.left());
+            value = constantOf(comparison.left(),
+                    Carrier.ofValue(comparison.right().type(), symbols));
             op = mirrored(op);
         }
         if (term == null || value == null) {
@@ -423,7 +431,7 @@ public final class GuardThresholds {
     /** One arm's edge, where that arm has a probe. An arm answering nothing has none, and it is owed
      * no row whether anything reaches it or not. */
     private static void edge(List<GuardEdge> edges, CoverageSites.GuardRef guard, int site,
-                             NumericTerm term, BigDecimal value, boolean below, boolean inclusive) {
+                             NumericTerm term, Count value, boolean below, boolean inclusive) {
         if (site == CoverageSites.NO_SITE) {
             return;
         }
@@ -494,25 +502,43 @@ public final class GuardThresholds {
         };
     }
 
-    /** The number a comparison is against, or null where the other side is not one. */
-    static BigDecimal constantOf(Core e) {
+    /**
+     * The count a comparison is against, or null where the other side is not a value on
+     * {@code carrier}.
+     *
+     * <p>Which count the literal is on comes from the position, not from the literal. A written
+     * temporal reaches here however it is spelled, and the carrier is what says whether the days or
+     * the seconds of it are the number the line is drawn at — the same question an invariant's
+     * literal is asked, asked of the same place, so an invariant and a {@code guard} at one position
+     * cannot admit different rules.
+     */
+    static Count constantOf(Core e, Carrier carrier) {
+        if (carrier == null) {
+            return null;
+        }
         return switch (e) {
-            case Core.Int i -> BigDecimal.valueOf(i.value());
-            case Core.Decimal d -> d.value();
+            case Core.Int i -> carrier.onTheGrid(Count.of(i.value()));
+            case Core.Decimal d -> carrier.onTheGrid(Count.of(d.value()));
             case Core.Neg n -> {
-                BigDecimal inner = constantOf(n.operand());
+                Count inner = constantOf(n.operand(), carrier);
                 yield inner == null ? null : inner.negate();
             }
             // A newtype written around a constant is that constant at this location.
             case Core.NewData nd when nd.inits().size() == 1 && nd.spreads().isEmpty() ->
-                    constantOf(nd.inits().get(0).value());
+                    constantOf(nd.inits().get(0).value(), carrier);
             // A temporal written the way a model writes one. Read by what the construction answers
             // with rather than by the name in front of it, so one reaches this however it is spelled.
-            // Which count it is on follows the type, as `Carrier` says it does.
-            case Core.Call call when call.type() == Type.DATE && call.args().size() == 1
-                    && call.args().get(0) instanceof Core.Str iso -> Dates.dayOf(iso.value());
-            case Core.Call call when call.type() == Type.DATETIME && call.args().size() == 1
-                    && call.args().get(0) instanceof Core.Str iso -> DateTimes.secondOf(iso.value());
+            case Core.Call call when call.args().size() == 1
+                    && call.args().get(0) instanceof Core.Str iso ->
+                    (call.type() == Type.DATE && carrier instanceof Carrier.Days)
+                            || (call.type() == Type.DATETIME && carrier instanceof Carrier.Seconds)
+                            ? carrier.countOf(new souther.compiler.observe.ObservedValue.Temporal(
+                                    iso.value()))
+                            : null;
+            // A case, which is named rather than written. Where the position counts in some other
+            // enumeration's declaration this is a value of neither, and the carrier says so.
+            case Core.UnitValue unit -> carrier instanceof Carrier.Ordinal ordinal
+                    ? ordinal.at(unit.data()) : null;
             case null, default -> null;
         };
     }
@@ -527,7 +553,7 @@ public final class GuardThresholds {
         };
     }
 
-    /** Whether a line can be drawn on what this type carries, asked of the one table that says so. */
+    /** Whether a line can be drawn on what this type carries, asked of the one place that says so. */
     static boolean orderable(Type type, Symbols symbols) {
         return Carrier.ofValue(type, symbols) != null;
     }

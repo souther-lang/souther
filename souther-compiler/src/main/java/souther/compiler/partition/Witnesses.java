@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Carrier;
+import souther.compiler.numeric.Count;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
@@ -399,12 +401,12 @@ final class Witnesses {
             return wrapped(type, FixtureTemplate.string(
                     "x".repeat(Math.max(1, Partitions.leastHeld(type, symbols)) + index)), symbols);
         }
-        BigDecimal number = Partitions.numberInside(type, symbols, index);
-        if (number == null) {
+        Count at = Partitions.numberInside(type, symbols, index);
+        if (at == null) {
             return null;
         }
-        return wrapped(type, carrier == Type.DECIMAL ? FixtureTemplate.decimal(number)
-                : FixtureTemplate.integer(number.longValueExact()), symbols);
+        return wrapped(type, FixtureTemplate.on(
+                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at), symbols);
     }
 
     /** The value under every name the position wears, which is how it is written where the position

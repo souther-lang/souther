@@ -89,12 +89,44 @@ A position no rule measures keeps its own name. A `String` nothing says anything
 derivable and is reported as the position, because naming its length there would put a term in the
 report that nobody wrote.
 
-One table says which values carry a line, and every reader asks it. A line is drawn on an `Int`, a
-`Decimal`, a `Date` and a `DateTime`, and on a single-value newtype over one of them; a `String` and
-an enumeration are ordered and are not measured. The table is exhaustive over the primitives, so a
-primitive added to the language stops the build at the one place that would otherwise answer for it
-by omission — and it closes only the primitives, since a newtype is reduced to its base before the
-table is asked and an enumeration is not a primitive at all.
+One carrier says which values carry a line, and every reader asks it. A line is drawn on an `Int`, a
+`Decimal`, a `Date`, a `DateTime` and an enumeration, and on a single-value newtype over any of
+them; a `String` is ordered and is not measured, having no count to embed into. The carriers are
+matched exhaustively wherever a count is read or written, so one added stops the build at every
+place that would otherwise answer for it by omission, and the primitives are matched exhaustively
+where a type is classified, so a primitive added stops it there. A newtype is reduced to its base
+before either is asked.
+
+What an enumeration counts to is the place its case takes in the declaration, which is the order the
+values have (spec §primitives). That count never leaves the carrier: an ordinal is a small integer,
+which is the most plausible-looking wrong value any of the five has and the one a report is least
+likely to give away, so the cases are what a row carries and what a line is named by.
+
+The carrier is the enumeration itself, and not an order a value of it can be compared on. Which
+order two operands are comparable by is the wider question the type checker asks, and it answers with
+the sum for a case and for a union of cases as well — `Qualified < Won` compares on `Stage`. Which
+counts a position ranges over is narrower: a position declared as one case holds one value, and a
+union of cases holds some of them. Answered with the wider order, such a position took the whole
+enumeration's counts, and the line drawn on it asked for a row at a value the position cannot hold.
+So a position that is not the enumeration draws no line, and says so as a position whose comparison
+went unread — which names the compiler rather than the model, and is the coarser of the two things
+that could be said. Measuring a case or a sub-union would need the carrier to carry both the order
+and the values that position admits, and neither this nor anything else needs that yet.
+
+Which counts a carrier holds is the carrier's, and every producer of an end asks it. A strict
+comparison over a carrier that steps is sharpened onto the count beside the one it names, and where
+the carrier has none there, there is no end — read off the range of a `long` instead, `value > Won`
+sharpened past the last case and reached the reader that writes an obligation as the value it stands
+for. Holding a count is a question and not a correction: a date-time's counts sit on a grid at the
+nanosecond and what writes one rounds onto it, so a carrier handed a count between two moments says
+it holds none rather than naming the nearer one.
+
+A threshold on an enumeration gives boundaries and no classes. Every other carrier divides a
+position its type left whole, so the ranges a cut leaves are the classes; an enumeration already has
+one class per case, and `s < Qualified` divides `{Prospecting, Qualified, Won}` into `{Prospecting}`
+and `{Qualified, Won}`, which is coarser. The meet of the two partitions is the cases, so the classes
+do not change and the rows the line owes are owed all the same. Rebuilding the classes from the
+ranges would take away distinctions the model had already drawn.
 
 Why a table rather than a predicate at each reader: there were three, and they disagreed. A `Date`
 was a carrier to the reader that drew a `guard`'s line and not to the one that read an invariant's

@@ -56,9 +56,18 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
     private static final Measured NO_CARRIER =
             new Measured(0, 0, "it is compared against values no line can be drawn on here");
 
-    /** The same, at a position whose type states classes of its own — which a cut does not add to. */
-    private static final Measured NO_CARRIER_BUT_CLASSED =
-            new Measured(1, 0, "it is compared against values no line can be drawn on here");
+    /**
+     * A carrier read all the way through at a position whose type already states classes of its own.
+     *
+     * <p>The line is drawn and owes its rows; the classes stay the cases. An enumeration's cases are
+     * a finer partition than any cut of it — {@code s < Qualified} leaves `{Prospecting}` and
+     * `{Qualified, Won}`, and the meet of that with the three cases is the three cases — so the cut
+     * adds no class, which is what tells this apart from the carriers whose type left the position
+     * whole.
+     */
+    private static Measured readBesideItsClasses(int obligations) {
+        return new Measured(1, obligations, null);
+    }
 
     private static final String MODEL = """
             module example.matrix
@@ -233,18 +242,21 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardDayBare", read(2));
         expected.put("guardMomentBare", read(1));
         expected.put("guardTextBare", NO_CARRIER);
-        expected.put("guardStageBare", NO_CARRIER_BUT_CLASSED);
+        // The line and the case beside it, written as case names. The classes are still the three
+        // cases: `read(2)` would say the cut replaced them, and it does not.
+        expected.put("guardStageBare", readBesideItsClasses(2));
         expected.put("guardWholeWrapped", read(2));
         expected.put("guardDenseWrapped", read(1));
         expected.put("guardDayWrapped", read(2));
         expected.put("guardMomentWrapped", read(1));
         expected.put("guardTextWrapped", NO_CARRIER);
-        // Not what the bare position answers, and not what this row is about. A newtype over a sum
-        // loses the sum's cases: the classes reader stops at the name instead of reading what it
-        // wraps, so the position comes back as one the model divides no way. Written down as it is
-        // rather than as it should be, because changing it is a different reader's work — and left
-        // in the table so that fixing it is a cell that stops matching.
-        expected.put("guardStageWrapped", NO_CARRIER);
+        // Not what the bare position answers, and not what this row is about. The line is drawn —
+        // the carrier is asked of what the name wraps, as it is for every other newtype here — and
+        // the classes are gone: a newtype over a sum loses the sum's cases, because the classes
+        // reader stops at the name instead of reading what it wraps. Written down as it is rather
+        // than as it should be, because changing it is a different reader's work, and left in the
+        // table so that fixing it is a cell that stops matching.
+        expected.put("guardStageWrapped", new Measured(0, 2, null));
 
         assertEquals(expected, measured(expected.keySet()));
     }
@@ -264,7 +276,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("boundDay", new Measured(0, 1, null));
         expected.put("boundMoment", new Measured(0, 1, null));
         expected.put("boundText", NO_CARRIER);
-        expected.put("boundStage", NO_CARRIER);
+        expected.put("boundStage", new Measured(0, 1, null));
 
         assertEquals(expected, measured(expected.keySet()));
     }
@@ -297,8 +309,9 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      * And a name wrapped round the values does not change the answer.
      *
      * <p>A newtype is the value it carries, so a rule about it is the rule about what it wraps. The
-     * enumeration is left out here and not silently passed over: it is the one carrier where the two
-     * forms disagree today, and the cell above says so.
+     * enumeration is left out here and not silently passed over: the line is drawn on both forms and
+     * only the wrapped one loses its classes, which is the classes reader stopping at the name and
+     * not the carrier table. The cell above says so, and this row would say it as a carrier problem.
      */
     @Test
     void aNameWrappedRoundTheValuesDoesNotChangeWhatIsMeasured() {
@@ -312,6 +325,13 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
             assertEquals(all.get("guard" + carrier + "Bare"), all.get("guard" + carrier + "Wrapped"),
                     carrier + ": a newtype is the value it carries");
         }
+        // The half of it that does hold of the enumeration, asked here so that the exception above
+        // is the classes and nothing more: the same line, drawn on the same carrier, either side of
+        // the name.
+        Map<String, Measured> stage = measured(List.of("guardStageBare", "guardStageWrapped"));
+        assertEquals(stage.get("guardStageBare").obligations(),
+                stage.get("guardStageWrapped").obligations(),
+                "Stage: a newtype is the value it carries, whatever the classes reader does");
     }
 
     /**
@@ -334,8 +354,9 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         compilation.answerEverything();
 
         String dense = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.matrix", "openOnBothSidesDense", true, SourceNameResolver.identity());
-        assertTrue(dense.contains("1.0 < x < 2.0"), dense);
+                compilation, "example.matrix", "openOnBothSidesDense", true,
+                SourceNameResolver.identity());
+        assertTrue(dense.contains("1 < x < 2"), dense);
         assertFalse(dense.contains("no value this position can hold"),
                 "a decimal lies between two decimals a whole apart: " + dense);
 

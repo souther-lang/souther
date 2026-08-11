@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EndpointTest {
 
-    private static final BigDecimal FIVE = new BigDecimal("5");
+    private static final Count FIVE = Count.of(new BigDecimal("5"));
 
     /**
      * Two lower bounds at the same value leave the value out where either of them does.
@@ -54,8 +54,8 @@ class EndpointTest {
      */
     @Test
     void anEndIsKeptWhereTheOtherIsNoTighter() {
-        Endpoint had = Endpoint.inclusive(new BigDecimal("0"));
-        Endpoint same = Endpoint.inclusive(new BigDecimal("0.0"));
+        Endpoint had = Endpoint.inclusive(Count.of(new BigDecimal("0")));
+        Endpoint same = Endpoint.inclusive(Count.of(new BigDecimal("0.0")));
 
         assertEquals(had, Endpoint.lower(had, same));
         assertEquals(had, Endpoint.upper(had, same));

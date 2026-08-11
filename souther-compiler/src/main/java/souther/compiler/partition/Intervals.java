@@ -1,11 +1,12 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.Type;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -29,10 +30,10 @@ import java.util.Set;
  */
 final class Intervals {
 
-    /** One range of a position's values. A null bound is the domain's own edge. */
-    record Interval(BigDecimal lo, boolean loInclusive, BigDecimal hi, boolean hiInclusive) {
+    /** One range of a position's counts. A null bound is the domain's own edge. */
+    record Interval(Count lo, boolean loInclusive, Count hi, boolean hiInclusive) {
 
-        boolean holds(BigDecimal v) {
+        boolean holds(Count v) {
             if (lo != null) {
                 int c = v.compareTo(lo);
                 if (c < 0 || (c == 0 && !loInclusive)) {
@@ -55,9 +56,11 @@ final class Intervals {
             return c < 0 || (c == 0 && loInclusive && hiInclusive);
         }
 
-        String label(java.util.function.Function<BigDecimal, String> written) {
-            String low = lo == null ? "" : (loInclusive ? written.apply(lo) + " <= " : written.apply(lo) + " < ");
-            String high = hi == null ? "" : (hiInclusive ? " <= " + written.apply(hi) : " < " + written.apply(hi));
+        String label(Carrier carrier) {
+            String low = lo == null ? ""
+                    : (loInclusive ? carrier.written(lo) + " <= " : carrier.written(lo) + " < ");
+            String high = hi == null ? ""
+                    : (hiInclusive ? " <= " + carrier.written(hi) : " < " + carrier.written(hi));
             if (lo == null && hi == null) {
                 return "any";
             }
@@ -65,8 +68,8 @@ final class Intervals {
         }
     }
 
-    /** A place a rule cuts the position, and which side the value itself falls on. */
-    private record Split(BigDecimal value, boolean valueBelongsBelow) {}
+    /** A place a rule cuts the position, and which side the count itself falls on. */
+    private record Split(Count value, boolean valueBelongsBelow) {}
 
     /**
      * The ranges {@code thresholds} leave, inside what the position holds.
@@ -78,22 +81,22 @@ final class Intervals {
      * anything past it is.
      */
     static List<Interval> of(List<Threshold> thresholds, Endpoint min, Endpoint max) {
-        // Keyed by the number and not by the BigDecimal: `0.00` and `0` are one line, and
-        // BigDecimal's own equality says they are two, which would leave two ranges holding zero.
+        // Keyed by the number and not by the count's own equality: `0.00` and `0` are one line, and
+        // BigDecimal's equality says they are two, which would leave two ranges holding zero.
         Map<String, Split> distinct = new LinkedHashMap<>();
         for (Threshold each : thresholds) {
             if (!Endpoint.someValueLiesBetween(min, Endpoint.inclusive(each.value()))
                     || !Endpoint.someValueLiesBetween(Endpoint.inclusive(each.value()), max)) {
                 continue;
             }
-            distinct.putIfAbsent(each.value().stripTrailingZeros().toPlainString(),
+            distinct.putIfAbsent(each.value().key(),
                     new Split(each.value(), each.valueBelongsBelow()));
         }
         List<Split> splits = new ArrayList<>(distinct.values());
         splits.sort(Comparator.comparing(Split::value));
 
         List<Interval> out = new ArrayList<>();
-        BigDecimal lo = min == null ? null : min.value();
+        Count lo = min == null ? null : min.at();
         boolean loInclusive = min == null || min.inclusive();
         for (Split split : splits) {
             Interval range = new Interval(lo, loInclusive, split.value(), split.valueBelongsBelow());
@@ -103,7 +106,7 @@ final class Intervals {
             lo = split.value();
             loInclusive = !split.valueBelongsBelow();
         }
-        Interval last = new Interval(lo, loInclusive, max == null ? null : max.value(),
+        Interval last = new Interval(lo, loInclusive, max == null ? null : max.at(),
                 max == null || max.inclusive());
         if (last.inhabited()) {
             out.add(last);
@@ -121,37 +124,30 @@ final class Intervals {
      */
     static List<PartitionClass> classesOf(List<Interval> intervals, NumericTerm of, Type type,
                                           Symbols symbols) {
-        // What the numbers in a label stand for. A day count is a carrier and never a name for the
+        // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
-        Carrier carrier = Carrier.of(of, type, symbols);
-        java.util.function.Function<BigDecimal, String> written =
-                switch (carrier) {
-                    case WHOLE, DENSE -> BigDecimal::toPlainString;
-                    case DATE -> Dates::written;
-                    case MOMENT -> DateTimes::written;
-                };
-        souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
-                && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
+        Carrier carrier = of.carrierAt(type, symbols);
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
-            String id = of + "/" + range.label(written);
-            BigDecimal inside = representative(range, carrier);
-            Classifier is = v -> switch (of.read(v)) {
+            String label = range.label(carrier);
+            String id = of + "/" + label;
+            Count inside = representative(range, carrier);
+            Classifier is = v -> switch (of.read(v, carrier)) {
                 case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
                 case NumericTerm.Reading.Missing missing ->
                         new Membership.Incomplete(missing.code());
                 case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
             };
             if (inside == null) {
-                classes.add(PartitionClass.ungeneratable(id, range.label(written), is,
+                classes.add(PartitionClass.ungeneratable(id, label, is,
                         "no value this position can hold lies inside this range"));
                 continue;
             }
-            List<FixtureTemplate> values = standingIn(of, inside, type, wrapper, carrier, symbols);
+            List<FixtureTemplate> values = standingIn(of, inside, type, carrier, symbols);
             classes.add(values.isEmpty()
-                    ? PartitionClass.ungeneratable(id, range.label(written), is,
+                    ? PartitionClass.ungeneratable(id, label, is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
-                    : PartitionClass.of(id, range.label(written), is,
+                    : PartitionClass.of(id, label, is,
                             RepresentativeSource.of(values.toArray(new FixtureTemplate[0]))));
         }
         return List.copyOf(classes);
@@ -171,8 +167,8 @@ final class Intervals {
      * came back as one holding no value, which is what a whole step would leave and not what the
      * values do.
      */
-    private static BigDecimal representative(Interval range, Carrier carrier) {
-        BigDecimal between = Endpoint.valueBetween(
+    private static Count representative(Interval range, Carrier carrier) {
+        Count between = Endpoint.valueBetween(
                 range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
                 range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
                 carrier.spacing());
@@ -181,9 +177,9 @@ final class Intervals {
         }
         // What the carrier can hold, and then whether the range still holds it. Spacing answers what
         // a strict bound may be sharpened onto and is not a promise that every number between two
-        // values is one — asking it for both is how a class open at both ends came to offer the
-        // value at one of its ends.
-        BigDecimal held = carrier.onTheGrid(between);
+        // counts is one — asking it for both is how a class open at both ends came to offer the
+        // count at one of its ends.
+        Count held = carrier.onTheGrid(between);
         return held != null && range.holds(held) ? held : null;
     }
 
@@ -196,33 +192,21 @@ final class Intervals {
      * one's. Asked of it rather than answered here, so that this says a range has no representative
      * only when the thing that builds them has none to give.
      */
-    private static List<FixtureTemplate> standingIn(NumericTerm of, BigDecimal inside, Type type,
-                                                    souther.compiler.types.TypeName wrapper,
+    private static List<FixtureTemplate> standingIn(NumericTerm of, Count inside, Type type,
                                                     Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
-            return List.of(written(inside, wrapper, carrier));
+            return List.of(Witnesses.wrapped(type, FixtureTemplate.on(carrier, inside), symbols));
         }
-        if (inside.stripTrailingZeros().scale() > 0
-                || inside.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
+        int size = Counts.asSize(inside);
+        if (size < 0) {
             return List.of();
         }
         List<FixtureTemplate> out = new ArrayList<>();
-        for (FixtureTemplate each : Witnesses
-                .ofSize(TypeOps.base(type, symbols), inside.intValue(), symbols, Set.of()).values()) {
+        for (FixtureTemplate each
+                : Witnesses.ofSize(TypeOps.base(type, symbols), size, symbols, Set.of()).values()) {
             out.add(Witnesses.wrapped(type, each, symbols));
         }
         return List.copyOf(out);
-    }
-
-    private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,
-                                           Carrier carrier) {
-        FixtureTemplate literal = switch (carrier) {
-            case DENSE -> FixtureTemplate.decimal(value);
-            case WHOLE -> FixtureTemplate.integer(value.longValueExact());
-            case DATE -> FixtureTemplate.date(Dates.written(value));
-            case MOMENT -> FixtureTemplate.dateTime(DateTimes.written(value));
-        };
-        return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
     }
 
     private Intervals() {}

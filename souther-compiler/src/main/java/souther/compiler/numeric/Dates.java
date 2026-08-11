@@ -1,4 +1,4 @@
-package souther.compiler.partition;
+package souther.compiler.numeric;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,23 +21,23 @@ import java.time.format.DateTimeParseException;
  * mixing the two units in one carrier would put a line drawn on a day beside one drawn on a second
  * with nothing saying which was which. A date-time comparison is left unread, which is said as that.
  */
-final class Dates {
+public final class Dates {
 
-    /** The day {@code iso} is, or null where it is not a date this reads. */
-    static BigDecimal dayOf(String iso) {
+    /** The day {@code iso} counts to, or null where it is not a date this reads. */
+    public static Count dayOf(String iso) {
         if (iso == null || iso.indexOf('T') >= 0) {
             return null;   // a date-time, whose step is not a day
         }
         try {
-            return BigDecimal.valueOf(LocalDate.parse(iso).toEpochDay());
+            return Count.of(LocalDate.parse(iso).toEpochDay());
         } catch (DateTimeParseException _) {
             return null;
         }
     }
 
     /** The date {@code day} counts to, written the way a model writes one. */
-    static String written(BigDecimal day) {
-        return LocalDate.ofEpochDay(day.longValueExact()).toString();
+    public static String written(Count day) {
+        return LocalDate.ofEpochDay(day.at().longValueExact()).toString();
     }
 
     private Dates() {}

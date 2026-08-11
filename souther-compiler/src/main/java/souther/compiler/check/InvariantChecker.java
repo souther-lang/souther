@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Combinators.Handed;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
@@ -257,7 +258,7 @@ public final class InvariantChecker {
      * still take, which is where a row completing that assignment has to look.
      */
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
-                             Map<String, BigDecimal> settled) {
+                             Map<String, Count> settled) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
@@ -301,7 +302,7 @@ public final class InvariantChecker {
             }
         }
         NumericDomain numbers = k.numbers();
-        for (Map.Entry<String, BigDecimal> each : settled.entrySet()) {
+        for (Map.Entry<String, Count> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
             Type type = typeAt.get(each.getKey());
             if (atom == null || type == null) {
@@ -309,7 +310,7 @@ public final class InvariantChecker {
             }
             numbers = numbers.assume(
                     NumericDomain.LinearForm.atom(atom)
-                            .minus(NumericDomain.LinearForm.constant(each.getValue())),
+                            .minus(NumericDomain.LinearForm.constant(each.getValue().at())),
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
@@ -401,22 +402,33 @@ public final class InvariantChecker {
      * one that gave none — {@code isOdd(value)} beside {@code value >= 0} — is a way the type refuses
      * a value that the bounds do not express.
      *
-     * <p>Which reader that is depends on what the value is carried as. A number's range comes from
-     * the comparison itself; anything else — a length, a pattern, a size — is read as the runtime
-     * check it becomes, which is the only reading of those there is.
+     * <p>Which reader that is depends on what the value is carried as. An ordered value's range comes
+     * from the comparison itself and is read by the one interpreter that reads every ordered rule;
+     * anything else — a pattern, a size, a quantifier — is read as the runtime check it becomes,
+     * which is the only reading of those there is.
+     *
+     * <p>The carrier decides which, and it is asked of the type rather than derived from a second
+     * list of what counts as a number. Read off such a list, a {@code Date} newtype's bound went to
+     * the runtime-check reader, which has no word for a date comparison — so a rule the interval
+     * algebra reads as a bound came back unreadable, and every boundary of the record it sat in lost
+     * its writability with it.
+     *
+     * <p>One conjunct at a time, and all of them. A clause is split to its leaves first, so a leaf is
+     * either an ordered bound whole or not one at all; a rule of another shape beside a bound is a
+     * way the type refuses a value that the bounds do not express, and saying the bounds are the
+     * whole story would offer a row nothing can build.
      */
     private static boolean everyRuleBecameABound(TypeName named, Ast.Data data, Symbols symbols) {
-        Type carried = TypeOps.numericBase(Type.ref(named), symbols);
-        Type base = carried != null ? carried : TypeOps.fieldTypes(data, symbols).get("value");
+        Carrier carrier = Carrier.ofValue(Type.ref(named), symbols);
+        Type base = TypeOps.fieldTypes(data, symbols).get("value");
         // Every name the value wears, read against what it is carried as. Asking only the outermost
         // one leaves a rule a layer down unaccounted for, and reading it against the type that layer
-        // declares rather than against the number underneath makes every such rule unreadable.
+        // declares rather than against what carries the value makes every such rule unreadable.
         for (TypeOps.Layer layer : TypeOps.newtypeChain(Type.ref(named), symbols)) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
-                boolean numeric = base == Type.INT || base == Type.DECIMAL;
                 for (Ast.Expr each
                         : souther.compiler.codegen.InvariantConstraints.clauses(clause.expr())) {
-                    boolean read = numeric ? InvariantBound.of(each, base).isPresent()
+                    boolean read = carrier != null ? InvariantBound.of(each, carrier).isPresent()
                             : souther.compiler.codegen.InvariantConstraints.of(each, base).isPresent();
                     if (!read) {
                         return false;
