@@ -829,7 +829,8 @@ public final class Partitions {
         }
         java.util.Set<TypeName> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
-        FieldDomains left = fieldDomainsOf(Type.ref(record), symbols);
+        Map<String, Count> settled = new LinkedHashMap<>();
+        FieldDomains left = FieldDomains.of(record, data, symbols, settled);
         Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         for (Map.Entry<String, Type> field : fields.entrySet()) {
             List<FixtureTemplate> stands = representativesHolding(field.getValue(), symbols,
@@ -837,7 +838,15 @@ public final class Partitions {
             if (stands.isEmpty()) {
                 return List.of();
             }
-            chosen.put(field.getKey(), stands.get(0));
+            FixtureTemplate at = stands.get(0);
+            chosen.put(field.getKey(), at);
+            // Settled, and the rules read again with it in them. A field chosen against the rules as
+            // they stand before anything is settled is chosen against `a < b` with `a` still open,
+            // which leaves `b` its whole range and takes the bottom of it.
+            if (Counts.writtenIn(at.value()) instanceof Count count) {
+                settled.put(field.getKey(), count);
+                left = FieldDomains.of(record, data, symbols, settled);
+            }
         }
         return List.of(FixtureTemplate.record(record, chosen));
     }

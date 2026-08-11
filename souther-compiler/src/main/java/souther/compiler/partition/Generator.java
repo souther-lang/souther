@@ -770,35 +770,13 @@ public final class Generator {
         Map<String, Place> out = new LinkedHashMap<>();
         decided.forEach((path, candidates) -> {
             if (candidates.size() == 1) {
-                Place number = writtenNumber(candidates.get(0).value());
+                Place number = Counts.writtenIn(candidates.get(0).value());
                 if (number != null) {
                     out.put(path, number);
                 }
             }
         });
         return out;
-    }
-
-    /**
-     * The count a fixture settles its position at, reaching through the newtype it may be wrapped in,
-     * or null where it settles none.
-     *
-     * <p>Only a written number. A temporal fixture carries its text and not its count, and it stays
-     * unsettled here rather than being read back: what a settled position is for is asking the
-     * record's rules what is left beside it, and those rules are read over the positions the
-     * projection holds — which the temporal ones are not yet.
-     */
-    private static Place writtenNumber(Ast.Expr written) {
-        return switch (written) {
-            case Ast.IntLit i -> Count.of(i.value());
-            case Ast.DecimalLit d -> Count.of(d.value());
-            case Ast.Neg n -> {
-                Place inner = writtenNumber(n.operand());
-                yield inner == null ? null : Count.number(inner).negate();
-            }
-            case Ast.Apply a when a.args().size() == 1 -> writtenNumber(a.args().get(0));
-            case null, default -> null;
-        };
     }
 
     /** One parameter's value, with the positions the caller fixed already decided. */
@@ -971,7 +949,7 @@ public final class Generator {
         Position position = positions.get(index);
         for (FixtureTemplate candidate : candidatesAt(subject, p, position, settled, decided)) {
             chosen.put(position.path(), candidate);
-            Place number = writtenNumber(candidate.value());
+            Place number = Counts.writtenIn(candidate.value());
             if (number != null) {
                 settled.put(position.path(), number);
             }

@@ -36,7 +36,8 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
             data Yen = Int invariant value >= 0
             data Ok = { n: Int }
 
-            data Boxed = { x: Int }
+            data Boxed = { a: Int, b: Int }
+                invariant rising = a < b
             data Labelled = { s: String }
             data EveryCaseARecord = Boxed | Labelled
 
@@ -49,7 +50,7 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
                 constructs Ok
             let recordCases (bill, v) = Ok { n = bill.value }
 
-            example recordCases | (Yen(5), Boxed { x = 1 }) -> Ok { n = 5 }
+            example recordCases | (Yen(5), Boxed { a = 1, b = 2 }) -> Ok { n = 5 }
             """;
 
     private final Symbols symbols = Symbols.of(resolved());
@@ -148,6 +149,23 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
             assertFalse(Partitions.representativesOf(named(each.id()), symbols).isEmpty(),
                     () -> "a record case stands for a value: " + each.id());
         }
+    }
+
+    /**
+     * A case whose fields constrain each other is composed against that rule.
+     *
+     * <p>The walk that composes a case as an axis chooses one position at a time, each against what
+     * the record's rules leave it once the ones before it are settled, which is the only way
+     * {@code a < b} is met. Composed here with every field read from the rules as they stand before
+     * anything is chosen, the value handed back is one the decoder refuses — and the position is
+     * back to being one the two strategies disagree about.
+     */
+    @Test
+    void aCaseWhoseFieldsConstrainEachOtherIsComposedAgainstThatRule() {
+        List<FixtureTemplate> stands = Partitions.representativesOf(named("Boxed"), symbols);
+
+        assertTrue(stands.stream().anyMatch(each -> each.text().equals("Boxed { a = 0, b = 1 }")),
+                () -> "each field against what the rules leave it: " + stands);
     }
 
     /**
