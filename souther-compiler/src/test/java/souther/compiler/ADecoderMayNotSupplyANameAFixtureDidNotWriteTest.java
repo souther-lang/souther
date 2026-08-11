@@ -19,9 +19,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reaches a decoder — the name the row wrote, or, where a helper answered, the value it answered
  * with.
  *
+ * <p>Both ways round. A nominal position takes one of the names it holds; a primitive or a
+ * collection takes a value under no name, since an `AmountN` is one wherever it is written and its
+ * representation reading as an `Int` does not make it one.
+ *
  * <p>Held at every position a value stands at rather than at the outermost one: a field of a record,
- * an element of a list, an argument of a helper and the value under a newtype are each a position of
- * their own.
+ * an element of a list, an argument of a helper, the value under a newtype and every position inside
+ * what a helper answered with are each a position of their own.
+ *
+ * <p>An expected value is not held to any of it. A row may state what the behavior does not answer
+ * with, and reporting that disagreement is what the row is for, so what a row expects is compared
+ * rather than admitted.
  *
  * <p>What a spread supplies is not a value of the position: {@code Filed { ...d, filedOn = on }}
  * copies a {@code Document}'s fields, and holding {@code d} to being a {@code Filed} would refuse
@@ -49,6 +57,8 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
             data DecisionN = Decision
 
             data Order = { amount: AmountN }
+            data Held = { amount: AmountN? }
+            data IntList = List<Int>
             data Document = { amount: AmountN }
             data Filed = { amount: AmountN, filedOn: Date }
 
@@ -71,6 +81,22 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
             behavior takesMany : (a: List<AmountN>) -> Ok
                 constructs Ok
             let takesMany (a) = Ok
+
+            behavior takesIntList : (l: List<Int>) -> Ok
+                constructs Ok
+            let takesIntList (l) = Ok
+
+            behavior takesSet : (s: Set<AmountN>) -> Ok
+                constructs Ok
+            let takesSet (s) = Ok
+
+            behavior takesMap : (m: Map<String, AmountN>) -> Ok
+                constructs Ok
+            let takesMap (m) = Ok
+
+            behavior takesHeld : (h: Held) -> Ok
+                constructs Ok
+            let takesHeld (h) = Ok
 
             behavior takesA : (a: A) -> Ok
                 constructs Ok
@@ -105,8 +131,18 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
             let inferredWrapped (n: Int) = AmountN(n)
             let inferredBare (n: Int) = n
             let identity (a: AmountN): AmountN = a
+            let ints (n: Int): List<Int> = [n]
+            let intSet (n: Int): Set<Int> = Set.fromList([n])
+            let intMap (n: Int): Map<String, Int> = Map.fromList([("a", n)])
+            let pickAmount (o: Held) = o.amount
 
             let doc: Document = Document { amount = AmountN(1) }
+            let viaDoc: Document = doc
+            let docOf (n: Int): Document = Document { amount = AmountN(n) }
+            let builtDoc: Document = docOf(1)
+
+            let full: Held = Held { amount = AmountN(1) }
+            let empty: Held = Held { amount = None }
             """;
 
     /** A model whose rows all hold. */
@@ -119,20 +155,14 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(BASE + rows),
                 "the row states no value of the position it is written at");
         assertEquals(1, e.diagnostics().size(), "one row, one diagnostic: " + e.getMessage());
-        Diagnostic d = e.diagnostics().get(0);
-        assertEquals("E1903", d.code(), d.said().toString());
-        return d;
+        return e.diagnostics().get(0);
     }
 
     /** What the row was told, where an input could not be built. */
     private static String refuses(String rows) {
-        return assertInstanceOf(ExampleMessage.AnInputCouldNotBeBuilt.class, only(rows).said()).why();
-    }
-
-    /** The same, where the expected value could not be built. */
-    private static String refusesExpected(String rows) {
-        return assertInstanceOf(ExampleMessage.TheExpectedValueCouldNotBeBuilt.class,
-                only(rows).said()).why();
+        Diagnostic d = only(rows);
+        assertEquals("E1903", d.code(), d.said().toString());
+        return assertInstanceOf(ExampleMessage.AnInputCouldNotBeBuilt.class, d.said()).why();
     }
 
     /** Both names, so the row is told which one it is written under and which one it wrote. */
@@ -313,25 +343,75 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
     }
 
     @Test
-    void anExpectedValueIsWrittenAtItsPositionToo() {
-        // A row may expect a case the behavior does not answer with, which is a disagreement it
-        // reports. Which name the value is written under is not that: a number states no `AmountN`,
-        // so there is nothing to disagree about and the row is told what it wrote.
+    void anExpectedValueIsComparedAndNotAdmitted() {
+        // Where the rule stops. A row may state what the behavior does not answer with, and reporting
+        // that disagreement is what the row is for, so an expected value is built and compared rather
+        // than held to its position — a number expected where an `AmountN` comes out is a mismatch
+        // the row reports (E1905) and not a fixture that could not be built.
         admits("""
                 example amountOf
                     | (1) -> AmountN(1)
                 """);
-        assertTrue(refusesExpected("""
+        assertEquals("E1905", only("""
                 example amountOf
                     | (1) -> 1
-                """).contains("`AmountN`"));
+                """).code());
+        assertEquals("E1905", only("""
+                example amountOf
+                    | (1) -> bare(1)
+                """).code());
+    }
+
+    @Test
+    void aPositionThatWearsNoNameRefusesOne() {
+        // The rule read the other way. A `data AmountN = Int` is an `AmountN` wherever it is written,
+        // and its representation reading as an `Int` does not make it one.
+        names(refuses("""
+                example takesInt
+                    | (AmountN(1)) -> Ok
+                """), "Int", "AmountN");
+        names(refuses("""
+                example takesIntList
+                    | (IntList([1])) -> Ok
+                """), "List<Int>", "IntList");
+        names(refuses("""
+                example takesAmount
+                    | (AmountN(OtherAmountN(1))) -> Ok
+                """), "Int", "OtherAmountN");
+    }
+
+    @Test
+    void aHelperAnswersForEveryPositionInsideWhatItAnsweredWith() {
         admits("""
-                example orderOf
-                    | (1) -> Order { amount = AmountN(1) }
+                example takesMany
+                    | ([AmountN(1)]) -> Ok
                 """);
-        assertTrue(refusesExpected("""
-                example orderOf
-                    | (1) -> Order { amount = 1 }
+        assertTrue(refuses("""
+                example takesMany
+                    | (ints(1)) -> Ok
+                """).contains("`List<AmountN>`"));
+        assertTrue(refuses("""
+                example takesSet
+                    | (intSet(1)) -> Ok
+                """).contains("`Set<AmountN>`"));
+        assertTrue(refuses("""
+                example takesMap
+                    | (intMap(1)) -> Ok
+                """).contains("`Map<String, AmountN>`"));
+    }
+
+    @Test
+    void anOptionalTakesWhatItHoldsAndAbsence() {
+        admits("""
+                example takesHeld
+                    | (Held { amount = AmountN(1) }) -> Ok
+                    | (Held { amount = None }) -> Ok
+                    | (Held { amount = pickAmount(full) }) -> Ok
+                    | (Held { amount = pickAmount(empty) }) -> Ok
+                """);
+        assertTrue(refuses("""
+                example takesHeld
+                    | (Held { amount = 1 }) -> Ok
                 """).contains("`AmountN`"));
     }
 
@@ -340,6 +420,20 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
         admits("""
                 example takesFiled
                     | (Filed { ...doc, filedOn = Date("2026-01-01") }) -> Ok
+                """);
+    }
+
+    @Test
+    void aSpreadStatesNoValueHoweverItsSourceIsReached() {
+        // The exemption is the frame's, and a name and an application go on at that same frame: they
+        // stand for what the spread names rather than opening a position of their own.
+        admits("""
+                example takesFiled
+                    | (Filed { ...viaDoc, filedOn = Date("2026-01-01") }) -> Ok
+                """);
+        admits("""
+                example takesFiled
+                    | (Filed { ...builtDoc, filedOn = Date("2026-01-01") }) -> Ok
                 """);
     }
 
