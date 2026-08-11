@@ -256,15 +256,22 @@ public final class Partitions {
             List<Threshold> reachable = here.stream()
                     .filter(t -> domain == null || domain.admits(t.value()))
                     .toList();
-            List<PartitionClass> classes = Intervals.classesOf(
-                    Intervals.of(reachable, domain == null ? null : domain.min(),
-                            domain == null ? null : domain.max()),
-                    term, axis.type(), symbols);
             // What the term is, not what an invariant said about it. There is a bound to read only
             // where the type is a newtype carrying one, and a plain `Decimal` has none — read off the
             // bound, every such position would be called an integer and a threshold of `0.5m` would
             // be asked for its exact `long`. A size is a whole number whatever it is a size of.
             Carrier carrier = term.carrierAt(axis.type(), symbols);
+            // The ranges a cut leaves, where the position has no finer partition of its own. On an
+            // enumeration it has: the cases are the classes, and `s < Qualified` divides them into
+            // `{Prospecting}` and `{Qualified, Won}`, which is coarser than the cases. The meet of
+            // the two is the case partition, so the cut adds no class — and a class list rebuilt
+            // from the ranges would take away distinctions the model already made. The line is still
+            // a line and still owes its rows; only the classes stay as they were.
+            List<PartitionClass> classes = carrier instanceof Carrier.Ordinal ? List.of()
+                    : Intervals.classesOf(
+                            Intervals.of(reachable, domain == null ? null : domain.min(),
+                                    domain == null ? null : domain.max()),
+                            term, axis.type(), symbols);
             // Through `excluding`, so that a class list replaced by the intervals a threshold cuts
             // keeps only the exclusions it still has classes for.
             out.add(new Axis(axis.id(), term, axis.type(),

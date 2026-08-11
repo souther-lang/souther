@@ -115,7 +115,6 @@ public record FixtureTemplate(String text, Ast.Expr value) {
                         new ReachName.Bare(type.name())));
     }
 
-    /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */
     /**
      * A count written as the value it stands for, wrapped where the position wears a name.
      *
@@ -128,16 +127,20 @@ public record FixtureTemplate(String text, Ast.Expr value) {
      */
     public static FixtureTemplate on(Carrier carrier, Count at, TypeName wrapper) {
         FixtureTemplate literal = switch (carrier) {
-            case WHOLE -> integer(at.at().longValueExact());
-            case DENSE -> decimal(at.at());
+            case Carrier.Whole _ -> integer(at.at().longValueExact());
+            case Carrier.Dense _ -> decimal(at.at());
             // Written by the carrier, so the text on a row and the text in a report are the same
             // text. Spelled here as well, the two could differ at midnight and nowhere else.
-            case DATE -> date(carrier.written(at));
-            case MOMENT -> dateTime(carrier.written(at));
+            case Carrier.Days _ -> date(carrier.written(at));
+            case Carrier.Seconds _ -> dateTime(carrier.written(at));
+            // Naming a case builds it, which is what a row writes at such a position — never the
+            // place the case takes in its declaration.
+            case Carrier.Ordinal ordinal -> unitCase(ordinal.caseAt(at));
         };
         return wrapper == null ? literal : newtype(wrapper, literal);
     }
 
+    /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */
     public static FixtureTemplate newtype(TypeName type, FixtureTemplate inner) {
         return new FixtureTemplate(type.name() + "(" + inner.text() + ")",
                 new Ast.Apply(type.name(), List.of(inner.value()), NOWHERE, NO_SOURCE));

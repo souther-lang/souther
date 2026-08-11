@@ -7,6 +7,10 @@ import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
+
+import java.util.List;
 
 /**
  * What a position's counts stand for, and the only place either direction is crossed.
@@ -26,57 +30,105 @@ import souther.compiler.types.Type;
  * had — the declared type says which, and guessing from the text is a second answer to a question
  * already answered.
  *
- * <p><b>Exhaustive over {@link Type.Prim}.</b> A primitive added to the language stops the build
- * here, at the one place that would otherwise answer for it by omission. What this does not close is
- * the rest of the ordered types (spec §primitives): a single-value newtype is reduced to its base
- * before this is asked, and an enumeration is ordered by its declaration and is not a primitive at
- * all.
+ * <p><b>Sealed, so a carrier added is one every reader has to answer for.</b> Each switch below is
+ * over these cases and nothing else, which is what makes a sixth one a build failure rather than a
+ * wrong value. That mattered least while every carrier's counts looked like numbers a model might
+ * write; an ordinal is a small integer, which is the most plausible-looking wrong value of the five
+ * and the one a report is least likely to give away.
+ *
+ * <p><b>Which types have one</b> is {@link #ofValue}, and it is not a second list: the primitives are
+ * matched exhaustively so that one added to the language stops the build, and an enumeration is asked
+ * of {@link TypeOps#orderingEnumeration}, which already knows that the order belongs to the sum
+ * rather than to a case a second sum may also list.
  */
-public enum Carrier {
+public sealed interface Carrier {
 
     /** A whole number: an {@code Int}, and every size. */
-    WHOLE,
+    record Whole() implements Carrier {}
 
     /** A decimal. */
-    DENSE,
+    record Dense() implements Carrier {}
 
     /** A day count, standing for a date. */
-    DATE,
+    record Days() implements Carrier {}
 
-    /** A second count, standing for a date-time. Apart from {@link #DATE}: two units in one carrier
+    /** A second count, standing for a date-time. Apart from {@link Days}: two units in one carrier
      *  would leave a line drawn on a day beside one drawn on a second with nothing saying which. */
-    MOMENT;
+    record Seconds() implements Carrier {}
+
+    /**
+     * The place a case takes in its enumeration's declaration, standing for the case.
+     *
+     * <p>Carries the cases because the count means nothing without them: 1 is a day, a second, a
+     * number and {@code Qualified} depending on what is being counted, and only here is that ever
+     * decided. Which enumeration a value is ordered by belongs to the sum rather than to the case —
+     * a unit data may be listed by two sums that place it differently — so the sum is named as well.
+     *
+     * @param enumeration the sum whose declaration order this counts in
+     * @param cases       its leaf cases, in that order
+     */
+    record Ordinal(TypeName enumeration, List<TypeName> cases) implements Carrier {
+
+        public Ordinal {
+            cases = List.copyOf(cases);
+        }
+
+        /** Where {@code name} comes in the declaration, or null where this enumeration has no such
+         * case — which is a value of some other type and not a place on this order. */
+        public Count at(TypeName name) {
+            int index = cases.indexOf(name);
+            return index < 0 ? null : Count.of(index);
+        }
+
+        /** The case at a count. Only ever asked of a count this carrier holds, which is what
+         * {@link Carrier#onTheGrid} is for. */
+        public TypeName caseAt(Count count) {
+            return cases.get(count.at().intValueExact());
+        }
+    }
+
+    Carrier WHOLE = new Whole();
+    Carrier DENSE = new Dense();
+    Carrier DATE = new Days();
+    Carrier MOMENT = new Seconds();
 
     /**
      * The carrier a location's own content is counted on, or null where nothing here draws a line on
      * it.
      *
      * <p>Asked of what the names wrap, so a newtype answers as the value it carries — which is what
-     * makes {@code data Cutoff = Date} the same carrier as a bare {@code Date}.
+     * makes {@code data Cutoff = Date} the same carrier as a bare {@code Date}, and
+     * {@code data StageN = Stage} the same carrier as a bare {@code Stage}.
      */
-    public static Carrier ofValue(Type type, Symbols symbols) {
-        if (!(TypeOps.base(type, symbols) instanceof Type.Prim prim)) {
+    static Carrier ofValue(Type type, Symbols symbols) {
+        Type base = TypeOps.base(type, symbols);
+        if (base instanceof Type.Prim prim) {
+            return switch (prim) {
+                case INT -> WHOLE;
+                case DECIMAL -> DENSE;
+                case DATE -> DATE;
+                case DATETIME -> MOMENT;
+                // `String` is ordered and has no count to embed into, so nothing here draws a line
+                // on it. `Bool` and `Raw` are not ordered at all.
+                case STRING, BOOL, RAW -> null;
+            };
+        }
+        TypeName enumeration = TypeOps.orderingEnumeration(base, symbols);
+        if (enumeration == null || !(symbols.get(enumeration) instanceof Ast.SumData sum)) {
             return null;
         }
-        return switch (prim) {
-            case INT -> WHOLE;
-            case DECIMAL -> DENSE;
-            case DATE -> DATE;
-            case DATETIME -> MOMENT;
-            // `String` is ordered and has no count to embed into, so nothing here draws a line on
-            // it. `Bool` and `Raw` are not ordered at all.
-            case STRING, BOOL, RAW -> null;
-        };
+        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+        return cases.isEmpty() ? null : new Ordinal(enumeration, cases);
     }
 
     /** How the counts on this carrier are spaced, which is what decides whether a strict bound has a
      * next count to step to. */
-    public Granularity spacing() {
+    default Granularity spacing() {
         return switch (this) {
-            case WHOLE, DATE -> Granularity.DISCRETE;
+            case Whole _, Days _, Ordinal _ -> Granularity.DISCRETE;
             // No smallest step this language names. A strict bound then leaves its end on the count
             // it names and says that count is not one of its own, rather than inventing a step in.
-            case DENSE, MOMENT -> Granularity.DENSE;
+            case Dense _, Seconds _ -> Granularity.DENSE;
         };
     }
 
@@ -92,23 +144,27 @@ public enum Carrier {
      * ends between two adjacent moments offered the count between them, which was written back as one
      * of the ends — a row labelled for a class it is not in.
      */
-    public Count onTheGrid(Count count) {
+    default Count onTheGrid(Count count) {
         if (count == null) {
             return null;
         }
         return switch (this) {
             // A decimal holds every number: the ranges and the values are the same numbers.
-            case DENSE -> count;
-            // A whole number and a day count step, so a number between two of them is neither, and
-            // each stops where what carries it stops. Asked here rather than at each place that
-            // steps one, because a step off the end is the same non-value however it was reached.
-            case WHOLE -> count.whole() && within(count, Long.MIN_VALUE, Long.MAX_VALUE)
+            case Dense _ -> count;
+            // A whole number, a day count and an ordinal step, so a number between two of them is
+            // neither, and each stops where what carries it stops. Asked here rather than at each
+            // place that steps one, because a step off the end is the same non-value however it was
+            // reached — and an enumeration's ends are the nearest of the five, one step past its
+            // last case.
+            case Whole _ -> count.whole() && within(count, Long.MIN_VALUE, Long.MAX_VALUE)
                     ? count : null;
-            case DATE -> count.whole()
+            case Days _ -> count.whole()
                     && within(count, java.time.LocalDate.MIN.toEpochDay(),
                             java.time.LocalDate.MAX.toEpochDay())
                     ? count : null;
-            case MOMENT -> DateTimes.secondOf(DateTimes.written(count));
+            case Ordinal ordinal -> count.whole() && within(count, 0, ordinal.cases().size() - 1)
+                    ? count : null;
+            case Seconds _ -> DateTimes.secondOf(DateTimes.written(count));
         };
     }
 
@@ -125,12 +181,18 @@ public enum Carrier {
      * reader instead, and an invariant and a {@code guard} at one position admitted different rules
      * with only one of them saying so.
      */
-    public Count literalOf(Ast.Expr e) {
+    default Count literalOf(Ast.Expr e) {
         return switch (this) {
-            case WHOLE -> Count.of(InvariantBound.wholeLiteral(e));
-            case DENSE -> Count.of(InvariantBound.literalOf(e));
-            case DATE -> temporal(e, "Date", Dates::dayOf);
-            case MOMENT -> temporal(e, "DateTime", DateTimes::secondOf);
+            case Whole _ -> Count.of(InvariantBound.wholeLiteral(e));
+            case Dense _ -> Count.of(InvariantBound.literalOf(e));
+            case Days _ -> temporal(e, "Date", Dates::dayOf);
+            case Seconds _ -> temporal(e, "DateTime", DateTimes::secondOf);
+            // A case is named rather than written, so the literal is a name and what it denotes says
+            // which case it is. Read off the denotation and not the text: a case is reachable under
+            // an alias, and two enumerations may declare cases spelled the same way.
+            case Ordinal ordinal -> e instanceof Ast.Var v
+                    && v.denotes() instanceof ValueName.OfType named
+                    ? ordinal.at(named.type()) : null;
         };
     }
 
@@ -155,19 +217,23 @@ public enum Carrier {
      * the value one inside it. Reached through rather than refused, which is how a wrapped number and
      * a bare one are the same count.
      */
-    public Count countOf(ObservedValue value) {
+    default Count countOf(ObservedValue value) {
         ObservedValue at = value instanceof ObservedValue.Constructed c && c.field("value") != null
                 ? c.field("value") : value;
         return switch (this) {
             // A whole number written as a decimal is the same count; whether the position admits a
             // fraction is the range's question and not this one's.
-            case WHOLE, DENSE -> switch (at) {
+            case Whole _, Dense _ -> switch (at) {
                 case ObservedValue.Integer i -> Count.of(i.value());
                 case ObservedValue.Decimal d -> Count.of(d.value());
                 case null, default -> null;
             };
-            case DATE -> at instanceof ObservedValue.Temporal t ? Dates.dayOf(t.iso()) : null;
-            case MOMENT -> at instanceof ObservedValue.Temporal t ? DateTimes.secondOf(t.iso()) : null;
+            case Days _ -> at instanceof ObservedValue.Temporal t ? Dates.dayOf(t.iso()) : null;
+            case Seconds _ ->
+                    at instanceof ObservedValue.Temporal t ? DateTimes.secondOf(t.iso()) : null;
+            // A case carries nothing but which case it is, so the observation is its name.
+            case Ordinal ordinal ->
+                    at instanceof ObservedValue.Unit u ? ordinal.at(u.type()) : null;
         };
     }
 
@@ -178,12 +244,13 @@ public enum Carrier {
      * everywhere a person reads it, and the conversion sitting here is what keeps a cut, a report and
      * a fixture from disagreeing about which of the two a line is drawn at.
      */
-    public ObservedValue valueOf(Count count) {
+    default ObservedValue valueOf(Count count) {
         return switch (this) {
-            case WHOLE -> new ObservedValue.Integer(count.at().longValueExact());
-            case DENSE -> new ObservedValue.Decimal(count.at());
-            case DATE -> new ObservedValue.Temporal(Dates.written(count));
-            case MOMENT -> new ObservedValue.Temporal(DateTimes.written(count));
+            case Whole _ -> new ObservedValue.Integer(count.at().longValueExact());
+            case Dense _ -> new ObservedValue.Decimal(count.at());
+            case Days _ -> new ObservedValue.Temporal(Dates.written(count));
+            case Seconds _ -> new ObservedValue.Temporal(DateTimes.written(count));
+            case Ordinal ordinal -> new ObservedValue.Unit(ordinal.caseAt(count));
         };
     }
 
@@ -197,11 +264,14 @@ public enum Carrier {
      * label that preserved places would print one line two ways depending on the order the rules
      * were read in.
      */
-    public String written(Count count) {
+    default String written(Count count) {
         return switch (this) {
-            case WHOLE, DENSE -> count.key();
-            case DATE -> Dates.written(count);
-            case MOMENT -> DateTimes.written(count);
+            case Whole _, Dense _ -> count.key();
+            case Days _ -> Dates.written(count);
+            case Seconds _ -> DateTimes.written(count);
+            // The case's name, which is the only thing a person ever writes at such a position. An
+            // ordinal in a report would name a line at a number the model does not contain.
+            case Ordinal ordinal -> ordinal.caseAt(count).name();
         };
     }
 }

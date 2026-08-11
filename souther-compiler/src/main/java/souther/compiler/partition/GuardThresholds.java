@@ -530,11 +530,15 @@ public final class GuardThresholds {
             // with rather than by the name in front of it, so one reaches this however it is spelled.
             case Core.Call call when call.args().size() == 1
                     && call.args().get(0) instanceof Core.Str iso ->
-                    (call.type() == Type.DATE && carrier == Carrier.DATE)
-                            || (call.type() == Type.DATETIME && carrier == Carrier.MOMENT)
+                    (call.type() == Type.DATE && carrier instanceof Carrier.Days)
+                            || (call.type() == Type.DATETIME && carrier instanceof Carrier.Seconds)
                             ? carrier.countOf(new souther.compiler.observe.ObservedValue.Temporal(
                                     iso.value()))
                             : null;
+            // A case, which is named rather than written. Where the position counts in some other
+            // enumeration's declaration this is a value of neither, and the carrier says so.
+            case Core.UnitValue unit -> carrier instanceof Carrier.Ordinal ordinal
+                    ? ordinal.at(unit.data()) : null;
             case null, default -> null;
         };
     }

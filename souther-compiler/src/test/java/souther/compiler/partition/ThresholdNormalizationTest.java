@@ -229,6 +229,49 @@ class ThresholdNormalizationTest {
     }
 
     /**
+     * A line on an enumeration owes the case it is drawn at and the case beside it.
+     *
+     * <p>Written as the cases and never as the places they take in the declaration. What carries an
+     * enumeration into the algebra is the ordinal, which is 0, 1, 2 — the most plausible-looking
+     * wrong value any carrier has, and the one a reader would not catch in a report.
+     *
+     * <p>The classes are the cases and the cut adds none. {@code s < Qualified} divides the values
+     * into `{Prospecting}` and `{Qualified, Won}`, which is coarser than the three cases the type
+     * already states, so the meet of the two is the cases — the line is worth its rows and the
+     * partition it would have made is one the model had already made finer (ADR-0090).
+     */
+    @Test
+    void aLineOnAnEnumerationIsOwedAtCaseNames() {
+        Read read = read("""
+                module example.pipeline
+
+                data Prospecting
+                data Qualified
+                data Won
+                data Stage = Prospecting | Qualified | Won
+
+                data Bigger
+                data Smaller
+                data Size = Bigger | Smaller
+
+                behavior classifyStage : (s: Stage) -> Size
+                    constructs Bigger, Smaller, Qualified
+                let classifyStage (s) = {
+                    guard s < Qualified else Bigger
+                    Smaller }
+                """, "classifyStage");
+
+        Axis stage = axis(read.partitioning(), "s");
+        assertEquals(List.of("Prospecting", "Qualified", "Won"), labels(stage),
+                "the cut is the coarser partition, so the classes stay the cases");
+
+        List<String> described = Partitions.obligationsOf(stage, read.symbols(),
+                        read.partitioning().domains().get(stage.term())).stream()
+                .map(o -> o.side() + " " + o.written()).toList();
+        assertEquals(List.of("AT Qualified", "BELOW Prospecting"), described);
+    }
+
+    /**
      * The shipping-fee example from smdd-book chapter 8, and the number it derives: the boundary of
      * "under three thousand" is 2999. Which neighbour is the other class's edge follows from which
      * side of the line the compared value is on, which is why the origin carries it.
