@@ -83,6 +83,34 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
     }
 
     /**
+     * And a rule the second phase read and could do nothing with does not take the first phase's
+     * answer away.
+     *
+     * <p>The elements of the list cannot be reached, which is what the position is left with. A
+     * body then compares the length against a number outside what a length can be: the comparison
+     * is understood — it is a threshold, on a term this measures — and it divides nothing, because
+     * no value of the position is on the far side of it.
+     *
+     * <p>So the position comes back to the same place it was, and what it is left with is what it
+     * was left with. It came back an absence instead, because the axis was rebuilt from its parts
+     * when the second phase moved it and the parts did not include what the first phase found.
+     */
+    @Test
+    void aRuleThatDividedNothingLeavesThePositionWithWhatItHad() {
+        UndividedPosition.Why why = whyAt(measured("""
+                module demo
+                data Ok
+                data Item = { charge: Int }
+                behavior run : (items: List<Item>) -> Ok constructs Ok
+                let run (items) = { guard List.length(items) < -1 else Ok
+                    Ok }
+                """, "run"), "items");
+
+        assertEquals(new UndividedPosition.Why.CannotDerive(
+                UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL), why);
+    }
+
+    /**
      * Issue #631. A sum under a name is that sum, so the position divides into its cases — where
      * before it came back as one the model divides no way, which is the opposite of what the
      * declaration says. Nothing about the reading of the model changed to make this true: the line

@@ -73,12 +73,19 @@ public sealed interface LocalInspection {
     /**
      * The one reading.
      *
-     * @param view   the position's type, read once
+     * <p>Takes the proof rather than the reading. A position outside what a partition may be
+     * derived from cannot be handed to this — which is the point of {@link PartitionInput}, and was
+     * not true of it while the walk asked for the proof only after this had answered: a shape the
+     * boundary should have refused arrived here, produced classes, and never reached the check that
+     * exists to make that disagreement loud.
+     *
+     * @param input  the position, proved to be one a partition may be derived from
      * @param path   where the position sits, which a term is named by
      * @param placed the value the position is inside, or null where it is a parameter itself
      */
-    static LocalInspection inspect(TypeView view, TermPath path, Symbols symbols,
+    static LocalInspection inspect(PartitionInput input, TermPath path, Symbols symbols,
                                    Partitions.Placed placed) {
+        TypeView view = input.view();
         Type type = view.declared();
         // Which number this position is measured at, and what its rules leave that number. Asked
         // together because they are one reading: whether a rule bounds the length of a string is how

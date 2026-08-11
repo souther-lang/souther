@@ -24,6 +24,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>The set is the partition's own. It is not the set a signature admits, nor the set a field
  * admits — those two disagree with each other — so a shape is written out here and a boundary that
  * starts admitting a new one stops this compiling.
+ *
+ * <p>That the walk goes through it is the signature of {@link LocalInspection#inspect} and not
+ * anything here: the phase takes the proof, so a position can be read only after being admitted.
+ * These rows are what admitting one comes to. Asked for the proof after the local phase had
+ * answered, the one shape that produces classes without being admissible — a union nobody named —
+ * would have gone round it, which is the disagreement the whole type is for.
  */
 class APositionAPartitionIsDerivedFromIsProvedToBeOneTest {
 

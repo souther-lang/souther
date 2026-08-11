@@ -8,6 +8,10 @@ import souther.compiler.types.Type;
 /**
  * A position the partition derivation may be asked about, and proof that it is one.
  *
+ * <p>Package-private, cases and all, so that holding one is the proof rather than a claim about
+ * one: a public record is a canonical constructor anything can call, and a proof anything can write
+ * down is not one.
+ *
  * <p>Holding one of these is the proof. The derivation asks whether a position divides, and answers
  * that it does not — {@code Absent} — only where every producer it has was asked and none of them
  * answered. Which producers those are is a fact about this compiler; what this type adds is the
@@ -26,7 +30,7 @@ import souther.compiler.types.Type;
  * measured over here. Written out, a boundary that starts admitting a new shape stops this compiling
  * until the partition semantics of that shape have been decided.
  */
-public record PartitionInput(TypeView view, Shape.PartitionInputShape shape) {
+record PartitionInput(TypeView view, Shape.PartitionInputShape shape) {
 
     /**
      * How {@code type} is read at a position the derivation is about.
@@ -34,14 +38,14 @@ public record PartitionInput(TypeView view, Shape.PartitionInputShape shape) {
      * <p>Exhaustive over {@link Shape}, with no {@code default}: a sixteenth case stops this
      * compiling rather than arriving somewhere further down as a position nothing divides.
      */
-    public static PartitionInput of(Type type, Symbols symbols) {
+    static PartitionInput of(Type type, Symbols symbols) {
         return of(TypeView.of(type, symbols));
     }
 
     /** The same, of a position already read. The reading is the expensive half and the walk has one
      *  of them per position, so what asks about the shape and what asks about the names it is
      *  written under ask of the same reading. */
-    public static PartitionInput of(TypeView view) {
+    static PartitionInput of(TypeView view) {
         return new PartitionInput(view, admitted(view));
     }
 

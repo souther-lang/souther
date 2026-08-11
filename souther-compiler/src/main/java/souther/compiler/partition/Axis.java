@@ -63,6 +63,25 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
         return new Axis(id, term, type, List.of(), List.of(), Set.of(), found);
     }
 
+    /**
+     * The same position, measured at another number.
+     *
+     * <p>A transition rather than a constructor at the call site. What a body's rules add is a term,
+     * classes and cuts; everything else about the position was settled by the reading that made
+     * this one, and a caller rebuilding an axis from its parts drops whatever it did not think to
+     * name. What went that way was {@link #pending}: a position whose elements could not be reached
+     * came back out of the second phase with nothing to say it had ever stopped, and was reported
+     * as one the model divides no way.
+     */
+    public Axis measuredAt(AxisId id, NumericTerm term) {
+        return new Axis(id, term, type, classes, cuts, excluded, pending);
+    }
+
+    /** The same position, with what a body's rules divided it into and the lines they drew. */
+    public Axis carrying(List<PartitionClass> classes, List<Cut> cuts) {
+        return new Axis(id, term, type, classes, cuts, excluded, pending);
+    }
+
     /** Where the value this axis is about sits, which is where a row is walked to before the term is
      * read off it. Not what the axis is: two terms can be taken of one location, and {@link #id()}
      * is the one that tells them apart. */

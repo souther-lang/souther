@@ -59,7 +59,8 @@ class LocalEvidenceIsAskedOfBothProducersTest {
     }
 
     private LocalInspection inspect(String type) {
-        return LocalInspection.inspect(TypeView.of(Type.ref(symbols.own(type)), symbols),
+        return LocalInspection.inspect(
+                PartitionInput.of(TypeView.of(Type.ref(symbols.own(type)), symbols)),
                 TermPath.of("x"), symbols, null);
     }
 

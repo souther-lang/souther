@@ -285,10 +285,10 @@ public final class Partitions {
                 // everything else. Ranges here would ask the rows for a distinction between the two
                 // sides of a value the behavior treats alike.
                 NumericDomain.Bounds only = domainOf(base, term);
-                keep(out, measured, new Axis(axis.id(), term, axis.type(),
+                keep(out, measured, axis.carrying(
                         singledClasses(points, term, axis.type(), only, symbols),
-                        mergedPoints(axis.cuts(), points, term.carrierAt(axis.type(), symbols)))
-                        .excluding(axis.excluded()), new BodyCutInspection.Evidence(), rules);
+                        mergedPoints(axis.cuts(), points, term.carrierAt(axis.type(), symbols))),
+                        new BodyCutInspection.Evidence(), rules);
                 continue;
             }
             if (here.isEmpty()) {
@@ -303,8 +303,7 @@ public final class Partitions {
                 }
                 term = drawn;
                 here = thresholds.stream().filter(t -> t.term().equals(drawn)).toList();
-                axis = new Axis(new AxisId(axis.id().behavior(), drawn.toString()), drawn,
-                        axis.type(), axis.classes(), axis.cuts(), axis.excluded());
+                axis = axis.measuredAt(new AxisId(axis.id().behavior(), drawn.toString()), drawn);
             }
             // What this term's values can be, which is the type's bound already narrowed by whatever
             // the record it sits in says about it. Reading the type again here would put a threshold
@@ -341,9 +340,9 @@ public final class Partitions {
             // a rule that went unread either: what it says was understood. So the answer there is
             // that the rules were exhausted, which is what keeps `Blocked` meaning that a
             // comparison could not be interpreted rather than everything that came to nothing.
-            keep(out, measured, new Axis(axis.id(), term, axis.type(),
+            keep(out, measured, axis.measuredAt(axis.id(), term).carrying(
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), reachable, carrier)).excluding(axis.excluded()),
+                    merged(axis.cuts(), reachable, carrier)),
                     reachable.isEmpty() ? null : new BodyCutInspection.Evidence(), rules);
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
@@ -579,8 +578,14 @@ public final class Partitions {
                              java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
         // Once, and every phase asks of this reading: what the position's own type and rules say,
         // and what is under it where they say nothing, are two questions put to one reading of it.
-        TypeView read = TypeView.of(type, symbols);
-        LocalInspection local = LocalInspection.inspect(read, path, symbols, placed);
+        //
+        // The proof first, and before anything is read off the position. A shape a partition is not
+        // derived from is this compiler disagreeing with itself about what may stand at a position,
+        // and it is refused here — asked after the local phase instead, a position that produced
+        // classes was never checked at all, and the one case the type exists to make loud was the
+        // one that stayed quiet.
+        PartitionInput input = PartitionInput.of(TypeView.of(type, symbols));
+        LocalInspection local = LocalInspection.inspect(input, path, symbols, placed);
         LocalReading reading = local.reading();
         for (UnreadRule each : reading.unread()) {
             if (unread.stream().noneMatch(had -> had.equals(each))) {
@@ -605,7 +610,7 @@ public final class Partitions {
             // answers.
             case LocalInspection.Exhausted _ -> {
                 StructuralInspection found = StructuralInspection.of(
-                        PartitionInput.of(read).shape(), depth < MAX_DEPTH);
+                        input.shape(), depth < MAX_DEPTH);
                 if (found instanceof StructuralInspection.Children children) {
                     for (Map.Entry<String, Type> field : children.under().entrySet()) {
                         walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1,
