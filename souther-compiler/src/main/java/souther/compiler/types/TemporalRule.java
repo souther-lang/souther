@@ -15,6 +15,13 @@ package souther.compiler.types;
  * {@code CodecGen} emits the calls into a generated class, and {@code Runner} makes them in Java.
  * Neither may state a rule of its own, and a temporal added here is one both have to answer for.
  *
+ * <p>What the table does <em>not</em> carry across both is which parse to call. {@link #factory} is a
+ * method name, which is what an emitter needs and what a Java caller cannot use without reflection —
+ * so {@code Runner} switches over {@link LeafScalar} to reach {@code date()} / {@code time()} and
+ * their siblings, each of which answers a different type. That switch is exhaustive, so a temporal
+ * added here stops that build too; what is shared is the part that went wrong, which was never which
+ * parse ran but which refusals were chained around it.
+ *
  * @param factory     the Raoh leaf the text is parsed by
  * @param guardsText  whether the text is refused before the parse, for what the parse would fold
  * @param guardsValue whether the parsed value is held to the second

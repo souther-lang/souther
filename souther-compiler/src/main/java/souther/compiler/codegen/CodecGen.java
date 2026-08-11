@@ -964,9 +964,11 @@ final class CodecGen {
      * static one, which takes the value as itself where the caller hands over a real temporal.
      *
      * <p>Both go through the same refinements, so a rule about what a {@code Time} holds cannot be
-     * one thing at a field and another at a map key. The one text this does not see is text handed
-     * to the neutral factory by a Java caller, which Raoh parses itself; that side of the boundary
-     * is the Java implementation's to meet (ADR-0006). */
+     * one thing at a field and another at a map key. The one text this does not see is text handed to
+     * the bare-value factory by a Java caller, which Raoh parses inside itself — so the pre-parse
+     * rule cannot be enforced there, and a leap second reaching it still becomes the second before.
+     * That is a violation of what the specification states and not a boundary being trusted; issue
+     * #639 tracks the Raoh-side fix. */
     private void emitTemporalLeaf(CodeBuilder code, Src src, Type.Prim temporal) {
         if (src == Src.JSON) {
             emitTemporalFromText(code, CD_JsonDecoders, temporal);

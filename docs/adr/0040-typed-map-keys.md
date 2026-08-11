@@ -4,7 +4,8 @@ Status: Accepted. Amended — the restriction is a boundary rule, not a rule abo
 temporal key crosses too (see "Where the restriction applies"). The in-language type and operations
 are implemented, and so is the boundary codec: a keyed map may be a data field or behavior I/O,
 decoding each string key into the key type (a newtype invariant-checked, a temporal parsed from its
-ISO form) and encoding it back bare.
+ISO form) and encoding it back bare. Widened by ADR-0103: the temporal set is four —
+`Date`, `Time`, `DateTime`, `Instant` — not the two this reasons about.
 
 ## Context
 
@@ -52,7 +53,7 @@ not the rule enforced. The reason for the restriction is representational, and r
 boundary concern: **the key check belongs at the boundary**. A data field and a behavior's input and
 output are checked, at any depth; a map that stays inside a body may be keyed by any value.
 
-The boundary set also admits `Date` and `DateTime`. What a key must satisfy is "renderable as, and
+The boundary set also admits `Date` and `DateTime` — and, since ADR-0103, `Time` and `Instant`, which cross as their own ISO 8601 forms for the same reason. What a key must satisfy is "renderable as, and
 parseable from, a bare string", and a temporal already crosses that way — a `Date` field travels as
 its ISO 8601 form, so `Map<Date, Amount>` is a JSON object whose keys are the same strings that field
 would carry. Daily aggregation, which had no expressible form, is `{"2026-01-01": 300}`.

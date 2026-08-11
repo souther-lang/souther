@@ -1,6 +1,7 @@
 # ADR-0103: A decomposition and its inverse are present together
 
-Status: Accepted
+Status: Accepted. Widens ADR-0040 (the boundary map-key set) and ADR-0047 (the ordered
+primitives): both reason about a temporal set of two and there are four.
 
 ## Context
 
@@ -64,7 +65,8 @@ been wrong about the parts was refused where the `Date` and the `Time` were buil
 has nothing left to check and no case to write an arm for. Partiality sits on the two small types
 and not on the one composed from them.
 
-`Date`, `Time` and `DateTime` are held to the second. Text finer than that is refused where it is
+`Time` and `DateTime` are held to the second — a `Date` is a day and has no time of day to hold a
+finer reading. Text finer than the second is refused where it is
 written (E1322) and at the boundary that carried it (a decode failure at that path), rather than
 being rounded on the way in. Text naming a leap second is refused the same way and for a sharper
 reason: `Instant.parse` answers `23:59:59` for `23:59:60`, so admitting it would put a *different*
