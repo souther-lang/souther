@@ -69,8 +69,12 @@ constrained field in a newtype of its own, which is a modelling choice and not a
 domain.
 
 A clause reaches a position from wherever it governs it: the newtype chain of the position's own
-type, the record the position is a field of, and the declarations under that record the position sits
-inside. A line is named by the declaration the clause is written on. `data Inner = { n: Int }
+type, the record the position is a field of, the declarations under that record the position sits
+inside, and the names wrapped round that record. The last of those is a place the same rule can be
+written — `data NonEmptyBag = Bag invariant List.length(value.xs) >= 1` states what `Bag` could have
+stated about its own field — and leaving it out puts this whole question back one level up. A
+newtype's value is the same location as the newtype, so the clause names the `xs` a reader of a
+`NonEmptyBag` sees rather than a position under a `value`. A line is named by the declaration the clause is written on. `data Inner = { n: Int }
 invariant n >= 1` names `Inner` at every position an `Inner` is held in, and `data Outer = { inner:
 Inner } invariant inner.n >= 5` names `Outer` where its clause is the tighter of the two. Where a
 record's own clause is the tighter, the line is the record's: `data Moved = { n: Count } invariant
@@ -90,20 +94,22 @@ the denominator, and refuses no build — which is what ADR-0091 already does wi
 has settled, for the same reason. What settles it is a witness rather than an argument: a row at the
 value went through the decoder, and from then on the edge is counted like any other.
 
-Nor is an edge at a count of distinct things, whatever the rules came to. What the projection settles
-is which numbers the rules leave, and a count of three is a number they leave whether or not three of
-the thing exist: a `Set<Bool>` has two elements to be made of, and the domain has no term for that.
-So such an edge is settled by a value — a row at it, or one this built — and not by an argument,
-which is the account an edge nothing has settled already gets. The projection was never entitled to
-say it, and it went unsaid only while a count could be bounded from the position's own type alone:
-given a second place to write the rule, a floor no value reaches becomes a row an author is told to
-write.
+Nor is an edge at a count, unless every count that measure could give is one some value has. What the
+projection settles is which numbers the rules leave, and three is a number they leave whether or not
+three of the thing exist: a `Set<Bool>` is capped at two by how many booleans there are, and a
+`List<T>` of one needs a `T` that something inhabits. Whether such a value exists is a question about
+what is counted and not about the count, and the domain has no term for it. So such an edge is
+settled by a value — a row at it, or one this built — and not by an argument, which is the account an
+edge nothing has settled already gets. The projection was never entitled to say it, and it went
+unsaid only while a count could be bounded from the position's own type alone: given a second place
+to write the rule, a floor no value reaches becomes a row an author is told to write.
 
-A length is not one of these. It counts positions rather than distinctions, and a position is always
-to be had — a list repeats an element, a string repeats a character — so the number the rules leave
-is a number some value holds. The two have to be told apart or the repair costs more than the defect:
-declining the proof at every count takes away every `String.length` edge in the corpus, twenty of
-them, over one `Set<Bool>` that has no values.
+A string's length is the one that stays proven. A string of any length is written by repeating a
+character and a character is always to be had, so what the rules leave is what some value has. The
+line has to be drawn there and not at distinctness, which is the other place it suggests itself:
+"a list repeats an element" is an answer only once there is an element, and it is wrong about a list
+of something nothing inhabits. Nor may it be drawn at every count — that takes away every
+`String.length` edge in the corpus, twenty of them, over collections that have no values.
 
 Whether the rules were all read is asked of the value and not of the position. A bound is about one
 position; a row at its edge is a whole value with that edge in it, and a rule about any other position
@@ -132,9 +138,17 @@ the positions it was written against.
 
 A position has one term, and which one is settled by which of them the model wrote a rule about — a
 `String` is the one value measured two ways, and a rule about its length is what makes the length the
-term. Reading those rules from more declarations does not change that selection and does not give a
-position two terms. Where a position turns out to have rules about both, nothing here chooses between
-them. What is spaced like an `Int`, what its own values are, and how
+term. The position's own type answers first and its answer stands. A rule reaching the position from
+the value it sits in states an end on a term; it does not say which term the position is measured at,
+and letting it say so takes an axis away — a `Name` bounded on its own order, held in a record that
+bounds the length of it, would stop being measured on that order, and the line the author wrote would
+go out with nothing saying it had.
+
+Where the type chose nothing, one such rule may choose. Only one: where they arrive about both terms
+there is nothing here to choose between them, and the position is left as one nothing divides rather
+than given whichever was looked at first. That is the coarser of the two things that could be said
+and the one that claims nothing; what would settle it is a position carrying both terms, which is not
+here. What is spaced like an `Int`, what its own values are, and how
 it is read off a row are three properties of the term — a size needs no boundary domain of its own,
 and its non-negativity is its own rather than something a rule has to state.
 

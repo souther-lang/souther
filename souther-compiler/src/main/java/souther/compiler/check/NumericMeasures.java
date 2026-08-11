@@ -48,21 +48,21 @@ public final class NumericMeasures {
     }
 
     /**
-     * Whether the operation counts things no two of which are alike.
+     * Whether every count this operation could give is a count some value of the type has.
      *
      * <p>Here with the rest because it is the same question one step on: what a value of this type
-     * is counted by, and what that count is capped at. A count of distinct things is capped by how
-     * many there are to be distinct — a {@code Set<Bool>} holds two and no rule makes it hold three
-     * — while a length counts positions, and a position is always to be had: a list repeats an
-     * element and a string repeats a character.
+     * is counted by, and whether the number a rule leaves is a number something holds. Only a
+     * string's length is. A string of any length is written by repeating a character and a character
+     * is always to be had, so what the rules leave is what some value has.
      *
-     * <p>Which is the one thing a range cannot answer. The rules leave a count of three whether or
-     * not three of the thing exist, so a reader treating the range as a proof that a value of that
-     * count can be written has to know which of these it is looking at.
+     * <p>Every other measure counts things that may not be there. A {@code Set<Bool>} is capped at
+     * two by how many booleans there are; a {@code List<T>} of one needs a {@code T}, and a
+     * {@code T} nothing inhabits has none. Whether such a value exists is a question about the
+     * element and not about the count, and the numeric domain has no term for it — so the range is
+     * not a proof, and a row at that edge is settled by a value rather than by an argument.
      */
-    public static boolean countsDistinct(ValueName operation) {
-        return operation.equals(ValueName.Stdlib.operation("Set", "size"))
-                || operation.equals(ValueName.Stdlib.operation("Map", "size"));
+    public static boolean everyCountHasAValue(ValueName operation) {
+        return operation.equals(ValueName.Stdlib.operation("String", "length"));
     }
 
     /**

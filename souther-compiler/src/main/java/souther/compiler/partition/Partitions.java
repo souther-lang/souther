@@ -93,22 +93,22 @@ public final class Partitions {
          * refuse that value as easily as the one beyond it — so the edge is not known to be writable
          * and asking for a row at it is asking for work nobody may be able to do.
          *
-         * <p>And false at a count of distinct things, whatever the rules came to. What the projection
-         * settles is which numbers the rules leave, and a count of three is a number they leave
-         * whether or not three of the thing exist: a `Set<Bool>` has two elements to be made of and
-         * the domain has no term for that. Such an edge is settled by a value rather than by an
+         * <p>And false at a count, unless every count that measure could give is one some value has
+         * ({@link NumericMeasures#everyCountHasAValue}). What the projection settles is which numbers
+         * the rules leave, and three is a number they leave whether or not three of the thing exist:
+         * a `Set<Bool>` is capped at two, and a `List<T>` of one needs a `T` that something inhabits.
+         * The domain has no term for either, so such an edge is settled by a value rather than by an
          * argument — a row at it, or one this built — which is the account an edge nothing has
          * settled already gets. Read as a proof, a floor no value reaches became a row an author was
          * told to write.
          *
-         * <p>A length is not one of these. It counts positions rather than distinctions and a
-         * position is always to be had, so the number the rules leave is a number some value holds
-         * ({@link NumericMeasures#countsDistinct}). Declining the proof there would take away every
-         * `String.length` edge in a corpus over one `Set<Bool>` that has no values. */
+         * <p>A string's length is the one that stays proven, because a string of any length is
+         * written by repeating a character. Declining the proof there too would take away every
+         * `String.length` edge in the corpus over collections that have no values. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
             return !uncertain.contains(term)
                     && !(term instanceof NumericTerm.SizeOf size
-                            && NumericMeasures.countsDistinct(size.measure()));
+                            && !NumericMeasures.everyCountHasAValue(size.measure()));
         }
 
         /** Only the positions the model actually divides. */
@@ -131,7 +131,9 @@ public final class Partitions {
             // each record is how `interval.startsAt < cap` stopped reaching `interval.startsAt`.
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
-                    0, symbols, found, new Placed(heldIn(type, symbols), fieldDomainsOf(type, symbols)),
+                    0, symbols, found,
+                    new Placed(heldIn(type, symbols), fieldDomainsOf(type, symbols),
+                            placedByWrappers(type, symbols)),
                     domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
@@ -647,7 +649,7 @@ public final class Partitions {
 
     /** The value a position is inside: what it is called, and what its rules leave each position of
      * it able to hold. */
-    record Placed(TypeName value, FieldDomains domains) {
+    record Placed(TypeName value, FieldDomains domains, List<FieldDomains.Placed> wrapped) {
 
         /** What is left for the position at {@code path}, which is read from the value this is of. */
         NumericDomain.Bounds at(TermPath path) {
@@ -655,11 +657,23 @@ public final class Partitions {
                     : domains.at(String.join(".", path.fields()));
         }
 
-        /** The ends this value's own clauses place on the coordinates at {@code path}, which is a
-         * different question from what {@link #at} leaves them. */
+        /**
+         * The ends the clauses reaching this value place on the coordinates at {@code path}, which is
+         * a different question from what {@link #at} leaves them.
+         *
+         * <p>The record's own and the names wrapped round it, together. A wrapper's clause reaches
+         * the record's positions and its ranges do not, so the two arrive by different routes and are
+         * one answer here: a reader taking only the first would go back to deciding a line by which
+         * of two declarations the author wrote it on.
+         */
         List<FieldDomains.Placed> placedAt(TermPath path) {
-            return path.fields().isEmpty() ? List.of()
-                    : domains.placedAt(String.join(".", path.fields()));
+            if (path.fields().isEmpty()) {
+                return List.of();
+            }
+            String at = String.join(".", path.fields());
+            List<FieldDomains.Placed> out = new ArrayList<>(domains.placedAt(at));
+            wrapped.stream().filter(each -> each.path().equals(at)).forEach(out::add);
+            return List.copyOf(out);
         }
     }
 
@@ -679,6 +693,24 @@ public final class Partitions {
      * {@code Pair}'s clauses — read off the written name, the walk descended into the fields of a
      * record whose rules about them it had just dropped.
      */
+    /**
+     * The ends placed by the names wrapped round the record a position sits in.
+     *
+     * <p>{@code data NonEmptyBag = Bag invariant List.length(value.xs) >= 1} states the rule
+     * {@code Bag} could have stated about its own field, so it places the edge {@code Bag} would have
+     * placed. Read here rather than through {@link #fieldDomainsOf}, which answers for the record
+     * under the names: the ranges a clause relating fields leaves are the record's, and the ends a
+     * wrapper places are the wrapper's, and asking one question for both would have to pick a name to
+     * file the answer under.
+     */
+    private static List<FieldDomains.Placed> placedByWrappers(Type type, Symbols symbols) {
+        List<FieldDomains.Placed> out = new ArrayList<>();
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
+            out.addAll(FieldDomains.placedBy(layer.named(), layer.data(), symbols));
+        }
+        return List.copyOf(out);
+    }
+
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
         TypeName held = heldIn(type, symbols);
         return held != null && symbols.get(held) instanceof Ast.Data data

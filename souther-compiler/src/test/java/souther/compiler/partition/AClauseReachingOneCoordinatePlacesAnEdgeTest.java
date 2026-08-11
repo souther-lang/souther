@@ -198,6 +198,51 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 "no row is at onTight/v.inner.n = 5 (invariant Tight (min))"), report);
     }
 
+    /** The rule written on a name wrapped round a record. Its own module, and with no rows: what is
+     *  asked is which lines the model draws, and a row would only say whether one was met. */
+    private static final String WRAPPERS = """
+            module wrappers
+
+            data Base        = { n: Int }
+            data Wrapped     = Base invariant value.n >= 1
+
+            data Bag         = { xs: List<Int> }
+            data NonEmptyBag = Bag invariant List.length(value.xs) >= 1
+
+            data Ok = { size: Int }
+
+            behavior onWrapped : (v: Wrapped) -> Ok
+                constructs Ok
+            let onWrapped (v) = Ok { size = v.n }
+
+            behavior onNonEmpty : (v: NonEmptyBag) -> Ok
+                constructs Ok
+            let onNonEmpty (v) = Ok { size = List.length(v.xs) }
+            """;
+
+    /**
+     * A name wrapped round a record reaches the record's positions.
+     *
+     * <p>The place left over when the record and the declarations under it were read. A wrapper is
+     * another place the same rule can be written, so reading the record and not the names round it
+     * puts this issue back one level up — and the walk cannot miss the shape, since the positions it
+     * takes apart are the record's either way.
+     *
+     * <p>The line is the wrapper's, and the {@code value} the clause is written through is not in
+     * it: a newtype's value is the same location as the newtype, so the clause names the {@code n} a
+     * reader of a `Wrapped` sees.
+     */
+    @Test
+    void aNameWrappedRoundARecordReachesItsPositions() {
+        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+
+        assertEquals(Set.of("onWrapped/v.n = 1", "onNonEmpty/List.length(v.xs) = 1"),
+                lines.keySet());
+        assertEquals("invariant Wrapped (min)", lines.get("onWrapped/v.n = 1").origin());
+        assertEquals("invariant NonEmptyBag (min)",
+                lines.get("onNonEmpty/List.length(v.xs) = 1").origin());
+    }
+
     /**
      * A clause relating two positions places nothing on either, however far it takes their ranges in.
      *
@@ -295,6 +340,77 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     }
 
     /**
+     * A position whose type is measured two ways, with rules arriving from outside it.
+     *
+     * <p>A `String` is the one value with two coordinates — its own order and the length of it — so
+     * this is where reading more declarations could change which one a position is measured at.
+     */
+    private static final String TWO_WAYS = """
+            module twoways
+
+            data Name   = String invariant value >= "m"
+            data Person = { name: Name } invariant String.length(name.value) >= 3
+
+            data R = { s: String }
+                invariant s >= "m"
+                invariant String.length(s) >= 3
+
+            data Ok = { size: Int }
+
+            behavior onPerson : (v: Person) -> Ok
+                constructs Ok
+            let onPerson (v) = Ok { size = String.length(v.name.value) }
+
+            behavior onR : (v: R) -> Ok
+                constructs Ok
+            let onR (v) = Ok { size = String.length(v.s) }
+
+            example onPerson | (Person { name = Name("zzz") }) -> Ok { size = 3 }
+            example onR      | (R { s = "zzz" }) -> Ok { size = 3 }
+            """;
+
+    /**
+     * A rule from outside states an end and does not choose the coordinate.
+     *
+     * <p>`Name` is measured on its own order because its own clause is about its value, and a record
+     * bounding the length of it says where a length stops without making the length what this
+     * position is measured at. Read as a choice, the axis switched: the line at `m` — a rule the
+     * author wrote and a report had been printing — went out, and the length edge came in beside
+     * nothing saying the other had gone.
+     */
+    @Test
+    void aRuleFromOutsideDoesNotChooseWhichCoordinateAPositionIsMeasuredAt() {
+        String report = report(TWO_WAYS);
+
+        assertTrue(report.contains("no row is at onPerson/v.name = m (invariant Name (min))"),
+                report);
+        assertFalse(report.contains("String.length(v.name"),
+                "the record's clause states an end on a coordinate this position is not measured at:\n"
+                        + report);
+    }
+
+    /**
+     * And where the type chose nothing, two such rules choose nothing either.
+     *
+     * <p>Both coordinates of `s` are bounded and neither by `s`'s own type, so which of them this
+     * position is measured at is a question with no answer here (ADR-0090). Left as a position
+     * nothing divides, which claims nothing; taking whichever was looked at first would put a line
+     * the author can read beside one they cannot see.
+     */
+    @Test
+    void rulesAboutBothCoordinatesLeaveThePositionUndivided() {
+        String report = report(TWO_WAYS);
+
+        assertTrue(report.contains("""
+                  onR                      implemented   rows 1    pending 0
+                    signature   not applicable (this behavior's output is not a sum)
+                    partition   not measured (no partition axis was derived at any position)
+                      · not derivable: v.s
+                    boundary    not measured (no line was derived at any position)
+                """), report);
+    }
+
+    /**
      * A floor no value of the type reaches, written both ways.
      *
      * <p>A `Set<Bool>` holds two elements at most, so a floor of three is a line nothing stands at.
@@ -377,14 +493,62 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * `String.length` edges out of the denominator across `souther-examples`, and the suite stays
      * green throughout. So the distinction is pinned where it is decided.
      */
+    /** A length floor over an element type nothing inhabits. Its own module, since a declaration that
+     *  cannot be built leaves the module with nothing to build against. */
+    private static final String UNINHABITED = """
+            module uninhabited
+
+            data Loop   = { next: Loop }
+            data LoopyR = { xs: List<Loop> } invariant List.length(xs) >= 1
+
+            data Ok = { size: Int }
+
+            behavior onLoopyR : (v: LoopyR) -> Ok
+                constructs Ok
+            let onLoopyR (v) = Ok { size = List.length(v.xs) }
+            """;
+
+    /**
+     * A length is not proven by the range where the thing counted may not exist.
+     *
+     * <p>The end-to-end half of the rule below. One is a number the rules leave and a list of one
+     * needs an element, and `Loop` has none — so the range says the count is admissible and says
+     * nothing about whether a value holds it. This is the case a rule about distinctness would let
+     * through: a list repeats an element, which is only an answer once there is an element.
+     */
     @Test
-    void onlyACountOfDistinctThingsIsCappedByWhatThereIsToCount() {
-        assertTrue(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("Set", "size")));
-        assertTrue(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("Map", "size")));
-        assertFalse(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("List", "length")),
-                "a list repeats an element");
-        assertFalse(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("String", "length")),
-                "and a string repeats a character");
+    void aLengthOverSomethingUninhabitedIsNotProvenByTheRange() {
+        BoundaryAssessment line = linesOf(UNINHABITED, "uninhabited")
+                .get("onLoopyR/List.length(v.xs) = 1");
+
+        assertFalse(line.writability().known(),
+                "nothing inhabits `Loop`, so nothing holds a list of one");
+    }
+
+    @Test
+    void onlyAStringsLengthIsACountEveryValueHas() {
+        assertTrue(NumericMeasures.everyCountHasAValue(
+                        ValueName.Stdlib.operation("String", "length")),
+                "a string of any length is a character repeated");
+        assertFalse(NumericMeasures.everyCountHasAValue(
+                        ValueName.Stdlib.operation("List", "length")),
+                "a list of one needs an element, and a type nothing inhabits has none");
+        assertFalse(NumericMeasures.everyCountHasAValue(ValueName.Stdlib.operation("Set", "size")),
+                "a set of three needs three that differ");
+        assertFalse(NumericMeasures.everyCountHasAValue(ValueName.Stdlib.operation("Map", "size")),
+                "and a map of three needs three keys that differ");
+    }
+
+    /** Every line one module draws, by the behavior and label it is reported under. */
+    private static Map<String, BoundaryAssessment> linesOf(String source, String module) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        Map<String, BoundaryAssessment> lines = new LinkedHashMap<>();
+        compilation.db().ask(new Adequacy.Coverage(module)).value()
+                .forEach((behavior, evidence) -> evidence.boundaries()
+                        .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
+        return lines;
     }
 
     private static String report(String source) {

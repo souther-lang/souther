@@ -138,22 +138,35 @@ public final class FieldDomains {
      * and at nothing else (ADR-0090), so handing back the range instead would make a relational rule
      * into a partition of a position it never mentioned.
      *
+     * @param path     where the coordinate sits, read from the value these are of
      * @param measured whether the coordinate is a count taken of the position rather than its value
      * @param from     the declaration the clause is written on, which is what names the line
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
-    public record Placed(boolean measured, TypeName from, boolean lower, Endpoint end) {}
+    public record Placed(String path, boolean measured, TypeName from, boolean lower, Endpoint end) {}
+
+    /**
+     * The ends one declaration's own clauses place, read for a caller that has no domains of it.
+     *
+     * <p>For the names wrapped round a record. A wrapper's clauses reach the record's positions and
+     * its ranges do not belong to them — {@link #at} of a newtype is empty by design, since its value
+     * is the same position it is — so what a wrapper contributes is these and nothing else.
+     */
+    public static List<Placed> placedBy(TypeName named, Ast.Data data, Symbols symbols) {
+        return of(named, data, symbols).placed();
+    }
+
+    /** Every end the rules place, wherever it is. */
+    public List<Placed> placed() {
+        return directs.stream()
+                .map(each -> new Placed(each.path(), each.measured(), each.from(),
+                        each.bound().lower(), each.bound().end()))
+                .toList();
+    }
 
     /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
     public List<Placed> placedAt(String path) {
-        List<Placed> out = new ArrayList<>();
-        for (InvariantChecker.Direct each : directs) {
-            if (each.path().equals(path)) {
-                out.add(new Placed(each.measured(), each.from(), each.bound().lower(),
-                        each.bound().end()));
-            }
-        }
-        return List.copyOf(out);
+        return placed().stream().filter(each -> each.path().equals(path)).toList();
     }
 
     /**

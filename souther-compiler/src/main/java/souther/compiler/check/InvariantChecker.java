@@ -317,10 +317,11 @@ public final class InvariantChecker {
             }
         }
         // Which of the clauses place an edge, asked once the positions have names to be recognised
-        // by. A newtype has no siblings and its own clause is read where its value is a position, so
-        // there is nothing here for one to place.
-        List<Direct> directs = data.newtype() ? List.of()
-                : c.directsIn(written, at, atoms, keys, held, typeAt);
+        // by.
+        List<Direct> directs = c.directsIn(written, at, atoms, keys, held, typeAt);
+        if (data.newtype()) {
+            directs = throughTheValue(directs);
+        }
         NumericDomain numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
@@ -397,6 +398,28 @@ public final class InvariantChecker {
     /** One clause reaching a value, rebased onto the positions of that value, and the declaration it
      * is written on. */
     private record Written(TypeName from, Core clause) {}
+
+    /**
+     * The same ends, said from outside the newtype that holds them.
+     *
+     * <p>A newtype's {@code value} is the same location as the newtype, so a clause a wrapper writes
+     * about {@code value.xs} is about the {@code xs} a reader of the wrapper sees — which is the path
+     * the walk that takes an input apart names it by. Left as written, every end a wrapper places
+     * would be filed under a position nothing asks about.
+     *
+     * <p>An end on the value itself drops out. That is the newtype's own bound, read where its value
+     * is a position of its own, and keeping it here would owe one line twice.
+     */
+    private static List<Direct> throughTheValue(List<Direct> directs) {
+        List<Direct> out = new ArrayList<>();
+        for (Direct each : directs) {
+            if (each.path().startsWith("value.")) {
+                out.add(new Direct(each.path().substring("value.".length()), each.measured(),
+                        each.from(), each.bound()));
+            }
+        }
+        return List.copyOf(out);
+    }
 
     /** A coordinate a clause of this declaration could be about. */
     private record Coordinate(String path, boolean measured, Carrier carrier) {}

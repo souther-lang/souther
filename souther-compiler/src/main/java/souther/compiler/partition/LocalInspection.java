@@ -103,15 +103,19 @@ public sealed interface LocalInspection {
         // the length of it — so which of them the model wrote about is what decides. Read off the
         // carrier first, every rule anybody ever wrote about the length of a string would have
         // become a rule about the string.
-        TypeBounds.Bounds sized = taken == null ? null
-                : TypeBounds.and(TypeBounds.of(type, symbols, Carrier.WHOLE, taken),
-                        TypeBounds.placed(stated, true, Carrier.WHOLE));
-        boolean bySize = sized != null && !sized.isEmpty();
+        TypeBounds.Bounds ofType = taken == null ? null
+                : TypeBounds.of(type, symbols, Carrier.WHOLE, taken);
+        TypeBounds.Bounds valueOfType = carried == null ? null
+                : TypeBounds.of(type, symbols, carried, null);
+        if (undecidable(ofType, valueOfType, stated, taken, carried)) {
+            stated = List.of();   // rules about both coordinates and nothing here to choose between
+        }
+        boolean bySize = measuredHere(ofType, valueOfType, stated, taken, carried);
         NumericTerm term = bySize ? new NumericTerm.SizeOf(taken, path) : new NumericTerm.ValueOf(path);
-        TypeBounds.Bounds own = bySize ? sized
+        TypeBounds.Bounds own = bySize
+                ? TypeBounds.and(ofType, TypeBounds.placed(stated, true, Carrier.WHOLE))
                 : carried == null ? null
-                : TypeBounds.and(TypeBounds.of(type, symbols, carried, null),
-                        TypeBounds.placed(stated, false, carried));
+                : TypeBounds.and(valueOfType, TypeBounds.placed(stated, false, carried));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed != null && placed.domains().infeasible();
@@ -145,6 +149,57 @@ public sealed interface LocalInspection {
                 : new CutEvidence.Present(cuts,
                         placed != null && !placed.domains().allRulesRead());
         return new Evidence(reading, classes, drawn);
+    }
+
+    /**
+     * Whether this position's one coordinate is the count taken of it rather than its value.
+     *
+     * <p>The position's own type answers first and its answer stands. A rule reaching the position
+     * from the value it sits in states an end on a coordinate; it does not say which coordinate the
+     * position is measured at, and letting it say so takes an axis away — {@code data Name = String
+     * invariant value >= "m"} held in a record that bounds the length of it would stop being measured
+     * on its own order, and the line at `m` would go without anything saying it had.
+     *
+     * <p>Where the type chose nothing, one of these rules may — and only one, which is what
+     * {@link #undecidable} has already refused.
+     */
+    private static boolean measuredHere(TypeBounds.Bounds ofType, TypeBounds.Bounds valueOfType,
+                                        List<souther.compiler.check.FieldDomains.Placed> stated,
+                                        ValueName.Stdlib taken, Carrier carried) {
+        if (stated(ofType)) {
+            return true;
+        }
+        if (stated(valueOfType)) {
+            return false;
+        }
+        return taken != null && stated(TypeBounds.placed(stated, true, Carrier.WHOLE));
+    }
+
+    /**
+     * Whether the rules reaching this position say where both of its coordinates stop, with its own
+     * type having said nothing about either.
+     *
+     * <p>A position has one coordinate and this is the one case with no answer. Which of a
+     * {@code String}'s two a rule is about is settled by which one the model wrote about, and here
+     * the model wrote about both from outside. Choosing either would put a line the author can read
+     * beside one they cannot see, so the position is left as one nothing divides and both rules go
+     * unread — the coarser of the two things that could be said, and the one that claims nothing.
+     *
+     * <p>Which of them a position holds is a question this does not answer, rather than one it
+     * answers badly: a position carrying both coordinates is what would settle it, and that is not
+     * here (ADR-0090).
+     */
+    private static boolean undecidable(TypeBounds.Bounds ofType, TypeBounds.Bounds valueOfType,
+                                       List<souther.compiler.check.FieldDomains.Placed> stated,
+                                       ValueName.Stdlib taken, Carrier carried) {
+        return !stated(ofType) && !stated(valueOfType)
+                && taken != null && carried != null
+                && stated(TypeBounds.placed(stated, true, Carrier.WHOLE))
+                && stated(TypeBounds.placed(stated, false, carried));
+    }
+
+    private static boolean stated(TypeBounds.Bounds bounds) {
+        return bounds != null && !bounds.isEmpty();
     }
 
     /**
