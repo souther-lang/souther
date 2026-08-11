@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -134,6 +135,19 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
             assertFalse(Partitions.representativesOf(named(each.id()), symbols).isEmpty(),
                     () -> "a record case stands for a value: " + each.id());
         }
+    }
+
+    /**
+     * A recipe of no values is not a recipe.
+     *
+     * <p>Held as one, a class offering nothing and saying nothing about why was a class the search
+     * met and had no reading for, and what it wrote down was read as the position having no value.
+     * A class that cannot produce one says so and says why, which is {@link
+     * RepresentativeSource.Ungeneratable}; there is nothing left for an empty list to mean.
+     */
+    @Test
+    void aRecipeOfNoValuesCannotBeWritten() {
+        assertThrows(IllegalArgumentException.class, () -> RepresentativeSource.of(List.of()));
     }
 
     private static String generated() throws Exception {

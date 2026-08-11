@@ -37,7 +37,7 @@ public sealed interface RepresentativeSource {
      * <p>One closed answer, and what a reader deciding what to do reads. The cases of this interface
      * are how a recipe is <em>written</em> — a projection sits over another recipe, and reading it
      * means reading what is under it — whereas an {@link Evaluation} is what a reader has to
-     * <em>do</em>, and the two are not the same four things. A reader that asked "is there a
+     * <em>do</em>, and the two are not the same set of things. A reader that asked "is there a
      * constructor", "are there values", "was a reason given" separately would be recovering the
      * variant from three answers, and could meet combinations no recipe can be in.
      */
@@ -54,14 +54,14 @@ public sealed interface RepresentativeSource {
     sealed interface Evaluation {
 
         /** Values ready to be written at the position, in the order to try them, under every name
-         *  it wears. Never empty: nothing to write is one of the two cases below. */
+         *  it wears. Never empty: a class with nothing to write is {@link NothingProducible}. */
         record Values(List<FixtureTemplate> written) implements Evaluation {
 
             public Values {
                 written = List.copyOf(written);
                 if (written.isEmpty()) {
                     throw new IllegalArgumentException(
-                            "no values is `NothingProduced`, which says so");
+                            "no values is `NothingProducible`, which says why");
                 }
             }
         }
@@ -87,10 +87,6 @@ public sealed interface RepresentativeSource {
             }
         }
 
-        /** Nothing was produced for this class and nothing said why. Which is not that the class
-         *  has no values — only that none was arrived at here. */
-        record NothingProduced() implements Evaluation {}
-
         /**
          * Nothing can produce a value for this class, and why.
          *
@@ -110,22 +106,31 @@ public sealed interface RepresentativeSource {
     default boolean buildable() {
         return switch (evaluate()) {
             case Evaluation.Values _, Evaluation.Compose _ -> true;
-            case Evaluation.NothingProduced _, Evaluation.NothingProducible _ -> false;
+            case Evaluation.NothingProducible _ -> false;
         };
     }
 
-    /** Values named outright. Empty is a class nothing here produced a value for and nothing said
-     *  why — which is a different report from {@link Ungeneratable}. */
+    /**
+     * Values named outright, and at least one of them.
+     *
+     * <p>Empty used to be allowed and meant a class nothing produced a value for and nothing said
+     * why. Nothing wrote one — every producer already branched to {@link Ungeneratable} where its
+     * values ran out — and what the state bought was a reader with a fourth answer to give, which
+     * it gave as the position having no value. A class that cannot produce one says why.
+     */
     record Ready(List<FixtureTemplate> values) implements RepresentativeSource {
 
         public Ready {
             values = List.copyOf(values);
+            if (values.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "a class with no values is `Ungeneratable`, which says why");
+            }
         }
 
         @Override
         public Evaluation evaluate() {
-            return values.isEmpty() ? new Evaluation.NothingProduced()
-                    : new Evaluation.Values(values);
+            return new Evaluation.Values(values);
         }
     }
 
@@ -170,8 +175,7 @@ public sealed interface RepresentativeSource {
                 }
                 // Nothing to put a name on. What the inner recipe says stands: a name wrapped round
                 // a value nothing composed does not make one, and does not change why there is none.
-                case Evaluation.NothingProduced _, Evaluation.NothingProducible _ ->
-                        inner.evaluate();
+                case Evaluation.NothingProducible _ -> inner.evaluate();
             };
         }
     }
@@ -191,11 +195,6 @@ public sealed interface RepresentativeSource {
 
     static RepresentativeSource of(List<FixtureTemplate> values) {
         return new Ready(values);
-    }
-
-    /** Nothing produced a value here and nothing said why. */
-    static RepresentativeSource none() {
-        return new Ready(List.of());
     }
 
     /** {@code inner}, written under {@code wrappers} — or {@code inner} itself where the position

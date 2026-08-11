@@ -216,7 +216,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         List<PartitionClass> classes = new java.util.ArrayList<>();
         for (int i = 0; i < classifiers.length; i++) {
             classes.add(PartitionClass.of("c" + i, "c" + i, classifiers[i],
-                    RepresentativeSource.none()));
+                    RepresentativeSource.of(FixtureTemplate.integer(i))));
         }
         return List.of(new Axis(real.id(), real.term(), real.type(), classes, real.cuts()));
     }

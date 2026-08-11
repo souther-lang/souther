@@ -722,9 +722,6 @@ public final class Generator {
                     return new Attempt(null, UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, at,
                             Optional.of(cannot.why()));
                 }
-                case RepresentativeSource.Evaluation.NothingProduced _ -> {
-                    return Attempt.no(UnresolvedCombination.Reason.NO_REASON_RECORDED, at);
-                }
             }
         }
         List<FixtureTemplate> inputs = new ArrayList<>();
