@@ -955,6 +955,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             b.put("axis", boundary.axis());
             b.put("origin", boundary.origin());
             b.put("side", word(boundary.side()));
+            // What the line is a line at, said rather than left to be inferred from the text beside
+            // it. A line between two positions writes the other position where a line at a count
+            // writes the count, and the two read alike.
+            b.put("kind", word(boundary.shape()));
             b.put("value", boundary.value());
             // The shape a published schema promises, read off the assessment rather than stored
             // beside it. What each of these says is unchanged; where it comes from is one answer now

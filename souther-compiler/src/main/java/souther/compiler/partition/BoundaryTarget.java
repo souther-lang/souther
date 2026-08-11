@@ -28,7 +28,26 @@ public sealed interface BoundaryTarget {
      * compares counts, and everything that writes or prints it asks the carrier — so a report, a
      * generated row and the rule that drew the line cannot disagree about which value the line is at.
      */
+    /**
+     * Which shape a line has, for a reader that has to tell them apart without holding either.
+     *
+     * <p>A report writes a line as {@code left = right} whichever it is, and what stands on the right
+     * is a value in one case and a position in the other. A consumer reading the right as a value
+     * would read a position's name as one, so the shape is said rather than inferred.
+     */
+    enum Shape {
+        /** A count of one position. */
+        AT_VALUE,
+        /** Two positions holding the same count. */
+        BETWEEN_POSITIONS
+    }
+
     record AtCount(AxisId axis, Carrier carrier, Count at) implements BoundaryTarget {
+
+        @Override
+        public Shape shape() {
+            return Shape.AT_VALUE;
+        }
 
         @Override
         public String named() {
@@ -67,6 +86,11 @@ public sealed interface BoundaryTarget {
             implements BoundaryTarget {
 
         @Override
+        public Shape shape() {
+            return Shape.BETWEEN_POSITIONS;
+        }
+
+        @Override
         public String named() {
             return new AxisId(behavior, on.toString()).toString();
         }
@@ -81,6 +105,9 @@ public sealed interface BoundaryTarget {
             return against.toString();
         }
     }
+
+    /** Which of the shapes this is. */
+    Shape shape();
 
     /** What the line is on, which is the same carrier for every side of it. */
     Carrier carrier();

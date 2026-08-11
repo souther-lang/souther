@@ -195,14 +195,11 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
         return obligation.target().named();
     }
 
-    /** Whether this line is at a value of one position, which is what says whether {@link #value()}
-     * is one. A line between two positions is at no value: what stands on its right is the other
-     * position, and the value a row happens to satisfy it with is that row's and not the line's. */
-    public boolean isAtAValue() {
-        return switch (obligation.target()) {
-            case BoundaryTarget.AtCount _ -> true;
-            case BoundaryTarget.EqualTerms _ -> false;
-        };
+    /** Which shape this line has, which is what says what {@link #value()} is. A line between two
+     * positions is at no value: what stands on its right is the other position, and the value a row
+     * happens to satisfy it with is that row's and not the line's. */
+    public BoundaryTarget.Shape shape() {
+        return obligation.target().shape();
     }
 
     /** The rule that drew the line. */
