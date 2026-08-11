@@ -9,15 +9,15 @@ import souther.compiler.types.Type;
  * A position the partition derivation may be asked about, and proof that it is one.
  *
  * <p>Holding one of these is the proof. The derivation asks whether a position divides, and answers
- * that it does not — {@code Absent} — only where it has looked everywhere there was to look. What
- * "everywhere" is depends on the position being one a value can stand at in the first place, and
- * that premise used to be nowhere: the walk took a {@link Type}, and a type it had no arm for fell
- * through the bottom of a chain of {@code if}s into the same answer as a position the model really
- * does not divide.
+ * that it does not — {@code Absent} — only where every producer it has was asked and none of them
+ * answered. Which producers those are is a fact about this compiler; what this type adds is the
+ * premise underneath it, that the position is one a value can stand at at all. That premise used to
+ * be nowhere: the walk took a {@link Type}, and a type it had no arm for fell through the bottom of
+ * a chain of {@code if}s into the same answer as a position the model really does not divide.
  *
  * <p>So the premise is the input's type rather than a check the walk repeats. A shape outside the
- * set cannot be carried here, so nothing downstream has to ask again, and {@code Absent} needs only
- * the evidence phases to have been exhausted.
+ * set cannot be carried here, so nothing downstream has to ask again, and what is left for an
+ * absence is that the evidence phases were exhausted ({@link PendingPosition}).
  *
  * <p><b>The set is this package's, not the boundary's.</b> Which types reach a behavior's parameter
  * and which reach a data's field are two rules that disagree — an {@code Option} may be a field and

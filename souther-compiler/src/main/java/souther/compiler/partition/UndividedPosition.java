@@ -60,11 +60,17 @@ public record UndividedPosition(TermPath at, Why why) {
     }
 
     /**
-     * What stopped the derivation.
+     * What stopped the derivation, in the words a document is written in.
      *
-     * <p>Each of these is a fact about this compiler. They are told apart because they are lifted by
-     * different work: one wants a reader for a form of condition, one wants the walk to go deeper,
-     * and a report that named neither could not say which.
+     * <p>Each of these is a fact about this compiler, said at the coarseness a reader of a document
+     * is promised. They are told apart because they are lifted by different work: one wants a
+     * reader for a form of condition, one wants the walk to go deeper, and a report that named
+     * neither could not say which.
+     *
+     * <p>Not the cause itself. What a producer recorded is a {@link BlockReason}, and one of these
+     * is what {@link ReportedReason} projects it to — three missing traversals arrive here as one
+     * word. So a reader of this knows which kind of thing stopped the derivation and not which
+     * capability was missing.
      */
     public enum Reason {
         /** A comparison this position is named by sits inside a condition this does not read. */
@@ -98,13 +104,19 @@ public record UndividedPosition(TermPath at, Why why) {
         UNSUPPORTED_TRAVERSAL
     }
 
-    /** The absence, of a position that has been completed. The argument is the proof: nothing can
-     *  call this that has not asked every producer, because nothing else can make one. */
+    /**
+     * The absence, of a position that has been completed.
+     *
+     * <p>The argument is the proof. A {@link PendingPosition} is made from a position whose local
+     * producers all came back with nothing, and only completing one reaches this — so what cannot
+     * happen is an absence written by a reader that did not ask. Outside this package there is
+     * neither a way to make one of those nor a name for this.
+     */
     static UndividedPosition absentAfter(PendingPosition proven) {
         return new UndividedPosition(proven.at(), Why.Absent.PROVEN);
     }
 
-    public static UndividedPosition cannotDerive(TermPath at, Reason reason) {
+    static UndividedPosition cannotDerive(TermPath at, Reason reason) {
         return new UndividedPosition(at, new Why.CannotDerive(reason));
     }
 

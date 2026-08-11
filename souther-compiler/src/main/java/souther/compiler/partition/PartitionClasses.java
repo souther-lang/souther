@@ -15,9 +15,14 @@ import java.util.List;
 /**
  * The classes a type states its values fall into, read through every name they are written under.
  *
- * <p>The one producer of class evidence. What a position divides into, what a witness of a type
- * varies over, and what values stand for one of its cases were three readings of one declaration,
- * and they disagreed about how far to look through a name.
+ * <p>The one reading of what a declaration states. What a position divides into, what a witness of
+ * a type varies over, and what values stand for one of its cases were three readings of one
+ * declaration, and they disagreed about how far to look through a name.
+ *
+ * <p>Classes read off a type, and not every class there is: what a body's comparisons divide a
+ * position into is read where those are ({@link Intervals}, and the values a {@code guard} singles
+ * out), and both kinds end up on one axis. So an empty answer here is this reading finding nothing
+ * stated, which the phase that owns it says ({@link LocalInspection}).
  */
 final class PartitionClasses {
 

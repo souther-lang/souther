@@ -27,8 +27,8 @@ import java.util.Set;
 /**
  * What a position's own type and rules say about it, asked once and answered whole.
  *
- * <p>Two producers answer here — the classes the type states, and the lines its rules draw — and a
- * caller cannot ask one without the other. That is the point of the type: {@link Exhausted} is not
+ * <p>Two producers answer here — the classes the type states, and the lines its rules draw — and
+ * what a caller gets is both or neither. That is the point of the type: {@link Exhausted} is not
  * "there were no classes", it is <b>both were asked and neither had anything</b>, and only that
  * licenses going on to ask what is under the position. Asked separately, the walk decided when
  * local evidence had run out by looking at two empty lists, and any reader that forgot one of them

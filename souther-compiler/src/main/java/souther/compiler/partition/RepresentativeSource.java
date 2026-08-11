@@ -34,7 +34,7 @@ public sealed interface RepresentativeSource {
      * What arriving at a value of this class comes to, with every name the position wears already
      * taken into account.
      *
-     * <p>One closed answer, and the only thing a reader decides from. The cases of this interface
+     * <p>One closed answer, and what a reader deciding what to do reads. The cases of this interface
      * are how a recipe is <em>written</em> — a projection sits over another recipe, and reading it
      * means reading what is under it — whereas an {@link Evaluation} is what a reader has to
      * <em>do</em>, and the two are not the same four things. A reader that asked "is there a

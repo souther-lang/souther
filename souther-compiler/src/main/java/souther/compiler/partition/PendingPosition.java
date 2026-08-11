@@ -1,21 +1,24 @@
 package souther.compiler.partition;
 
 /**
- * A position every producer has been asked about that none of them answered, and what it is left
- * with so far.
+ * A position the local producers were all asked about that none of them answered, and what it is
+ * left with so far.
  *
- * <p>The step before a verdict, and the only way to one. Holding one of these is already three
- * facts: the position was read, its own type and rules produced no evidence, and the structural
- * reading has said whether it stopped. What is missing is what the rules written about the position
- * came to — {@link #complete} takes that and nothing else, and what comes back is what a report
- * says.
+ * <p>The step before a verdict, and the only way to an absence. Holding one of these is already
+ * three facts: the position was read, the producers of local evidence came back with nothing, and
+ * the structural reading has said whether it stopped. What is missing is what the rules written
+ * about the position came to, which {@link #complete} takes.
  *
  * <p>Which is what makes an absence a conclusion rather than a default. Written as a value anything
  * could construct, "the model divides this position no way" was one line of a caller away from
  * every position that happened to have an empty list beside it, and the whole protocol exists
  * because that line was easy to write.
+ *
+ * <p>Package-private, cases and all, so that the chain cannot be started halfway through from
+ * outside. Inside this package it is a discipline like any other and the tests hold it; outside,
+ * there is no {@code Leaf} to make and so no absence to reach.
  */
-public sealed interface PendingPosition {
+sealed interface PendingPosition {
 
     TermPath at();
 
@@ -55,10 +58,11 @@ public sealed interface PendingPosition {
     /**
      * What the position comes to, once what the rules said about it is known.
      *
-     * <p>The whole phase's answer and not one producer's. A {@code guard}'s comparison and a
-     * newtype's invariant are two producers of one kind of evidence, and {@link BodyCutInspection}
-     * is what came of asking them — so completing one of these cannot be done by whichever producer
-     * happens to have finished.
+     * <p>The phase's answer and not one producer's. A {@code guard}'s comparison and a newtype's
+     * invariant are two producers of one kind of evidence, and {@link BodyCutInspection} is what
+     * came of asking them — which is why this takes one of those rather than a list of lines and a
+     * reason beside it. What makes it the phase's answer is where it is produced, not this
+     * signature: a caller inside this package can still build one out of half a reading.
      *
      * <p>The structural reason outranks the rules'. Where the walk could not reach into what a
      * position holds, a rule naming something inside it describes that same stop from the other end
@@ -79,8 +83,9 @@ public sealed interface PendingPosition {
             case Leaf _ -> switch (body) {
                 case BodyCutInspection.Blocked blocked ->
                         UndividedPosition.cannotDerive(at(), ReportedReason.of(blocked.why()));
-                // Every producer asked, none of them stopped, and none of them found anything.
-                // Which is the only way to an absence, and is what one means.
+                // The producers of both phases asked, none of them stopped, and none of them found
+                // anything. Which is the only way to an absence, and is what one means: what those
+                // readers read, rather than a claim about what could have been written.
                 case BodyCutInspection.Exhausted _ -> UndividedPosition.absentAfter(this);
                 case BodyCutInspection.Evidence _ -> throw new IllegalStateException("unreachable");
             };

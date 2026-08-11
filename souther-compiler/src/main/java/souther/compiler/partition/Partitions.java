@@ -157,8 +157,14 @@ public final class Partitions {
      * ones the walk did not finish, which is the one thing the axes cannot say for themselves: an
      * axis that was never descended into looks exactly like one there was nothing under.
      */
-    /** One position, and what the rules written about it came to. Held together because the two are
-     *  read at the same place and a report is the fold of them. */
+    /**
+     * One position, and what the rules written about it came to.
+     *
+     * <p>Paired where both are in hand rather than rejoined afterwards by how a path is spelled.
+     * What holds the two to one position is {@link #keep} making them together — the type says they
+     * travel together, not that they are of the same position — and that is the whole of the
+     * difference from a list of reasons matched to a list of positions later.
+     */
     private record Measured(Axis axis, BodyCutInspection body) {}
 
     /** The axis, and the body's answer about it — a line it drew, nothing, or a rule about it that

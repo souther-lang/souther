@@ -23,7 +23,15 @@ public sealed interface BodyCutInspection {
     /** A rule drew a line through the position's values, and the axis carries it. */
     record Evidence() implements BodyCutInspection {}
 
-    /** Every rule reaching the position was read, and none of them divided it. */
+    /**
+     * The rules this phase read about the position were all understood, and none of them divided
+     * it.
+     *
+     * <p>What was read, and not what could be written. A rule in a form no reader here takes apart
+     * is {@link Blocked} and says so; a rule nothing looks for at all is neither, and no case of
+     * this could say it. So this is a producer's answer about its own reading, which is what
+     * anything reading it may say — never that no line exists at the position.
+     */
     record Exhausted() implements BodyCutInspection {}
 
     /**

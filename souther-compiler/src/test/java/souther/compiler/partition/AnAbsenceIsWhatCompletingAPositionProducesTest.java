@@ -27,10 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * nothing could turn into a line. What all of those have in common is that they say something about
  * this compiler, and the sentence they produced says something about the model.
  *
- * <p>So the chain is the type. A position is read; where every producer of local evidence came back
- * with nothing it becomes a {@link PendingPosition}; and only completing one of those with what the
- * rules came to produces a verdict. An absence is the one arm of that where nothing stopped and
- * nothing was found, and there is no other way to one.
+ * <p>So the chain is the type. A position is read; where the producers of local evidence came back
+ * with nothing it becomes a {@link PendingPosition}; and completing one of those with what the
+ * rules came to is what produces the absence. It is the one arm where nothing stopped and nothing
+ * was found.
+ *
+ * <p>What is held here is that arm and its neighbours. That nothing outside this package can start
+ * the chain halfway through is the visibility of {@link PendingPosition}, which no test in this
+ * package can show — the scan below is a tripwire over where the one absence is named, not a proof
+ * that it cannot be reached another way.
  */
 class AnAbsenceIsWhatCompletingAPositionProducesTest {
 
