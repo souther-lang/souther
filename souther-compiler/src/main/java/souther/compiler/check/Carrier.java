@@ -178,8 +178,11 @@ public sealed interface Carrier {
         }
         return switch (this) {
             // A decimal holds every number and a string is every string: the ranges and the values
-            // are the same things.
-            case Dense _, Text _ -> count;
+            // are the same things. Its own, though — this is where a carrier says which places are
+            // its, so a place of some other carrier is not one of them however little else would
+            // have noticed.
+            case Dense _ -> count instanceof Count ? count : null;
+            case Text _ -> count instanceof souther.compiler.numeric.Text ? count : null;
             // A whole number, a day count and an ordinal step, so a number between two of them is
             // neither, and each stops where what carries it stops. Asked here rather than at each
             // place that steps one, because a step off the end is the same non-value however it was
@@ -209,7 +212,7 @@ public sealed interface Carrier {
             // it holds this one. A caller reading that as a yes offers a value between two moments
             // as one of them.
             case Seconds _ -> {
-                if (!DateTimes.holds(count)) {
+                if (!(count instanceof Count) || !DateTimes.holds(count)) {
                     yield null;
                 }
                 Place written = DateTimes.secondOf(DateTimes.written(count));
@@ -286,19 +289,28 @@ public sealed interface Carrier {
      * stated.
      */
     private static Place someStringInside(Endpoint low, Endpoint high) {
+        if (!Endpoint.someValueLiesBetween(low, high)) {
+            return null;
+        }
+        // An end the range holds is the string taken, whichever end it is. Only the lower one was
+        // looked at, so `"a" < x <= "b"` came back with nothing while holding a value the model
+        // itself wrote two characters away.
         if (low != null && low.inclusive()) {
             return low.at();
         }
+        if (high != null && high.inclusive()) {
+            return high.at();
+        }
+        // Open above a string, and every string with that one as a prefix is inside. Which of them
+        // is a choice, and a choice made here puts a character nobody wrote into a row somebody has
+        // to read — the restraint a decimal and a date-time already get above a strict bound.
         if (low != null) {
             return null;
         }
-        if (high == null) {
-            return souther.compiler.numeric.Text.of("");
-        }
-        if (high.inclusive()) {
-            return high.at();
-        }
-        return high.at().key().isEmpty() ? null : souther.compiler.numeric.Text.of("");
+        // Open below one, and the empty string is under every other. The least there is, not one
+        // this made up.
+        return high == null || !high.at().key().isEmpty()
+                ? souther.compiler.numeric.Text.of("") : null;
     }
 
     /** An end moved onto the nearest whole count the range holds, which is always one it holds. */
@@ -373,6 +385,12 @@ public sealed interface Carrier {
         } else {
             tried.addAll(stepped);
             tried.addAll(inside);
+        }
+        // A string has a least value and nothing beside one, so what stands for "none of these" is
+        // the empty string wherever that is not one of them. Last, so a domain that names its own
+        // ends is asked first — and refused by the filter below where it is itself singled out.
+        if (this instanceof Text) {
+            tried.add(souther.compiler.numeric.Text.of(""));
         }
         for (Place candidate : tried) {
             // On the carrier's grid before it is asked anything. Halfway between two adjacent moments

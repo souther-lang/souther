@@ -28,9 +28,16 @@ public record Text(String at) implements Place {
     /**
      * The order, which is the strings' own.
      *
-     * <p>{@link String#compareTo} and not a collator. What the language defines is the lexicographic
-     * order of the code points (spec §primitives), and a locale-aware order would put a line
-     * somewhere the model did not.
+     * <p>{@link String#compareTo} and not a collator: the same comparison the runtime makes, so a
+     * line drawn here and the branch a row takes cannot disagree about which side of it a value is
+     * on. A locale-aware order would put a line somewhere the model did not.
+     *
+     * <p>Which orders UTF-16 code units and not code points — Java's order, and so the runtime's.
+     * Said rather than left to be assumed, because the measure beside this one counts a string's
+     * length in code points, on purpose: two units in one measure is the kind of thing read as a
+     * mistake later if nothing wrote down that it is not one. What ties them is that each matches
+     * what it is a measure of — the length matches what the decoder admits, and the order matches
+     * the branch a row takes.
      */
     @Override
     public int compareTo(Place other) {
