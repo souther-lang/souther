@@ -552,6 +552,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      * {@code Shape} holds a {@code Shape}, so there is no first one, and whether a sum has a case that
      * bottoms out is a judgement the construction check does not make. Written through a collection
      * the rules will not let be empty, the model is refused before the descent is reached.
+     *
+     * <p>So this asks its question through the gap rather than around it, and holds only while the
+     * gap is open. Have the construction check decide a sum's inhabitance and no model reaching the
+     * descent is left to ask it with — at which point what this asserts has to be asked of a type the
+     * check still admits, or the question has stopped being one the generator can be posed.
      */
     @Test
     void aTypeWrittenInTermsOfItselfIsGivenUpOn() {

@@ -139,6 +139,36 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                 """);
     }
 
+    /**
+     * The shortest cycle there is: a name whose value is a collection of that same name, which the
+     * rules will not let be empty.
+     *
+     * <p>Two things meet here. The floor is written on {@code Nest} about what {@code Nest} holds, so
+     * a walk beginning at the field inside reads a bare {@code List<Nest>} and finds none — the walk
+     * has to begin at the name. And the element it then reaches is {@code Nest} again, so a walk
+     * treating each element as a fresh start with no memory of where it has been descends forever
+     * rather than answering.
+     */
+    @Test
+    void aNameWhoseValueIsANonEmptyCollectionOfItselfIsRefused() {
+        refuses("Nest", """
+                module demo
+
+                data Nest = List<Nest>
+                    invariant someNest = List.length(value) >= 1
+                """);
+    }
+
+    /** And the same shape where the collection may be empty, which is an ordinary tree. */
+    @Test
+    void aNameWhoseValueIsACollectionOfItselfBottomsOutAtTheEmptyOne() {
+        admits("""
+                module demo
+
+                data Nest = List<Nest>
+                """);
+    }
+
     /** A set counts what it holds under its own name, and a floor on it is the same floor. */
     @Test
     void aSetsSizeIsAFloorOnWhatItHolds() {
