@@ -44,7 +44,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      * @param obligations lines some rule drew that a row is owed at
      * @param unread      what stopped a rule being read, or null where nothing did
      */
-    private record Measured(int axes, int obligations, String unread) {}
+    private record Measured(int axes, int obligations, UndividedPosition.Reason unread) {}
 
     /** A carrier read all the way through: an axis, the line and the value beside it where the
      *  values step, and nothing left unread. */
@@ -251,23 +251,27 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardDayWrapped", read(2));
         expected.put("guardMomentWrapped", read(2));
         expected.put("guardTextWrapped", read(1));
-        // Not what the bare position answers, and not what this row is about. The line is drawn —
-        // the carrier is asked of what the name wraps, as it is for every other newtype here — and
-        // the classes are gone: a newtype over a sum loses the sum's cases, because the classes
-        // reader stops at the name instead of reading what it wraps. Written down as it is rather
-        // than as it should be, because changing it is a different reader's work, and left in the
-        // table so that fixing it is a cell that stops matching.
-        expected.put("guardStageWrapped", new Measured(0, 2, null));
+        // What the bare position answers. The classes reader reads through the name now, as the
+        // carrier always did, so the cell that was a name changing what a rule means is a cell that
+        // says the two forms are one.
+        expected.put("guardStageWrapped", readBesideItsClasses(2));
 
         assertEquals(expected, measured(expected.keySet()));
     }
 
     /**
-     * The same rule written as an invariant, which draws a line and no class.
+     * The same rule written as an invariant, which draws a line and adds no class.
      *
      * <p>Everything outside a bound is refused at construction, so there is no class on the far side
-     * to cover and the position has one edge worth a row (ADR-0090) — which is why every cell here
-     * has no axis and the {@code guard} cells above have one.
+     * to cover and the position has one edge worth a row (ADR-0090) — which is why the cells over a
+     * range have no axis and the {@code guard} cells above have one.
+     *
+     * <p>The enumeration is the exception, and it is the bound adding nothing rather than the bound
+     * being read differently: an enumeration's type states its cases whatever any rule says, so the
+     * axis is there before the invariant is read. What the invariant does is take away the cases
+     * outside it — {@code value >= Qualified} leaves two of the three — because a class is a set of
+     * values the position holds, and a class for a value refused at construction is a row nobody
+     * can write.
      */
     @Test
     void anInvariantsBoundIsDrawnOnTheSameCarriers() {
@@ -277,10 +281,11 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("boundDay", new Measured(0, 1, null));
         expected.put("boundMoment", new Measured(0, 1, null));
         expected.put("boundText", new Measured(0, 1, null));
-        expected.put("boundStage", new Measured(0, 1, null));
+        expected.put("boundStage", new Measured(1, 1, null));
 
         assertEquals(expected, measured(expected.keySet()));
     }
+
 
     /**
      * And the two rows say the same thing about the same carriers.
@@ -310,29 +315,23 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      * And a name wrapped round the values does not change the answer.
      *
      * <p>A newtype is the value it carries, so a rule about it is the rule about what it wraps. The
-     * enumeration is left out here and not silently passed over: the line is drawn on both forms and
-     * only the wrapped one loses its classes, which is the classes reader stopping at the name and
-     * not the carrier table. The cell above says so, and this row would say it as a carrier problem.
+     * enumeration is a row here like the rest: it used to be the one carrier where the two forms
+     * differed, because the reader that drew the line read through the name and the reader that
+     * asked what the position divides into stopped at it (issue #631). One reading answers both
+     * now, so the row that recorded the disagreement is the row that holds it closed.
      */
     @Test
     void aNameWrappedRoundTheValuesDoesNotChangeWhatIsMeasured() {
         Map<String, Measured> all = measured(List.of(
                 "guardWholeBare", "guardDenseBare", "guardDayBare", "guardMomentBare",
-                "guardTextBare",
+                "guardTextBare", "guardStageBare",
                 "guardWholeWrapped", "guardDenseWrapped", "guardDayWrapped", "guardMomentWrapped",
-                "guardTextWrapped"));
+                "guardTextWrapped", "guardStageWrapped"));
 
-        for (String carrier : List.of("Whole", "Dense", "Day", "Moment", "Text")) {
+        for (String carrier : List.of("Whole", "Dense", "Day", "Moment", "Text", "Stage")) {
             assertEquals(all.get("guard" + carrier + "Bare"), all.get("guard" + carrier + "Wrapped"),
                     carrier + ": a newtype is the value it carries");
         }
-        // The half of it that does hold of the enumeration, asked here so that the exception above
-        // is the classes and nothing more: the same line, drawn on the same carrier, either side of
-        // the name.
-        Map<String, Measured> stage = measured(List.of("guardStageBare", "guardStageWrapped"));
-        assertEquals(stage.get("guardStageBare").obligations(),
-                stage.get("guardStageWrapped").obligations(),
-                "Stage: a newtype is the value it carries, whatever the classes reader does");
     }
 
     /**
@@ -418,23 +417,14 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         for (String behavior : behaviors) {
             PartitionEvidence evidence = coverage.get(behavior);
             assertNotNull(evidence, behavior + " was measured");
-            String unread = evidence.unread().isEmpty() ? null
-                    : said(evidence.unread().get(0).why());
+            // Through the projection a report goes through, which is what this table is of: what
+            // this compiler could not do is recorded in its own words and said in the document's.
+            UndividedPosition.Reason unread = evidence.unread().isEmpty() ? null
+                    : ReportedReason.of(evidence.unread().get(0).why());
             out.put(behavior, new Measured(evidence.axes().size(),
                     evidence.boundaries().size(), unread));
         }
         return out;
-    }
-
-    /** The reason as the report writes it, so a cell says what an author would read. */
-    private static String said(UndividedPosition.Reason reason) {
-        return switch (reason) {
-            case UNSUPPORTED_SYNTAX -> "a comparison here is written in a form this does not read";
-            case UNSUPPORTED_DOMAIN -> "it is compared against values no line can be drawn on here";
-            case UNSUPPORTED_PARTITION_SHAPE ->
-                    "the comparison relates it to another position rather than dividing it";
-            case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
-        };
     }
 
     /**

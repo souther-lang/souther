@@ -508,6 +508,9 @@ public final class Adequacy {
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 boolean armsAsked, FixtureReader.Construction building, Exclusions excluded) {
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            souther.compiler.partition.BehaviorInputs inputs =
+                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                            symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
             Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
@@ -520,12 +523,11 @@ public final class Adequacy {
                 if (!axis.measurable()) {
                     continue;
                 }
-                out.addAll(Coverages.assess(axis, parameters, observed, symbols, armsAsked,
+                out.addAll(Coverages.assess(axis, inputs, observed, armsAsked,
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
                         partitioning.domains().get(axis.term())));
             }
-            out.addAll(Coverages.assessBetween(partitioning, parameters, observed, armsAsked,
-                    probe));
+            out.addAll(Coverages.assessBetween(partitioning, inputs, observed, armsAsked, probe));
             return List.copyOf(out);
         }
 
@@ -542,8 +544,9 @@ public final class Adequacy {
             if (building == null) {
                 return null;
             }
-            Generator.Subject subject = new Generator.Subject(parameters, sig.inputTypes(),
-                    partitioning.axes(), symbols);
+            Generator.Subject subject = new Generator.Subject(
+                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                            symbols), partitioning.axes());
             Generator.CandidateCheck check =
                     (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
             return new Coverages.Probe() {
@@ -1321,15 +1324,19 @@ public final class Adequacy {
             }
             List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            // One reading of what the behavior takes, for both halves of this: the rows already
+            // written are read by it, and the rows offered are generated from it.
+            souther.compiler.partition.BehaviorInputs inputs =
+                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                            symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
-            Generator.Subject subject = new Generator.Subject(parameters, sig.inputTypes(),
-                    partitioning.axes(), symbols);
+            Generator.Subject subject = new Generator.Subject(inputs, partitioning.axes());
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
 
             List<Map<AxisId, Classification>> existing = rows.stream()
-                    .map(row -> RowClasses.of(row, parameters, partitioning.axes())).toList();
+                    .map(row -> RowClasses.of(row, inputs, partitioning.axes())).toList();
             return Generator.fill(subject, existing, check);
         }
     }
@@ -1569,7 +1576,8 @@ public final class Adequacy {
             // above — and the walk stopping short is the one reason that comes from neither.
             List<List<Object>> unread = new ArrayList<>();
             for (souther.compiler.partition.UnreadRule each : partition.unread()) {
-                unread.add(List.<Object>of(each.at().toString(), said(each.why())));
+                unread.add(List.<Object>of(each.at().toString(),
+                        said(souther.compiler.partition.ReportedReason.of(each.why()))));
             }
             for (souther.compiler.partition.UndividedPosition position : partition.notDerivable()) {
                 if (position.why() instanceof souther.compiler.partition.UndividedPosition.Why
@@ -1602,6 +1610,9 @@ public final class Adequacy {
                 case UNSUPPORTED_PARTITION_SHAPE ->
                         "the comparison relates it to another position rather than dividing it";
                 case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
+                case TYPE_UNRESOLVED -> "its type could not be worked out here";
+                case UNSUPPORTED_TRAVERSAL ->
+                        "its values are held inside something this does not reach into";
             };
         }
 

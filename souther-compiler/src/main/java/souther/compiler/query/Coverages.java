@@ -21,6 +21,7 @@ import souther.compiler.partition.NumericTerm;
 import souther.compiler.partition.OriginRef;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
+import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.RowClasses;
 
 import java.util.ArrayList;
@@ -49,6 +50,10 @@ final class Coverages {
                                                   Core body, CoverageSites.Plan plan,
                                                   Exclusions excluded) {
         List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
+        // What a row's values are, where they sit and what they are written as, read together:
+        // a field under a name is reached by taking the name off, and a walk given the paths
+        // alone reaches nothing where the derivation reaches a field.
+        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning = Partitions.of(behavior, sig, symbols, excluded);
         if (body == null) {
             return partitioning;
@@ -71,13 +76,17 @@ final class Coverages {
                                 List<BoundaryAssessment> boundaries, Exclusions excluded) {
         List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
+        // What a row's values are, where they sit and what they are written as, read together:
+        // a field under a name is reached by taking the name off, and a walk given the paths
+        // alone reaches nothing where the derivation reaches a field.
+        BehaviorInputs where = new BehaviorInputs(parameters, sig.inputTypes(), symbols);
         Partitions.Partitioning partitioning =
                 partitioningOf(behavior, sig, symbols, body, plan, excluded);
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
-        Readings readings = Readings.of(rows, parameters, partitioning.axes(),
+        Readings readings = Readings.of(rows, where, partitioning.axes(),
                 observed.someRowsUnseen());
         for (Axis axis : partitioning.axes()) {
             if (!axis.measurable()) {
@@ -132,11 +141,11 @@ final class Coverages {
      */
     private record Readings(List<Map<AxisId, Classification>> byRow, boolean someRowsUnseen) {
 
-        static Readings of(List<RowOutcome> rows, List<String> parameters, List<Axis> axes,
+        static Readings of(List<RowOutcome> rows, BehaviorInputs where, List<Axis> axes,
                            boolean someRowsUnseen) {
             List<Map<AxisId, Classification>> read = new ArrayList<>();
             for (RowOutcome row : rows) {
-                read.add(RowClasses.of(row, parameters, axes));
+                read.add(RowClasses.of(row, where, axes));
             }
             return new Readings(List.copyOf(read), someRowsUnseen);
         }
@@ -308,17 +317,17 @@ final class Coverages {
      * @param probe     null where the module's classes or the runtime are not there to build against
      */
     static List<BoundaryAssessment> assess(
-            Axis axis, List<String> parameters, souther.compiler.query.Adequacy.Observed observed,
-            Symbols symbols, boolean armsAsked, boolean knownWritable, Probe probe,
+            Axis axis, BehaviorInputs where, souther.compiler.query.Adequacy.Observed observed,
+            boolean armsAsked, boolean knownWritable, Probe probe,
             souther.compiler.numeric.NumericDomain.Bounds within) {
         List<RowOutcome> rows = observed.rows();
         // Keyed by the line rather than by the reading of it. A guard inside a non-recursive helper
         // is read once per call of that helper, and the rows do not owe the same edge twice for
         // having been offered it twice; what each reading saw is merged below.
         java.util.SequencedMap<Line, BoundaryAssessment> out = new java.util.LinkedHashMap<>();
-        for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols, within)) {
+        for (BoundaryObligation each : Partitions.obligationsOf(axis, where.symbols(), within)) {
             BoundaryAssessment.Coverage coverage =
-                    coverageOf(each, axis, parameters, symbols, observed, armsAsked);
+                    coverageOf(each, axis, where, observed, armsAsked);
             BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
             BoundaryAssessment made = new BoundaryAssessment(each, coverage,
                     writabilityOf(coverage, knownWritable, attempt), attempt);
@@ -391,7 +400,7 @@ final class Coverages {
 
     /** Whether a row sits at one boundary, and whether that could be told. */
     private static BoundaryAssessment.Coverage coverageOf(
-            BoundaryObligation obligation, Axis axis, List<String> parameters, Symbols symbols,
+            BoundaryObligation obligation, Axis axis, BehaviorInputs where,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
         boolean guard = obligation.origin() instanceof OriginRef.GuardOrigin;
@@ -403,12 +412,11 @@ final class Coverages {
         }
         Met met = switch (obligation.target()) {
             case BoundaryTarget.AtPlace place -> guard
-                    ? evaluatedAt(axis, parameters, rows, symbols, place.at(),
+                    ? evaluatedAt(axis, where, rows, place.at(),
                             (OriginRef.GuardOrigin) obligation.origin())
-                    : writtenAt(axis, parameters, rows, symbols, place.at());
+                    : writtenAt(axis, where, rows, place.at());
             case BoundaryTarget.EqualTerms line ->
-                    heldBetween(line, parameters, rows,
-                            (OriginRef.GuardOrigin) obligation.origin());
+                    heldBetween(line, where, rows, (OriginRef.GuardOrigin) obligation.origin());
         };
         return verdictOf(met, guard, observed);
     }
@@ -425,7 +433,7 @@ final class Coverages {
      * is reported and not counted, the same account any other unpromised edge gets.
      */
     static List<BoundaryAssessment> assessBetween(
-            Partitions.Partitioning partitioning, List<String> parameters,
+            Partitions.Partitioning partitioning, BehaviorInputs where,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked, Probe probe) {
         List<RowOutcome> rows = observed.rows();
         // Keyed by the line the author drew, the way a line at a place is. A guard inside a
@@ -439,7 +447,7 @@ final class Coverages {
                     whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen());
             BoundaryAssessment.Coverage coverage = absent != null
                     ? new BoundaryAssessment.Coverage.NotMeasured(absent)
-                    : verdictOf(heldBetween(line, parameters, rows,
+                    : verdictOf(heldBetween(line, where, rows,
                             (OriginRef.GuardOrigin) each.origin()), true, observed);
             // A place both positions admit is what a row on the line writes. Read once: it is what a
             // candidate is built at, and what proves the line writable where the two are independent.
@@ -519,14 +527,14 @@ final class Coverages {
      * is what the domain this was found in is made of — and two values of different types are never
      * equal however much the numbers inside them agree.
      */
-    private static Met heldBetween(BoundaryTarget.EqualTerms line, List<String> parameters,
+    private static Met heldBetween(BoundaryTarget.EqualTerms line, BehaviorInputs where,
                                    List<RowOutcome> rows, OriginRef.GuardOrigin origin) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
             NumericTerm.Reading on = line.on()
-                    .read(RowClasses.valueAt(row, parameters, line.on().path()), line.carrier());
+                    .read(where.valueAt(row, line.on().path()), line.carrier());
             NumericTerm.Reading against = line.against()
-                    .read(RowClasses.valueAt(row, parameters, line.against().path()), line.carrier());
+                    .read(where.valueAt(row, line.against().path()), line.carrier());
             if (on instanceof NumericTerm.Reading.Missing
                     || against instanceof NumericTerm.Reading.Missing) {
                 unreadable = true;
@@ -669,12 +677,11 @@ final class Coverages {
      * {@code B} false and the rows that never reached {@code B}. Reading the arms here credited the
      * second kind and could not credit the first.
      */
-    private static Met evaluatedAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                   Symbols symbols, Place boundary,
-                                   OriginRef.GuardOrigin origin) {
+    private static Met evaluatedAt(Axis axis, BehaviorInputs where, List<RowOutcome> rows,
+                                   Place boundary, OriginRef.GuardOrigin origin) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            switch (readingFor(axis, parameters, symbols, row)) {
+            switch (readingFor(axis, where, row)) {
                 case NumericTerm.Reading.Missing _ -> unreadable = true;
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
@@ -688,11 +695,11 @@ final class Coverages {
         return unreadable ? Met.UNREADABLE : Met.NO;
     }
 
-    private static Met writtenAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                 Symbols symbols, Place boundary) {
+    private static Met writtenAt(Axis axis, BehaviorInputs where, List<RowOutcome> rows,
+                                 Place boundary) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
-            switch (readingFor(axis, parameters, symbols, row)) {
+            switch (readingFor(axis, where, row)) {
                 case NumericTerm.Reading.Missing _ -> unreadable = true;
                 case NumericTerm.Reading.NotNumber _ -> { }
                 case NumericTerm.Reading.Number number -> {
@@ -721,10 +728,9 @@ final class Coverages {
      * its position as a row nobody could read — which is the answer {@code Intervals} already gives
      * a class asked the same question, and it has to be the same answer.
      */
-    private static NumericTerm.Reading readingFor(Axis axis, List<String> parameters,
-                                                  Symbols symbols, RowOutcome row) {
-        return axis.term().read(RowClasses.valueAt(row, parameters, axis.path()),
-                axis.term().carrierAt(axis.type(), symbols));
+    private static NumericTerm.Reading readingFor(Axis axis, BehaviorInputs where, RowOutcome row) {
+        return axis.term().read(where.valueAt(row, axis.path()),
+                axis.term().carrierAt(axis.type(), where.symbols()));
     }
 
     private Coverages() {}

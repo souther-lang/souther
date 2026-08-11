@@ -154,7 +154,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void aPositionNamedInsideAnExpressionIsStillNoticed() {
         assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
-                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
+                        new BlockReason.UnreadComparisonForm())),
                 read("p: Pair", "p.x + 1 < 10").unread());
     }
 
@@ -169,9 +169,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void twoPositionsComparedWithEachOtherSayWhichLimitThatIs() {
         assertEquals(List.of(
                         new UnreadRule(TermPath.of("p").then("x"),
-                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+                                new BlockReason.ComparisonBetweenPositions()),
                         new UnreadRule(TermPath.of("p").then("y"),
-                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
+                                new BlockReason.ComparisonBetweenPositions())),
                 read("p: Pair", "p.x < p.y").unread());
     }
 
@@ -189,7 +189,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
 
         assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
         assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
-                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
+                        new BlockReason.UnreadComparisonForm())),
                 guards.unread());
     }
 
@@ -204,9 +204,9 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     void aRelationWithArithmeticOnOneSideIsStillARelation() {
         assertEquals(List.of(
                         new UnreadRule(TermPath.of("p").then("x"),
-                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE),
+                                new BlockReason.ComparisonBetweenPositions()),
                         new UnreadRule(TermPath.of("p").then("y"),
-                                UndividedPosition.Reason.UNSUPPORTED_PARTITION_SHAPE)),
+                                new BlockReason.ComparisonBetweenPositions())),
                 read("p: Pair", "p.x < p.y + 1").unread());
     }
 
@@ -221,7 +221,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     @Test
     void aReadableCarrierAgainstAnUnreadableSideIsNotACarrierProblem() {
         assertEquals(List.of(new UnreadRule(TermPath.of("p").then("x"),
-                        UndividedPosition.Reason.UNSUPPORTED_SYNTAX)),
+                        new BlockReason.UnreadComparisonForm())),
                 read("p: Pair", "p.x < 1 + 2").unread());
     }
 }

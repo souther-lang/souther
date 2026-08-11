@@ -358,29 +358,21 @@ final class Witnesses {
         return List.copyOf(out);
     }
 
-    /** The values a type divides into, under every name it wears: a {@code Bool} is two of them and a
+    /**
+     * The values a type divides into, under every name it wears: a {@code Bool} is two of them and a
      * sum is its cases. Empty where the type is not divided, which is where a range or a length is
-     * what tells its values apart instead. */
+     * what tells its values apart instead.
+     *
+     * <p>Asked once. This used to ask again of what the names wrap and put them back on itself,
+     * because the reading it asks stopped at a name — so the same rule about what a newtype divides
+     * into was written here as well, and the two could differ about how far to look. The reading
+     * goes through the names now and hands the values back written under them.
+     */
     private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PartitionClass each : Partitions.classesOf(type, symbols)) {
+        for (PartitionClass each : PartitionClasses.of(type, symbols)) {
             if (each.generatable()) {
                 out.addAll(each.representatives().candidates());
-            }
-        }
-        if (!out.isEmpty()) {
-            return out;
-        }
-        // A newtype divides where what it wraps does, and the values are written under its name.
-        Type carrier = TypeOps.base(type, symbols);
-        if (carrier == null || carrier.equals(type)) {
-            return List.of();
-        }
-        for (PartitionClass each : Partitions.classesOf(carrier, symbols)) {
-            if (each.generatable()) {
-                for (FixtureTemplate value : each.representatives().candidates()) {
-                    out.add(wrapped(type, value, symbols));
-                }
             }
         }
         return out;

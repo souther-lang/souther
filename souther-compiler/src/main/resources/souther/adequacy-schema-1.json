@@ -252,8 +252,8 @@
             "properties": {
               "position": { "type": "string" },
               "reason": {
-                "description": "`unsupported_syntax` is an expression the terms do not name; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position.",
-                "enum": ["unsupported_syntax", "unsupported_domain", "unsupported_partition_shape", "depth_limit"]
+                "description": "`unsupported_syntax` is an expression the terms do not name; `unsupported_domain` is a comparison against values no line can be drawn on; `unsupported_partition_shape` is a comparison relating two positions rather than dividing one; `depth_limit` is the walk stopping before it reached the position; `type_unresolved` is a type at the position that could not be worked out; `unsupported_traversal` is values held inside something the walk does not reach into. Every one of them is a fact about the compiler and none is a fact about the model.",
+                "enum": ["unsupported_syntax", "unsupported_domain", "unsupported_partition_shape", "depth_limit", "type_unresolved", "unsupported_traversal"]
               }
             }
           }

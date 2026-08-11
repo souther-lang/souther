@@ -9,9 +9,10 @@ package souther.compiler.partition;
  * for the line their own body draws.
  *
  * <p>So the absence is a value that has to be produced rather than the default reading of an empty
- * result. {@link Absent} is only written where the walk ran to the end and found nothing; where it
- * stopped, or where something named the position and this could not turn it into a line,
- * {@link CannotDerive} says so and carries which.
+ * result. {@link Why.Absent} is produced by {@link PendingPosition#complete} and nowhere else, from
+ * a position whose structural reading did not stop and whose rules were all read and drew nothing —
+ * which is what the word means. Where the reading stopped, or where something named the position
+ * and this could not turn it into a line, {@link Why.CannotDerive} says so and carries which.
  *
  * @param at  the position, spelled the way a report names it
  * @param why whether the model draws nothing here or this could not read what it draws
@@ -21,19 +22,55 @@ public record UndividedPosition(TermPath at, Why why) {
     /** Which of the two it is. */
     public sealed interface Why {
 
-        /** The walk finished and the model divides this position no way at all. */
-        record Absent() implements Why {}
+        /**
+         * Every producer was asked, none of them stopped, and none of them divided the position:
+         * the model divides it no way at all.
+         *
+         * <p>A class with no way to make one rather than a record, because what it says is a
+         * conclusion about a model and the only thing entitled to draw it is the completion of a
+         * {@link PendingPosition}. Anything able to write {@code new Absent()} is able to say the
+         * model divides a position no way without having asked anything, which is the sentence this
+         * whole protocol exists to stop being cheap to write.
+         */
+        final class Absent implements Why {
+
+            /** The one, reached through {@link PendingPosition#complete}. */
+            static final Absent PROVEN = new Absent();
+
+            private Absent() {}
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Absent;
+            }
+
+            @Override
+            public int hashCode() {
+                return Absent.class.hashCode();
+            }
+
+            @Override
+            public String toString() {
+                return "Absent";
+            }
+        }
 
         /** Something is written here that this did not read, so nothing is established either way. */
         record CannotDerive(Reason reason) implements Why {}
     }
 
     /**
-     * What stopped the derivation.
+     * What stopped the derivation, in the words a document is written in.
      *
-     * <p>Each of these is a fact about this compiler. They are told apart because they are lifted by
-     * different work: one wants a reader for a form of condition, one wants the walk to go deeper,
-     * and a report that named neither could not say which.
+     * <p>Each of these is a fact about this compiler, said at the coarseness a reader of a document
+     * is promised. They are told apart because they are lifted by different work: one wants a
+     * reader for a form of condition, one wants the walk to go deeper, and a report that named
+     * neither could not say which.
+     *
+     * <p>Not the cause itself. What a producer recorded is a {@link BlockReason}, and one of these
+     * is what {@link ReportedReason} projects it to — three missing traversals arrive here as one
+     * word. So a reader of this knows which kind of thing stopped the derivation and not which
+     * capability was missing.
      */
     public enum Reason {
         /** A comparison this position is named by sits inside a condition this does not read. */
@@ -50,21 +87,37 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         UNSUPPORTED_PARTITION_SHAPE,
         /** The walk stopped before it reached the fields under this position. */
-        DEPTH_LIMIT
+        DEPTH_LIMIT,
+        /**
+         * The type at this position could not be interpreted, so nothing about its values is
+         * established. A model carrying one compiles, which is why this is a word a report writes
+         * rather than a state nothing reaches.
+         */
+        TYPE_UNRESOLVED,
+        /**
+         * The position holds its values inside something this does not reach into — the elements of
+         * a collection, what an optional holds, what a map holds. One word for all of them: which
+         * reaching is missing is a fact about this compiler, and the model reads the same either
+         * way. What this compiler could not do is told apart internally
+         * ({@link BlockReason.UnsupportedTraversal}).
+         */
+        UNSUPPORTED_TRAVERSAL
     }
 
-    public static UndividedPosition absent(TermPath at) {
-        return new UndividedPosition(at, new Why.Absent());
+    /**
+     * The absence, of a position that has been completed.
+     *
+     * <p>The argument is the proof. A {@link PendingPosition} is made from a position whose local
+     * producers all came back with nothing, and only completing one reaches this — so what cannot
+     * happen is an absence written by a reader that did not ask. Outside this package there is
+     * neither a way to make one of those nor a name for this.
+     */
+    static UndividedPosition absentAfter(PendingPosition proven) {
+        return new UndividedPosition(proven.at(), Why.Absent.PROVEN);
     }
 
-    public static UndividedPosition cannotDerive(TermPath at, Reason reason) {
+    static UndividedPosition cannotDerive(TermPath at, Reason reason) {
         return new UndividedPosition(at, new Why.CannotDerive(reason));
-    }
-
-    /** The same position, with a reason where it had none. A position already carrying one keeps it:
-     * what stopped the walk first is what a reader has to lift first. */
-    public UndividedPosition because(Reason reason) {
-        return why instanceof Why.Absent ? cannotDerive(at, reason) : this;
     }
 
     public boolean isAbsent() {
