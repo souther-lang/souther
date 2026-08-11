@@ -617,6 +617,69 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 "the clause is `Wrapped`'s wherever a `Wrapped` is held: " + lines.keySet());
     }
 
+    /**
+     * A relation that holds an end, and one beside it that holds nothing.
+     *
+     * <p>`a < b` under a `b` of at most 8 is what leaves `a` at 7. `a < c` under a `c` of at most 100
+     * reaches nothing `a` had not already passed, so taking it away moves no end and it decided
+     * none. And the two ends of `a` in the second model are held by different declarations, which is
+     * a second answer and not the same one twice.
+     */
+    private static final String WHO_HELD_IT = """
+            module whoheldit
+
+            data A = Int invariant value <= 10
+            data B = Int invariant value <= 8
+            data C = Int invariant value <= 100
+
+            data Base  = { a: A, b: B, c: C }
+            data Inner = Base  invariant value.a.value < value.b.value
+            data Outer = Inner invariant value.value.a.value < value.value.c.value
+
+            data N     = Int invariant value >= 0 invariant value <= 10
+            data Low   = Int invariant value >= 2
+            data High  = Int invariant value <= 8
+
+            data Ends  = { n: N, low: Low, high: High }
+            data Upper = Ends  invariant value.n.value < value.high.value
+            data Both  = Upper invariant value.value.n.value > value.value.low.value
+
+            data Ok = { size: Int }
+
+            behavior onOuter : (v: Outer) -> Ok
+                constructs Ok
+            let onOuter (v) = Ok { size = v.a.value }
+
+            behavior onBoth : (v: Both) -> Ok
+                constructs Ok
+            let onBoth (v) = Ok { size = v.n.value }
+            """;
+
+    /**
+     * A relation that moved no end does not get to name one.
+     *
+     * <p>Having written a relation about a coordinate is not the same as having decided where it
+     * stops. Read as the same thing, adding a redundant clause to an outer declaration changed which
+     * declaration a line was named by while the domain, the edge and the rule that moved it all
+     * stayed where they were — and the name is part of what tells one line from another.
+     */
+    @Test
+    void aRelationThatMovedNoEndDoesNotNameOne() {
+        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+
+        assertEquals("invariant A (max) within Inner", lines.get("onOuter/v.a = 7").origin(),
+                "`Outer`'s clause reaches nothing `a` had not already passed");
+    }
+
+    /** And the two ends of one position are two answers. */
+    @Test
+    void eachEndIsHeldByWhicheverDeclarationHoldsIt() {
+        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+
+        assertEquals("invariant N (min) within Both", lines.get("onBoth/v.n = 3").origin());
+        assertEquals("invariant N (max) within Upper", lines.get("onBoth/v.n = 7").origin());
+    }
+
     /** A length floor over an element type nothing inhabits. Its own module, since a declaration that
      *  cannot be built leaves the module with nothing to build against. */
     private static final String UNINHABITED = """

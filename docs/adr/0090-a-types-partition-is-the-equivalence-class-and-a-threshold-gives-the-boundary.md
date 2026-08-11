@@ -262,9 +262,21 @@ reader following that name finds no such clause there. It is not only what is pr
 tells one line from another — so a value standing in for the provenance made two lines one wherever
 two declarations round a value each related a coordinate.
 
-Which clause of the ones that could have moved it is not asked. A bound arrives along a path through
-the differences and several clauses can be on it, so what is known is that some declaration wrote a
-relation about this coordinate, and naming one that did is the whole of it.
+Which of them is holding the end is asked by taking each away. Having written a relation about a
+coordinate is not the same as having decided where it stops: a second relation reaching a value the
+first has already passed changes nothing, and named as the narrower it would make a line's identity
+turn on a clause that moved it nowhere. The closure answers with a number and not with how it got
+there, so the question is put to it again — seed the value without one declaration's clauses, and an
+end that moves is an end that declaration was holding.
+
+Per end, because they are two answers. One declaration can hold a minimum while another holds the
+maximum, and a single name for both is wrong about at least one of them.
+
+Where taking any one away leaves the end where it is, they are handed over together. Two clauses can
+each say what the edge says, and then each is as much the answer as the other; choosing one would
+invent the thing that is not known. Exactly which constraints a bound was derived from is the
+closure's to record and it does not, so that is the limit of what can be said here rather than
+something to guess past.
 
 ## Consequences
 

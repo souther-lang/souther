@@ -31,7 +31,7 @@ public final class FieldDomains {
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
             new FieldDomains(Map.of(), Map.of(), List.of(), Map.of(), false, true,
-                    NumericDomain.top(), () -> true);
+                    NumericDomain.top(), null, null, null, Map.of(), () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -49,6 +49,11 @@ public final class FieldDomains {
      * with no rules, and a second reading asked afterwards does not take the same path. */
     private final boolean seeded;
     private final NumericDomain numbers;
+    /** What this was read from, so that it can be read again without one declaration's clauses. */
+    private final TypeName named;
+    private final Ast.Data data;
+    private final Symbols symbols;
+    private final Map<String, Count> settled;
     private final java.util.function.BooleanSupplier reading;
     private volatile Boolean everyRuleRead;
 
@@ -56,7 +61,8 @@ public final class FieldDomains {
                          Map<String, NumericDomain.Bounds> heldByField,
                          List<InvariantChecker.Direct> directs,
                          Map<String, List<TypeName>> narrowers, boolean infeasible,
-                         boolean seeded, NumericDomain numbers,
+                         boolean seeded, NumericDomain numbers, TypeName named, Ast.Data data,
+                         Symbols symbols, Map<String, Count> settled,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.heldByField = heldByField;
@@ -65,6 +71,10 @@ public final class FieldDomains {
         this.infeasible = infeasible;
         this.seeded = seeded;
         this.numbers = numbers;
+        this.named = named;
+        this.data = data;
+        this.symbols = symbols;
+        this.settled = settled;
         this.reading = reading;
     }
 
@@ -95,11 +105,19 @@ public final class FieldDomains {
      */
     public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
                                   Map<String, Count> settled) {
+        return of(named, data, symbols, settled, _ -> false);
+    }
+
+    /** The same, with one declaration's own clauses left out — see {@link #narrowedBy}. */
+    private static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
+                                   Map<String, Count> settled,
+                                   java.util.function.Predicate<TypeName> without) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the same position it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
         // answers were being given away by treating it as a value with nothing to say.
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, settled);
+        InvariantChecker.Seeded seeded =
+                InvariantChecker.seedFields(named, data, symbols, settled, without);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no path, and its range is the one thing not worth handing back:
@@ -131,7 +149,7 @@ public final class FieldDomains {
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
         return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.reading().directs(),
                 seeded.reading().narrowers(), seeded.numbers().isBottom(),
-                seeded.everyClauseRead(), seeded.numbers(),
+                seeded.everyClauseRead(), seeded.numbers(), named, data, symbols, settled,
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
@@ -168,9 +186,42 @@ public final class FieldDomains {
      * this can answer — a bound arrives along a path through the differences and several clauses can
      * be on it — and naming one that wrote such a clause is the whole of what is known.
      */
-    public TypeName narrowedBy(String path) {
-        List<TypeName> from = narrowers.get(path);
-        return from == null || from.isEmpty() ? null : from.get(0);
+    public List<TypeName> narrowedBy(String path, boolean lower) {
+        List<TypeName> candidates = narrowers.get(path);
+        if (candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        NumericDomain.Bounds here = byField.get(path);
+        Endpoint end = here == null ? null : lower ? here.min() : here.max();
+        if (end == null) {
+            return List.of();
+        }
+        // Which of them is holding this end, asked by taking each away. A candidate is a declaration
+        // that wrote a relation about this coordinate, which is not the same as one that decided
+        // where it stops: a second relation reaching a value the first has already passed changes
+        // nothing, and naming it would make an edge's identity turn on a clause that moved it
+        // nowhere.
+        List<TypeName> held = new ArrayList<>();
+        for (TypeName each : candidates) {
+            if (!sameEnd(end, without(each), path, lower)) {
+                held.add(each);
+            }
+        }
+        // None on its own, and the end still moved: two of them say it and taking away either leaves
+        // the other saying it. Which is not a reason to name one — every candidate is as much the
+        // answer as any other, and they are handed over together.
+        return held.isEmpty() ? candidates : List.copyOf(held);
+    }
+
+    private boolean sameEnd(Endpoint end, FieldDomains other, String path, boolean lower) {
+        NumericDomain.Bounds bounds = other.byField.get(path);
+        Endpoint was = bounds == null ? null : lower ? bounds.min() : bounds.max();
+        return end.equals(was);
+    }
+
+    /** This value read again without {@code skip}'s own clauses. */
+    private FieldDomains without(TypeName skip) {
+        return of(named, data, symbols, settled, skip::equals);
     }
 
     /** Every end the rules place, wherever it is. */

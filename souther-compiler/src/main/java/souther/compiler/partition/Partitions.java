@@ -662,10 +662,10 @@ public final class Partitions {
                     : domains.placedAt(String.join(".", path.fields()));
         }
 
-        /** Which declaration's clause could have moved where the coordinate at {@code path} stops. */
-        TypeName narrowedBy(TermPath path) {
-            return path.fields().isEmpty() ? null
-                    : domains.narrowedBy(String.join(".", path.fields()));
+        /** Which declarations' clauses are holding the end at {@code path}, on the side asked for. */
+        List<TypeName> narrowedBy(TermPath path, boolean lower) {
+            return path.fields().isEmpty() ? List.of()
+                    : domains.narrowedBy(String.join(".", path.fields()), lower);
         }
     }
 

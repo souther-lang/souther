@@ -270,6 +270,21 @@ public final class InvariantChecker {
      */
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
                              Map<String, Count> settled) {
+        return seedFields(named, data, symbols, settled, _ -> false);
+    }
+
+    /**
+     * The same, with one declaration's own clauses left out.
+     *
+     * <p>What a rule did is read by asking what happens without it. Which clause moved an edge is not
+     * something the closure records — it answers with a number and not with how it got there — and
+     * this is that question put to the same reader rather than answered by a second one: seed the
+     * value again without the clauses of {@code without}, and an end that moves is an end that
+     * declaration was holding.
+     */
+    static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
+                             Map<String, Count> settled,
+                             java.util.function.Predicate<TypeName> without) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
@@ -278,7 +293,8 @@ public final class InvariantChecker {
         boolean read = true;
         List<Written> written = new ArrayList<>();
         try {
-            for (Ast.InvariantClause clause : c.clauses.of(named, data)) {
+            for (Ast.InvariantClause clause : without.test(named) ? List.<Ast.InvariantClause>of()
+                    : c.clauses.of(named, data)) {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
                 if (stated == null) {
                     read = false;
@@ -299,7 +315,7 @@ public final class InvariantChecker {
                     // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             k, at, 1, Integer.MAX_VALUE, new HashSet<>(),
-                            (from, clause) -> written.add(new Written(from, clause)));
+                            (from, clause) -> written.add(new Written(from, clause)), without);
                 }
             }
         } catch (RuntimeException why) {
@@ -1545,7 +1561,7 @@ public final class InvariantChecker {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>(), null);
+        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>(), null, _ -> false);
     }
 
     /**
@@ -1570,7 +1586,8 @@ public final class InvariantChecker {
      */
     private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
                          Set<TypeName> onPath,
-                         java.util.function.BiConsumer<TypeName, Core> onClause) {
+                         java.util.function.BiConsumer<TypeName, Core> onClause,
+                         java.util.function.Predicate<TypeName> without) {
         if (depth > limit || !(root.type() instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data)
                 || !onPath.add(ref.name())) {
@@ -1587,7 +1604,8 @@ public final class InvariantChecker {
         });
         Known out = k;
         List<Quantified> quantified = new ArrayList<>();
-        for (Clauses.Stated stated : clauses.statedAt(ref.name(), data, given)) {
+        for (Clauses.Stated stated : without.test(ref.name()) ? List.<Clauses.Stated>of()
+                : clauses.statedAt(ref.name(), data, given)) {
             if (onClause != null) {
                 onClause.accept(ref.name(), stated.expr());
             }
@@ -1600,10 +1618,11 @@ public final class InvariantChecker {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
             Core value = given.get(bindings.get("value"));
-            out = value == null ? out : seedAt(value, out, at, depth + 1, limit, onPath, onClause);
+            out = value == null ? out
+                    : seedAt(value, out, at, depth + 1, limit, onPath, onClause, without);
         } else {
             for (Core value : given.values()) {
-                out = seedAt(value, out, at, depth + 1, limit, onPath, onClause);
+                out = seedAt(value, out, at, depth + 1, limit, onPath, onClause, without);
             }
         }
         onPath.remove(ref.name());

@@ -138,7 +138,9 @@ public sealed interface LocalInspection {
                 constructibleAt(PartitionClasses.of(view, symbols), view, admissible, symbols);
         TypeBounds.Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
-                : cutsOf(type, axis, own, placed == null ? null : placed.narrowedBy(path));
+                : cutsOf(type, axis, own,
+                        placed == null ? List.of() : placed.narrowedBy(path, true),
+                        placed == null ? List.of() : placed.narrowedBy(path, false));
         if (classes.isEmpty() && cuts.isEmpty()) {
             return new Exhausted(reading);
         }
@@ -327,13 +329,13 @@ public sealed interface LocalInspection {
      *
      * @param bounds where the position stops, the record it sits in taken into account
      * @param own    where its own type stops, so that an end the record moved can say so
-     * @param within the declaration whose clause could have moved the end, or null where none did.
-     *               The declaration and not the value: the same relation can be written on the
-     *               record, on a record inside it, or on a name wrapped round either, and only the
-     *               one that wrote it has anything to answer for
+     * @param under  the declarations holding the lower end, and {@code over} those holding the
+     *               upper. Per end because they are separate answers: one declaration can be holding
+     *               a minimum while another holds the maximum, and one slot for both names the wrong
+     *               one for at least one of them
      */
     private static List<Cut> cutsOf(Type type, TypeBounds.Bounds bounds, TypeBounds.Bounds own,
-                                    TypeName within) {
+                                    List<TypeName> under, List<TypeName> over) {
         // Nothing about the shape of the position's type. An end is here because some clause placed
         // it, and a clause naming a field of a record places one on a bare `Int` and on the length of
         // a bare `List<Int>` as readily as on a newtype over either. Asking for a `Type.Ref` here was
@@ -343,15 +345,15 @@ public sealed interface LocalInspection {
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();
         cut(byValue, bounds.min(), own == null ? null : own.min(), "min",
-                bounds.carrier(), within);
+                bounds.carrier(), under);
         cut(byValue, bounds.max(), own == null ? null : own.max(), "max",
-                bounds.carrier(), within);
+                bounds.carrier(), over);
         return List.copyOf(byValue.values());
     }
 
     /** One end as a cut, owed once to each rule that put it there. */
     private static void cut(Map<String, Cut> into, TypeBounds.End end, TypeBounds.End own,
-                            String clause, Carrier carrier, TypeName within) {
+                            String clause, Carrier carrier, List<TypeName> within) {
         if (end == null) {
             return;
         }
@@ -360,14 +362,14 @@ public sealed interface LocalInspection {
         // that is the record's doing as much as a smaller number would have been.
         boolean moved = own != null && !own.at().equals(end.at());
         for (TypeName from : end.from()) {
-            put(into, carrier, end.value(), from, clause, moved ? within : null);
+            put(into, carrier, end.value(), from, clause, moved ? within : List.<TypeName>of());
         }
     }
 
     private static void put(Map<String, Cut> into, Carrier carrier, Place at, TypeName type,
-                            String clause, TypeName narrowedBy) {
+                            String clause, List<TypeName> narrowedBy) {
         OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
-        if (narrowedBy != null) {
+        if (!narrowedBy.isEmpty()) {
             origin = new OriginRef.NarrowedOrigin(origin, narrowedBy);
         }
         OriginRef each = origin;
