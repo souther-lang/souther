@@ -97,27 +97,31 @@ final class ValueMatch {
             return v instanceof ObservedValue.Absent && o instanceof ObservedValue.Absent
                     ? null : new Mismatch(path, Reason.ABSENCE, a, o, position);
         }
+        // Of one type before anything else, and which type a written value with no parts is has one
+        // answer for every reader of it. A row writing `1` where a `Decimal` came out wrote an `Int`
+        // — the difference is written in the language, and reading a whole number as an amount is
+        // what a boundary does and not what a row did.
+        String stated = ValueRendering.primitiveNamed(v);
+        String answered = ValueRendering.primitiveNamed(o);
+        if (stated == null || answered == null || !stated.equals(answered)) {
+            return v instanceof ObservedValue.Unit x && o instanceof ObservedValue.Unit y
+                    && x.type().equals(y.type())
+                    ? null : new Mismatch(path, Reason.TYPE, a, o, position);
+        }
         return switch (v) {
-            case ObservedValue.Bool x -> o instanceof ObservedValue.Bool y
-                    ? same(path, x.value() == y.value(), a, o, position) : new Mismatch(path, Reason.TYPE, a, o, position);
-            case ObservedValue.Integer x -> o instanceof ObservedValue.Integer y
-                    ? same(path, x.value() == y.value(), a, o, position) : new Mismatch(path, Reason.TYPE, a, o, position);
+            case ObservedValue.Bool x ->
+                    same(path, x.value() == ((ObservedValue.Bool) o).value(), a, o, position);
+            case ObservedValue.Integer x ->
+                    same(path, x.value() == ((ObservedValue.Integer) o).value(), a, o, position);
             // A decimal is the amount it stands for, so two that differ only in scale are one amount
             // — the rule `Values.equal` states for the run-time values.
-            case ObservedValue.Decimal x -> o instanceof ObservedValue.Decimal y
-                    ? same(path, x.value().compareTo(y.value()) == 0, a, o, position)
-                    : new Mismatch(path, Reason.TYPE, a, o, position);
-            case ObservedValue.Text x -> o instanceof ObservedValue.Text y
-                    ? same(path, x.value().equals(y.value()), a, o, position) : new Mismatch(path, Reason.TYPE, a, o, position);
-            // Kept apart from text, so a row writing a date as a string is told the two are of
-            // different types rather than being read as one.
-            case ObservedValue.Temporal x -> o instanceof ObservedValue.Temporal y
-                    ? same(path, x.iso().equals(y.iso()), a, o, position) : new Mismatch(path, Reason.TYPE, a, o, position);
-            case ObservedValue.Unit x -> o instanceof ObservedValue.Unit y && x.type().equals(y.type())
-                    ? null : new Mismatch(path, Reason.TYPE, a, o, position);
-            case ObservedValue.Constructed _, ObservedValue.Sequence _, ObservedValue.Mapping _,
-                    ObservedValue.Absent _, ObservedValue.Unknown _, ObservedValue.Truncated _ ->
-                    new Mismatch(path, Reason.UNREADABLE, a, o, position);
+            case ObservedValue.Decimal x -> same(path,
+                    x.value().compareTo(((ObservedValue.Decimal) o).value()) == 0, a, o, position);
+            case ObservedValue.Text x ->
+                    same(path, x.value().equals(((ObservedValue.Text) o).value()), a, o, position);
+            case ObservedValue.Temporal x ->
+                    same(path, x.iso().equals(((ObservedValue.Temporal) o).iso()), a, o, position);
+            default -> new Mismatch(path, Reason.UNREADABLE, a, o, position);
         };
     }
 

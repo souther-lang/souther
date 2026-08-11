@@ -714,15 +714,6 @@ public final class FixtureReader {
         return true;
     }
 
-    private boolean each(List<Asserted> elements, Type element) {
-        for (Asserted e : elements) {
-            if (!states(e, element)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /** The name a written value wears, or null where it wears none. */
     private static TypeName named(Asserted a) {
         return switch (a) {
@@ -733,17 +724,22 @@ public final class FixtureReader {
         };
     }
 
-    /** Whether a written value with no parts is how {@code name} is spelled. */
+    /** Whether a written value with no parts is of {@code name}. Asked of what the row wrote, which
+     *  is why it is not asked of a decoder: one reads a whole number where a `Decimal` stands, and a
+     *  row writing `1` there wrote an `Int`. */
     private static boolean spells(ObservedValue v, TypeName name) {
-        return switch (name.name()) {
-            case "Int" -> v instanceof ObservedValue.Integer;
-            case "String" -> v instanceof ObservedValue.Text;
-            case "Bool" -> v instanceof ObservedValue.Bool;
-            case "Decimal" -> v instanceof ObservedValue.Decimal || v instanceof ObservedValue.Integer;
-            case "Date", "Time", "DateTime", "Instant" -> v instanceof ObservedValue.Temporal;
-            default -> false;
-        };
+        return name.name().equals(ValueRendering.primitiveNamed(v));
     }
+
+    private boolean each(List<Asserted> elements, Type element) {
+        for (Asserted e : elements) {
+            if (!states(e, element)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 
     /** Whether a type is one whose values have no parts, so a value of it is settled by the one value
      *  standing there and a decoder for it reads no position but its own. */

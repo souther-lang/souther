@@ -116,7 +116,7 @@ final class ValueRendering {
             case ObservedValue.Text t -> "\"" + t.value() + "\"";
             // Written as the construction a fixture writes one with, so it is never read as the text
             // that spells it — which is the difference a row writing a date as a string is told about.
-            case ObservedValue.Temporal t -> typeShown(t) + "(\"" + t.iso() + "\")";
+            case ObservedValue.Temporal t -> primitiveNamed(t) + "(\"" + t.iso() + "\")";
             case ObservedValue.Unit u -> u.type().name();
             case ObservedValue.Absent _ -> "None";
             case ObservedValue.Constructed c -> constructed(c);
@@ -160,17 +160,25 @@ final class ValueRendering {
     }
 
     /**
-     * What the value is, named as the language names it — what a mismatch says when the two sides
-     * differ by their type rather than by their contents.
+     * Which primitive a value with no parts is of, or null where it has parts.
+     *
+     * <p>Answered once, here, because three readers want it and each would otherwise answer it for
+     * itself: whether a row wrote a value of a position's type, whether two values are of one type,
+     * and what to call them where they are not. A reader that worked it out on its own worked it out
+     * from what it had — and one of them had a decoder, which reads a whole number where a
+     * {@code Decimal} stands because a boundary carries one that way. What a row wrote is not that:
+     * {@code 1} is an {@code Int} and {@code 1m} is a {@code Decimal}, and the language makes that
+     * difference written.
+     *
+     * <p>A temporal is which one its text spells. An observation keeps the ISO form rather than the
+     * class it arrived in, and the four spell themselves apart.
      */
-    String typeShown(ObservedValue v) {
+    static String primitiveNamed(ObservedValue v) {
         return switch (v) {
             case ObservedValue.Bool _ -> "Bool";
             case ObservedValue.Integer _ -> "Int";
             case ObservedValue.Decimal _ -> "Decimal";
             case ObservedValue.Text _ -> "String";
-            // Which temporal it is, read off the text it was kept as: an observation holds the ISO
-            // form rather than the class it arrived in, and these four spell themselves apart.
             case ObservedValue.Temporal t -> {
                 String iso = t.iso();
                 if (iso.endsWith("Z")) {
@@ -178,12 +186,28 @@ final class ValueRendering {
                 }
                 yield iso.contains("T") ? "DateTime" : iso.contains("-") ? "Date" : "Time";
             }
+            case ObservedValue.Unit _, ObservedValue.Constructed _, ObservedValue.Absent _,
+                    ObservedValue.Sequence _, ObservedValue.Mapping _, ObservedValue.Unknown _,
+                    ObservedValue.Truncated _ -> null;
+        };
+    }
+
+    /**
+     * What the value is, named as the language names it — what a mismatch says when the two sides
+     * differ by their type rather than by their contents.
+     */
+    String typeShown(ObservedValue v) {
+        String primitive = primitiveNamed(v);
+        if (primitive != null) {
+            return primitive;
+        }
+        return switch (v) {
             case ObservedValue.Unit u -> u.type().name();
             case ObservedValue.Constructed c -> c.type().name();
             case ObservedValue.Absent _ -> "None";
             case ObservedValue.Sequence _ -> "a collection";
             case ObservedValue.Mapping _ -> "a map";
-            case ObservedValue.Unknown _, ObservedValue.Truncated _ -> "unread";
+            default -> "unread";
         };
     }
 }

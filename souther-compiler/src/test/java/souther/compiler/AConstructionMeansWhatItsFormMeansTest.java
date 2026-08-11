@@ -37,6 +37,9 @@ class AConstructionMeansWhatItsFormMeansTest {
             data Wrapped = Receipt
             data Span = { from: Int, to: Int }
                 invariant from <= to
+            data Priced = { at: Decimal }
+                invariant at > 0m
+            data Stamped = { at: DateTime }
             data Boxed = { held: AmountN? }
             data Receipt = { total: AmountN }
             data Held = { total: AmountN, note: String? }
@@ -73,6 +76,14 @@ class AConstructionMeansWhatItsFormMeansTest {
             behavior widen : (s: Span) -> Span
                 constructs Span
             let widen (s) = Span { from = s.from, to = s.to + 1 }
+
+            behavior pricedOf : (n: Int) -> Priced
+                constructs Priced
+            let pricedOf (n) = Priced { at = 1m }
+
+            behavior stampedOf : (n: Int) -> Stamped
+                constructs Stamped
+            let stampedOf (n) = Stamped { at = DateTime("2026-07-20T09:00") }
 
             behavior positiveOf : (n: Int) -> Positive
                 constructs Positive
@@ -301,6 +312,41 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example widen
                     | (Span { from = 1, to = 2 }) -> Span { from = 5, to = 1 }
                 """).contains("invariant"), "the row is told its own construction refused it");
+    }
+
+    @Test
+    void anInvariantIsNotReadOfAValueTheRowDidNotWrite() {
+        // The other half of the rule above, and the one that says which of the two a failure is.
+        // `-1` at a `Decimal` field is an `Int`: the row wrote a value of another type, which is the
+        // disagreement it reports. Reading it as the amount a boundary would have made of it and then
+        // asking `at > 0m` would report a rule broken by a value nobody wrote.
+        holds("""
+                example pricedOf
+                    | (1) -> Priced { at = 1m }
+                """);
+        doesNotHold("""
+                example pricedOf
+                    | (1) -> Priced { at = -1 }
+                """);
+        // And the same reading, where no invariant is involved at all.
+        doesNotHold("""
+                example pricedOf
+                    | (1) -> Priced { at = 1 }
+                """);
+    }
+
+    @Test
+    void oneTemporalIsNotAnother() {
+        // `Date` and `DateTime` were one written form to this reading, so a row could write either
+        // where the other stands.
+        holds("""
+                example stampedOf
+                    | (1) -> Stamped { at = DateTime("2026-07-20T09:00") }
+                """);
+        doesNotHold("""
+                example stampedOf
+                    | (1) -> Stamped { at = Date("2026-07-20") }
+                """);
     }
 
     @Test
