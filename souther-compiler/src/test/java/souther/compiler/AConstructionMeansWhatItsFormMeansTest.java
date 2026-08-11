@@ -35,6 +35,8 @@ class AConstructionMeansWhatItsFormMeansTest {
                 invariant List.length(value) >= 1
             data Amounts = List<AmountN>
             data Wrapped = Receipt
+            data Span = { from: Int, to: Int }
+                invariant from <= to
             data Boxed = { held: AmountN? }
             data Receipt = { total: AmountN }
             data Held = { total: AmountN, note: String? }
@@ -67,6 +69,10 @@ class AConstructionMeansWhatItsFormMeansTest {
             behavior boxedOf : (n: Int) -> Boxed
                 constructs Boxed, AmountN
             let boxedOf (n) = Boxed { held = AmountN(n) }
+
+            behavior widen : (s: Span) -> Span
+                constructs Span
+            let widen (s) = Span { from = s.from, to = s.to + 1 }
 
             behavior positiveOf : (n: Int) -> Positive
                 constructs Positive
@@ -280,6 +286,21 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example boxedOf
                     | (1) -> Boxed { held = None }
                 """);
+    }
+
+    @Test
+    void aRecordReadsItsOwnInvariantToo() {
+        // A construction's invariant is its own, as a newtype's is, and it is read of the value the
+        // row wrote once every field states what this type declares it to be. Reading it only where
+        // something was built through a decoder left it to whether that path happened to run.
+        holds("""
+                example widen
+                    | (Span { from = 1, to = 1 }) -> Span { from = 1, to = 2 }
+                """);
+        assertTrue(couldNotBuild("""
+                example widen
+                    | (Span { from = 1, to = 2 }) -> Span { from = 5, to = 1 }
+                """).contains("invariant"), "the row is told its own construction refused it");
     }
 
     @Test

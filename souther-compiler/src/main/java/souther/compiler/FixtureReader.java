@@ -522,7 +522,28 @@ public final class FixtureReader {
             }
             fields.put(f.getKey(), new Asserted.Value(new ObservedValue.Absent()));
         }
-        return new Asserted.Built(built, fields);
+        Asserted.Built whole = new Asserted.Built(built, fields);
+        admitsItself(whole, nd, built);
+        return whole;
+    }
+
+    /**
+     * A construction's own invariant, over the value it states.
+     *
+     * <p>The same two stages a newtype goes through, for the same reason. Whether every field states
+     * what this type declares it to be is asked of what the row wrote; only where it does is there a
+     * value of this type to ask the invariant about, and only there can building one read nothing as
+     * something else. A row whose field states another type is not a value whose invariant failed —
+     * it is the disagreement it reports, and asking a rule about a value nobody wrote would answer
+     * for a value nobody wrote.
+     */
+    private void admitsItself(Asserted.Built whole, Ast.NewData nd, TypeName built) {
+        if (TypeOps.effectiveInvariants(declared(built), symbols).isEmpty()
+                || !states(whole, Type.ref(built))) {
+            return;
+        }
+        decode(FixtureShape.of(Type.ref(built), symbols),
+                neutral.shaped(raw(nd, Type.ref(built), Admission.HELD), Type.ref(built)));
     }
 
     private Asserted assertedApply(Ast.Apply c, Type position) {
