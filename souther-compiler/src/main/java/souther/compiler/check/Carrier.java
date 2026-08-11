@@ -36,10 +36,12 @@ import java.util.List;
  * write; an ordinal is a small integer, which is the most plausible-looking wrong value of the five
  * and the one a report is least likely to give away.
  *
- * <p><b>Which types have one</b> is {@link #ofValue}, and it is not a second list: the primitives are
- * matched exhaustively so that one added to the language stops the build, and an enumeration is asked
- * of {@link TypeOps#orderingEnumeration}, which already knows that the order belongs to the sum
- * rather than to a case a second sum may also list.
+ * <p><b>Which types have one</b> is {@link #ofValue}. The primitives are matched exhaustively, so
+ * one added to the language stops the build; an enumeration is the sum itself, checked as one
+ * ({@link TypeOps#isUnitOnlySum}). Which order two operands can be compared on is a wider question
+ * with its own answer ({@link TypeOps#comparisonEnumeration}) — it holds of a case and of a union of
+ * cases as well — and this one was being answered with it, which gave a position declared as one
+ * case the whole enumeration's counts and a line at a value that position cannot hold.
  */
 public sealed interface Carrier {
 
@@ -175,7 +177,20 @@ public sealed interface Carrier {
             // would answer "the nearest count this carrier holds" to a question that asks whether it
             // holds this one. A caller reading that as a yes offers a value between two moments as
             // one of them.
+            // Where the calendar stops first, and then on the grid inside it. A date-time is the
+            // one carrier whose counts are bounded at both ends and spaced besides, and asking the
+            // writer would be asking it to answer for a count it exists to write — which it does by
+            // throwing, out of a question whose whole job is to answer no.
+            //
+            // Round-tripped and then held to itself. What a date-time can be written as sits on a
+            // grid at the nanosecond, and the writer rounds onto it, so returning what came back
+            // would answer "the nearest count this carrier holds" to a question that asks whether
+            // it holds this one. A caller reading that as a yes offers a value between two moments
+            // as one of them.
             case Seconds _ -> {
+                if (!DateTimes.holds(count)) {
+                    yield null;
+                }
                 Count written = DateTimes.secondOf(DateTimes.written(count));
                 yield written != null && written.sameAs(count) ? count : null;
             }
