@@ -840,11 +840,15 @@ public final class Generator {
                                                          Map<String, List<FixtureTemplate>> decided,
                                                          Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
         List<Position> found = new ArrayList<>();
-        positionsUnder(subject.types().get(p), TermPath.of(subject.parameters().get(p)),
-                subject.symbols(), 0, found, decided.keySet(), recipes);
+        TermPath root = TermPath.of(subject.parameters().get(p));
+        Type declared = subject.types().get(p);
+        positionsUnder(declared, root, subject.symbols(), 0, found, decided.keySet(), recipes);
+        FieldDomains rules = rulesOf(declared, subject.symbols(), Map.of());
         UnresolvedCombination.Reason held = null;
         for (Position each : found) {
-            UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols());
+            String field = fieldUnder(root, each.path());
+            UnresolvedCombination.Reason here = Partitions.notBuilt(each.type(), subject.symbols(),
+                    field == null ? null : rules.heldAt(field));
             // Nothing of the shape having been built outranks some of it having been: the first says
             // the search never had what the rule asks for, and a reader owed one sentence is owed that.
             if (here == UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE) {
@@ -1072,15 +1076,34 @@ public final class Generator {
         // A position the caller fixed holds nothing back: it was given the value it is to take.
         List<List<FixtureTemplate>> reserves = new ArrayList<>(
                 java.util.Collections.nCopies(paths.size(), List.<FixtureTemplate>of()));
-        // One reading of the parameter, not one per record inside it. A clause on the outer record
-        // says what is left for a position two levels down, and a reading rebuilt at the inner record
-        // has never seen it.
-        FieldDomains left = type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
-                ? FieldDomains.of(ref.name(), data, symbols, under(at, settled)) : FieldDomains.NONE;
-        String missing = choicesUnder(type, at, symbols, 0, paths, values, reserves, left, at, recipes);
+        String missing = choicesUnder(type, at, symbols, 0, paths, values, reserves,
+                rulesOf(type, symbols, under(at, settled)), at, recipes);
         return missing != null ? Choices.missing(missing)
                 : new Choices(paths, values, reserves, null);
+    }
+
+    /**
+     * The rules of the record a parameter is, or nothing where it is not one.
+     *
+     * <p>One reading of the parameter, not one per record inside it. A clause on the outer record
+     * says what is left for a position two levels down, and a reading rebuilt at the inner record
+     * has never seen it.
+     *
+     * <p>Written once because two readers want it: what a position is offered, and why a position
+     * offered less than its rules allow. Those are the two halves of one floor and they were the two
+     * halves this was already asymmetric about.
+     */
+    private static FieldDomains rulesOf(Type type, Symbols symbols, Map<String, Count> settled) {
+        return type instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()
+                ? FieldDomains.of(ref.name(), data, symbols, settled) : FieldDomains.NONE;
+    }
+
+    /** What a position under a parameter is called where the parameter's own rules name it, or null
+     * where the position is the parameter itself. */
+    private static String fieldUnder(TermPath root, String path) {
+        String prefix = root + ".";
+        return path.startsWith(prefix) ? path.substring(prefix.length()) : null;
     }
 
     /** The settled positions of one parameter, named the way the reading of that parameter names
@@ -1124,9 +1147,10 @@ public final class Generator {
             }
             return null;
         }
-        souther.compiler.numeric.NumericDomain.Bounds here =
-                at.fields().isEmpty() ? null : left.at(String.join(".", at.fields()));
-        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols, here);
+        String field = at.fields().isEmpty() ? null : String.join(".", at.fields());
+        souther.compiler.numeric.NumericDomain.Bounds here = field == null ? null : left.at(field);
+        List<FixtureTemplate> stands = Partitions.representativesHolding(type, symbols, here,
+                field == null ? null : left.heldAt(field));
         if (stands.isEmpty()) {
             // Nothing could be written at all: a position of a type nothing stands for. Which is not
             // the same as a value that was written and refused, and reporting it as one sends the
