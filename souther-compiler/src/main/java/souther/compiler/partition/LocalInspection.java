@@ -92,17 +92,26 @@ public sealed interface LocalInspection {
         // it is known that the length is the number being measured.
         Carrier carried = Carrier.ofValue(type, symbols);
         ValueName.Stdlib taken = NumericMeasures.takenOf(type, symbols);
+        // The ends the value this sits in places on this position, which its own type says nothing
+        // about. Read beside the type's own rules and not after them: a clause naming one coordinate
+        // and a constant places an end wherever it is written, so where the rule was written is not
+        // what decides whether there is a line here (ADR-0090).
+        List<souther.compiler.check.FieldDomains.Placed> stated =
+                placed == null ? List.of() : placed.placedAt(path);
         // What the rules are about, and only then what the type could carry. A position has one
         // axis, and a `String` is the one type that can be measured two ways — its own order, and
         // the length of it — so which of them the model wrote about is what decides. Read off the
         // carrier first, every rule anybody ever wrote about the length of a string would have
         // become a rule about the string.
         TypeBounds.Bounds sized = taken == null ? null
-                : TypeBounds.of(type, symbols, Carrier.WHOLE, taken);
+                : TypeBounds.and(TypeBounds.of(type, symbols, Carrier.WHOLE, taken),
+                        TypeBounds.placed(stated, true, Carrier.WHOLE));
         boolean bySize = sized != null && !sized.isEmpty();
         NumericTerm term = bySize ? new NumericTerm.SizeOf(taken, path) : new NumericTerm.ValueOf(path);
         TypeBounds.Bounds own = bySize ? sized
-                : carried == null ? null : TypeBounds.of(type, symbols, carried, null);
+                : carried == null ? null
+                : TypeBounds.and(TypeBounds.of(type, symbols, carried, null),
+                        TypeBounds.placed(stated, false, carried));
         // A value whose rules contradict has no positions to cover: every edge of every field of it
         // is a row nobody can write, which is not the same answer as a field nothing bounds.
         boolean nothingExists = placed != null && placed.domains().infeasible();
@@ -267,7 +276,11 @@ public sealed interface LocalInspection {
      */
     private static List<Cut> cutsOf(Type type, TypeBounds.Bounds bounds, TypeBounds.Bounds own,
                                     TypeName within) {
-        if (bounds == null || bounds.isEmpty() || !(type instanceof Type.Ref)) {
+        // Nothing about the shape of the position's type. An end is here because some clause placed
+        // it, and a clause naming a field of a record places one on a bare `Int` and on the length of
+        // a bare `List<Int>` as readily as on a newtype over either. Asking for a `Type.Ref` here was
+        // reading the one route an end could arrive by as the condition for having one.
+        if (bounds == null || bounds.isEmpty()) {
             return List.of();
         }
         Map<String, Cut> byValue = new LinkedHashMap<>();

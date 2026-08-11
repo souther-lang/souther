@@ -250,7 +250,7 @@ public final class InvariantChecker {
      *                        turning one into an obligation has to know that
      */
     record Seeded(NumericDomain numbers, Map<String, String> atoms, Map<String, String> held,
-                  boolean everyClauseRead) {}
+                  List<Direct> directs, boolean everyClauseRead) {}
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
@@ -275,6 +275,7 @@ public final class InvariantChecker {
         Denotations at = Denotations.none().locations(bindings.values());
         Known k = Known.top();
         boolean read = true;
+        List<Core> written = new ArrayList<>();
         try {
             for (Ast.InvariantClause clause : c.clauses.of(named, data)) {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
@@ -282,6 +283,7 @@ public final class InvariantChecker {
                     read = false;
                     continue;
                 }
+                written.add(stated);
                 Predicates.Owed owed = c.predicates.obligations(stated, k, at, false);
                 read &= !owed.unreadable();
                 k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
@@ -300,18 +302,24 @@ public final class InvariantChecker {
             }
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
-            return new Seeded(NumericDomain.top(), Map.of(), Map.of(), false);
+            return new Seeded(NumericDomain.top(), Map.of(), Map.of(), List.of(), false);
         }
         Map<String, String> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
         Map<String, String> held = new LinkedHashMap<>();
+        Map<String, String> keys = new LinkedHashMap<>();
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
             if (type != null) {
                 c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                        field.getKey(), type, at, symbols, 1, atoms, typeAt, held);
+                        field.getKey(), type, at, symbols, 1, atoms, typeAt, held, keys);
             }
         }
+        // Which of the clauses place an edge, asked once the positions have names to be recognised
+        // by. A newtype has no siblings and its own clause is read where its value is a position, so
+        // there is nothing here for one to place.
+        List<Direct> directs = data.newtype() ? List.of()
+                : c.directsIn(written, named, at, atoms, keys, held, typeAt);
         NumericDomain numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
@@ -325,7 +333,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(numbers, atoms, held, read);
+        return new Seeded(numbers, atoms, held, directs, read);
     }
 
     /**
@@ -338,10 +346,19 @@ public final class InvariantChecker {
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, String> atoms, Map<String, Type> typeAt,
-                      Map<String, String> held) {
+                      Map<String, String> held, Map<String, String> keys) {
         String atom = terms.atomOf(value, at);
         if (atom != null) {
             atoms.put(path, atom);
+        }
+        // What the position is called, which every position has and only some are numbers. An
+        // enumeration is ordered and carries no atom, so a clause bounding one is recognised by this
+        // and by nothing above it.
+        String key = terms.bodyKey(value, at);
+        if (key != null) {
+            keys.put(path, key);
+        }
+        if (atom != null || key != null) {
             typeAt.put(path, type);
         }
         // And what a rule counting this position spoke about, which is not what the position is. A
@@ -358,8 +375,112 @@ public final class InvariantChecker {
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(value, field.getKey(), field.getValue(), NOWHERE),
                     path + "." + field.getKey(), field.getValue(), at, symbols, depth + 1,
-                    atoms, typeAt, held);
+                    atoms, typeAt, held, keys);
         }
+    }
+
+    /**
+     * One end a clause places on one coordinate of a value, and the declaration that placed it.
+     *
+     * <p>Separate from the bounds a projection leaves, because placing an edge and taking one in are
+     * separate acts (ADR-0090). {@code a < b} beside {@code b <= 10} leaves {@code a} stopping at 9
+     * and places nothing on it: that 9 is where {@code b} stops, and a position whose only limit is
+     * another position's is one the model draws no line through. Only what is here may be a line.
+     *
+     * @param path     where the coordinate sits, read from the value these are of
+     * @param measured whether the coordinate is a count taken of the position rather than its value
+     * @param from     the declaration the clause is written on, which is what names the line
+     */
+    record Direct(String path, boolean measured, TypeName from, InvariantBound bound) {}
+
+    /** A coordinate a clause of this declaration could be about. */
+    private record Coordinate(String path, boolean measured, Carrier carrier) {}
+
+    /**
+     * The ends the clauses of {@code from} place on coordinates of the value they are about.
+     *
+     * <p>A clause qualifies by reaching one coordinate and a constant, and the coordinate is
+     * recognised by the naming the discharge check already made of it — so {@code n}, {@code n.value}
+     * where {@code n} is a newtype over a number, and {@code List.length(xs)} are each read as the
+     * one coordinate they name. Recognising them again by their spelling would be a second grammar
+     * beside that one, and the two would answer differently the first time an import wrote a size
+     * call without its qualifier.
+     *
+     * <p>A clause naming two coordinates is not one of these however plainly it reads, and neither is
+     * one naming a coordinate through arithmetic: what a line is drawn at has to be a value a row can
+     * be written at, and neither {@code a < b} nor {@code 2 * n >= 4} names one.
+     */
+    private List<Direct> directsIn(List<Core> stated, TypeName from, Denotations at,
+                                   Map<String, String> atoms, Map<String, String> keys,
+                                   Map<String, String> held, Map<String, Type> typeAt) {
+        Map<String, Coordinate> byName = new LinkedHashMap<>();
+        keys.forEach((path, key) -> {
+            Carrier carrier = Carrier.ofValue(typeAt.get(path), symbols);
+            if (carrier != null) {
+                byName.put(key, new Coordinate(path, false, carrier));
+                String atom = atoms.get(path);
+                if (atom != null) {
+                    byName.put(atom, new Coordinate(path, false, carrier));
+                }
+            }
+        });
+        // A count is a whole number whatever it counts, so nothing about the container decides how
+        // its sizes are spaced.
+        held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
+        List<Direct> out = new ArrayList<>();
+        stated.forEach(each -> direct(each, from, at, byName, out));
+        return List.copyOf(out);
+    }
+
+    /** {@code clause}'s ends, taking a conjunction one conjunct at a time as an invariant is. */
+    private void direct(Core clause, TypeName from, Denotations at,
+                        Map<String, Coordinate> byName, List<Direct> out) {
+        if (!(clause instanceof Core.Binary bin)) {
+            return;
+        }
+        if (bin.op() == Ast.BinOp.AND) {
+            direct(bin.left(), from, at, byName, out);
+            direct(bin.right(), from, at, byName, out);
+            return;
+        }
+        if (!InvariantBound.ordering(bin.op())) {
+            return;
+        }
+        // The coordinate-bearing side read as the left one, as `0 <= value` says what `value >= 0`
+        // says.
+        Coordinate found = byName.get(nameOf(bin.left(), at));
+        Core bound = bin.right();
+        Ast.BinOp op = bin.op();
+        if (found == null) {
+            found = byName.get(nameOf(bin.right(), at));
+            bound = bin.left();
+            op = InvariantBound.flipped(op);
+        }
+        if (found == null || byName.containsKey(nameOf(bound, at))) {
+            return;   // no coordinate here, or a coordinate on both sides, which divides neither
+        }
+        Ast.Expr written = Terms.asWrittenValue(bound);
+        if (written == null) {
+            return;
+        }
+        Coordinate on = found;
+        InvariantBound.at(op, written, found.carrier())
+                .ifPresent(read -> out.add(new Direct(on.path(), on.measured(), from, read)));
+    }
+
+    /**
+     * What {@code e} is called where a coordinate is looked up.
+     *
+     * <p>{@link Terms#atomOf} first, which is what a size call is known by: the shape a size keys as
+     * is held under a name of its own, and the shape itself is not that name. Read off the shape,
+     * every rule counting a field looked like a rule about nothing.
+     *
+     * <p>Then what the position is called, for the positions that are ordered and are not numbers. An
+     * enumeration has no atom and a clause can still say where its values stop.
+     */
+    private String nameOf(Core e, Denotations at) {
+        String atom = terms.atomOf(e, at);
+        return atom != null ? atom : terms.bodyKey(e, at);
     }
 
     /**

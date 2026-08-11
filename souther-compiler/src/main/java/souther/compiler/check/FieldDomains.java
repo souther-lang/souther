@@ -1,11 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.types.TypeName;
 
 import souther.compiler.numeric.Count;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,9 +30,13 @@ public final class FieldDomains {
 
     /** Nothing known of any field. */
     public static final FieldDomains NONE =
-            new FieldDomains(Map.of(), Map.of(), false, true, NumericDomain.top(), () -> true);
+            new FieldDomains(Map.of(), Map.of(), List.of(), false, true, NumericDomain.top(),
+                    () -> true);
 
     private final Map<String, NumericDomain.Bounds> byField;
+    /** The ends the record's own clauses place, which is a different question from the range they
+     * leave — see {@link #placedAt}. */
+    private final List<InvariantChecker.Direct> directs;
     /** What each field has to hold, kept apart from what each field is. Same numbers, different
      * question — see {@link Held}. */
     private final Map<String, NumericDomain.Bounds> heldByField;
@@ -43,11 +50,13 @@ public final class FieldDomains {
     private volatile Boolean everyRuleRead;
 
     private FieldDomains(Map<String, NumericDomain.Bounds> byField,
-                         Map<String, NumericDomain.Bounds> heldByField, boolean infeasible,
+                         Map<String, NumericDomain.Bounds> heldByField,
+                         List<InvariantChecker.Direct> directs, boolean infeasible,
                          boolean seeded, NumericDomain numbers,
                          java.util.function.BooleanSupplier reading) {
         this.byField = byField;
         this.heldByField = heldByField;
+        this.directs = directs;
         this.infeasible = infeasible;
         this.seeded = seeded;
         this.numbers = numbers;
@@ -111,12 +120,40 @@ public final class FieldDomains {
         });
         // Classifying the rules is a second reading of every one of them, and the bounds are the
         // whole of what a caller filling a row needs. Asked when the answer is, and not before.
-        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.numbers().isBottom(),
-                seeded.everyClauseRead(), seeded.numbers(),
+        return new FieldDomains(Map.copyOf(out), Map.copyOf(holds), seeded.directs(),
+                seeded.numbers().isBottom(), seeded.everyClauseRead(), seeded.numbers(),
                 // Classifying the rules is a second reading of every one of them. Asked when the
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
                 () -> InvariantChecker.everyRuleRead(named, data, symbols));
+    }
+
+    /**
+     * An end one clause of this record places on one coordinate of it, and the declaration that
+     * placed it.
+     *
+     * <p>Not a bound the range happens to have. {@link #at} answers what a position can hold, which
+     * every rule reaching it takes part in; this answers which clause said where it stops, which only
+     * a clause naming that one coordinate and a constant does. A line may be drawn at one of these
+     * and at nothing else (ADR-0090), so handing back the range instead would make a relational rule
+     * into a partition of a position it never mentioned.
+     *
+     * @param measured whether the coordinate is a count taken of the position rather than its value
+     * @param from     the declaration the clause is written on, which is what names the line
+     * @param lower    whether this bounds the coordinate below; otherwise above
+     */
+    public record Placed(boolean measured, TypeName from, boolean lower, Endpoint end) {}
+
+    /** The ends the rules place on the coordinates at {@code path}, in the order they were read. */
+    public List<Placed> placedAt(String path) {
+        List<Placed> out = new ArrayList<>();
+        for (InvariantChecker.Direct each : directs) {
+            if (each.path().equals(path)) {
+                out.add(new Placed(each.measured(), each.from(), each.bound().lower(),
+                        each.bound().end()));
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**

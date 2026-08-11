@@ -107,9 +107,20 @@ class AnArmNothingReachesIsNotOwedARowTest {
 
     // --- the cases behind such an arm -------------------------------------------------------------
 
+    /**
+     * The row at the cap, which the record's own clause draws a line at.
+     *
+     * <p>Written here and not into {@link #CAPPED}, because the arm tests below move the guard down
+     * to 5 and a `b` of 10 would then reach the arm they are about. What is checked here is that
+     * nothing is left over once the arms have been accounted for, and `b <= 10` is a bound on one
+     * coordinate against a constant, so it is owed a row like any other (ADR-0090).
+     */
+    private static final String AT_THE_CAP = CAPPED
+            + "    | \"at the cap\" : (Pair { a = Count(0), b = Count(10) }) -> Small\n";
+
     @Test
     void aCaseOnlyThatArmProducesIsNotOwedEither() throws Exception {
-        String report = reportOn(CAPPED);
+        String report = reportOn(AT_THE_CAP);
 
         assertTrue(report.contains("out specified 1/1"),
                 () -> "`Big` is answered only where nothing reaches:\n" + report);

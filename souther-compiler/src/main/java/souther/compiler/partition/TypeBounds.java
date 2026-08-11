@@ -121,6 +121,53 @@ final class TypeBounds {
     }
 
     /**
+     * The ends {@code placed} puts on one coordinate, or null where it puts none there.
+     *
+     * <p>The clauses of the record a position sits in, read as what they are: a clause naming one
+     * coordinate and a constant places an end exactly as one written on that coordinate's own type
+     * does, and which declaration held it is what the line is named by (ADR-0090).
+     *
+     * @param measured which of the position's coordinates these are wanted for — the count taken of
+     *                 it, or its value
+     */
+    static Bounds placed(List<souther.compiler.check.FieldDomains.Placed> placed, boolean measured,
+                         Carrier carrier) {
+        End min = null;
+        End max = null;
+        for (souther.compiler.check.FieldDomains.Placed each : placed) {
+            if (each.measured() != measured) {
+                continue;
+            }
+            End end = new End(each.end(), List.of(each.from()));
+            if (each.lower()) {
+                min = End.tighter(min, end, false);
+            } else {
+                max = End.tighter(max, end, true);
+            }
+        }
+        return min == null && max == null ? null : new Bounds(min, max, carrier);
+    }
+
+    /**
+     * Both, intersected, with every declaration that put an end where it is kept.
+     *
+     * <p>One coordinate can be bounded from either side of the same rule set — a newtype's own clause
+     * and the record holding a field of it — and neither is the other's context. Which number
+     * survives is {@link End#tighter}'s, the same answer two layers of newtype already get.
+     */
+    static Bounds and(Bounds had, Bounds one) {
+        if (one == null) {
+            return had;
+        }
+        if (had == null) {
+            return one;
+        }
+        return new Bounds(End.tighter(had.min(), one.min(), false),
+                End.tighter(had.max(), one.max(), true),
+                had.carrier() == null ? one.carrier() : had.carrier());
+    }
+
+    /**
      * What the position can hold: every rule reaching it, intersected, with what the term itself
      * guarantees taken in.
      *
