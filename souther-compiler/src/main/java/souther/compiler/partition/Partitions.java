@@ -785,9 +785,25 @@ public final class Partitions {
         if (sized == null || sized.min() == null) {
             return 0;
         }
-        // A count is a whole number, so the end a size bound leaves is one the rule admits.
-        int least = Counts.asSize(sized.min().value());
-        return least <= 0 ? 0 : least;
+        return Counts.leastFrom(sized.min().at());
+    }
+
+    /**
+     * The same, where the record the position sits in has a rule about it too.
+     *
+     * <p>The higher of the two, because both are rules the construction has to satisfy. A value
+     * clearing one and not the other is refused as surely as one clearing neither, so reading either
+     * alone offers a value something refuses — which is the whole of #650 read from the other side:
+     * the type's floor was the only one a position was ever asked for, and a field whose floor was
+     * its record's got the value that holds nothing.
+     *
+     * <p>Both readings end at {@link Counts#leastFrom}, so what a floor comes to as a count is
+     * settled once. A second reading here could put a record's {@code > 3} at three while the type's
+     * came to four, and the two would disagree about one rule written twice.
+     */
+    static int leastHeld(Type type, Symbols symbols, FieldDomains.Held held) {
+        return Math.max(leastHeld(type, symbols),
+                held == null ? 0 : Counts.leastFrom(held.bounds().min()));
     }
 
     /**
@@ -802,9 +818,15 @@ public final class Partitions {
      *
      * <p>Asked only where nothing was written. It re-reads what a position could have offered, and a
      * row that was written has no reason to pay for that.
+     *
+     * <p>{@code held} for the same reason {@link #representativesHolding} takes one: the floor this
+     * reads is the floor that was built against, and a reading here that knew only the type would
+     * say "every value tried was refused" of a position whose values were never built.
      */
-    static Generator.UnresolvedCombination.Reason notBuilt(Type type, Symbols symbols) {
-        return Witnesses.heldBackFor(TypeOps.base(type, symbols), leastHeld(type, symbols), symbols);
+    static Generator.UnresolvedCombination.Reason notBuilt(Type type, Symbols symbols,
+                                                            FieldDomains.Held held) {
+        return Witnesses.heldBackFor(TypeOps.base(type, symbols), leastHeld(type, symbols, held),
+                symbols);
     }
 
     /**
@@ -834,6 +856,36 @@ public final class Partitions {
     }
 
     /**
+     * The same, with what a floor asks for offered ahead of it.
+     *
+     * <p>Both, and the floor first. Each is what one rule was read to produce and which of them the
+     * whole of the rules admits is the decoder's answer, so neither withdraws the other — the same
+     * reading {@link #insideTheNewtype} makes of a newtype carrying a floor, made here of a position
+     * whose floor is its record's. What the order decides is not which is right: the search over a
+     * row's positions is bounded, so a position offering the value that holds nothing first spends
+     * an assignment on a value the rule refuses, and rows at positions the rule has nothing to do
+     * with are what runs out.
+     */
+    static List<FixtureTemplate> representativesHolding(Type type, Symbols symbols,
+                                                        NumericDomain.Bounds within,
+                                                        FieldDomains.Held held) {
+        List<FixtureTemplate> candidates = new ArrayList<>();
+        // Under every name the position wears, because a floor read off the record says how much the
+        // value holds and not what it is written as: a field of a newtype over a list takes a list
+        // inside that newtype's own name.
+        for (FixtureTemplate bare : Witnesses.holding(TypeOps.base(type, symbols),
+                leastHeld(type, symbols, held), symbols, java.util.Set.of())) {
+            candidates.add(Witnesses.wrapped(type, bare, symbols));
+        }
+        candidates.addAll(representativesOf(type, symbols, within));
+        Map<String, FixtureTemplate> once = new LinkedHashMap<>();
+        for (FixtureTemplate each : candidates) {
+            once.putIfAbsent(each.text(), each);
+        }
+        return List.copyOf(once.values());
+    }
+
+    /**
      * The same, with a second value offered at a numeric position.
      *
      * <p>One value is enough only where the rules that decide it are the rules the projection holds.
@@ -848,14 +900,16 @@ public final class Partitions {
      * write.
      */
     static List<FixtureTemplate> displacedRepresentativesOf(Type type, Symbols symbols,
-                                                            NumericDomain.Bounds within) {
-        List<FixtureTemplate> base = new ArrayList<>(representativesOf(type, symbols, within));
+                                                            NumericDomain.Bounds within,
+                                                            FieldDomains.Held held) {
+        List<FixtureTemplate> base =
+                new ArrayList<>(representativesHolding(type, symbols, within, held));
         // What a position holds back for the product search's second pass is on offer here from the
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
-        for (FixtureTemplate held : inReserve(type, symbols, within)) {
-            if (base.stream().noneMatch(each -> each.text().equals(held.text()))) {
-                base.add(held);
+        for (FixtureTemplate kept : inReserve(type, symbols, within)) {
+            if (base.stream().noneMatch(each -> each.text().equals(kept.text()))) {
+                base.add(kept);
             }
         }
         Type numeric = TypeOps.numericBase(type, symbols);

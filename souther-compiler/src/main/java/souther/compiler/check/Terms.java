@@ -294,6 +294,30 @@ final class Terms {
         return named(shared(sizeKey(size, container)), Granularity.DISCRETE);
     }
 
+    /**
+     * The atom a rule counting {@code e} would have bounded, or null where there is no such atom.
+     *
+     * <p>Written because the identity is not the field's name. A size is keyed on the shape
+     * {@code length(<what the container keys as>)}, and what the container keys as is a location —
+     * {@code demo.Bag.fields.0} and not {@code xs} — so a caller spelling that shape itself would be
+     * agreeing with this by hand at every place it asked. What a value of a type is counted by is
+     * {@link NumericMeasures}' answer, and the container's key is {@link #bodyKey}'s, and this is the
+     * two of them put together in the one order they go together in.
+     *
+     * <p>Recognised and not made. {@link #sizeKeyOf} names a shape whether or not anything has
+     * spoken about it, which is what a clause reading one needs; a reader asking what was said about
+     * a field wants the name a clause already gave it, and answering with a fresh one would put an
+     * atom nothing bounds into the domain and call that an answer.
+     */
+    String takenAtomOf(Core e, Type type, Denotations at) {
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        if (counts == null) {
+            return null;
+        }
+        String container = bodyKey(e, at);
+        return container == null ? null : shapes.get(sizeKey(counts, container));
+    }
+
     /** {@code shape} under the name it goes by here, so that what reads it reads the name. */
     private String shared(String shape) {
         if (shape == null) {

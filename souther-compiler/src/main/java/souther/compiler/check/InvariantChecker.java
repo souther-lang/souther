@@ -240,12 +240,17 @@ public final class InvariantChecker {
      * bounds that field on its own; and both land in one domain over the same atoms, which is what
      * lets a bound reach one field through another.
      *
+     * @param atoms the atom each field's own value is, for the fields that are numbers
+     * @param held the atom the count of each field is, for the fields whose values are counted by
+     *             something. A field is in one of these two or in neither, never in both: what
+     *             names a number is its own value and what names a list is how much of it there is
      * @param everyClauseRead whether every clause of the declaration was taken into the domain. False
      *                        where one could not be typed or held nothing this reads — the bounds are
      *                        then weaker than what the declaration actually says, and a caller
      *                        turning one into an obligation has to know that
      */
-    record Seeded(NumericDomain numbers, Map<String, String> atoms, boolean everyClauseRead) {}
+    record Seeded(NumericDomain numbers, Map<String, String> atoms, Map<String, String> held,
+                  boolean everyClauseRead) {}
 
     /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
@@ -295,15 +300,16 @@ public final class InvariantChecker {
             }
         } catch (RuntimeException why) {
             gaveUp("seedFields " + named.name(), why);
-            return new Seeded(NumericDomain.top(), Map.of(), false);
+            return new Seeded(NumericDomain.top(), Map.of(), Map.of(), false);
         }
         Map<String, String> atoms = new LinkedHashMap<>();
         Map<String, Type> typeAt = new LinkedHashMap<>();
+        Map<String, String> held = new LinkedHashMap<>();
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
             if (type != null) {
                 c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                        field.getKey(), type, at, symbols, 1, atoms, typeAt);
+                        field.getKey(), type, at, symbols, 1, atoms, typeAt, held);
             }
         }
         NumericDomain numbers = k.numbers();
@@ -319,7 +325,7 @@ public final class InvariantChecker {
                     NumericDomain.Rel.EQ,
                     Map.of(atom, c.terms.granularityOf(type)));
         }
-        return new Seeded(numbers, atoms, read);
+        return new Seeded(numbers, atoms, held, read);
     }
 
     /**
@@ -331,11 +337,19 @@ public final class InvariantChecker {
      * rather than at the record it happens to be inside.
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
-                      int depth, Map<String, String> atoms, Map<String, Type> typeAt) {
+                      int depth, Map<String, String> atoms, Map<String, Type> typeAt,
+                      Map<String, String> held) {
         String atom = terms.atomOf(value, at);
         if (atom != null) {
             atoms.put(path, atom);
             typeAt.put(path, type);
+        }
+        // And what a rule counting this position spoke about, which is not what the position is. A
+        // list is no number and has no atom above; the count of it has one, and a reader asking how
+        // much the position holds is asking about that one.
+        String counted = terms.takenAtomOf(value, type, at);
+        if (counted != null) {
+            held.put(path, counted);
         }
         if (depth > FIELDS_SEEDED || !(type instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data) || data.newtype()) {
@@ -344,7 +358,7 @@ public final class InvariantChecker {
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(value, field.getKey(), field.getValue(), NOWHERE),
                     path + "." + field.getKey(), field.getValue(), at, symbols, depth + 1,
-                    atoms, typeAt);
+                    atoms, typeAt, held);
         }
     }
 
