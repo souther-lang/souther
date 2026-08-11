@@ -143,14 +143,11 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
                 | "home" : (Domestic) -> Fine
             """;
 
-    /** The same, with a case that carries a field whose value nothing here composes. */
     /**
-     * A case an axis divides and nothing composes a value for.
+     * The same, with a case an axis divides and no value gets past its rules.
      *
-     * <p>A newtype over a record. What stands for the case is a value wrapped in its constructor, so
-     * what it needs is a value of what it wraps — and a record is not one a position hands over: its
-     * fields are composed, which is a composition a class cannot do on its own. A record case of a
-     * sum is composed through its own constructor and is no longer this shape.
+     * <p>The case is composed field by field like any other and every candidate is refused at
+     * construction, so what comes back is a search that ran and a reason for what it found.
      */
     private static final String CARRIED = """
             module example.pay
@@ -158,8 +155,8 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
             data Amount = Decimal
                 invariant value >= 0.0m
 
-            data Holder = { holder: Amount }
-            data Card = Holder
+            data Card = { holder: Amount }
+                invariant impossible = holder.value >= 10.0m && holder.value <= 5.0m
             data Cash = { amount: Amount }
             data Payment = Card | Cash
 
@@ -234,8 +231,8 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
      * A case an axis divides and nothing composed a value for is answered by the attempt.
      *
      * <p>Not {@code NotSupported}: the strategy took this class and came back with a reason, which is
-     * news of a different kind. What it came back with here is a refusal a hand-written row would
-     * settle, and reading it as "no strategy for this" would say the generator will never offer one.
+     * news of a different kind. Reading it as "no strategy for this" would say the generator will
+     * never offer a row at a class it took and searched.
      */
     @Test
     void aCaseNothingComposedAValueForIsAnsweredByTheAttempt() {

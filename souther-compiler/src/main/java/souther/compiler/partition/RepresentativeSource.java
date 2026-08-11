@@ -101,16 +101,6 @@ public sealed interface RepresentativeSource {
     }
 
     /**
-     * The values ready to be written at the position, or empty where the recipe is not values.
-     *
-     * <p>Derived from the one answer rather than answered beside it, so that a caller wanting
-     * values and a caller wanting to know what to do cannot be told different things.
-     */
-    default List<FixtureTemplate> candidates() {
-        return evaluate() instanceof Evaluation.Values values ? values.written() : List.of();
-    }
-
-    /**
      * Whether a value of this class can be produced at all.
      *
      * <p>Not whether there are values here: a class composed through a constructor has none and is

@@ -310,48 +310,50 @@ class GeneratorTest {
     }
 
     /**
-     * A class that recorded why nothing was composed for it is not reported as one nothing can be
-     * written for.
+     * An optional whose element is a record is offered a row, which is the value this composes at a
+     * parameter of the same type.
      *
-     * <p>The two license different work. "No value can be written there" tells an author the row does
-     * not exist; what a record case has is a value this composes everywhere else and does not compose
-     * here, which is a row they can write by hand in one line. The class already says which of the two
-     * it is, at the point it is built.
+     * <p>What {@code Some} stands for is what stands for the element, arrived at the way the row
+     * above arrives at a record. Held as values only, the class said it could produce nothing and
+     * the position was reported as one no value can be written at (issue #651).
      */
     @Test
-    void aClassThatSaidWhyNothingWasComposedIsNotReportedAsHavingNoValue() {
+    void anOptionalWhoseElementIsARecordIsOfferedARow() {
         Generator.GenerationResult filled = Generator.fill(
                 modelOf(OPTIONAL_RECORD, "feeOf").subject(), List.of(),
                 Generator.CandidateCheck.ANY);
 
-        Generator.UnresolvedCombination some = filled.unresolved().stream()
-                .filter(each -> each.classes().contains("p.card=Some")).findFirst().orElseThrow();
-        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, some.reason(),
-                "a value this could not compose, not one that cannot exist");
-        assertTrue(some.said().isPresent(), "the reason the class recorded");
-        assertEquals("p.card=Some", some.subject(),
-                "the position, which is what several of these share");
+        assertEquals(List.of(), filled.unresolved(), filled.unresolved().toString());
+        assertTrue(texts(filled).contains("Request { card = Card { number = Amount(0m) } }"),
+                () -> "the element composed, under the optional: " + texts(filled));
     }
 
     /**
-     * What a class records about itself does not claim the value cannot be written either.
+     * A class that recorded why nothing was composed for it is not reported as one nothing can be
+     * written for.
      *
-     * <p>The sentence is the whole of what an author gets, so moving the overclaim out of the reason
-     * and into the words beside it would change nothing. Nothing that ends at an empty list has
-     * established that a value does not exist: {@code Option<Card>} has one, spelled the way the row
-     * above spells a record.
+     * <p>The two license different work. "No value can be written there" tells an author the row does
+     * not exist; what the class recorded is that this composed nothing here, which may be a row they
+     * can write by hand in one line. The class already says which of the two it is, at the point it
+     * is built, and the reason carries what it said rather than a category read off an empty list.
      */
     @Test
-    void whatAClassRecordsDoesNotClaimTheValueCannotBeWritten() {
-        Generator.GenerationResult filled = Generator.fill(modelOf(OPTIONAL_RECORD, "feeOf").subject(),
-                List.of(), Generator.CandidateCheck.ANY);
+    void aClassThatSaidWhyNothingWasComposedIsNotReportedAsHavingNoValue() {
+        Symbols symbols = modelOf(TRIP, "submit").symbols();
+        Generator.Subject subject = twoNumbers(symbols,
+                List.of(PartitionClass.ungeneratable("empty", "empty", _ -> Membership.NO_MATCH,
+                        "no value this position can hold lies inside this range")),
+                List.of(number("high", 10)));
 
-        Generator.UnresolvedCombination some = filled.unresolved().stream()
-                .filter(each -> each.classes().contains("p.card=Some")).findFirst().orElseThrow();
-        String said = some.said().orElse("");
-        assertTrue(said.contains("Card"), "which value it was about, which is " + said);
-        assertFalse(said.contains("can be written"),
-                "an empty list is not a value that cannot be written: " + said);
+        Generator.GenerationResult filled =
+                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
+
+        assertEquals(List.of(), filled.rows(), "nothing was composed at the first position");
+        Generator.UnresolvedCombination only = filled.unresolved().getFirst();
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, only.reason(),
+                "a value this could not compose, not one that cannot exist");
+        assertEquals(Optional.of("no value this position can hold lies inside this range"),
+                only.said(), "the sentence the class recorded, and not one made up here");
     }
 
     /**

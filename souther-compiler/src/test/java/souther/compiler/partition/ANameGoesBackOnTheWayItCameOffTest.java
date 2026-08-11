@@ -188,7 +188,8 @@ class ANameGoesBackOnTheWayItCameOffTest {
         return at;
     }
 
-    private static List<String> written(PartitionClass each) {
-        return each.representatives().candidates().stream().map(FixtureTemplate::text).toList();
+    private List<String> written(PartitionClass each) {
+        return Partitions.standingFor(each.representatives(), symbols, java.util.Set.of()).stream()
+                .map(FixtureTemplate::text).toList();
     }
 }

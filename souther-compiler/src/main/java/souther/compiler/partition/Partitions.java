@@ -25,6 +25,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -748,22 +749,84 @@ public final class Partitions {
         if (type instanceof Type.ListOf || type instanceof Type.SetOf || type instanceof Type.MapOf) {
             return List.of(FixtureTemplate.emptyCollection());
         }
-        List<PartitionClass> classes = PartitionClasses.of(type, symbols);
-        for (PartitionClass each : classes) {
-            // Values, not a class that could produce one. A class whose values are composed has none
-            // to hand over here, and returning its empty list would say the type has no values.
-            if (each.generatable() && !each.representatives().candidates().isEmpty()) {
-                return each.representatives().candidates();
+        // Absence, which every optional holds. Answered here rather than through the classes below
+        // because what the classes say about `Some` is what stands for the element, and asking that
+        // while the element is being built is the element asking for itself.
+        if (type instanceof Type.OptionOf) {
+            return List.of(FixtureTemplate.none());
+        }
+        for (PartitionClass each : PartitionClasses.of(type, symbols)) {
+            List<FixtureTemplate> stands = standingFor(each.representatives(), symbols, expanding);
+            if (!stands.isEmpty()) {
+                return stands;
             }
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.
-        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
-                && data.newtype()) {
-            return insideTheNewtype(ref.name(), symbols, within, expanding).stream()
-                    .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
+        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data) {
+            return data.newtype()
+                    ? insideTheNewtype(ref.name(), symbols, within, expanding).stream()
+                            .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList()
+                    : composed(ref.name(), symbols, expanding);
         }
         return List.of();
+    }
+
+    /**
+     * The values a recipe arrives at, whichever way it arrives at them.
+     *
+     * <p>{@code Values} and {@code Compose} are two ways of writing where a representative comes
+     * from and not two answers about whether there is one, so a reader asking for one takes both
+     * here. Read as a reader's own two questions — is it generatable, and does it hold values — a
+     * class naming a constructor answered yes and then handed over nothing, and the position it
+     * stood at was reported as one no value can be written at (issue #651).
+     */
+    static List<FixtureTemplate> standingFor(RepresentativeSource source, Symbols symbols,
+                                             java.util.Set<TypeName> expanding) {
+        return switch (source.evaluate()) {
+            case RepresentativeSource.Evaluation.Values values -> values.written();
+            case RepresentativeSource.Evaluation.Compose compose ->
+                    composed(compose.through(), symbols, expanding).stream()
+                            .map(compose::written).toList();
+            case RepresentativeSource.Evaluation.NothingProduced _,
+                 RepresentativeSource.Evaluation.NothingProducible _ -> List.of();
+        };
+    }
+
+    /**
+     * A record composed field by field, or nothing where one of its fields has nothing to stand for
+     * it.
+     *
+     * <p>{@code expanding} carries the names this is already inside the value of, so a record
+     * reached from its own field is given up on there rather than composed forever. Path-local: a
+     * name is in it only while the value under it is being built, so a type met twice in two
+     * branches is composed in both.
+     *
+     * <p>Nothing about the rules relating the fields. Each is what stands for it on its own, and
+     * whether they may be held together is the decoder's answer — the same answer every other
+     * candidate this offers is put through.
+     */
+    private static List<FixtureTemplate> composed(TypeName record, Symbols symbols,
+                                                  java.util.Set<TypeName> expanding) {
+        if (expanding.contains(record) || !(symbols.get(record) instanceof Ast.Data data)) {
+            return List.of();
+        }
+        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+        if (fields.isEmpty()) {
+            return List.of();   // a unit has no fields to compose, and is named rather than built
+        }
+        java.util.Set<TypeName> inside = new LinkedHashSet<>(expanding);
+        inside.add(record);
+        Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
+        for (Map.Entry<String, Type> field : fields.entrySet()) {
+            List<FixtureTemplate> stands =
+                    representativesOf(field.getValue(), symbols, null, inside);
+            if (stands.isEmpty()) {
+                return List.of();
+            }
+            chosen.put(field.getKey(), stands.get(0));
+        }
+        return List.of(FixtureTemplate.record(record, chosen));
     }
 
     /**
