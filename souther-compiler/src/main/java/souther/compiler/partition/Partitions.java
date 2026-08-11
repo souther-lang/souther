@@ -755,11 +755,18 @@ public final class Partitions {
         if (type instanceof Type.OptionOf) {
             return List.of(FixtureTemplate.none());
         }
-        for (PartitionClass each : PartitionClasses.of(type, symbols)) {
+        List<PartitionClass> classes = PartitionClasses.of(type, symbols);
+        for (PartitionClass each : classes) {
             List<FixtureTemplate> stands = standingFor(each.representatives(), symbols, expanding);
             if (!stands.isEmpty()) {
                 return stands;
             }
+        }
+        // Where there were classes, they have answered. Each said nothing can be produced for it and
+        // why, and reading that and then arriving at a value another way is this deciding the classes
+        // were wrong about themselves — the answer they carry is the one an author is shown.
+        if (!classes.isEmpty()) {
+            return List.of();
         }
         // A newtype the model only bounds has no classes — everything outside the bound is refused at
         // construction — but it does have values, and the edge of the bound is one that builds.

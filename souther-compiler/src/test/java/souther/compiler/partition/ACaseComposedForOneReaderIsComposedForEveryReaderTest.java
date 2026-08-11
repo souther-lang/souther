@@ -90,14 +90,24 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
 
     // --- the same question, asked by the other readers --------------------------------------------
 
-    /** What an optional holds is what stands for its element, composed or not. */
+    /**
+     * What an optional holds is what stands for its element, composed or not.
+     *
+     * <p>Held to the value and not to whether one could be arrived at. A class carrying a recipe
+     * answers yes to that either way, and what went wrong was the step after it: the recipe was
+     * read for values, it had none to hand over, and the class was written down as one nothing can
+     * produce a value for.
+     */
     @Test
-    void theSomeOfAnOptionalSumOfRecordsIsGeneratable() {
+    void theSomeOfAnOptionalSumOfRecordsStandsForAComposedCase() {
         PartitionClass some = PartitionClasses.of(new Type.OptionOf(sum()), symbols).stream()
                 .filter(each -> each.id().equals("Some")).findFirst().orElseThrow();
 
-        assertTrue(some.generatable(),
-                () -> "`Some` stands for a value that composes: " + some.representatives());
+        List<FixtureTemplate> stands =
+                Partitions.standingFor(some.representatives(), symbols, Set.of());
+
+        assertTrue(stands.stream().anyMatch(each -> each.text().startsWith("Boxed {")),
+                () -> "`Some` stands for a case of the element: " + stands);
     }
 
     /** A collection whose rules ask it to hold one is built from what stands for its element. */
