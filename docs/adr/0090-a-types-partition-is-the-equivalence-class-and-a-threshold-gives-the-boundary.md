@@ -272,11 +272,18 @@ end that moves is an end that declaration was holding.
 Per end, because they are two answers. One declaration can hold a minimum while another holds the
 maximum, and a single name for both is wrong about at least one of them.
 
-Where taking any one away leaves the end where it is, they are handed over together. Two clauses can
-each say what the edge says, and then each is as much the answer as the other; choosing one would
-invent the thing that is not known. Exactly which constraints a bound was derived from is the
-closure's to record and it does not, so that is the limit of what can be said here rather than
-something to guess past.
+Where taking any one away leaves the end where it is, two or more of them are saying what the edge
+says, and each is as much the answer as the others; choosing one would invent the thing that is not
+known. Which is a reason to name them together and not a reason to name everything that was asked. A
+candidate that moves the end nowhere when it is the only one left moved it nowhere here, and it is
+out whatever the rest are doing — otherwise a clause reaching a value the coordinate had already
+passed changes a line's identity by being written, which is the defect this paragraph exists to
+prevent, coming back through the case where nobody is essential.
+
+What is left is clauses that reach an end only together. Taking those apart is a search for the
+smallest sets that suffice, and that is combinatorial; exactly which constraints a bound was derived
+from is the closure's to record and it does not. So the set is the answer there, and saying so is the
+limit of what this knows rather than something to guess past.
 
 ## Consequences
 

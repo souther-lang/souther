@@ -636,6 +636,11 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             data Inner = Base  invariant value.a.value < value.b.value
             data Outer = Inner invariant value.value.a.value < value.value.c.value
 
+            data D     = Int invariant value <= 100
+            data Twice = Base  invariant value.a.value < value.b.value
+            data Again = Twice invariant value.value.a.value < value.value.b.value
+            data Idle  = Again invariant value.value.value.a.value < value.value.value.c.value
+
             data N     = Int invariant value >= 0 invariant value <= 10
             data Low   = Int invariant value >= 2
             data High  = Int invariant value <= 8
@@ -653,6 +658,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             behavior onBoth : (v: Both) -> Ok
                 constructs Ok
             let onBoth (v) = Ok { size = v.n.value }
+
+            behavior onIdle : (v: Idle) -> Ok
+                constructs Ok
+            let onIdle (v) = Ok { size = v.a.value }
             """;
 
     /**
@@ -669,6 +678,26 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
         assertEquals("invariant A (max) within Inner", lines.get("onOuter/v.a = 7").origin(),
                 "`Outer`'s clause reaches nothing `a` had not already passed");
+    }
+
+    /**
+     * Where two clauses each hold the end, the one that holds nothing is still out.
+     *
+     * <p>`Twice` and `Again` say the same thing about `a`, so taking away either leaves the other
+     * saying it and neither is the answer on its own. That is a reason to name both and not a reason
+     * to name everything that was asked: `Idle` reaches nothing `a` had not already passed, and a
+     * candidate that moves this end nowhere when it is the only one left moved it nowhere here.
+     *
+     * <p>What is left unresolved is said rather than guessed past: clauses that only reach the end
+     * together are not taken apart further, and the set is what is handed over.
+     */
+    @Test
+    void aCandidateThatHoldsNothingIsOutEvenWhereNoOneCandidateHoldsIt() {
+        Map<String, BoundaryAssessment> lines = linesOf(WHO_HELD_IT, "whoheldit");
+
+        assertEquals("invariant A (max) within Again or Twice",
+                lines.get("onIdle/v.a = 7").origin(),
+                "`Idle`'s clause moves this end nowhere");
     }
 
     /** And the two ends of one position are two answers. */

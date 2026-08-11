@@ -182,9 +182,10 @@ public final class FieldDomains {
      * either, and an edge said to have been taken in by a declaration holding no clause about the
      * pair sends a reader to a line that is not there.
      *
-     * <p>The outermost where several relate it. Which of them settled the number is not a question
-     * this can answer — a bound arrives along a path through the differences and several clauses can
-     * be on it — and naming one that wrote such a clause is the whole of what is known.
+     * <p>Several where several hold it, in one order whoever found them. Which of them settled the
+     * number is not always a question this can answer — a bound arrives along a path through the
+     * differences and clauses can reach an end only together — and where it cannot, the set is what
+     * is known and is handed over as it is.
      */
     public List<TypeName> narrowedBy(String path, boolean lower) {
         List<TypeName> candidates = narrowers.get(path);
@@ -203,25 +204,49 @@ public final class FieldDomains {
         // nowhere.
         List<TypeName> held = new ArrayList<>();
         for (TypeName each : candidates) {
-            if (!sameEnd(end, without(each), path, lower)) {
+            if (!ends(end, without(each::equals), path, lower)) {
                 held.add(each);
             }
         }
-        // None on its own, and the end still moved: two of them say it and taking away either leaves
-        // the other saying it. Which is not a reason to name one — every candidate is as much the
-        // answer as any other, and they are handed over together.
-        return held.isEmpty() ? candidates : List.copyOf(held);
+        if (!held.isEmpty()) {
+            return byName(held);
+        }
+        // None on its own: two or more of them say what the edge says, and taking away any one
+        // leaves the others saying it. Which is not a reason to name one — each is as much the
+        // answer as the others — and not a reason to name all of them either. A candidate that
+        // moves this end nowhere when it is the only one left moved it nowhere here, and it is out
+        // whatever the rest of them are doing.
+        Endpoint bare = endOf(without(candidates::contains), path, lower);
+        List<TypeName> saying = new ArrayList<>();
+        for (TypeName each : candidates) {
+            if (!ends(bare, without(name -> candidates.contains(name) && !name.equals(each)),
+                    path, lower)) {
+                saying.add(each);
+            }
+        }
+        return byName(saying.isEmpty() ? candidates : saying);
     }
 
-    private boolean sameEnd(Endpoint end, FieldDomains other, String path, boolean lower) {
-        NumericDomain.Bounds bounds = other.byField.get(path);
-        Endpoint was = bounds == null ? null : lower ? bounds.min() : bounds.max();
-        return end.equals(was);
+    /** In one order, whoever found them. Several of these are one answer and the answer is what a
+     * line is told apart by, so an order read off the walk that collected them would make two
+     * readings of one edge into two lines. */
+    private static List<TypeName> byName(List<TypeName> found) {
+        return found.stream().sorted(java.util.Comparator.comparing(TypeName::name)).toList();
     }
 
-    /** This value read again without {@code skip}'s own clauses. */
-    private FieldDomains without(TypeName skip) {
-        return of(named, data, symbols, settled, skip::equals);
+    private Endpoint endOf(FieldDomains read, String path, boolean lower) {
+        NumericDomain.Bounds bounds = read.byField.get(path);
+        return bounds == null ? null : lower ? bounds.min() : bounds.max();
+    }
+
+    /** Whether {@code end} is where {@code other} leaves this coordinate on the side asked for. */
+    private boolean ends(Endpoint end, FieldDomains other, String path, boolean lower) {
+        return java.util.Objects.equals(end, endOf(other, path, lower));
+    }
+
+    /** This value read again without the clauses of the declarations {@code skip} names. */
+    private FieldDomains without(java.util.function.Predicate<TypeName> skip) {
+        return of(named, data, symbols, settled, skip);
     }
 
     /** Every end the rules place, wherever it is. */
