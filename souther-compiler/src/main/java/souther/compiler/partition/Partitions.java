@@ -801,9 +801,15 @@ public final class Partitions {
      * name is in it only while the value under it is being built, so a type met twice in two
      * branches is composed in both.
      *
-     * <p>Nothing about the rules relating the fields. Each is what stands for it on its own, and
-     * whether they may be held together is the decoder's answer — the same answer every other
-     * candidate this offers is put through.
+     * <p>Each field is chosen against what the record's rules leave it, which is the reading
+     * {@link FieldDomains} makes of them: the range a clause leaves the value, and the floor a
+     * clause counting it puts on what it holds. Chosen from the field's type alone, a record whose
+     * rule asks its list for two is handed one holding none, and the row it was composed for comes
+     * back as one every value tried was refused at.
+     *
+     * <p>Nothing about the clauses relating two fields, which are read where a row is searched for
+     * one position at a time. Whether the values may be held together is the decoder's answer — the
+     * same answer every other candidate this offers is put through.
      */
     private static List<FixtureTemplate> composed(TypeName record, Symbols symbols,
                                                   java.util.Set<TypeName> expanding) {
@@ -816,10 +822,11 @@ public final class Partitions {
         }
         java.util.Set<TypeName> inside = new LinkedHashSet<>(expanding);
         inside.add(record);
+        FieldDomains left = fieldDomainsOf(Type.ref(record), symbols);
         Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
         for (Map.Entry<String, Type> field : fields.entrySet()) {
-            List<FixtureTemplate> stands =
-                    representativesOf(field.getValue(), symbols, null, inside);
+            List<FixtureTemplate> stands = representativesHolding(field.getValue(), symbols,
+                    left.at(field.getKey()), left.heldAt(field.getKey()), inside);
             if (stands.isEmpty()) {
                 return List.of();
             }
@@ -931,15 +938,24 @@ public final class Partitions {
     static List<FixtureTemplate> representativesHolding(Type type, Symbols symbols,
                                                         NumericDomain.Bounds within,
                                                         FieldDomains.Held held) {
+        return representativesHolding(type, symbols, within, held, java.util.Set.of());
+    }
+
+    /** The same, with the names this is already inside the value of, for the same reason
+     *  {@link #representativesOf} carries them. */
+    static List<FixtureTemplate> representativesHolding(Type type, Symbols symbols,
+                                                        NumericDomain.Bounds within,
+                                                        FieldDomains.Held held,
+                                                        java.util.Set<TypeName> expanding) {
         List<FixtureTemplate> candidates = new ArrayList<>();
         // Under every name the position wears, because a floor read off the record says how much the
         // value holds and not what it is written as: a field of a newtype over a list takes a list
         // inside that newtype's own name.
         for (FixtureTemplate bare : Witnesses.holding(TypeOps.base(type, symbols),
-                leastHeld(type, symbols, held), symbols, java.util.Set.of())) {
+                leastHeld(type, symbols, held), symbols, expanding)) {
             candidates.add(Witnesses.wrapped(type, bare, symbols));
         }
-        candidates.addAll(representativesOf(type, symbols, within));
+        candidates.addAll(representativesOf(type, symbols, within, expanding));
         Map<String, FixtureTemplate> once = new LinkedHashMap<>();
         for (FixtureTemplate each : candidates) {
             once.putIfAbsent(each.text(), each);

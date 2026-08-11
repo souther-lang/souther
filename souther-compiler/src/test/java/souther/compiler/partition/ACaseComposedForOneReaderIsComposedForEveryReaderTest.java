@@ -42,6 +42,9 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
 
             data Wrapped = EveryCaseARecord
 
+            data Bag = { xs: List<Int> }
+                invariant enough = List.length(xs) >= 2
+
             behavior recordCases : (bill: Yen, v: EveryCaseARecord) -> Ok
                 constructs Ok
             let recordCases (bill, v) = Ok { n = bill.value }
@@ -135,6 +138,23 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
             assertFalse(Partitions.representativesOf(named(each.id()), symbols).isEmpty(),
                     () -> "a record case stands for a value: " + each.id());
         }
+    }
+
+    /**
+     * A record composed here holds what its own rule says it holds.
+     *
+     * <p>The floor a record puts on a field is read wherever a value is chosen, and composing a
+     * record is choosing one for every field of it. Read off the field's type alone, what comes
+     * back is a value the record refuses at construction, and the row it was composed for is
+     * reported as one every value tried was refused at.
+     */
+    @Test
+    void aComposedRecordHoldsWhatItsOwnRuleAsksFor() {
+        List<FixtureTemplate> stands = Partitions.representativesOf(named("Bag"), symbols);
+
+        assertTrue(stands.stream().anyMatch(each -> each.text().contains("xs = [")
+                        && !each.text().contains("xs = []")),
+                () -> "the floor its rule puts on the field: " + stands);
     }
 
     /**
