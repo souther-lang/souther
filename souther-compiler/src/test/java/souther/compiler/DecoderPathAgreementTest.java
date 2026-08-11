@@ -82,8 +82,8 @@ class DecoderPathAgreementTest {
     }
 
     /**
-     * A boundary map is keyed by a {@code String}, a String-backed newtype, {@code Date},
-     * {@code DateTime} or an enumeration, and all three readers read all five. The rows are written
+     * A boundary map is keyed by a {@code String}, a temporal, an enumeration or a newtype over one
+     * of those, and all three readers read every one. The rows are written
      * out one kind at a time because the key is where a reader composing its own decoder is most
      * likely to admit fewer kinds than the boundary does.
      */
@@ -98,6 +98,17 @@ class DecoderPathAgreementTest {
     }
 
     @Test
+    void aTimeKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Time, Int>", Map.of("09:30:00", 7L), "{\"09:30:00\": 7}", 7L);
+    }
+
+    @Test
+    void anInstantKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Instant, Int>", Map.of("2026-01-01T09:00:00Z", 7L),
+                "{\"2026-01-01T09:00:00Z\": 7}", 7L);
+    }
+
+    @Test
     void aDateTimeKeyedMapIsReadByAllThree() throws Exception {
         acceptedEverywhere("Map<DateTime, Int>", Map.of("2026-01-01T09:00", 7L),
                 "{\"2026-01-01T09:00\": 7}", 7L);
@@ -106,6 +117,14 @@ class DecoderPathAgreementTest {
     @Test
     void anEnumerationKeyedMapIsReadByAllThree() throws Exception {
         acceptedEverywhere("Map<Outcome, Int>", Map.of("Won", 7L), "{\"Won\": 7}", 1L);
+    }
+
+    /** A newtype over a temporal, which is a key because its base is. The three readers reach it
+     *  the way they reach any other named key — through the type's own codec — so what it wraps
+     *  never has to be a kind any of them was told about. */
+    @Test
+    void aWrappedTemporalKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Day, Int>", Map.of("2026-01-01", 7L), "{\"2026-01-01\": 7}", 7L);
     }
 
     /**
@@ -183,8 +202,11 @@ class DecoderPathAgreementTest {
             case "List<Date>" -> "[ Date(\"2026-01-01\") ]";
             case "Map<Key, Int>" -> "[ (Key(\"a\"), 7) ]";
             case "Map<Date, Int>" -> "[ (Date(\"2026-01-01\"), 7) ]";
+            case "Map<Time, Int>" -> "[ (Time(\"09:30:00\"), 7) ]";
+            case "Map<Instant, Int>" -> "[ (Instant(\"2026-01-01T09:00:00Z\"), 7) ]";
             case "Map<DateTime, Int>" -> "[ (DateTime(\"2026-01-01T09:00\"), 7) ]";
             case "Map<Outcome, Int>" -> "[ (Won, 7) ]";
+            case "Map<Day, Int>" -> "[ (Day(Date(\"2026-01-01\")), 7) ]";
             default -> throw new IllegalArgumentException(type);
         };
     }
@@ -193,6 +215,7 @@ class DecoderPathAgreementTest {
      *  reads the same module but for the one line that puts the type in position. */
     private static final String DECLS = """
             data Key = String
+            data Day = Date
             data Wrapped = Int
             data Outcome = Won | Lost
             data Bounded = String
@@ -272,8 +295,11 @@ class DecoderPathAgreementTest {
             case "Map<String, Int>" -> "\"a\"";
             case "Map<Key, Int>" -> "Key(\"a\")";
             case "Map<Date, Int>" -> "Date(\"2026-01-01\")";
+            case "Map<Time, Int>" -> "Time(\"09:30:00\")";
+            case "Map<Instant, Int>" -> "Instant(\"2026-01-01T09:00:00Z\")";
             case "Map<DateTime, Int>" -> "DateTime(\"2026-01-01T09:00\")";
             case "Map<Bounded, Int>" -> "Bounded(\"abc\")";
+            case "Map<Day, Int>" -> "Day(Date(\"2026-01-01\"))";
             default -> throw new IllegalArgumentException(mapType);
         };
     }
@@ -286,6 +312,9 @@ class DecoderPathAgreementTest {
         }
         if (type.contains("Bounded")) {
             return ", Bounded";
+        }
+        if (type.contains("Day")) {
+            return ", Day";
         }
         return type.contains("Outcome") ? ", Won" : "";
     }

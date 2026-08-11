@@ -44,7 +44,7 @@ own index decides membership.
 A probe — `Map.get`, `Map.containsKey`, `Set.member` — reads the container it was given, by the index
 that container carries. Every container Souther builds is indexed by the language, and so is the
 `Set` a field decodes into. A map a field decodes into is a JDK map, and its keys are the ones a
-boundary map may have — a String, a String-backed newtype, a temporal, an enumeration (ADR-0040) —
+boundary map may have — a String, a temporal, an enumeration, a newtype over one of those (ADR-0040) —
 for every one of which Java's index and the language's agree. So the probe is already answering the
 language's question wherever the language can produce the container, and normalizing it first would
 cost the whole map on every lookup to buy nothing there. A `java.util.Map` handed in from Java with

@@ -547,18 +547,14 @@ public final class Runner {
      *
      * <p>Which key types arrive here is not decided again, and is not asked again either: the witness
      * the map-key rule answers with travels in the shape. A named key runs its own decoder, and a
-     * representation is the string leaf, parsed for a temporal.
+     * lexical one is the string leaf, parsed for a temporal.
      */
     private static Decoder<Object, ?> keyDecoder(ClassLoader loader, BoundaryMapKey key) {
         return switch (key.representation()) {
-            case MapKeyRepresentation.StringNewtype n -> codecOf(loader, n.name(), "decoder");
-            case MapKeyRepresentation.UnitEnum e -> codecOf(loader, e.name(), "decoder");
+            case MapKeyRepresentation.NamedKey n -> codecOf(loader, n.name(), "decoder");
             case MapKeyRepresentation.Text _ -> text();
             // Through the same rules a field's text goes through, for the same reason.
-            case MapKeyRepresentation.Date _ -> temporal(text(), LeafScalar.DATE);
-            case MapKeyRepresentation.Time _ -> temporal(text(), LeafScalar.TIME);
-            case MapKeyRepresentation.DateTime _ -> temporal(text(), LeafScalar.DATETIME);
-            case MapKeyRepresentation.Instant _ -> temporal(text(), LeafScalar.INSTANT);
+            case MapKeyRepresentation.Lexical l -> temporal(text(), l.leaf());
         };
     }
 
@@ -725,21 +721,15 @@ public final class Runner {
     }
 
     /**
-     * A map's key, written as the text it crosses as. Each kind already has the encoder that writes
-     * it — the string leaf, the ISO form of a temporal, the newtype's bare value, the enumeration's
-     * case name — and which kind it is travelled here rather than being asked again.
+     * A map's key, written as the text it crosses as: the leaf's own form for a primitive, and the
+     * type's derived encoder for a named key, whatever that name wraps. The same two the bytecode
+     * encoder writes ({@code CodecGen.pushKeyRenderer}), which is what keeps the two paths from
+     * spelling a key differently.
      */
     private static String encodeKey(ClassLoader loader, BoundaryMapKey key, Object value) {
         return (String) switch (key.representation()) {
-            case MapKeyRepresentation.Text _ -> encodeLeaf(LeafScalar.STRING, value);
-            case MapKeyRepresentation.Date _ -> encodeLeaf(LeafScalar.DATE, value);
-            case MapKeyRepresentation.Time _ -> encodeLeaf(LeafScalar.TIME, value);
-            case MapKeyRepresentation.DateTime _ -> encodeLeaf(LeafScalar.DATETIME, value);
-            case MapKeyRepresentation.Instant _ -> encodeLeaf(LeafScalar.INSTANT, value);
-            case MapKeyRepresentation.StringNewtype n ->
-                    encodeThrough(loader, n.name().qualified(), value);
-            case MapKeyRepresentation.UnitEnum e ->
-                    encodeThrough(loader, e.name().qualified(), value);
+            case MapKeyRepresentation.Lexical l -> encodeLeaf(l.leaf(), value);
+            case MapKeyRepresentation.NamedKey n -> encodeThrough(loader, n.name().qualified(), value);
         };
     }
 

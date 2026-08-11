@@ -14,8 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * what the signature already admitted.
  *
  * <p>Held over every shape the witness has a name in — a record, a newtype, a unit, an enumeration,
- * a sum, a union a behavior answers with, and both kinds of named map key — in both directions,
- * which is every place the runner turns a name into a factory.
+ * a sum, a union a behavior answers with, and a named map key over each base a key may have — in
+ * both directions, which is every place the runner turns a name into a factory.
  */
 class EveryNameAWitnessCarriesHasItsCodecTest {
 
@@ -23,7 +23,7 @@ class EveryNameAWitnessCarriesHasItsCodecTest {
     Path dir;
 
     private static final String MODEL = """
-            module demo exposing ( Sku, Empty, Stage, Decision, Note, Keyed, nominal, newtype, unit, enumeration, sum, keys, answer )
+            module demo exposing ( Sku, Empty, Stage, Decision, Note, Keyed, Day, Bracket, Legacy, nominal, newtype, unit, enumeration, sum, keys, answer )
 
             data Sku = String
             data Empty
@@ -34,7 +34,16 @@ class EveryNameAWitnessCarriesHasItsCodecTest {
             data Rejected = { why: String }
             data Decision = Approved | Rejected
             data Note = { at: DateTime, sku: Sku }
-            data Keyed = { by: Map<Sku, Int>, at: Map<Stage, Int> }
+            data Day = Date
+            data Bracket = Stage
+            data Legacy = Sku
+            data Keyed = {
+                by: Map<Sku, Int>
+                , at: Map<Stage, Int>
+                , on: Map<Day, Int>
+                , per: Map<Bracket, Int>
+                , old: Map<Legacy, Int>
+            }
 
             behavior nominal : (n: Note) -> Note
             let nominal (n) = n
@@ -101,9 +110,13 @@ class EveryNameAWitnessCarriesHasItsCodecTest {
                 run("sum", "{\"why\":\"no\",\"type\":\"Rejected\"}"));
     }
 
+    /** A named key over each base one may have: a String, an enumeration, a temporal, and a newtype
+     *  over each of the first two. The runner reaches for the outermost name's codec in every case,
+     *  because that is what the witness carries whatever the name wraps. */
     @Test
-    void bothKindsOfNamedMapKeyCarryTheirNameInBothDirections() throws Exception {
-        String keyed = "{\"by\":{\"s\":1},\"at\":{\"Won\":2}}";
+    void aNamedMapKeyCarriesItsNameInBothDirectionsOverEveryBase() throws Exception {
+        String keyed = "{\"by\":{\"s\":1},\"at\":{\"Won\":2},\"on\":{\"2026-01-01\":3}"
+                + ",\"per\":{\"Lost\":4},\"old\":{\"t\":5}}";
         assertEquals(keyed, run("keys", keyed));
     }
 

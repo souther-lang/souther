@@ -334,7 +334,6 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Path_append = MethodTypeDesc.of(CD_RPath, CD_String);
     static final MethodTypeDesc MTD_mapKeys = MethodTypeDesc.of(CD_Map, CD_Map, CD_Function);
     static final MethodTypeDesc MTD_mapKeysWith = MethodTypeDesc.of(CD_Map, CD_Function, CD_Map);
-    static final MethodTypeDesc MTD_value = MethodTypeDesc.of(CD_String);
     /** {@code Encoder.contramap(Function)}: pre-processes the value an element encoder receives —
      * a nested Set is listed, a nested newtype-keyed Map has its keys rendered bare. */
     static final MethodTypeDesc MTD_Rencoder_contramap = MethodTypeDesc.of(CD_REncoder, CD_Function);
