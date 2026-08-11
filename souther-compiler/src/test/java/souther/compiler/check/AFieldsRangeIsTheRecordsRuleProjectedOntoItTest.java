@@ -41,9 +41,9 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
     private static void assertBounds(NumericDomain.Bounds bounds, long min, long max) {
         assertNotNull(bounds, "nothing bounds this field");
-        assertEquals(0, BigDecimal.valueOf(min).compareTo(bounds.min().at().at()),
+        assertEquals(0, BigDecimal.valueOf(min).compareTo(souther.compiler.numeric.Count.number(bounds.min().at()).at()),
                 "min was " + bounds.min());
-        assertEquals(0, BigDecimal.valueOf(max).compareTo(bounds.max().at().at()),
+        assertEquals(0, BigDecimal.valueOf(max).compareTo(souther.compiler.numeric.Count.number(bounds.max().at()).at()),
                 "max was " + bounds.max());
     }
 
@@ -302,7 +302,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
         assertTrue(domains.allRulesRead(),
                 "the rule is `value >= 0.0m` wherever it is declared");
-        assertEquals(0, BigDecimal.ZERO.compareTo(domains.at("total").min().at().at()),
+        assertEquals(0, BigDecimal.ZERO.compareTo(souther.compiler.numeric.Count.number(domains.at("total").min().at()).at()),
                 "and it reaches the domain from there too");
     }
 

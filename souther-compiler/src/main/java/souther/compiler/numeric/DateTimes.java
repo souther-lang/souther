@@ -55,7 +55,7 @@ public final class DateTimes {
     }
 
     /** Whether {@code count} is one of the counts a date-time can be written as. */
-    public static boolean holds(Count count) {
+    public static boolean holds(Place count) {
         return count.compareTo(MIN) >= 0 && count.compareTo(MAX) <= 0;
     }
 
@@ -74,8 +74,8 @@ public final class DateTimes {
     }
 
     /** The date-time {@code count} counts to, written the way a model writes one. */
-    public static String written(Count count) {
-        BigDecimal second = count.at();
+    public static String written(Place count) {
+        BigDecimal second = Count.number(count).at();
         BigDecimal whole = second.setScale(0, RoundingMode.FLOOR);
         BigDecimal fraction = second.subtract(whole).multiply(NANOS)
                 .setScale(0, RoundingMode.HALF_UP);

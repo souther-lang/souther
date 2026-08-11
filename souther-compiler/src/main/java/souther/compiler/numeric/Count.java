@@ -3,7 +3,7 @@ package souther.compiler.numeric;
 import java.math.BigDecimal;
 
 /**
- * Where a value sits on its carrier's order, and never a number a model writes.
+ * The number a value counts to on its carrier's order, and never a number a model writes.
  *
  * <p>The interval algebra holds one number per position, and a type takes part in it by counting to
  * that number: a date counts days from an epoch, a date-time counts seconds, an {@code Int} counts
@@ -27,7 +27,7 @@ import java.math.BigDecimal;
  * lives on {@link souther.compiler.numeric.Granularity the carrier} rather than here. Nothing in this
  * type knows what a date is.
  */
-public record Count(BigDecimal at) implements Comparable<Count> {
+public record Count(BigDecimal at) implements Place {
 
     public static final Count ZERO = new Count(BigDecimal.ZERO);
 
@@ -39,6 +39,20 @@ public record Count(BigDecimal at) implements Comparable<Count> {
 
     public static Count of(BigDecimal at) {
         return at == null ? null : new Count(at);
+    }
+
+    /**
+     * The count a place is.
+     *
+     * <p>The one narrowing, so that a reader which reached arithmetic on a carrier that has none is
+     * one line to find rather than a cast repeated wherever a number was wanted. Never reachable
+     * from a model: every caller has already established which carrier it is on.
+     */
+    public static Count number(Place at) {
+        if (!(at instanceof Count count)) {
+            throw new IllegalStateException("a carrier with no counts was asked for a number: " + at);
+        }
+        return count;
     }
 
     public static Count of(long at) {
@@ -115,25 +129,30 @@ public record Count(BigDecimal at) implements Comparable<Count> {
         return at.signum();
     }
 
+    /**
+     * The order, which is the numbers' own.
+     *
+     * <p>Against another count. A place on some other carrier's order is not below or above this
+     * one, and the algebra never brings two together — so the mistake is said rather than answered
+     * with whichever of the two happened to be a number.
+     */
     @Override
-    public int compareTo(Count other) {
-        return at.compareTo(other.at);
+    public int compareTo(Place other) {
+        if (!(other instanceof Count count)) {
+            throw Place.notOneOrder(this, other);
+        }
+        return at.compareTo(count.at);
     }
 
     /**
-     * Whether two counts are the same place on the order.
+     * What makes two counts one line: the number, and not how many places it was written to.
      *
      * <p>Not {@link #equals}, which a record derives from {@link BigDecimal#equals} and which says
-     * {@code 0.00} and {@code 0} are two places. Every comparison of counts in the algebra goes
-     * through here or through {@link #compareTo}; the derived equality is left alone rather than
+     * {@code 0.00} and {@code 0} are two places. The derived equality is left alone rather than
      * overridden so that a map keyed on counts keeps saying what a map keyed on {@code BigDecimal}
-     * said, and callers that want one line per number key on {@link #key()}.
+     * said; every comparison in the algebra goes through {@link #compareTo} or {@link Place#sameAs}.
      */
-    public boolean sameAs(Count other) {
-        return other != null && at.compareTo(other.at) == 0;
-    }
-
-    /** What makes two counts one line: the number, and not how many places it was written to. */
+    @Override
     public String key() {
         return at.stripTrailingZeros().toPlainString();
     }

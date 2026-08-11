@@ -2,9 +2,12 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Dates;
 import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -77,15 +80,15 @@ public sealed interface Carrier {
 
         /** Where {@code name} comes in the declaration, or null where this enumeration has no such
          * case — which is a value of some other type and not a place on this order. */
-        public Count at(TypeName name) {
+        public Place at(TypeName name) {
             int index = cases.indexOf(name);
             return index < 0 ? null : Count.of(index);
         }
 
         /** The case at a count. Only ever asked of a count this carrier holds, which is what
          * {@link Carrier#onTheGrid} is for. */
-        public TypeName caseAt(Count count) {
-            return cases.get(count.at().intValueExact());
+        public TypeName caseAt(Place count) {
+            return cases.get(Count.number(count).at().intValueExact());
         }
     }
 
@@ -152,7 +155,7 @@ public sealed interface Carrier {
      * ends between two adjacent moments offered the count between them, which was written back as one
      * of the ends — a row labelled for a class it is not in.
      */
-    default Count onTheGrid(Count count) {
+    default Place onTheGrid(Place count) {
         if (count == null) {
             return null;
         }
@@ -164,13 +167,13 @@ public sealed interface Carrier {
             // place that steps one, because a step off the end is the same non-value however it was
             // reached — and an enumeration's ends are the nearest of the five, one step past its
             // last case.
-            case Whole _ -> count.whole() && within(count, Long.MIN_VALUE, Long.MAX_VALUE)
+            case Whole _ -> whole(count) && within(count, Long.MIN_VALUE, Long.MAX_VALUE)
                     ? count : null;
-            case Days _ -> count.whole()
+            case Days _ -> whole(count)
                     && within(count, java.time.LocalDate.MIN.toEpochDay(),
                             java.time.LocalDate.MAX.toEpochDay())
                     ? count : null;
-            case Ordinal ordinal -> count.whole() && within(count, 0, ordinal.cases().size() - 1)
+            case Ordinal ordinal -> whole(count) && within(count, 0, ordinal.cases().size() - 1)
                     ? count : null;
             // Round-tripped and then held to itself. What a date-time can be written as sits on a
             // grid at the nanosecond, and the writer rounds onto it — so returning what came back
@@ -191,15 +194,146 @@ public sealed interface Carrier {
                 if (!DateTimes.holds(count)) {
                     yield null;
                 }
-                Count written = DateTimes.secondOf(DateTimes.written(count));
+                Place written = DateTimes.secondOf(DateTimes.written(count));
                 yield written != null && written.sameAs(count) ? count : null;
             }
         };
     }
 
-    private static boolean within(Count count, long low, long high) {
-        return count.at().compareTo(java.math.BigDecimal.valueOf(low)) >= 0
-                && count.at().compareTo(java.math.BigDecimal.valueOf(high)) <= 0;
+    /** Whether a place counts to a whole number, which is what a stepping carrier's order is made
+     * of. A place that is not a number is not one. */
+    private static boolean whole(Place at) {
+        return at instanceof Count count && count.whole();
+    }
+
+    private static boolean within(Place count, long low, long high) {
+        return count.compareTo(Count.of(low)) >= 0 && count.compareTo(Count.of(high)) <= 0;
+    }
+
+    /**
+     * A place inside a pair of ends, or null where they hold none.
+     *
+     * <p>The one way a range gives up a value, so that nothing deciding what to write reads an end
+     * and loses whether the range holds it. An end the range holds is the place taken: it is inside
+     * whatever other end there is, and it is what a boundary wants written anyway. An end the range
+     * stops short of is not one, and over a carrier whose values do not step there is nothing beside
+     * it to take instead — so the place comes from inside, between the ends where both are known and
+     * a step in from the only one where there is one.
+     *
+     * <p>Asked of the carrier because the answer is the carrier's arithmetic. It sat on the ends
+     * themselves, which is where it could only ever be a number's answer, and a carrier whose values
+     * are not numbers had nothing to say through it.
+     */
+    default Place somethingInside(Endpoint low, Endpoint high) {
+        Granularity spacing = spacing();
+        if (spacing == Granularity.DISCRETE) {
+            Endpoint lo = whole(low, true);
+            Endpoint hi = whole(high, false);
+            if (!Endpoint.someValueLiesBetween(lo, hi)) {
+                return null;
+            }
+            return lo != null ? lo.at() : hi != null ? hi.at() : Count.ZERO;
+        }
+        if (!Endpoint.someValueLiesBetween(low, high)) {
+            return null;
+        }
+        if (low == null) {
+            return high == null ? Count.ZERO
+                    : high.inclusive() ? high.at() : count(high).minus(1);
+        }
+        if (low.inclusive()) {
+            return low.at();
+        }
+        // Open below, so the place is not the end. Halfway to the other end where there is one — a
+        // count the dense carrier holds, and inside both — and a step in where there is not.
+        return high == null ? count(low).plus(1)
+                : count(low).halfwayTo(count(high), Granularity.DENSE);
+    }
+
+    /** An end moved onto the nearest whole count the range holds, which is always one it holds. */
+    private static Endpoint whole(Endpoint end, boolean lower) {
+        if (end == null) {
+            return null;
+        }
+        java.math.RoundingMode away = lower ? java.math.RoundingMode.CEILING
+                : java.math.RoundingMode.FLOOR;
+        if (end.inclusive()) {
+            return Endpoint.inclusive(count(end).rounded(away));
+        }
+        java.math.RoundingMode into = lower ? java.math.RoundingMode.FLOOR
+                : java.math.RoundingMode.CEILING;
+        Count step = count(end).rounded(into);
+        return Endpoint.inclusive(lower ? step.plus(1) : step.minus(1));
+    }
+
+    /** The count an end is at. Only reached from the arithmetic above, which every carrier that has
+     * none skips before it gets here. */
+    private static Count count(Endpoint end) {
+        if (!(end.at() instanceof Count at)) {
+            throw new IllegalStateException("a carrier with no counts reached the arithmetic: " + end);
+        }
+        return at;
+    }
+
+    /**
+     * A place the position holds that is none of {@code singled}, or null where this found none.
+     *
+     * <p>Where the values step, the one beside a singled-out value is the nearest thing to it and is
+     * tried first. Over a carrier whose values do not step there is no step to take: a value bounded
+     * to `+[0, 1]+` and singled out at `+0.5+` steps to `+1.5+` and `+-0.5+`, both outside, and
+     * neither says anything about whether the class has values — it holds `+0+`, `+1+` and everything
+     * between. So the ends of what the position admits are asked, and a value between them, before
+     * any step is.
+     *
+     * <p>Null is this having found none and never the class being empty. Nothing here enumerates a
+     * range, so what a caller may say about an empty answer is that it composed nothing.
+     */
+    default Place somethingOtherThan(java.util.List<Place> singled, NumericDomain.Bounds within) {
+        java.util.List<Place> stepped = new java.util.ArrayList<>();
+        for (Place from : singled) {
+            if (from instanceof Count count) {
+                stepped.add(count.plus(1));
+                stepped.add(count.minus(1));
+            }
+        }
+        java.util.List<Place> inside = new java.util.ArrayList<>();
+        if (within != null) {
+            for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
+                if (end != null && end.inclusive()) {
+                    inside.add(end.at());
+                }
+            }
+            inside.add(somethingInside(within.min(), within.max()));
+            // Between the place singled out and each end, which is where a range with no step still
+            // has room once the ends themselves are singled out too.
+            for (Place from : singled) {
+                for (Endpoint end : java.util.Arrays.asList(within.min(), within.max())) {
+                    if (end != null) {
+                        inside.add(somethingInside(Endpoint.exclusive(from), end));
+                        inside.add(somethingInside(end, Endpoint.exclusive(from)));
+                    }
+                }
+            }
+        }
+        java.util.List<Place> tried = new java.util.ArrayList<>();
+        if (spacing() == Granularity.DENSE) {
+            tried.addAll(inside);
+            tried.addAll(stepped);
+        } else {
+            tried.addAll(stepped);
+            tried.addAll(inside);
+        }
+        for (Place candidate : tried) {
+            // On the carrier's grid before it is asked anything. Halfway between two adjacent moments
+            // is neither of them as a number and is one of them once written, so a class of
+            // everything else was offered one of the values it exists to exclude.
+            Place each = onTheGrid(candidate);
+            if (each != null && (within == null || within.admits(each))
+                    && singled.stream().noneMatch(each::sameAs)) {
+                return each;
+            }
+        }
+        return null;
     }
 
     /**
@@ -210,7 +344,7 @@ public sealed interface Carrier {
      * reader instead, and an invariant and a {@code guard} at one position admitted different rules
      * with only one of them saying so.
      */
-    default Count literalOf(Ast.Expr e) {
+    default Place literalOf(Ast.Expr e) {
         return switch (this) {
             case Whole _ -> Count.of(InvariantBound.wholeLiteral(e));
             case Dense _ -> Count.of(InvariantBound.literalOf(e));
@@ -246,7 +380,7 @@ public sealed interface Carrier {
      * the value one inside it. Reached through rather than refused, which is how a wrapped number and
      * a bare one are the same count.
      */
-    default Count countOf(ObservedValue value) {
+    default Place placeOf(ObservedValue value) {
         ObservedValue at = value instanceof ObservedValue.Constructed c && c.field("value") != null
                 ? c.field("value") : value;
         return switch (this) {
@@ -273,10 +407,10 @@ public sealed interface Carrier {
      * everywhere a person reads it, and the conversion sitting here is what keeps a cut, a report and
      * a fixture from disagreeing about which of the two a line is drawn at.
      */
-    default ObservedValue valueOf(Count count) {
+    default ObservedValue valueOf(Place count) {
         return switch (this) {
-            case Whole _ -> new ObservedValue.Integer(count.at().longValueExact());
-            case Dense _ -> new ObservedValue.Decimal(count.at());
+            case Whole _ -> new ObservedValue.Integer(Count.number(count).at().longValueExact());
+            case Dense _ -> new ObservedValue.Decimal(Count.number(count).at());
             case Days _ -> new ObservedValue.Temporal(Dates.written(count));
             case Seconds _ -> new ObservedValue.Temporal(DateTimes.written(count));
             case Ordinal ordinal -> new ObservedValue.Unit(ordinal.caseAt(count));
@@ -293,7 +427,7 @@ public sealed interface Carrier {
      * label that preserved places would print one line two ways depending on the order the rules
      * were read in.
      */
-    default String written(Count count) {
+    default String written(Place count) {
         return switch (this) {
             case Whole _, Dense _ -> count.key();
             case Days _ -> Dates.written(count);

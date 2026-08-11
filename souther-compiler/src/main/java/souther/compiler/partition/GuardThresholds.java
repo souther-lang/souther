@@ -5,6 +5,7 @@ import souther.compiler.check.Location;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -70,7 +71,7 @@ public final class GuardThresholds {
          * value, and reading it as a place to cut would put a distinction between the two sides into
          * a partition the model never drew.
          */
-        public record Singled(NumericTerm term, Count value, OriginRef.GuardOrigin origin) {}
+        public record Singled(NumericTerm term, Place value, OriginRef.GuardOrigin origin) {}
 
         public Guards {
             thresholds = List.copyOf(thresholds);
@@ -351,7 +352,7 @@ public final class GuardThresholds {
         // the whole-number carrier, and a position holding dates is a day count — the same answer
         // `Carrier` gives everywhere else.
         NumericTerm term = termOf(comparison.left(), parameters, symbols);
-        Count value = constantOf(comparison.right(),
+        Place value = constantOf(comparison.right(),
                 Carrier.ofValue(comparison.left().type(), symbols));
         if (term == null || value == null) {
             // `100000 >= cost` says what `cost <= 100000` says; read the position-bearing side first.
@@ -431,7 +432,7 @@ public final class GuardThresholds {
     /** One arm's edge, where that arm has a probe. An arm answering nothing has none, and it is owed
      * no row whether anything reaches it or not. */
     private static void edge(List<GuardEdge> edges, CoverageSites.GuardRef guard, int site,
-                             NumericTerm term, Count value, boolean below, boolean inclusive) {
+                             NumericTerm term, Place value, boolean below, boolean inclusive) {
         if (site == CoverageSites.NO_SITE) {
             return;
         }
@@ -512,7 +513,7 @@ public final class GuardThresholds {
      * literal is asked, asked of the same place, so an invariant and a {@code guard} at one position
      * cannot admit different rules.
      */
-    static Count constantOf(Core e, Carrier carrier) {
+    static Place constantOf(Core e, Carrier carrier) {
         if (carrier == null) {
             return null;
         }
@@ -520,8 +521,8 @@ public final class GuardThresholds {
             case Core.Int i -> carrier.onTheGrid(Count.of(i.value()));
             case Core.Decimal d -> carrier.onTheGrid(Count.of(d.value()));
             case Core.Neg n -> {
-                Count inner = constantOf(n.operand(), carrier);
-                yield inner == null ? null : inner.negate();
+                Place inner = constantOf(n.operand(), carrier);
+                yield inner == null ? null : Count.number(inner).negate();
             }
             // A newtype written around a constant is that constant at this location.
             case Core.NewData nd when nd.inits().size() == 1 && nd.spreads().isEmpty() ->
@@ -532,7 +533,7 @@ public final class GuardThresholds {
                     && call.args().get(0) instanceof Core.Str iso ->
                     (call.type() == Type.DATE && carrier instanceof Carrier.Days)
                             || (call.type() == Type.DATETIME && carrier instanceof Carrier.Seconds)
-                            ? carrier.countOf(new souther.compiler.observe.ObservedValue.Temporal(
+                            ? carrier.placeOf(new souther.compiler.observe.ObservedValue.Temporal(
                                     iso.value()))
                             : null;
             // A case, which is named rather than written. Where the position counts in some other

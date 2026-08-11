@@ -3,7 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.Type;
 
@@ -31,9 +31,9 @@ import java.util.Set;
 final class Intervals {
 
     /** One range of a position's counts. A null bound is the domain's own edge. */
-    record Interval(Count lo, boolean loInclusive, Count hi, boolean hiInclusive) {
+    record Interval(Place lo, boolean loInclusive, Place hi, boolean hiInclusive) {
 
-        boolean holds(Count v) {
+        boolean holds(Place v) {
             if (lo != null) {
                 int c = v.compareTo(lo);
                 if (c < 0 || (c == 0 && !loInclusive)) {
@@ -69,7 +69,7 @@ final class Intervals {
     }
 
     /** A place a rule cuts the position, and which side the count itself falls on. */
-    private record Split(Count value, boolean valueBelongsBelow) {}
+    private record Split(Place value, boolean valueBelongsBelow) {}
 
     /**
      * The ranges {@code thresholds} leave, inside what the position holds.
@@ -96,7 +96,7 @@ final class Intervals {
         splits.sort(Comparator.comparing(Split::value));
 
         List<Interval> out = new ArrayList<>();
-        Count lo = min == null ? null : min.at();
+        Place lo = min == null ? null : min.at();
         boolean loInclusive = min == null || min.inclusive();
         for (Split split : splits) {
             Interval range = new Interval(lo, loInclusive, split.value(), split.valueBelongsBelow());
@@ -131,7 +131,7 @@ final class Intervals {
         for (Interval range : intervals) {
             String label = range.label(carrier);
             String id = of + "/" + label;
-            Count inside = representative(range, carrier);
+            Place inside = representative(range, carrier);
             Classifier is = v -> switch (of.read(v, carrier)) {
                 case NumericTerm.Reading.Number number -> Membership.of(range.holds(number.value()));
                 case NumericTerm.Reading.Missing missing ->
@@ -167,11 +167,10 @@ final class Intervals {
      * came back as one holding no value, which is what a whole step would leave and not what the
      * values do.
      */
-    private static Count representative(Interval range, Carrier carrier) {
-        Count between = Endpoint.valueBetween(
+    private static Place representative(Interval range, Carrier carrier) {
+        Place between = carrier.somethingInside(
                 range.lo() == null ? null : new Endpoint(range.lo(), range.loInclusive()),
-                range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()),
-                carrier.spacing());
+                range.hi() == null ? null : new Endpoint(range.hi(), range.hiInclusive()));
         if (between == null) {
             return null;
         }
@@ -179,7 +178,7 @@ final class Intervals {
         // a strict bound may be sharpened onto and is not a promise that every number between two
         // counts is one — asking it for both is how a class open at both ends came to offer the
         // count at one of its ends.
-        Count held = carrier.onTheGrid(between);
+        Place held = carrier.onTheGrid(between);
         return held != null && range.holds(held) ? held : null;
     }
 
@@ -192,7 +191,7 @@ final class Intervals {
      * one's. Asked of it rather than answered here, so that this says a range has no representative
      * only when the thing that builds them has none to give.
      */
-    private static List<FixtureTemplate> standingIn(NumericTerm of, Count inside, Type type,
+    private static List<FixtureTemplate> standingIn(NumericTerm of, Place inside, Type type,
                                                     Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
             return List.of(Witnesses.wrapped(type, FixtureTemplate.on(carrier, inside), symbols));
