@@ -14,6 +14,7 @@ import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -311,20 +312,20 @@ public final class Partitions {
                                                        NumericTerm term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
         Carrier carrier = term.carrierAt(type, symbols);
-        List<Count> values = new ArrayList<>();
+        List<Place> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
             if (values.stream().noneMatch(had -> had.sameAs(each.value()))) {
                 values.add(each.value());
             }
         }
         List<PartitionClass> classes = new ArrayList<>();
-        for (Count value : values) {
+        for (Place value : values) {
             String written = carrier.written(value);
             classes.add(PartitionClass.of(term + "/= " + written, "= " + written,
                     holding(term, carrier, at -> at.sameAs(value)),
                     RepresentativeSource.of(standing(type, carrier, value, symbols))));
         }
-        Count other = otherThan(values, within, carrier);
+        Place other = carrier.somethingOtherThan(values, within);
         String label = "/= " + String.join(", ",
                 values.stream().map(carrier::written).toList());
         classes.add(other == null
@@ -339,81 +340,18 @@ public final class Partitions {
     }
 
     /** A count written at a position, wearing every name that position declares. */
-    private static FixtureTemplate standing(Type type, Carrier carrier, Count at, Symbols symbols) {
+    private static FixtureTemplate standing(Type type, Carrier carrier, Place at, Symbols symbols) {
         return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at), symbols);
     }
 
     /** A classifier that reads the term's count out of a row and answers about it. */
     private static Classifier holding(NumericTerm term, Carrier carrier,
-                                      java.util.function.Predicate<Count> holds) {
+                                      java.util.function.Predicate<Place> holds) {
         return value -> switch (term.read(value, carrier)) {
             case NumericTerm.Reading.Number number -> Membership.of(holds.test(number.value()));
             case NumericTerm.Reading.Missing missing -> new Membership.Incomplete(missing.code());
             case NumericTerm.Reading.NotNumber _ -> Membership.NO_MATCH;
         };
-    }
-
-    /**
-     * A number the position holds that is none of {@code values}, or null where this found none.
-     *
-     * <p>Where the values step, the one beside a singled-out value is the nearest thing to it and is
-     * tried first. Over a dense carrier there is no step to take: a value bounded to `+[0, 1]+` and
-     * singled out at `+0.5+` steps to `+1.5+` and `+-0.5+`, both outside, and neither says anything
-     * about whether the class has values — it holds `+0+`, `+1+` and everything between. So the ends
-     * of what the position admits are asked, and a value between them, before any step is.
-     *
-     * <p>Null is this having found none and never the class being empty. Nothing here enumerates a
-     * dense range, so what a caller may say about an empty answer is that it composed nothing.
-     */
-    private static Count otherThan(List<Count> values, NumericDomain.Bounds within, Carrier carrier) {
-        List<Count> stepped = new ArrayList<>();
-        for (Count from : values) {
-            stepped.add(from.plus(1));
-            stepped.add(from.minus(1));
-        }
-        List<Count> inside = new ArrayList<>();
-        if (within != null) {
-            for (Endpoint end : List.of(within.min(), within.max())) {
-                if (end != null && end.inclusive()) {
-                    inside.add(end.at());
-                }
-            }
-            Count between = Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
-            if (between != null) {
-                inside.add(between);
-            }
-            // Between the count singled out and each end, which is where a dense range still has
-            // room once the ends themselves are singled out too.
-            for (Count from : values) {
-                for (Endpoint end : List.of(within.min(), within.max())) {
-                    if (end != null) {
-                        inside.add(Endpoint.valueBetween(Endpoint.exclusive(from), end,
-                                carrier.spacing()));
-                        inside.add(Endpoint.valueBetween(end, Endpoint.exclusive(from),
-                                carrier.spacing()));
-                    }
-                }
-            }
-        }
-        List<Count> tried = new ArrayList<>();
-        if (carrier == Carrier.DENSE) {
-            tried.addAll(inside);
-            tried.addAll(stepped);
-        } else {
-            tried.addAll(stepped);
-            tried.addAll(inside);
-        }
-        for (Count candidate : tried) {
-            // On the carrier's grid before it is asked anything. Halfway between two adjacent moments
-            // is neither of them as a number and is one of them once written, so a class of
-            // everything else was offered one of the values it exists to exclude.
-            Count each = carrier.onTheGrid(candidate);
-            if (each != null && (within == null || within.admits(each))
-                    && values.stream().noneMatch(each::sameAs)) {
-                return each;
-            }
-        }
-        return null;
     }
 
     /** The cuts a position has, with the values a body singled out added as lines of their own. */
@@ -672,15 +610,20 @@ public final class Partitions {
         Carrier carried = Carrier.ofValue(type, symbols);
         ValueName.Stdlib of = NumericMeasures.takenOf(type, symbols);
         List<UnreadRule> unread = unreadBoundsAt(path, type, symbols, carried, of);
-        if (carried != null) {
-            return new Measured(new NumericTerm.ValueOf(path),
-                    boundsOf(type, symbols, carried, null), unread);
-        }
+        // What the rules are about, and only then what the type could carry. A position has one
+        // axis, and a `String` is the one type that can be measured two ways — its own order, and
+        // the length of it — so which of them the model wrote about is what decides. Read off the
+        // carrier first, every rule anybody ever wrote about the length of a string would have
+        // become a rule about the string.
         if (of != null) {
             Bounds sized = boundsOf(type, symbols, Carrier.WHOLE, of);
             if (sized != null && !sized.isEmpty()) {
                 return new Measured(new NumericTerm.SizeOf(of, path), sized, unread);
             }
+        }
+        if (carried != null) {
+            return new Measured(new NumericTerm.ValueOf(path),
+                    boundsOf(type, symbols, carried, null), unread);
         }
         return new Measured(new NumericTerm.ValueOf(path), null, unread);
     }
@@ -857,7 +800,7 @@ public final class Partitions {
      */
     private record End(Endpoint at, List<TypeName> from) {
 
-        Count value() {
+        Place value() {
             return at.at();
         }
 
@@ -988,7 +931,7 @@ public final class Partitions {
         return own != null && own.compareTo(effective) != 0;
     }
 
-    private static void put(Map<String, Cut> into, Carrier carrier, Count at, TypeName type,
+    private static void put(Map<String, Cut> into, Carrier carrier, Place at, TypeName type,
                             String clause, TypeName narrowedBy) {
         OriginRef origin = new OriginRef.InvariantOrigin(Optional.<SourceRef>empty(), type, clause);
         if (narrowedBy != null) {
@@ -1036,7 +979,7 @@ public final class Partitions {
         }
         if (type == Type.INT || type == Type.DECIMAL) {
             Carrier carrier = type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
-            Count at = inside(within, carrier);
+            Place at = inside(within, carrier);
             return at == null ? List.of() : List.of(FixtureTemplate.on(carrier, at));
         }
         if (type == Type.STRING) {
@@ -1051,8 +994,14 @@ public final class Partitions {
         if (type == Type.DATE) {
             return List.of(FixtureTemplate.date("2000-01-01"));
         }
+        if (type == Type.TIME) {
+            return List.of(FixtureTemplate.time("00:00:00"));
+        }
         if (type == Type.DATETIME) {
             return List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
+        }
+        if (type == Type.INSTANT) {
+            return List.of(FixtureTemplate.instant("2000-01-01T00:00:00Z"));
         }
         // The empty one, for every collection nothing has said otherwise about. A row whose collection
         // is not what it is about should say so by carrying nothing, and where no rule counts what the
@@ -1132,17 +1081,17 @@ public final class Partitions {
      * <p>Only a whole number steps. Between two decimals there is no next value, so a dense carrier
      * names the one number inside its range and no more.
      */
-    static Count numberInside(Type type, Symbols symbols, int index) {
+    static Place numberInside(Type type, Symbols symbols, int index) {
         Type base = TypeOps.numericBase(type, symbols);
         if (base == null) {
             return null;
         }
         NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), null);
-        Count from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
+        Place from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
         if (from == null || base != Type.INT) {
             return from != null && index == 0 ? from : null;
         }
-        Count stepped = from.plus(index);
+        Count stepped = Count.number(from).plus(index);
         return holdsCount(range, stepped) ? stepped : null;
     }
 
@@ -1177,7 +1126,7 @@ public final class Partitions {
         }
         NumericDomain.Bounds range = admissibleBounds(boundsOf(type, symbols), within);
         Carrier carrier = numeric == Type.INT ? Carrier.WHOLE : Carrier.DENSE;
-        Count step = displaced(range, carrier);
+        Place step = displaced(range, carrier);
         if (step == null) {
             return List.copyOf(base);
         }
@@ -1190,8 +1139,8 @@ public final class Partitions {
     }
 
     /** A second count of a range, or null where the carrier has none to give. */
-    private static Count displaced(NumericDomain.Bounds range, Carrier carrier) {
-        Count from = inside(range, carrier);
+    private static Place displaced(NumericDomain.Bounds range, Carrier carrier) {
+        Place from = inside(range, carrier);
         if (from == null) {
             return null;
         }
@@ -1201,18 +1150,18 @@ public final class Partitions {
             // No smallest step, so the only second count a range names is one inside both its ends —
             // and the one already on offer is that count where the range is open below.
             return min == null || max == null || !min.inclusive() ? null
-                    : Endpoint.valueBetween(Endpoint.exclusive(min.at()), max, Granularity.DENSE);
+                    : carrier.somethingInside(Endpoint.exclusive(min.at()), max);
         }
-        Count up = from.plus(1);
+        Count up = Count.number(from).plus(1);
         if (holdsCount(range, up)) {
             return up;
         }
-        Count down = from.minus(1);
+        Count down = Count.number(from).minus(1);
         return holdsCount(range, down) ? down : null;
     }
 
     /** Whether a range holds a count, with no range holding everything. */
-    private static boolean holdsCount(NumericDomain.Bounds range, Count at) {
+    private static boolean holdsCount(NumericDomain.Bounds range, Place at) {
         return range == null || range.admits(at);
     }
 
@@ -1250,7 +1199,7 @@ public final class Partitions {
 
         Bounds own = boundsOf(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
-        Count held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
+        Place held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
         if (held != null) {
             candidates.add(FixtureTemplate.on(own.carrier(), held));
         }
@@ -1282,17 +1231,17 @@ public final class Partitions {
 
     /** A count the position holds, or null where it holds none. The ends decide it, so nothing here
      * reads one of them as a number and loses whether the range reaches it. */
-    private static Count inside(NumericDomain.Bounds within, Carrier carrier) {
+    private static Place inside(NumericDomain.Bounds within, Carrier carrier) {
         if (within == null) {
             return Count.ZERO;
         }
-        Count between = Endpoint.valueBetween(within.min(), within.max(), carrier.spacing());
+        Place between = carrier.somethingInside(within.min(), within.max());
         if (between == null) {
             return null;
         }
         // On the carrier's own grid, and then still inside. A number between two counts it can hold
         // is not always one of them (see Carrier#onTheGrid).
-        Count held = carrier.onTheGrid(between);
+        Place held = carrier.onTheGrid(between);
         return held != null && within.admits(held) ? held : null;
     }
 

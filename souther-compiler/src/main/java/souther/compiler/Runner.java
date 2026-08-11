@@ -7,6 +7,8 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.check.BoundaryMapKey;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.LeafScalar;
+import souther.compiler.types.TemporalRule;
+import souther.runtime.Temporals;
 import souther.compiler.check.BoundaryInput;
 import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.Type;
@@ -24,6 +26,7 @@ import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
 import net.unit8.raoh.decode.builtin.StringDecoder;
+import net.unit8.raoh.decode.builtin.TemporalDecoder;
 import net.unit8.raoh.json.JsonDecoders;
 import net.unit8.raoh.encode.Encoder;
 import net.unit8.raoh.encode.ObjectEncoders;
@@ -550,8 +553,8 @@ public final class Runner {
         return switch (key.representation()) {
             case MapKeyRepresentation.NamedKey n -> codecOf(loader, n.name(), "decoder");
             case MapKeyRepresentation.Text _ -> text();
-            case MapKeyRepresentation.Date _ -> text().date();
-            case MapKeyRepresentation.DateTime _ -> text().dateTime();
+            // Through the same rules a field's text goes through, for the same reason.
+            case MapKeyRepresentation.Lexical l -> temporal(text(), l.leaf());
         };
     }
 
@@ -625,16 +628,43 @@ public final class Runner {
 
     /** A scalar over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
      *  temporal is a string that is then parsed — so a date reads as {@code string().date()}, the
-     *  same two steps the generated JSON decoder takes. */
+     *  same two steps the generated JSON decoder takes, and through the same rules. */
     private static Decoder<JsonNode, ?> leafDecoder(LeafScalar scalar) {
         return switch (scalar) {
             case STRING -> JsonDecoders.string();
             case INT -> JsonDecoders.long_();
             case BOOL -> JsonDecoders.bool();
             case DECIMAL -> JsonDecoders.decimal();
-            case DATE -> JsonDecoders.string().date();
-            case DATETIME -> JsonDecoders.string().dateTime();
+            case DATE, TIME, DATETIME, INSTANT -> temporal(JsonDecoders.string(), scalar);
         };
+    }
+
+    /**
+     * A temporal read from text, under the rules the type has wherever it arrives
+     * ({@link TemporalRule}).
+     *
+     * <p>These were {@code string().time()} and its siblings, spelled out beside the generated
+     * decoder's own — so a top-level {@code Time} argument took {@code 09:00:00.5} and a top-level
+     * {@code Instant} took a leap second, both of which the same types refuse at a data's field. A
+     * rule that changes with the way in is not the type's rule, and this reads the one table rather
+     * than restating it a third time.
+     */
+    private static <I> Decoder<I, ?> temporal(StringDecoder<I> text, LeafScalar scalar) {
+        TemporalRule rule = TemporalRule.of(scalar);
+        StringDecoder<I> guarded = rule.guardsText()
+                ? text.refine(Temporals::notALeapSecond, TemporalRule.REFUSED, TemporalRule.LEAP_SECOND)
+                : text;
+        TemporalDecoder<I, ?> parsed = switch (scalar) {
+            case DATE -> guarded.date();
+            case TIME -> guarded.time();
+            case DATETIME -> guarded.dateTime();
+            case INSTANT -> guarded.iso8601();
+            case STRING, INT, BOOL, DECIMAL ->
+                    throw new IllegalStateException(scalar + " is not a temporal");
+        };
+        return rule.guardsValue()
+                ? parsed.refine(Temporals::toTheSecond, TemporalRule.REFUSED, TemporalRule.SUB_SECOND)
+                : parsed;
     }
 
     /**
@@ -735,7 +765,9 @@ public final class Runner {
             case DECIMAL -> ObjectEncoders.decimal()
                     .encode(Representations.canonicalNumber((java.math.BigDecimal) value));
             case DATE -> ObjectEncoders.date().encode((java.time.LocalDate) value);
+            case TIME -> ObjectEncoders.time().encode((java.time.LocalTime) value);
             case DATETIME -> ObjectEncoders.dateTime().encode((java.time.LocalDateTime) value);
+            case INSTANT -> ObjectEncoders.iso8601().encode((java.time.Instant) value);
         };
     }
 

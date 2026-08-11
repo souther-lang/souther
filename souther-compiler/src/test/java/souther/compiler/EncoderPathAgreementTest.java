@@ -91,6 +91,17 @@ class EncoderPathAgreementTest {
     }
 
     @Test
+    void aTimeKeyedMapIsWrittenTheSameBothWays() throws Exception {
+        writtenAlike("Map<Time, Int>", "Map.fromList([ (Time(\"09:30:00\"), 7) ])");
+    }
+
+    @Test
+    void anInstantKeyedMapIsWrittenTheSameBothWays() throws Exception {
+        writtenAlike("Map<Instant, Int>",
+                "Map.fromList([ (Instant(\"2026-01-01T09:00:00Z\"), 7) ])");
+    }
+
+    @Test
     void aDateTimeKeyedMapIsWrittenTheSameBothWays() throws Exception {
         writtenAlike("Map<DateTime, Int>", "Map.fromList([ (DateTime(\"2026-01-01T09:00\"), 7) ])");
     }

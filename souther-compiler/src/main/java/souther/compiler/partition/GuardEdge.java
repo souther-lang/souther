@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.coverage.CoverageSites;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 
@@ -23,18 +23,18 @@ import souther.compiler.numeric.NumericDomain;
  * @param site  the probe number of that arm, the same identity a branch obligation is counted by
  */
 public record GuardEdge(CoverageSites.GuardRef guard, int site, NumericTerm term,
-                        Count low, boolean lowInclusive,
-                        Count high, boolean highInclusive) {
+                        Place low, boolean lowInclusive,
+                        Place high, boolean highInclusive) {
 
     /** The values above {@code value}, including it where {@code inclusive}. */
     public static GuardEdge above(CoverageSites.GuardRef guard, int site, NumericTerm term,
-                                  Count value, boolean inclusive) {
+                                  Place value, boolean inclusive) {
         return new GuardEdge(guard, site, term, value, inclusive, null, false);
     }
 
     /** The values below {@code value}, including it where {@code inclusive}. */
     public static GuardEdge below(CoverageSites.GuardRef guard, int site, NumericTerm term,
-                                  Count value, boolean inclusive) {
+                                  Place value, boolean inclusive) {
         return new GuardEdge(guard, site, term, null, false, value, inclusive);
     }
 
@@ -73,7 +73,7 @@ public record GuardEdge(CoverageSites.GuardRef guard, int site, NumericTerm term
     }
 
     /** An end of this edge, or no end at all where the edge is open in that direction. */
-    private static Endpoint end(Count at, boolean inclusive) {
+    private static Endpoint end(Place at, boolean inclusive) {
         return at == null ? null : new Endpoint(at, inclusive);
     }
 }

@@ -6,6 +6,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.MapKeyRepresentation;
 import souther.compiler.types.CaseShape;
 import souther.compiler.types.LeafScalar;
+import souther.compiler.types.TemporalRule;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -137,14 +138,11 @@ final class CodecGen {
             // text is the string leaf itself, which canonicalizes and does nothing else; a temporal
             // is that leaf parsed
             case MapKeyRepresentation.Text _ -> emitStringLeaf(code, CD_ObjectDecoders);
-            case MapKeyRepresentation.Date _ -> {
-                emitStringLeaf(code, CD_ObjectDecoders);
-                code.invokevirtual(CD_StringDecoder, "date", MTD_leafTemporal);
-            }
-            case MapKeyRepresentation.DateTime _ -> {
-                emitStringLeaf(code, CD_ObjectDecoders);
-                code.invokevirtual(CD_StringDecoder, "dateTime", MTD_leafTemporal);
-            }
+            // Through the same builder a field's leaf goes through. Spelled out here instead, a
+            // key parsed the text and skipped the refinements beside it, so what a `Time` holds
+            // depended on whether it stood at a field or under one.
+            case MapKeyRepresentation.Lexical l ->
+                    emitTemporalFromText(code, CD_ObjectDecoders, l.leaf().type());
         }
     }
 
@@ -869,21 +867,86 @@ final class CodecGen {
             case INT -> code.invokestatic(owner, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(owner, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(owner, "decimal", MTD_leafDecimal);
-            case DATE -> emitTemporalLeaf(code, src, "date");
-            case DATETIME -> emitTemporalLeaf(code, src, "dateTime");
+            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
+            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
+            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
+            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
     }
 
-    /** Emits a temporal leaf decoder. {@code JsonDecoders} has no {@code date()}/{@code dateTime()}
-     * factory — a JSON temporal is a string that is then parsed (Raoh's {@code string().date()}),
-     * whereas the neutral/map source has a direct static factory. */
-    private void emitTemporalLeaf(CodeBuilder code, Src src, String method) {
-        if (src == Src.JSON) {
-            emitStringLeaf(code, CD_JsonDecoders);
-            code.invokevirtual(CD_StringDecoder, method, MTD_leafTemporal);
-        } else {
-            code.invokestatic(srcLeafOwner(src), method, MTD_leafTemporal);
+    /** {@code Temporals::notALeapSecond} as a {@code Predicate}, for the text refinement below. */
+    private static final DynamicCallSiteDesc NOT_A_LEAP_SECOND = DynamicCallSiteDesc.of(
+            BSM_METAFACTORY, "test",
+            MethodTypeDesc.of(CD_Predicate),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
+                    "notALeapSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+
+    /** {@code Temporals::toTheSecond} as a {@code Predicate}, for the leaf refinement below. */
+    private static final DynamicCallSiteDesc TO_THE_SECOND = DynamicCallSiteDesc.of(
+            BSM_METAFACTORY, "test",
+            MethodTypeDesc.of(CD_Predicate),                                   // no captures
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object),            // samMethodType
+            MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_Temporals,
+                    "toTheSecond", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object)),
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));           // instantiated
+
+    /**
+     * Emits a temporal leaf decoder from text: Raoh's string leaf, refined, parsed, refined again.
+     *
+     * <p>A {@code Time} and a {@code DateTime} are held to the second. They carry no fraction of one
+     * (spec §a-local-temporal-is-held-to-the-second), so text that has one says something the domain
+     * cannot hold, and the boundary reports that rather than dropping it: a value silently rounded
+     * reads to everything downstream as the value that was sent.
+     *
+     * <p>An {@code Instant}'s text is refused where it names a second that does not exist, and that
+     * has to happen <em>before</em> the parse. {@code Instant.parse} takes {@code 23:59:60} and
+     * answers {@code 23:59:59}, so afterwards the two are one value and the substitution is
+     * invisible. An offset is not refused here: it is the same moment spelled differently, and only the
+     * written form is held to UTC (spec §temporal-literal, §a-leap-second-is-no-moment).
+     */
+    private void emitTemporalFromText(CodeBuilder code, ClassDesc leafOwner, Type.Prim temporal) {
+        TemporalRule rule = TemporalRule.of(temporal);
+        emitStringLeaf(code, leafOwner);
+        if (rule.guardsText()) {
+            code.invokedynamic(NOT_A_LEAP_SECOND);
+            code.loadConstant(TemporalRule.REFUSED);
+            code.loadConstant(TemporalRule.LEAP_SECOND);
+            code.invokevirtual(CD_StringDecoder, "refine", MTD_refineString);
         }
+        code.invokevirtual(CD_StringDecoder, rule.factory(), MTD_leafTemporal);
+        emitToTheSecond(code, temporal);
+    }
+
+    /** Holds a {@code Time} and a {@code DateTime} to the second, after the parse that produced one. */
+    private void emitToTheSecond(CodeBuilder code, Type.Prim temporal) {
+        if (!TemporalRule.of(temporal).guardsValue()) {
+            return;
+        }
+        code.invokedynamic(TO_THE_SECOND);
+        code.loadConstant(TemporalRule.REFUSED);
+        code.loadConstant(TemporalRule.SUB_SECOND);
+        code.invokevirtual(CD_TemporalDecoder, "refine", MTD_refineTemporal);
+    }
+
+    /** Emits a temporal leaf decoder at a field. {@code JsonDecoders} has no {@code date()} factory —
+     * a JSON temporal is a string that is then parsed — whereas the neutral/jOOQ source has a direct
+     * static one, which takes the value as itself where the caller hands over a real temporal.
+     *
+     * <p>Both go through the same refinements, so a rule about what a {@code Time} holds cannot be
+     * one thing at a field and another at a map key. The one text this does not see is text handed to
+     * the bare-value factory by a Java caller, which Raoh parses inside itself — so the pre-parse
+     * rule cannot be enforced there, and a leap second reaching it still becomes the second before.
+     * That is a violation of what the specification states and not a boundary being trusted; issue
+     * #639 tracks the Raoh-side fix. */
+    private void emitTemporalLeaf(CodeBuilder code, Src src, Type.Prim temporal) {
+        if (src == Src.JSON) {
+            emitTemporalFromText(code, CD_JsonDecoders, temporal);
+            return;
+        }
+        code.invokestatic(srcLeafOwner(src), TemporalRule.of(temporal).factory(), MTD_leafTemporal);
+        emitToTheSecond(code, temporal);
     }
 
     private void emitPrimDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.PrimDecoder prim,
@@ -900,8 +963,10 @@ final class CodecGen {
             case INT -> code.invokestatic(leaf, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(leaf, "decimal", MTD_leafDecimal);
-            case DATE -> emitTemporalLeaf(code, src, "date");
-            case DATETIME -> emitTemporalLeaf(code, src, "dateTime");
+            case DATE -> emitTemporalLeaf(code, src, Type.Prim.DATE);
+            case TIME -> emitTemporalLeaf(code, src, Type.Prim.TIME);
+            case DATETIME -> emitTemporalLeaf(code, src, Type.Prim.DATETIME);
+            case INSTANT -> emitTemporalLeaf(code, src, Type.Prim.INSTANT);
         }
         emitInvariantConstraints(code, cdName, inputType, invariants);
         code.aload(1);                                                 // in (bare value)
@@ -1955,7 +2020,9 @@ final class CodecGen {
             case BOOL -> "bool";
             case DECIMAL -> "decimal";
             case DATE -> "date";
+            case TIME -> "time";
             case DATETIME -> "dateTime";
+            case INSTANT -> "iso8601";
         };
     }
 }

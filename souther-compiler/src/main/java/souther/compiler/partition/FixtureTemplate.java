@@ -5,6 +5,7 @@ import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.Region;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
@@ -89,14 +90,26 @@ public record FixtureTemplate(String text, Ast.Expr value) {
 
     /** A date, written the way a row writes one: the constructor applied to an ISO 8601 string. */
     public static FixtureTemplate date(String iso) {
-        return new FixtureTemplate("Date(\"" + iso + "\")",
-                new Ast.Apply("Date", List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
-                        NOWHERE, NO_SOURCE));
+        return temporal("Date", iso);
+    }
+
+    public static FixtureTemplate time(String iso) {
+        return temporal("Time", iso);
     }
 
     public static FixtureTemplate dateTime(String iso) {
-        return new FixtureTemplate("DateTime(\"" + iso + "\")",
-                new Ast.Apply("DateTime", List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
+        return temporal("DateTime", iso);
+    }
+
+    public static FixtureTemplate instant(String iso) {
+        return temporal("Instant", iso);
+    }
+
+    /** Every temporal is written the same way — the type's name applied to its ISO 8601 text — so the
+     *  four share this rather than repeating it and letting one of them drift. */
+    private static FixtureTemplate temporal(String type, String iso) {
+        return new FixtureTemplate(type + "(\"" + iso + "\")",
+                new Ast.Apply(type, List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
                         NOWHERE, NO_SOURCE));
     }
 
@@ -128,10 +141,10 @@ public record FixtureTemplate(String text, Ast.Expr value) {
      * well, it was answered one layer deep, and a value of a newtype over a newtype came back
      * missing the name in the middle.
      */
-    public static FixtureTemplate on(Carrier carrier, Count at) {
+    public static FixtureTemplate on(Carrier carrier, Place at) {
         return switch (carrier) {
-            case Carrier.Whole _ -> integer(at.at().longValueExact());
-            case Carrier.Dense _ -> decimal(at.at());
+            case Carrier.Whole _ -> integer(Count.number(at).at().longValueExact());
+            case Carrier.Dense _ -> decimal(Count.number(at).at());
             // Written by the carrier, so the text on a row and the text in a report are the same
             // text. Spelled here as well, the two could differ at midnight and nowhere else.
             case Carrier.Days _ -> date(carrier.written(at));
@@ -139,6 +152,9 @@ public record FixtureTemplate(String text, Ast.Expr value) {
             // Naming a case builds it, which is what a row writes at such a position — never the
             // place the case takes in its declaration.
             case Carrier.Ordinal ordinal -> unitCase(ordinal.caseAt(at));
+            // A string stands for itself, so what a row carries is the string, escaped the way the
+            // language reads one back.
+            case Carrier.Text _ -> string(at.key());
         };
     }
 

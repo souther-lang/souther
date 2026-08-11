@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.DateTimes;
 import souther.compiler.numeric.Dates;
 
 import java.math.BigDecimal;
@@ -50,16 +51,27 @@ class BoundaryDomainTest {
         assertTrue(BoundaryDomain.on(Carrier.WHOLE).predecessor(Count.of(Long.MIN_VALUE)).isEmpty());
     }
 
-    /** The restraint that matters: no epsilon is invented. */
+    /** The restraint that matters: no epsilon is invented. A decimal is the carrier with no smallest
+     *  step this language names, and since a `DateTime` is held to the second it is the only one. */
     @Test
     void aDenseCarrierHasNoNeighbourToGive() {
         Count amount = Count.of(new BigDecimal("100000"));
 
         assertTrue(BoundaryDomain.on(Carrier.DENSE).successor(amount).isEmpty());
         assertTrue(BoundaryDomain.on(Carrier.DENSE).predecessor(amount).isEmpty());
-        assertTrue(BoundaryDomain.on(Carrier.MOMENT).successor(amount).isEmpty(),
-                "a date-time is dense in the sense that matters to a strict bound");
-        assertTrue(BoundaryDomain.on(Carrier.MOMENT).predecessor(amount).isEmpty());
+    }
+
+    /** A date-time steps, and by a second. This was the other dense carrier while a `DateTime`
+     *  carried nanoseconds and the step it moved in was a decision nobody had taken
+     *  (spec §a-local-temporal-is-held-to-the-second). */
+    @Test
+    void aMomentStepsBySecondsEitherWay() {
+        Count at = DateTimes.secondOf("2026-08-01T00:00:01");
+
+        assertEquals(Optional.of(DateTimes.secondOf("2026-08-01T00:00:02")),
+                BoundaryDomain.on(Carrier.MOMENT).successor(at));
+        assertEquals(Optional.of(DateTimes.secondOf("2026-08-01T00:00:00")),
+                BoundaryDomain.on(Carrier.MOMENT).predecessor(at));
     }
 
     @Test

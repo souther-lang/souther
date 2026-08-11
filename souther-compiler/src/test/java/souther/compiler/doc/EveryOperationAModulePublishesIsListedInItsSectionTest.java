@@ -127,7 +127,11 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
                 continue;
             }
             if (opening != null && delimiter.equals(opening)) {
-                if (bare && !current.isEmpty()) {
+                // An empty block counts. A module may publish nothing and say so — `Instant` carries
+                // what a timestamp said and has no operation at all, which is a rule of that type
+                // rather than a section not written yet — and a listing skipped for being empty
+                // would leave that module with no block and this check unable to read it.
+                if (bare) {
                     blocks.add(current);
                 }
                 opening = null;

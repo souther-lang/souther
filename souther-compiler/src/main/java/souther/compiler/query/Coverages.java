@@ -3,7 +3,7 @@ package souther.compiler.query;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.observe.Classification;
@@ -325,7 +325,7 @@ final class Coverages {
 
     /** One line of one axis, told from another by what drew it and where — and not by which copy of
      * the body the reading came off. */
-    private record Line(BoundaryObligation.BoundarySide side, Count at, OriginRef.Line drawn) {}
+    private record Line(BoundaryObligation.BoundarySide side, Place at, OriginRef.Line drawn) {}
 
     /**
      * Which of two readings of one line the report keeps.
@@ -523,7 +523,7 @@ final class Coverages {
      * second kind and could not credit the first.
      */
     private static Met evaluatedAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                   Symbols symbols, Count boundary,
+                                   Symbols symbols, Place boundary,
                                    OriginRef.GuardOrigin origin) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
@@ -542,7 +542,7 @@ final class Coverages {
     }
 
     private static Met writtenAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                 Symbols symbols, Count boundary) {
+                                 Symbols symbols, Place boundary) {
         boolean unreadable = false;
         for (RowOutcome row : rows) {
             switch (readingFor(axis, parameters, symbols, row)) {

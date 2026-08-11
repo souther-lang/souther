@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 import java.util.List;
@@ -20,13 +20,13 @@ import java.util.List;
  * every reader afterwards had to work out which of the two it was holding, and one of them read a
  * day count as the number a model wrote.
  */
-public record Cut(Carrier carrier, Count at, List<OriginRef> origins) {
+public record Cut(Carrier carrier, Place at, List<OriginRef> origins) {
 
     public Cut {
         origins = List.copyOf(origins);
     }
 
-    public static Cut at(Carrier carrier, Count at, OriginRef origin) {
+    public static Cut at(Carrier carrier, Place at, OriginRef origin) {
         return new Cut(carrier, at, List.of(origin));
     }
 

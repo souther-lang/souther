@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A newtype is a key exactly when what it wraps is a key, at any depth. Which is why the tests
  * below are a matrix over (base, how many wrappers) rather than a list of admitted types: what is
- * being fixed is the induction, not the four bases it happens to close over today.
+ * being fixed is the induction, not the six bases it happens to close over today.
  *
  * <p>The two questions the one predicate used to answer are separate here. Whether a type may stand
  * as a key in a signature admits a type variable, which the core's generic signatures are written
@@ -34,8 +34,10 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
             data EmployeeNo = Int
             data Price = Decimal
             data Flag = Bool
-            data 貸出日 = Date
+            data LoanDate = Date
+            data OpensAt = Time
             data StampedAt = DateTime
+            data SeenAt = Instant
 
             data Won
             data Lost
@@ -43,7 +45,7 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
             data OutcomeKey = Outcome
 
             data WrappedId = ProductId
-            data WrappedDay = 貸出日
+            data WrappedDay = LoanDate
             data WrappedNo = EmployeeNo
 
             data A = Date
@@ -90,7 +92,9 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
     @Test
     void aTemporalKeyIsItsOwnRepresentation() {
         assertEquals(new MapKeyRepresentation.Date(), classify(Type.DATE));
+        assertEquals(new MapKeyRepresentation.Time(), classify(Type.TIME));
         assertEquals(new MapKeyRepresentation.DateTime(), classify(Type.DATETIME));
+        assertEquals(new MapKeyRepresentation.Instant(), classify(Type.INSTANT));
     }
 
     @Test
@@ -103,8 +107,10 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
     @Test
     void aNewtypeOverEachKeyableLeafIsANamedKey() {
         assertNamedKey("ProductId");     // String
-        assertNamedKey("貸出日");         // Date
+        assertNamedKey("LoanDate");      // Date
+        assertNamedKey("OpensAt");       // Time
         assertNamedKey("StampedAt");     // DateTime
+        assertNamedKey("SeenAt");        // Instant
         assertNamedKey("OutcomeKey");    // an enumeration
     }
 
@@ -113,7 +119,7 @@ class ABoundaryMapKeyIsClassifiedByOneRuleTest {
     @Test
     void aNewtypeOverANewtypeIsANamedKeyUnderItsOwnName() {
         assertNamedKey("WrappedId");     // ProductId -> String
-        assertNamedKey("WrappedDay");    // 貸出日 -> Date
+        assertNamedKey("WrappedDay");    // LoanDate -> Date
     }
 
     /**

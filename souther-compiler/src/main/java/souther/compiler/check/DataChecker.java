@@ -742,7 +742,13 @@ public final class DataChecker {
                     "argument of Decimal");
             case Ast.IsoTextRaw t -> {
                 Type at = Elaborator.typeOf(t.arg(), env, ctx);
-                if (at != Type.DATE && at != Type.DATETIME) {
+                // Asked of each primitive, so a temporal added later is admitted where it is
+                // declared rather than being refused here by a comparison written before it existed.
+                boolean temporal = at instanceof Type.Prim p && switch (p) {
+                    case DATE, TIME, DATETIME, INSTANT -> true;
+                    case INT, STRING, BOOL, DECIMAL, RAW -> false;
+                };
+                if (!temporal) {
                     throw CompileException.of(Diagnostic.at(t.pos())
                             .say(new CodecMessage.AnIsoTextEncoderTakesATemporalValue(Type.show(at)))
                             .build());

@@ -234,12 +234,17 @@ public final class TypeOps {
         if (m instanceof Type.Ref r) {
             return r.name();
         }
-        if (m == Type.INT) return TypeName.primitive("Int");
-        if (m == Type.STRING) return TypeName.primitive("String");
-        if (m == Type.BOOL) return TypeName.primitive("Bool");
-        if (m == Type.DECIMAL) return TypeName.primitive("Decimal");
-        if (m == Type.DATE) return TypeName.primitive("Date");
-        if (m == Type.DATETIME) return TypeName.primitive("DateTime");
+        // Exhaustive over the primitives rather than a chain of comparisons, and reading the one
+        // spelling table rather than repeating it. A chain answers null for a primitive added later
+        // without asking anyone, and null here reads as "this is not a name a member can be written
+        // as" — which is the truth about Raw and about nothing else.
+        if (m instanceof Type.Prim p) {
+            return switch (p) {
+                case INT, STRING, BOOL, DECIMAL, DATE, TIME, DATETIME, INSTANT ->
+                        TypeName.primitive(p.shown());
+                case RAW -> null;
+            };
+        }
         return null;
     }
 
@@ -1168,14 +1173,19 @@ public final class TypeOps {
 
     private static MapKeyRepresentation classifyMapKey(Type key, Symbols symbols,
                                                        Set<TypeName> unwrapping) {
-        if (key == Type.STRING) {
-            return new MapKeyRepresentation.Text();
-        }
-        if (key == Type.DATE) {
-            return new MapKeyRepresentation.Date();
-        }
-        if (key == Type.DATETIME) {
-            return new MapKeyRepresentation.DateTime();
+        // Exhaustive over the primitives: whether a key has a text form is a question about each one,
+        // and a chain of comparisons answers "no" for a primitive added later without being asked.
+        if (key instanceof Type.Prim p) {
+            return switch (p) {
+                case STRING -> new MapKeyRepresentation.Text();
+                case DATE -> new MapKeyRepresentation.Date();
+                case TIME -> new MapKeyRepresentation.Time();
+                case DATETIME -> new MapKeyRepresentation.DateTime();
+                case INSTANT -> new MapKeyRepresentation.Instant();
+                // a key is addressed by the text it is written as, and a number, a flag and Raw have
+                // none a boundary could name one by
+                case INT, BOOL, DECIMAL, RAW -> null;
+            };
         }
         if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {
             return null;   // a newtype reaching itself; DataChecker reports it, this must terminate
@@ -1266,7 +1276,7 @@ public final class TypeOps {
     static boolean isOrdered(Type t) {
         return switch (t) {
             case Type.Prim p -> switch (p) {
-                case INT, STRING, DECIMAL, DATE, DATETIME -> true;
+                case INT, STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> true;
                 case BOOL, RAW -> false;
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
@@ -1478,7 +1488,9 @@ public final class TypeOps {
             case BOOL -> Type.BOOL;
             case DECIMAL -> Type.DECIMAL;
             case DATE -> Type.DATE;
+            case TIME -> Type.TIME;
             case DATETIME -> Type.DATETIME;
+            case INSTANT -> Type.INSTANT;
         };
     }
 
@@ -1489,7 +1501,9 @@ public final class TypeOps {
             case BOOL -> Type.BOOL;
             case DECIMAL -> Type.DECIMAL;
             case DATE -> Type.DATE;
+            case TIME -> Type.TIME;
             case DATETIME -> Type.DATETIME;
+            case INSTANT -> Type.INSTANT;
         };
     }
 
@@ -1513,7 +1527,9 @@ public final class TypeOps {
             case "Bool" -> Type.BOOL;
             case "Decimal" -> Type.DECIMAL;
             case "Date" -> Type.DATE;
+            case "Time" -> Type.TIME;
             case "DateTime" -> Type.DATETIME;
+            case "Instant" -> Type.INSTANT;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec §algebraic-types,
             // §violation-destination).
             case "List" -> Type.list(typeArg(ref, symbols, "list", 4, "List needs a type argument, e.g. List<Int>"));

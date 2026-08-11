@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 
 /**
@@ -20,7 +20,7 @@ import souther.compiler.observe.ObservedValue;
  * generated row and the rule that drew the line cannot disagree about which value the line is at.
  */
 public record BoundaryObligation(AxisId axis, OriginRef origin, BoundarySide side,
-                                 Carrier carrier, Count at) {
+                                 Carrier carrier, Place at) {
 
     public enum BoundarySide {
         /** The largest value on the low side of the cut. */

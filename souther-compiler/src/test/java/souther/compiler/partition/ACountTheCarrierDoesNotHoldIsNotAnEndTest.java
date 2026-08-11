@@ -114,12 +114,17 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
      *
      * <p>Null rather than the moment it would be written as. Answered with the nearest one, a class
      * open between two adjacent moments was offered a value at one of its own ends.
+     *
+     * <p>The grid is the second, which is what a `DateTime` is held to
+     * (spec §a-local-temporal-is-held-to-the-second). Any fraction of one is off it, so what the
+     * nanosecond counts here used to demonstrate one unit down is demonstrated by a half-second.
      */
     @Test
     void aCountBetweenTwoMomentsIsNotOneOfThem() {
-        assertNull(Carrier.MOMENT.onTheGrid(Count.of(new BigDecimal("0.0000000005"))));
-        assertEquals(Count.of(new BigDecimal("0.000000001")),
-                Carrier.MOMENT.onTheGrid(Count.of(new BigDecimal("0.000000001"))));
+        assertNull(Carrier.MOMENT.onTheGrid(Count.of(new BigDecimal("0.5"))));
+        assertNull(Carrier.MOMENT.onTheGrid(Count.of(new BigDecimal("0.000000001"))));
+        assertEquals(Count.of(new BigDecimal("1")),
+                Carrier.MOMENT.onTheGrid(Count.of(new BigDecimal("1"))));
     }
 
     /**

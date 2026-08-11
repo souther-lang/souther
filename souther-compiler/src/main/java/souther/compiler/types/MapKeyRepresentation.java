@@ -29,9 +29,10 @@ public sealed interface MapKeyRepresentation {
     Type type();
 
     /**
-     * A primitive key, written as the leaf's own text. Closed at three: a JSON object's key is a
-     * string, and {@code Int}, {@code Bool} and {@code Decimal} are written as themselves elsewhere,
-     * so admitting one here would make a type's external form depend on where it stands.
+     * A primitive key, written as the leaf's own text. Closed at the text and the four temporals: a
+     * JSON object's key is a string, and {@code Int}, {@code Bool} and {@code Decimal} are written
+     * as themselves elsewhere, so admitting one here would make a type's external form depend on
+     * where it stands.
      */
     sealed interface Lexical extends MapKeyRepresentation {
 
@@ -60,6 +61,14 @@ public sealed interface MapKeyRepresentation {
         }
     }
 
+    /** A {@code Time}, as its ISO form. */
+    record Time() implements Lexical {
+        @Override
+        public LeafScalar leaf() {
+            return LeafScalar.TIME;
+        }
+    }
+
     /** A {@code DateTime}, as its ISO form. */
     record DateTime() implements Lexical {
         @Override
@@ -68,13 +77,21 @@ public sealed interface MapKeyRepresentation {
         }
     }
 
+    /** An {@code Instant}, as its ISO form. */
+    record Instant() implements Lexical {
+        @Override
+        public LeafScalar leaf() {
+            return LeafScalar.INSTANT;
+        }
+    }
+
     /**
      * A type a model declared: a newtype over anything that is itself a key, or an enumeration — a
      * sum every case of which is a unit data, which crosses as that case's name (issue #161).
      *
      * <p>Both go through the named type's own codec, so what it wraps does not reach here. A
-     * {@code data ProductId = String} writes its bare value, a {@code data 貸出日 = Date} writes the
-     * ISO form its base writes, and an enumeration writes its case's name — each because that is
+     * {@code data ProductId = String} writes its bare value, a {@code data LoanDate = Date} writes
+     * the ISO form its base writes, and an enumeration writes its case's name — each because that is
      * what its derived {@code encoder()} does, and each read back by the {@code decoder()} that
      * inverts it.
      */

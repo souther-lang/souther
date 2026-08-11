@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.types.ValueName;
@@ -61,7 +62,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!isValue(left)) {
             return Optional.empty();
         }
-        Count bound = carrier.literalOf(right);
+        Place bound = carrier.literalOf(right);
         if (bound == null) {
             return Optional.empty();
         }
@@ -92,7 +93,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!takesSizeOfValue(left, measure)) {
             return Optional.empty();
         }
-        Count bound = Count.of(wholeLiteral(right));
+        Place bound = Count.of(wholeLiteral(right));
         if (bound == null) {
             return Optional.empty();
         }
@@ -136,14 +137,14 @@ public record InvariantBound(boolean lower, Endpoint end) {
     }
 
     /** One end, from the comparison and how the carrier's counts are spaced. */
-    private static Optional<InvariantBound> ordered(Ast.BinOp op, Count bound, Carrier carrier) {
+    private static Optional<InvariantBound> ordered(Ast.BinOp op, Place bound, Carrier carrier) {
         boolean steps = carrier.spacing() == Granularity.DISCRETE;
         return switch (op) {
             case GE -> Optional.of(new InvariantBound(true, Endpoint.inclusive(bound)));
             case LE -> Optional.of(new InvariantBound(false, Endpoint.inclusive(bound)));
-            case GT -> steps ? stepped(true, carrier.onTheGrid(bound.plus(1)))
+            case GT -> steps ? stepped(true, carrier.onTheGrid(Count.number(bound).plus(1)))
                     : Optional.of(new InvariantBound(true, Endpoint.exclusive(bound)));
-            case LT -> steps ? stepped(false, carrier.onTheGrid(bound.minus(1)))
+            case LT -> steps ? stepped(false, carrier.onTheGrid(Count.number(bound).minus(1)))
                     : Optional.of(new InvariantBound(false, Endpoint.exclusive(bound)));
             default -> Optional.empty();
         };
@@ -173,7 +174,7 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * unsatisfiable, and this does not say which — the two look alike from here, and an end nothing
      * can be written at is the one thing that must not be claimed.
      */
-    private static Optional<InvariantBound> stepped(boolean lower, Count onto) {
+    private static Optional<InvariantBound> stepped(boolean lower, Place onto) {
         return onto == null ? Optional.empty()
                 : Optional.of(new InvariantBound(lower, Endpoint.inclusive(onto)));
     }

@@ -122,9 +122,9 @@ public final class Symbols {
      */
     public TypeName resolveCase(String written) {
         return switch (written) {
-            case "Int", "String", "Bool", "Decimal", "Date", "DateTime", "Raw" ->
+            case "Int", "String", "Bool", "Decimal", "Date", "Time", "DateTime", "Instant", "Raw" ->
                     TypeName.primitive(written);
-            case "DivisionByZero", "NotANumber" -> TypeName.runtime(written);
+            case "DivisionByZero", "NotANumber", "NotADate", "NotATime" -> TypeName.runtime(written);
             default -> resolve(written);
         };
     }

@@ -82,8 +82,8 @@ class DecoderPathAgreementTest {
     }
 
     /**
-     * A boundary map is keyed by a {@code String}, {@code Date}, {@code DateTime}, an enumeration
-     * or a newtype over one of those, and all three readers read every one. The rows are written
+     * A boundary map is keyed by a {@code String}, a temporal, an enumeration or a newtype over one
+     * of those, and all three readers read every one. The rows are written
      * out one kind at a time because the key is where a reader composing its own decoder is most
      * likely to admit fewer kinds than the boundary does.
      */
@@ -95,6 +95,17 @@ class DecoderPathAgreementTest {
     @Test
     void aDateKeyedMapIsReadByAllThree() throws Exception {
         acceptedEverywhere("Map<Date, Int>", Map.of("2026-01-01", 7L), "{\"2026-01-01\": 7}", 7L);
+    }
+
+    @Test
+    void aTimeKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Time, Int>", Map.of("09:30:00", 7L), "{\"09:30:00\": 7}", 7L);
+    }
+
+    @Test
+    void anInstantKeyedMapIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Map<Instant, Int>", Map.of("2026-01-01T09:00:00Z", 7L),
+                "{\"2026-01-01T09:00:00Z\": 7}", 7L);
     }
 
     @Test
@@ -191,6 +202,8 @@ class DecoderPathAgreementTest {
             case "List<Date>" -> "[ Date(\"2026-01-01\") ]";
             case "Map<Key, Int>" -> "[ (Key(\"a\"), 7) ]";
             case "Map<Date, Int>" -> "[ (Date(\"2026-01-01\"), 7) ]";
+            case "Map<Time, Int>" -> "[ (Time(\"09:30:00\"), 7) ]";
+            case "Map<Instant, Int>" -> "[ (Instant(\"2026-01-01T09:00:00Z\"), 7) ]";
             case "Map<DateTime, Int>" -> "[ (DateTime(\"2026-01-01T09:00\"), 7) ]";
             case "Map<Outcome, Int>" -> "[ (Won, 7) ]";
             case "Map<Day, Int>" -> "[ (Day(Date(\"2026-01-01\")), 7) ]";
@@ -282,6 +295,8 @@ class DecoderPathAgreementTest {
             case "Map<String, Int>" -> "\"a\"";
             case "Map<Key, Int>" -> "Key(\"a\")";
             case "Map<Date, Int>" -> "Date(\"2026-01-01\")";
+            case "Map<Time, Int>" -> "Time(\"09:30:00\")";
+            case "Map<Instant, Int>" -> "Instant(\"2026-01-01T09:00:00Z\")";
             case "Map<DateTime, Int>" -> "DateTime(\"2026-01-01T09:00\")";
             case "Map<Bounded, Int>" -> "Bounded(\"abc\")";
             case "Map<Day, Int>" -> "Day(Date(\"2026-01-01\"))";

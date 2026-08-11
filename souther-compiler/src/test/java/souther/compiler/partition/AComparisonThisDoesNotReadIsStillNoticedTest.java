@@ -105,17 +105,19 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     }
 
     /**
-     * And a comparison on a carrier there is no count to embed into, which a string is.
+     * A string is read, which it was not.
      *
-     * <p>A string is ordered — the comparison typechecks and the branch is real — and nothing here
-     * draws a line on one. So it is left unread, and said as that rather than as a position the
-     * model divides no way.
+     * <p>It is ordered — the comparison typechecks and the branch is real — and the only thing about
+     * it out of reach is the value below the line, which is what a carrier with no step already
+     * says. Left unread, the position came back saying no line could be drawn on values the language
+     * orders.
      */
     @Test
-    void aLineDrawnOnAStringIsNamedToo() {
-        assertEquals(List.of(new UnreadRule(TermPath.of("at"),
-                        UndividedPosition.Reason.UNSUPPORTED_DOMAIN)),
-                read("at: String", "at < \"2026-01\"").unread());
+    void aLineDrawnOnAStringIsRead() {
+        GuardThresholds.Guards guards = read("at: String", "at < \"2026-01\"");
+
+        assertEquals(List.of(), guards.unread());
+        assertEquals(1, guards.thresholds().size(), guards.thresholds().toString());
     }
 
     /**
@@ -136,8 +138,8 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
     /** One position said once, however many comparisons in the body name it. */
     @Test
     void aPositionIsNamedOnceRatherThanPerComparison() {
-        assertEquals(1, read("at: String",
-                "at < \"2026-01\" || at > \"2020-01\"").unread().size());
+        assertEquals(1, read("at: Int",
+                "at < 1 + 1 || at > 2 + 2").unread().size());
     }
 
     /**

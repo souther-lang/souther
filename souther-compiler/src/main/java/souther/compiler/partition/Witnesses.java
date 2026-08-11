@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Carrier;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.types.Type;
@@ -401,7 +401,7 @@ final class Witnesses {
             return wrapped(type, FixtureTemplate.string(
                     "x".repeat(Math.max(1, Partitions.leastHeld(type, symbols)) + index)), symbols);
         }
-        Count at = Partitions.numberInside(type, symbols, index);
+        Place at = Partitions.numberInside(type, symbols, index);
         if (at == null) {
             return null;
         }

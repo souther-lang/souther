@@ -34,7 +34,9 @@ public final class Reserved {
             new StdlibModule("souther.list", "List"),
             new StdlibModule("souther.set", "Set"),
             new StdlibModule("souther.date", "Date"),
+            new StdlibModule("souther.time", "Time"),
             new StdlibModule("souther.datetime", "DateTime"),
+            new StdlibModule("souther.instant", "Instant"),
             new StdlibModule("souther.int", "Int"),
             new StdlibModule("souther.decimal", "Decimal"),
             new StdlibModule("souther.option", "Option"));

@@ -311,6 +311,24 @@ class CompileMapKeyBoundaryTest {
                         Map.of("2026-01-01T09:00", 7L)));
     }
 
+    /** A wrapped temporal writes what the temporal itself writes — which for a {@code Time} is not
+     *  the text that arrived, since the ISO form drops a zero second. That the two agree is the
+     *  claim; what either writes is the temporal's own rule. */
+    @Test
+    void aNewtypeOverATimeWritesWhatATimeWrites() throws Exception {
+        Object bare = echoed(echoing("Time", ""), Map.of("09:30:00", 1L));
+        assertEquals(Map.of("09:30", 1L), bare, "a Time writes its ISO form, zero second dropped");
+        assertEquals(bare, echoed(echoing("OpensAt", "data OpensAt = Time"), Map.of("09:30:00", 1L)));
+    }
+
+    @Test
+    void aNewtypeOverAnInstantWritesWhatAnInstantWrites() throws Exception {
+        Object in = Map.of("2026-01-01T09:00:00Z", 1L);
+        Object bare = echoed(echoing("Instant", ""), in);
+        assertEquals(in, bare, "an Instant writes the ISO form it arrived as");
+        assertEquals(bare, echoed(echoing("SeenAt", "data SeenAt = Instant"), in));
+    }
+
     @Test
     void aNewtypeOverAnEnumerationKeysAMapAtTheBoundary() throws Exception {
         assertEquals(Map.of("Won", 2L),
