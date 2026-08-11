@@ -508,6 +508,9 @@ public final class Adequacy {
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 boolean armsAsked, FixtureReader.Construction building, Exclusions excluded) {
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            souther.compiler.partition.BehaviorInputs inputs =
+                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                            symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
             Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
@@ -520,12 +523,11 @@ public final class Adequacy {
                 if (!axis.measurable()) {
                     continue;
                 }
-                out.addAll(Coverages.assess(axis, parameters, observed, symbols, armsAsked,
+                out.addAll(Coverages.assess(axis, inputs, observed, armsAsked,
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
                         partitioning.domains().get(axis.term())));
             }
-            out.addAll(Coverages.assessBetween(partitioning, parameters, observed, armsAsked,
-                    probe));
+            out.addAll(Coverages.assessBetween(partitioning, inputs, observed, armsAsked, probe));
             return List.copyOf(out);
         }
 
@@ -1329,7 +1331,9 @@ public final class Adequacy {
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
 
             List<Map<AxisId, Classification>> existing = rows.stream()
-                    .map(row -> RowClasses.of(row, parameters, partitioning.axes())).toList();
+                    .map(row -> RowClasses.of(row, new souther.compiler.partition.BehaviorInputs(
+                            parameters, sig.inputTypes(), symbols),
+                            partitioning.axes())).toList();
             return Generator.fill(subject, existing, check);
         }
     }

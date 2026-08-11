@@ -3,8 +3,10 @@ package souther.compiler.partition;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
@@ -982,16 +984,18 @@ public final class Generator {
             return;
         }
         type = shaped(type, at, recipes);
-        if (depth < MAX_DEPTH && type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
-            Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
-            if (!fields.isEmpty()) {
-                for (Map.Entry<String, Type> field : fields.entrySet()) {
-                    positionsUnder(field.getValue(), at.then(field.getKey()), symbols,
-                            depth + 1, out, decided, recipes);
-                }
-                return;
+        // Read the way the walk that derived the axes reads it, so that the two agree about where
+        // the positions are. A record under a name is a record: `data SlotN = Slot` has the fields
+        // of `Slot`, and a generator that stopped at the name had no positions where the derivation
+        // had two.
+        Shape shape = TypeView.of(type, symbols).shape();
+        if (depth < MAX_DEPTH && shape instanceof Shape.Product product
+                && !product.fields().isEmpty()) {
+            for (Map.Entry<String, Type> field : product.fields().entrySet()) {
+                positionsUnder(field.getValue(), at.then(field.getKey()), symbols,
+                        depth + 1, out, decided, recipes);
             }
+            return;
         }
         out.add(new Position(at.toString(), type));
     }
@@ -1092,19 +1096,17 @@ public final class Generator {
             return null;   // an axis decides here
         }
         type = shaped(type, at, recipes);
-        if (depth < MAX_DEPTH && type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
-            Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
-            if (!fields.isEmpty()) {
-                for (Map.Entry<String, Type> field : fields.entrySet()) {
-                    String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
-                            depth + 1, paths, values, reserves, left, root, recipes);
-                    if (missing != null) {
-                        return missing;
-                    }
+        Shape shape = TypeView.of(type, symbols).shape();
+        if (depth < MAX_DEPTH && shape instanceof Shape.Product product
+                && !product.fields().isEmpty()) {
+            for (Map.Entry<String, Type> field : product.fields().entrySet()) {
+                String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
+                        depth + 1, paths, values, reserves, left, root, recipes);
+                if (missing != null) {
+                    return missing;
                 }
-                return null;
             }
+            return null;
         }
         souther.compiler.numeric.NumericDomain.Bounds here =
                 at.fields().isEmpty() ? null : left.at(String.join(".", at.fields()));
@@ -1232,23 +1234,25 @@ public final class Generator {
             return here;
         }
         RepresentativeSource.Evaluation.Compose recipe = recipes.get(at.toString());
-        type = shaped(type, at, recipes);
-        if (depth < MAX_DEPTH && type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
-            Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
-            if (!fields.isEmpty()) {
-                Map<String, FixtureTemplate> built = new LinkedHashMap<>();
-                for (Map.Entry<String, Type> field : fields.entrySet()) {
-                    FixtureTemplate value = compose(field.getValue(), at.then(field.getKey()), chosen,
-                            symbols, depth + 1, recipes);
-                    if (value == null) {
-                        return null;
-                    }
-                    built.put(field.getKey(), value);
+        TypeView view = TypeView.of(shaped(type, at, recipes), symbols);
+        if (depth < MAX_DEPTH && view.shape() instanceof Shape.Product product
+                && !product.fields().isEmpty()) {
+            Map<String, FixtureTemplate> built = new LinkedHashMap<>();
+            for (Map.Entry<String, Type> field : product.fields().entrySet()) {
+                FixtureTemplate value = compose(field.getValue(), at.then(field.getKey()), chosen,
+                        symbols, depth + 1, recipes);
+                if (value == null) {
+                    return null;
                 }
-                FixtureTemplate record = FixtureTemplate.record(ref.name(), built);
-                return recipe == null ? record : recipe.written(record);
+                built.put(field.getKey(), value);
             }
+            // Under the names the position is written with, which the reading that found the fields
+            // took off to find them. A row at a `data SlotN = Slot` carries `SlotN(Slot { ... })`,
+            // and a value composed without them is of a type the parameter does not declare.
+            FixtureTemplate record = RepresentativeSource.under(
+                    view.wrappers().stream().map(TypeOps.Layer::named).toList(),
+                    FixtureTemplate.record(product.name(), built));
+            return recipe == null ? record : recipe.written(record);
         }
         return null;
     }

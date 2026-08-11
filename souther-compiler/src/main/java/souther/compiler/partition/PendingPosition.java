@@ -51,8 +51,15 @@ sealed interface PendingPosition {
         if (axis.measurable()) {
             return null;
         }
-        return axis.pending() instanceof StructuralInspection.Blocked blocked
-                ? new Blocked(axis.path(), blocked.why()) : new Leaf(axis.path());
+        return switch (axis.pending()) {
+            case StructuralInspection.Leaf _ -> new Leaf(axis.path());
+            case StructuralInspection.Blocked blocked -> new Blocked(axis.path(), blocked.why());
+            // A position with no evidence that was never read. Nothing about a model follows from
+            // it — an answer here would be this compiler's state written down as what the model
+            // divides, which is the sentence the whole protocol is against.
+            case null -> throw new IllegalStateException(
+                    "nothing was read at " + axis.path() + " and it has no evidence");
+        };
     }
 
     /**

@@ -50,7 +50,7 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
                 List.of());
     }
 
-    private static Axis pending(StructuralInspection found) {
+    private static Axis pending(StructuralInspection.Pending found) {
         return Axis.pendingAt(ID, new NumericTerm.ValueOf(AT), Type.BOOL, found);
     }
 
@@ -61,6 +61,14 @@ class AnAbsenceIsWhatCompletingAPositionProducesTest {
     @Test
     void aPositionWithEvidenceIsNotPending() {
         assertNull(PendingPosition.of(measured()));
+    }
+
+    /** And a position with no evidence that nothing read is not answered for at all: what would be
+     *  said of it is this compiler's state, written down as what the model divides. */
+    @Test
+    void aPositionNothingReadIsNotAnsweredFor() {
+        assertThrows(IllegalStateException.class, () -> PendingPosition.of(
+                new Axis(ID, new NumericTerm.ValueOf(AT), Type.BOOL, List.of(), List.of())));
     }
 
     @Test

@@ -37,6 +37,17 @@ import java.util.Map;
 public sealed interface StructuralInspection {
 
     /**
+     * The answers that leave the position standing.
+     *
+     * <p>Named because what happens next depends on it and nothing else: a position still to be
+     * answered for goes on to the rules a body writes, and a position made of positions is given up
+     * in favour of what is under it. Read as "not {@link Children}", the two arms of that were a
+     * condition anybody could get the wrong way round — and getting it wrong the quiet way turns a
+     * position nothing has read into one nothing divides.
+     */
+    sealed interface Pending extends StructuralInspection permits Leaf, Blocked {}
+
+    /**
      * The position is not made of positions.
      *
      * <p>Says that and only that. Whether it divides is still open — the rules a body writes have
@@ -44,7 +55,7 @@ public sealed interface StructuralInspection {
      * nothing answers is an absence. Reading it as one here puts back the defect the protocol
      * removes.
      */
-    record Leaf() implements StructuralInspection {}
+    record Leaf() implements Pending {}
 
     /** The position is made of these, each of which is read the same way — in the order the
      *  declaration writes them, which is the order they are walked and reported in. */
@@ -64,7 +75,7 @@ public sealed interface StructuralInspection {
      * reported. What it does not do is let a rule about what is <em>inside</em> stand in for
      * reaching inside.
      */
-    record Blocked(BlockReason why) implements StructuralInspection {}
+    record Blocked(BlockReason why) implements Pending {}
 
     /**
      * What is under {@code shape}, or why nothing can be.

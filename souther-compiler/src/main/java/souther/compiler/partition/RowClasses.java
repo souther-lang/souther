@@ -24,27 +24,19 @@ public final class RowClasses {
 
     /** Where each axis's value fell, for the axes that have classes. An axis the model only bounds
      * has nothing to fall into and is left out. */
-    public static Map<AxisId, Classification> of(RowOutcome row, List<String> parameters,
+    public static Map<AxisId, Classification> of(RowOutcome row, BehaviorInputs where,
                                                  List<Axis> axes) {
         Map<AxisId, Classification> out = new LinkedHashMap<>();
         for (Axis axis : axes) {
             if (!axis.derivable()) {
                 continue;
             }
-            out.put(axis.id(), classify(row, parameters, axis));
+            out.put(axis.id(), classify(row, where, axis));
         }
         return Map.copyOf(out);
     }
 
-    /** The value this row put at {@code path}, or null where it did not put a readable one there.
-     * What a boundary asks of a row: not which class it fell in, but whether it was the value. */
-    public static ObservedValue valueAt(RowOutcome row, List<String> parameters, TermPath path) {
-        int at = parameters.indexOf(path.head());
-        if (at < 0 || at >= row.inputs().size()) {
-            return null;
-        }
-        return walk(row.inputs().get(at), path.fields());
-    }
+
 
     /**
      * Which class the row's value at {@code axis} fell in, or why none of them could say.
@@ -56,13 +48,12 @@ public final class RowClasses {
      * a construction this saw nothing wrong with, and the reason came out as the one the last line
      * had to guess.
      */
-    private static Classification classify(RowOutcome row, List<String> parameters, Axis axis) {
-        int at = parameters.indexOf(axis.path().head());
-        if (at < 0 || at >= row.inputs().size()) {
+    private static Classification classify(RowOutcome row, BehaviorInputs where, Axis axis) {
+        ObservedValue value = where.valueAt(row, axis.path());
+        if (value == null && where.indexOf(axis.path()) < 0) {
             return Classification.unreadable(Incompleteness.Code.VALUE_UNREADABLE,
                     axis.id().behavior(), axis.id().term());
         }
-        ObservedValue value = walk(row.inputs().get(at), axis.path().fields());
         // Kept rather than returned on, and not acted on either. A class may read less of a value
         // than the one after it, so one saying it could not read says nothing about the rest —
         // including that the rest cannot hold it. An incompleteness is what is left once no class
@@ -101,38 +92,6 @@ public final class RowClasses {
         // measurement failure for a defect in the partition.
         throw new IllegalStateException("no class of " + axis.id() + " holds a value it read: "
                 + value);
-    }
-
-    /**
-     * The value at the end of a field chain, or null where the chain does not lead anywhere. A
-     * newtype is never a step — the path never names its {@code value} — so what is walked here is
-     * only a record's fields.
-     *
-     * <p>An observation that stopped is handed on rather than walked into. It is not a record and
-     * there is nothing under it, but it is also not a chain that leads nowhere: it is the reason
-     * this position has no value, and it says that itself. Read as somewhere the walk could not go,
-     * a limit that ran out one field short of a position came back as a value nobody could read —
-     * the same observation the walk returns as it stands when the path happens to end on it.
-     *
-     * <p>Which leaves null for the walk's own answer, and only that: a record that does not hold the
-     * field named next, or a value that was read and is not a record at all. The path and the shape
-     * disagree, and no observation says why because nothing went wrong with one.
-     */
-    private static ObservedValue walk(ObservedValue from, List<String> fields) {
-        ObservedValue at = from;
-        for (String field : fields) {
-            if (at.unread() != null) {
-                return at;
-            }
-            if (!(at instanceof ObservedValue.Constructed constructed)) {
-                return null;
-            }
-            at = constructed.field(field);
-            if (at == null) {
-                return null;
-            }
-        }
-        return at;
     }
 
     private RowClasses() {}

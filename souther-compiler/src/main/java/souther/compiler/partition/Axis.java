@@ -33,7 +33,7 @@ import java.util.Set;
  *                 with.
  */
 public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> classes,
-                   List<Cut> cuts, Set<String> excluded, StructuralInspection pending) {
+                   List<Cut> cuts, Set<String> excluded, StructuralInspection.Pending pending) {
 
     public Axis {
         classes = List.copyOf(classes);
@@ -59,7 +59,7 @@ public record Axis(AxisId id, NumericTerm term, Type type, List<PartitionClass> 
      * ran out, and what stopped the reading where it did not.
      */
     public static Axis pendingAt(AxisId id, NumericTerm term, Type type,
-                                 StructuralInspection found) {
+                                 StructuralInspection.Pending found) {
         return new Axis(id, term, type, List.of(), List.of(), Set.of(), found);
     }
 

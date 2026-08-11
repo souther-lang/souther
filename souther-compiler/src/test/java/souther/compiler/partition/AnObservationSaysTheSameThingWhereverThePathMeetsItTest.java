@@ -67,7 +67,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
 
     private static final String POSITION = "request.interval.startsAt";
 
-    private record Read(List<Axis> axes, List<String> parameters, RowOutcome row) {}
+    private record Read(List<Axis> axes, BehaviorInputs inputs, RowOutcome row) {}
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -90,7 +90,9 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(), parameters, observed.rows().get(0));
+        return new Read(partitioning.axes(),
+                new BehaviorInputs(parameters, sigs.get("book").inputTypes(), symbols),
+                observed.rows().get(0));
     }
 
     /** The row it read, with the request's {@code interval} replaced by whatever stands there. */
@@ -115,7 +117,7 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
     }
 
     private static Incompleteness.Code why(Read read, RowOutcome row) {
-        Map<AxisId, Classification> classes = RowClasses.of(row, read.parameters(), read.axes());
+        Map<AxisId, Classification> classes = RowClasses.of(row, read.inputs(), read.axes());
         Classification where = classes.entrySet().stream()
                 .filter(e -> e.getKey().term().equals(POSITION))
                 .map(Map.Entry::getValue).findFirst()
@@ -191,12 +193,11 @@ class AnObservationSaysTheSameThingWhereverThePathMeetsItTest {
         Read read = read();
 
         assertInstanceOf(ObservedValue.Truncated.class,
-                RowClasses.valueAt(givingInterval(read, intervalHolding(read,
-                        new ObservedValue.Truncated())), read.parameters(), position(read)),
+                read.inputs().valueAt(givingInterval(read, intervalHolding(read,
+                        new ObservedValue.Truncated())), position(read)),
                 "the limit was reached at the position");
         assertInstanceOf(ObservedValue.Truncated.class,
-                RowClasses.valueAt(givingInterval(read, new ObservedValue.Truncated()),
-                        read.parameters(), position(read)),
+                read.inputs().valueAt(givingInterval(read, new ObservedValue.Truncated()), position(read)),
                 "the limit was reached one field above the position");
     }
 }

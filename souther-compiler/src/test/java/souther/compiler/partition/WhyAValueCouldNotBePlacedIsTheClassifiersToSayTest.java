@@ -68,7 +68,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 | (Request { kind = Domestic, cost = Amount(50), plain = 1 }) -> Submitted
             """;
 
-    private record Read(List<Axis> axes, List<String> parameters, RowOutcome row) {}
+    private record Read(List<Axis> axes, BehaviorInputs inputs, RowOutcome row) {}
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
@@ -91,7 +91,9 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 .ask(Output.Examples.asked(compilation.db(), module,
                         compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
-        return new Read(partitioning.axes(), parameters, observed.rows().get(0));
+        return new Read(partitioning.axes(),
+                new BehaviorInputs(parameters, sigs.get("submit").inputTypes(), symbols),
+                observed.rows().get(0));
     }
 
     /** The row it read, with one of the request's fields replaced. */
@@ -116,7 +118,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     }
 
     private static Classification at(Read read, RowOutcome row, String path) {
-        Map<AxisId, Classification> classes = RowClasses.of(row, read.parameters(), read.axes());
+        Map<AxisId, Classification> classes = RowClasses.of(row, read.inputs(), read.axes());
         return classes.entrySet().stream().filter(e -> e.getKey().term().equals(path))
                 .map(Map.Entry::getValue).findFirst()
                 .orElseThrow(() -> new AssertionError("no axis at " + path));
@@ -189,7 +191,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
         RowOutcome row = giving(read, "plain", new ObservedValue.Text("x"));
 
         assertThrows(IllegalStateException.class,
-                () -> RowClasses.of(row, read.parameters(), read.axes()));
+                () -> RowClasses.of(row, read.inputs(), read.axes()));
     }
 
     /** And a value every class could read still lands where it did. */
@@ -236,7 +238,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> Membership.MATCH);
 
         assertEquals(new Classification.Classified("c2"),
-                RowClasses.of(read.row(), read.parameters(), axes).values().iterator().next());
+                RowClasses.of(read.row(), read.inputs(), axes).values().iterator().next());
     }
 
     /**
@@ -254,7 +256,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> Membership.NO_MATCH, _ -> Membership.NO_MATCH);
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> RowClasses.of(read.row(), read.parameters(), axes));
+                () -> RowClasses.of(read.row(), read.inputs(), axes));
         org.junit.jupiter.api.Assertions.assertTrue(
                 thrown.getMessage().contains("holds a value it read"), thrown.getMessage());
     }
@@ -274,7 +276,7 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
                 _ -> new Membership.Incomplete(Incompleteness.Code.VALUE_UNREADABLE));
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class,
-                () -> RowClasses.of(read.row(), read.parameters(), axes));
+                () -> RowClasses.of(read.row(), read.inputs(), axes));
         org.junit.jupiter.api.Assertions.assertTrue(
                 thrown.getMessage().contains("disagree about why"), thrown.getMessage());
     }

@@ -114,7 +114,7 @@ public final class Partitions {
             // each record is how `interval.startsAt < cap` stopped reaching `interval.startsAt`.
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
-                    0, symbols, found, new Placed(nameOf(type), fieldDomainsOf(type, symbols)),
+                    0, symbols, found, new Placed(heldIn(type, symbols), fieldDomainsOf(type, symbols)),
                     domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
@@ -609,16 +609,20 @@ public final class Partitions {
             // positions still to be answered for, and each carries what it is left with if nothing
             // answers.
             case LocalInspection.Exhausted _ -> {
-                StructuralInspection found = StructuralInspection.of(
-                        input.shape(), depth < MAX_DEPTH);
-                if (found instanceof StructuralInspection.Children children) {
-                    for (Map.Entry<String, Type> field : children.under().entrySet()) {
-                        walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1,
-                                symbols, out, placed, domains, uncertain, unread);
+                switch (StructuralInspection.of(input.shape(), depth < MAX_DEPTH)) {
+                    // The one answer that takes the position away: what is under it is what the
+                    // classes belong to, and this position is not carried further.
+                    case StructuralInspection.Children children -> {
+                        for (Map.Entry<String, Type> field : children.under().entrySet()) {
+                            walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1,
+                                    symbols, out, placed, domains, uncertain, unread);
+                        }
                     }
-                    return;
+                    // A leaf and a block are both positions still to be answered for, and each
+                    // carries what it is left with if nothing answers.
+                    case StructuralInspection.Pending pending ->
+                            out.add(Axis.pendingAt(id, term, type, pending));
                 }
-                out.add(Axis.pendingAt(id, term, type, found));
             }
         }
     }
@@ -635,14 +639,44 @@ public final class Partitions {
         }
     }
 
-    private static TypeName nameOf(Type type) {
-        return type instanceof Type.Ref ref ? ref.name() : null;
+    /** The record a position holds, through the names it is written under: a value of
+     *  {@code data SlotN = Slot} is a {@code Slot}, and the clauses relating its fields are
+     *  {@code Slot}'s. */
+    private static TypeName recordIn(Type type, Symbols symbols) {
+        return TypeView.of(type, symbols).shape() instanceof Shape.Product product
+                ? product.name() : null;
     }
 
-    /** What the record a field sits in leaves each of its fields able to hold. */
+    /**
+     * What the record a field sits in leaves each of its fields able to hold.
+     *
+     * <p>Of the record, and not of a name written over it. A clause relating two fields is written
+     * on the declaration that has them, so a position of {@code data PairN = Pair} is bounded by
+     * {@code Pair}'s clauses — read off the written name, the walk descended into the fields of a
+     * record whose rules about them it had just dropped.
+     */
     private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
-        return type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
-                ? FieldDomains.of(ref.name(), data, symbols) : FieldDomains.NONE;
+        TypeName held = heldIn(type, symbols);
+        return held != null && symbols.get(held) instanceof Ast.Data data
+                ? FieldDomains.of(held, data, symbols) : FieldDomains.NONE;
+    }
+
+    /**
+     * The declaration whose rules reach the position: the record under the names where there is
+     * one, and the declaration as written where there is not.
+     *
+     * <p>A position that is not a record has no fields for a clause to relate, and its own rules
+     * still say what a reading of them could not turn into a range — which is what keeps an edge it
+     * refuses from being called writable. So the answer falls back to the name the signature wrote
+     * rather than to nothing.
+     */
+    private static TypeName heldIn(Type type, Symbols symbols) {
+        TypeName record = recordIn(type, symbols);
+        return record != null ? record : nameOf(type);
+    }
+
+    private static TypeName nameOf(Type type) {
+        return type instanceof Type.Ref ref ? ref.name() : null;
     }
 
 

@@ -64,9 +64,16 @@ public interface Classifier {
         return value -> inner.membershipOf(inside(worn, value));
     }
 
-    /** The value under {@code worn}: a newtype is observed as its construction, whose one field is
-     *  {@code value} (spec §data). */
-    private static ObservedValue inside(List<TypeName> worn, ObservedValue value) {
+    /**
+     * The value under {@code worn}: a newtype is observed as its construction, whose one field is
+     * {@code value} (spec §data).
+     *
+     * <p>The one place an observation has names taken off it. What a row wrote is what arrives, and
+     * every reader that walks into one — a class asking which case it is, a walk on its way to a
+     * field under it — takes them off the same way and by name, so that a record whose own field is
+     * called {@code value} is never mistaken for a name worn over one.
+     */
+    static ObservedValue inside(List<TypeName> worn, ObservedValue value) {
         ObservedValue at = value;
         for (TypeName name : worn) {
             if (!(at instanceof ObservedValue.Constructed constructed)
