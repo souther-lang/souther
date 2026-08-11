@@ -71,8 +71,9 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
         Ast.SpecBehavior spec = (Ast.SpecBehavior) prepared.behaviors().stream()
                 .filter(b -> b.name().equals("submit")).findFirst().orElseThrow();
         Sig sig = sigs.get("submit");
-        return new Generator.Subject(spec.params().stream().map(Ast.Param::name).toList(),
-                sig.inputTypes(), Partitions.of(spec, sig, symbols, Exclusions.NONE).axes(), symbols);
+        return new Generator.Subject(new souther.compiler.partition.BehaviorInputs(
+                spec.params().stream().map(Ast.Param::name).toList(), sig.inputTypes(), symbols),
+                Partitions.of(spec, sig, symbols, Exclusions.NONE).axes());
     }
 
     private static String written(Generator.GenerationResult result) {

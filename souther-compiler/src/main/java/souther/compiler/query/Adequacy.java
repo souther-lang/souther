@@ -544,8 +544,9 @@ public final class Adequacy {
             if (building == null) {
                 return null;
             }
-            Generator.Subject subject = new Generator.Subject(parameters, sig.inputTypes(),
-                    partitioning.axes(), symbols);
+            Generator.Subject subject = new Generator.Subject(
+                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                            symbols), partitioning.axes());
             Generator.CandidateCheck check =
                     (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
             return new Coverages.Probe() {
@@ -1323,17 +1324,19 @@ public final class Adequacy {
             }
             List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            // One reading of what the behavior takes, for both halves of this: the rows already
+            // written are read by it, and the rows offered are generated from it.
+            souther.compiler.partition.BehaviorInputs inputs =
+                    new souther.compiler.partition.BehaviorInputs(parameters, sig.inputTypes(),
+                            symbols);
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
-            Generator.Subject subject = new Generator.Subject(parameters, sig.inputTypes(),
-                    partitioning.axes(), symbols);
+            Generator.Subject subject = new Generator.Subject(inputs, partitioning.axes());
             Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
                     : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
 
             List<Map<AxisId, Classification>> existing = rows.stream()
-                    .map(row -> RowClasses.of(row, new souther.compiler.partition.BehaviorInputs(
-                            parameters, sig.inputTypes(), symbols),
-                            partitioning.axes())).toList();
+                    .map(row -> RowClasses.of(row, inputs, partitioning.axes())).toList();
             return Generator.fill(subject, existing, check);
         }
     }

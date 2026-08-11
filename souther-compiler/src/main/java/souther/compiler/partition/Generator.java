@@ -59,13 +59,29 @@ public final class Generator {
 
     /** The behavior a row would be written for: what its inputs are called, what they are, and where
      * the model divides them. */
-    public record Subject(List<String> parameters, List<Type> types, List<Axis> axes,
-                          Symbols symbols) {
+    public record Subject(BehaviorInputs inputs, List<Axis> axes) {
 
         public Subject {
-            parameters = List.copyOf(parameters);
-            types = List.copyOf(types);
             axes = List.copyOf(axes);
+        }
+
+        /**
+         * The same three facts a row is read by, which is the point of holding one value.
+         *
+         * <p>Written out here as well, a row would be generated from one reading of what the
+         * behavior takes and read back by another — and how a position is written is exactly what
+         * the two came to disagree about.
+         */
+        public List<String> parameters() {
+            return inputs.parameters();
+        }
+
+        public List<Type> types() {
+            return inputs.types();
+        }
+
+        public Symbols symbols() {
+            return inputs.symbols();
         }
     }
 

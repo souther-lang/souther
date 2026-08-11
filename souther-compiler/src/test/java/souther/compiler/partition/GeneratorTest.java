@@ -105,7 +105,8 @@ class GeneratorTest {
         Sig sig = sigs.get(behavior);
         List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
         Partitions.Partitioning partitioning = Partitions.of(spec, sig, symbols, Exclusions.NONE);
-        return new Model(new Generator.Subject(parameters, sig.inputTypes(), partitioning.axes(), symbols),
+        return new Model(new Generator.Subject(
+                new BehaviorInputs(parameters, sig.inputTypes(), symbols), partitioning.axes()),
                 symbols);
     }
 
@@ -186,8 +187,9 @@ class GeneratorTest {
                 List.of());
         Axis b = new Axis(new AxisId("f", "b"), new NumericTerm.ValueOf(TermPath.of("b")), Type.INT, right,
                 List.of());
-        return new Generator.Subject(List.of("a", "b"), List.of(Type.INT, Type.INT), List.of(a, b),
-                symbols);
+        return new Generator.Subject(
+                new BehaviorInputs(List.of("a", "b"), List.of(Type.INT, Type.INT), symbols),
+                List.of(a, b));
     }
 
     private static PartitionClass number(String id, long... candidates) {
@@ -364,8 +366,8 @@ class GeneratorTest {
         Symbols symbols = modelOf(TRIP, "submit").symbols();
         Axis only = new Axis(new AxisId("f", "a"), new NumericTerm.ValueOf(TermPath.of("a")), Type.INT,
                 List.of(number("low", 1), number("high", 9)), List.of());
-        Generator.Subject subject = new Generator.Subject(List.of("a"), List.of(Type.INT),
-                List.of(only), symbols);
+        Generator.Subject subject = new Generator.Subject(
+                new BehaviorInputs(List.of("a"), List.of(Type.INT), symbols), List.of(only));
 
         Generator.GenerationResult filled =
                 Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
