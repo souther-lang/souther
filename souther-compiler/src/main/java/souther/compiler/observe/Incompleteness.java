@@ -96,6 +96,11 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
         return target.shown(names);
     }
 
+    /** The source this is about, where what it names is one. Empty otherwise. */
+    public Optional<String> sourceIdentity() {
+        return target.sourceIdentity();
+    }
+
     public static Incompleteness of(Code code, Scope scope, String subject) {
         return new Incompleteness(code, Target.of(scope, subject), Optional.empty());
     }

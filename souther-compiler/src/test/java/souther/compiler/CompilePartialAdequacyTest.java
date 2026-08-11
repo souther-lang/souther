@@ -492,7 +492,8 @@ class CompilePartialAdequacyTest {
     @Test
     void theJsonNamesNoUnreachedArmUnderPartial() throws Exception {
         JsonNode branch = JsonMapper.builder().build().readTree(
-                AdequacyReport.of(measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")))).json())
+                AdequacyReport.of(measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go"))))
+                        .json(souther.compiler.diag.SourceNameResolver.identity()))
                 .get("modules").get(0).get("behaviors").get(0).get("branch");
 
         assertEquals("partial", branch.get("status").asString());

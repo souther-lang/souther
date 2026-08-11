@@ -262,7 +262,8 @@ class EverySchemaWordIsAccountedForTest {
                 DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.answerEverything();
 
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation).json());
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                .json(souther.compiler.diag.SourceNameResolver.identity()));
         Set<String> allowed =
                 allowedAt(schema(), List.of("$defs", "incompleteness", "properties", "code"));
 
