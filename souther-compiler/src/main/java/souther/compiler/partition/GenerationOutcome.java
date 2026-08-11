@@ -45,18 +45,32 @@ public sealed interface GenerationOutcome {
          *
          * <p>Each of these is a strategy that could exist and does not. None of them says the gap
          * cannot be met, and none is read as evidence about the model.
+         *
+         * <p><b>Which the words have to carry too.</b> A sentence saying nothing composes an input
+         * for an arm is read as there being no input that reaches it, and an author who writes the
+         * row by hand has been told something false (issue #643). So each of these says what is
+         * missing here, and what a reader does about it is write the row that this cannot.
+         *
+         * <p>Including where what is missing is upstream of the strategies. No axis at a position
+         * is no classes <em>derived</em> there, and the position may well have cases — the one this
+         * is written for is a sum past the axis limit, whose cases are in the declaration and in no
+         * partition. Said as there being no classes, it is the model that reads as having none.
          */
         public enum Reason {
 
             /** Nothing composes an input for the sake of the path it would take through a body. */
-            NO_STRATEGY_FOR_AN_ARM("nothing here composes an input for the arm it would reach"),
+            NO_STRATEGY_FOR_AN_ARM(
+                    "rows here are composed for classes and for boundaries, and nothing composes"
+                            + " one for the sake of an arm"),
 
             /** Nothing searches for an input by the output it produces. */
             NO_STRATEGY_FOR_AN_OUTPUT_CASE(
-                    "nothing here searches for an input by the case it would answer with"),
+                    "rows here are composed from what the input positions divide into, and nothing"
+                            + " searches for one by the case it would answer with"),
 
             /** The position the case belongs to is not one any axis was derived at. */
-            NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to");
+            NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
+                    + " no classes were derived there to compose a row from");
 
             private final String said;
 
