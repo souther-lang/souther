@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Carrier;
-import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -132,8 +131,7 @@ public final class Partitions {
             Type type = sig.inputTypes().get(i);
             walk(behavior.name(), TermPath.of(behavior.params().get(i).name()), type,
                     0, symbols, found,
-                    new Placed(heldIn(type, symbols), fieldDomainsOf(type, symbols),
-                            placedByWrappers(type, symbols)),
+                    new Placed(readAs(type, symbols), fieldDomainsOf(type, symbols)),
                     domains, uncertain, unread);
         }
         found.replaceAll(axis -> axis.excluding(
@@ -649,7 +647,7 @@ public final class Partitions {
 
     /** The value a position is inside: what it is called, and what its rules leave each position of
      * it able to hold. */
-    record Placed(TypeName value, FieldDomains domains, List<FieldDomains.Placed> wrapped) {
+    record Placed(TypeName value, FieldDomains domains) {
 
         /** What is left for the position at {@code path}, which is read from the value this is of. */
         NumericDomain.Bounds at(TermPath path) {
@@ -657,23 +655,11 @@ public final class Partitions {
                     : domains.at(String.join(".", path.fields()));
         }
 
-        /**
-         * The ends the clauses reaching this value place on the coordinates at {@code path}, which is
-         * a different question from what {@link #at} leaves them.
-         *
-         * <p>The record's own and the names wrapped round it, together. A wrapper's clause reaches
-         * the record's positions and its ranges do not, so the two arrive by different routes and are
-         * one answer here: a reader taking only the first would go back to deciding a line by which
-         * of two declarations the author wrote it on.
-         */
+        /** The ends the clauses reaching this value place on the coordinates at {@code path}, which
+         * is a different question from what {@link #at} leaves them. */
         List<FieldDomains.Placed> placedAt(TermPath path) {
-            if (path.fields().isEmpty()) {
-                return List.of();
-            }
-            String at = String.join(".", path.fields());
-            List<FieldDomains.Placed> out = new ArrayList<>(domains.placedAt(at));
-            wrapped.stream().filter(each -> each.path().equals(at)).forEach(out::add);
-            return List.copyOf(out);
+            return path.fields().isEmpty() ? List.of()
+                    : domains.placedAt(String.join(".", path.fields()));
         }
     }
 
@@ -694,27 +680,39 @@ public final class Partitions {
      * record whose rules about them it had just dropped.
      */
     /**
-     * The ends placed by the names wrapped round the record a position sits in.
+     * What the rules reaching a value of {@code type} leave and place, read under the name the
+     * signature wrote.
      *
-     * <p>{@code data NonEmptyBag = Bag invariant List.length(value.xs) >= 1} states the rule
-     * {@code Bag} could have stated about its own field, so it places the edge {@code Bag} would have
-     * placed. Read here rather than through {@link #fieldDomainsOf}, which answers for the record
-     * under the names: the ranges a clause relating fields leaves are the record's, and the ends a
-     * wrapper places are the wrapper's, and asking one question for both would have to pick a name to
-     * file the answer under.
+     * <p>The written name and not the record under it. A name wrapped round a record is a place the
+     * same rule can be written — {@code data NonEmptyBag = Bag invariant List.length(value.xs) >= 1}
+     * states what {@code Bag} could have stated about its own field — and reading the record alone
+     * drops every clause of every name round it. What those clauses leave is read at the paths the
+     * record's own positions have, since a name wrapped round a value is not a step of the path.
+     *
+     * <p>One reading and not two. A wrapper's clauses place ends, project ranges onto the record's
+     * fields, and can be ones this could not read, and all three are answers about the same value:
+     * lifted as ends alone, a wrapper relating two of the record's fields narrowed nothing and a
+     * wrapper clause nothing could read left every edge under it looking certain.
      */
-    private static List<FieldDomains.Placed> placedByWrappers(Type type, Symbols symbols) {
-        List<FieldDomains.Placed> out = new ArrayList<>();
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            out.addAll(FieldDomains.placedBy(layer.named(), layer.data(), symbols));
-        }
-        return List.copyOf(out);
+    private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
+        TypeName read = readAs(type, symbols);
+        return read != null && symbols.get(read) instanceof Ast.Data data
+                ? FieldDomains.of(read, data, symbols) : FieldDomains.NONE;
     }
 
-    private static FieldDomains fieldDomainsOf(Type type, Symbols symbols) {
-        TypeName held = heldIn(type, symbols);
-        return held != null && symbols.get(held) instanceof Ast.Data data
-                ? FieldDomains.of(held, data, symbols) : FieldDomains.NONE;
+    /**
+     * The declaration a value of {@code type} is read under: the name the signature wrote where it
+     * names one, and the record beneath the names where it does not.
+     *
+     * <p>One name for both questions. Which declaration's rules reach the positions, and which
+     * declaration is said to have taken an edge in, are answers about the same value — read apart,
+     * an edge a wrapper narrowed was reported as narrowed by the record under it, which is a
+     * declaration that may have no clause about the pair at all.
+     */
+    private static TypeName readAs(Type type, Symbols symbols) {
+        TypeName written = nameOf(type);
+        return written != null && symbols.get(written) instanceof Ast.Data ? written
+                : heldIn(type, symbols);
     }
 
     /**

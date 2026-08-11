@@ -312,16 +312,17 @@ public final class InvariantChecker {
         for (Map.Entry<String, BindingId> field : bindings.entrySet()) {
             Type type = fields.get(field.getKey());
             if (type != null) {
+                // A newtype's value is the same location as the newtype, so it is at no path of its
+                // own and its fields are the first step there is. Named `value`, every position of a
+                // record inside a newtype was filed one step deeper than anything asks for.
                 c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                        field.getKey(), type, at, symbols, 1, atoms, typeAt, held, keys);
+                        data.newtype() ? "" : field.getKey(), type, at, symbols, 1,
+                        atoms, typeAt, held, keys);
             }
         }
         // Which of the clauses place an edge, asked once the positions have names to be recognised
         // by.
         List<Direct> directs = c.directsIn(written, at, atoms, keys, held, typeAt);
-        if (data.newtype()) {
-            directs = throughTheValue(directs);
-        }
         NumericDomain numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
@@ -345,6 +346,13 @@ public final class InvariantChecker {
      * is a position this can name. Two levels down as well as one: a clause on a record relates a
      * field of a field to something, and the bound that leaves on it is read at the path it sits at
      * rather than at the record it happens to be inside.
+     *
+     * <p>A name wrapped round a value is not a step of the path ({@link Location#isStep}), which is
+     * the rule the rest of this already reads by: the atom of {@code w.value.n} <em>is</em> the atom
+     * of {@code w.n}, so naming the position {@code w.value.n} files it under a path nothing asks
+     * about. Counted as a step, a wrapper was where the walk stopped, and every position under one
+     * went unnamed — so the clauses of a record inside a newtype reached the domain and nothing could
+     * ask for what they left.
      */
     private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, String> atoms, Map<String, Type> typeAt,
@@ -370,15 +378,36 @@ public final class InvariantChecker {
         if (counted != null) {
             held.put(path, counted);
         }
-        if (depth > FIELDS_SEEDED || !(type instanceof Type.Ref ref)
+        // Through the names, to the value that has the fields. Each is read at the path it is worn
+        // under, since wearing a name is not being somewhere else.
+        Core inner = value;
+        Type worn = type;
+        Set<TypeName> through = new HashSet<>();
+        while (TypeOps.isSingleValueNewtype(worn, symbols)
+                && through.add(((Type.Ref) worn).name())) {
+            Type under = TypeOps.fieldTypes(
+                    (Ast.Data) symbols.get(((Type.Ref) worn).name()), symbols).get("value");
+            if (under == null) {
+                break;
+            }
+            inner = new Core.FieldAccess(inner, "value", under, NOWHERE);
+            worn = under;
+        }
+        if (depth > FIELDS_SEEDED || !(worn instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data) || data.newtype()) {
             return;
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
-            name(new Core.FieldAccess(value, field.getKey(), field.getValue(), NOWHERE),
-                    path + "." + field.getKey(), field.getValue(), at, symbols, depth + 1,
+            name(new Core.FieldAccess(inner, field.getKey(), field.getValue(), NOWHERE),
+                    under(path, field.getKey()), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt, held, keys);
         }
+    }
+
+    /** A field of the value at {@code path}. The root of a newtype's own reading is the value it
+     * wraps, which is at no path of its own, so its fields are the first step there is. */
+    private static String under(String path, String field) {
+        return path.isEmpty() ? field : path + "." + field;
     }
 
     /**
@@ -399,45 +428,9 @@ public final class InvariantChecker {
      * is written on. */
     private record Written(TypeName from, Core clause) {}
 
-    /**
-     * The same ends, said from outside the newtype that holds them.
-     *
-     * <p>A newtype's {@code value} is the same location as the newtype, so a clause a wrapper writes
-     * about {@code value.xs} is about the {@code xs} a reader of the wrapper sees — which is the path
-     * the walk that takes an input apart names it by. Left as written, every end a wrapper places
-     * would be filed under a position nothing asks about.
-     *
-     * <p>An end on the value itself drops out. That is the newtype's own bound, read where its value
-     * is a position of its own, and keeping it here would owe one line twice.
-     */
-    private static List<Direct> throughTheValue(List<Direct> directs) {
-        List<Direct> out = new ArrayList<>();
-        for (Direct each : directs) {
-            if (each.path().startsWith("value.")) {
-                out.add(new Direct(each.path().substring("value.".length()), each.measured(),
-                        each.from(), each.bound()));
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    /** A coordinate a clause of this declaration could be about. */
+    /** A coordinate a clause reaching this value could be about. */
     private record Coordinate(String path, boolean measured, Carrier carrier) {}
 
-    /**
-     * The ends the clauses of {@code from} place on coordinates of the value they are about.
-     *
-     * <p>A clause qualifies by reaching one coordinate and a constant, and the coordinate is
-     * recognised by the naming the discharge check already made of it — so {@code n}, {@code n.value}
-     * where {@code n} is a newtype over a number, and {@code List.length(xs)} are each read as the
-     * one coordinate they name. Recognising them again by their spelling would be a second grammar
-     * beside that one, and the two would answer differently the first time an import wrote a size
-     * call without its qualifier.
-     *
-     * <p>A clause naming two coordinates is not one of these however plainly it reads, and neither is
-     * one naming a coordinate through arithmetic: what a line is drawn at has to be a value a row can
-     * be written at, and neither {@code a < b} nor {@code 2 * n >= 4} names one.
-     */
     private List<Direct> directsIn(List<Written> stated, Denotations at,
                                    Map<String, String> atoms, Map<String, String> keys,
                                    Map<String, String> held, Map<String, Type> typeAt) {

@@ -198,16 +198,30 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 "no row is at onTight/v.inner.n = 5 (invariant Tight (min))"), report);
     }
 
-    /** The rule written on a name wrapped round a record. Its own module, and with no rows: what is
-     *  asked is which lines the model draws, and a row would only say whether one was met. */
+    /**
+     * The rules written on names wrapped round a record, at a parameter and inside one.
+     *
+     * <p>Its own module, and with no rows: what is asked is which lines the model draws, and a row
+     * would only say whether one was met.
+     *
+     * <p>`Held` is the case a wrapper reached only at the top would miss. Nothing is written on
+     * `Held` or on `Base`; the rule is `Wrapped`'s, and the position is two steps down from the
+     * parameter.
+     */
     private static final String WRAPPERS = """
             module wrappers
 
             data Base        = { n: Int }
             data Wrapped     = Base invariant value.n >= 1
+            data Held        = { w: Wrapped }
 
             data Bag         = { xs: List<Int> }
             data NonEmptyBag = Bag invariant List.length(value.xs) >= 1
+            data HeldBag     = { b: NonEmptyBag }
+
+            data W1          = Base
+            data W2          = W1 invariant value.value.n >= 2
+            data Stacked     = { w: W2 }
 
             data Ok = { size: Int }
 
@@ -218,7 +232,45 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             behavior onNonEmpty : (v: NonEmptyBag) -> Ok
                 constructs Ok
             let onNonEmpty (v) = Ok { size = List.length(v.xs) }
+
+            behavior onHeld : (v: Held) -> Ok
+                constructs Ok
+            let onHeld (v) = Ok { size = v.w.n }
+
+            behavior onHeldBag : (v: HeldBag) -> Ok
+                constructs Ok
+            let onHeldBag (v) = Ok { size = List.length(v.b.xs) }
+
+            behavior onStacked : (v: Stacked) -> Ok
+                constructs Ok
+            let onStacked (v) = Ok { size = v.w.n }
             """;
+
+    /**
+     * A wrapper's rule reaches a position inside a record as well as at a parameter.
+     *
+     * <p>The place a wrapper read once, at the root of the walk, does not reach. `Held` holds a
+     * `Wrapped` and states nothing itself, so the line at its `w.n` is `Wrapped`'s and arrives from a
+     * name worn part way down. A wrapper met on the way is the general case and a wrapper at the top
+     * is one instance of it, so reading only the second leaves the rule true of parameters and false
+     * of fields.
+     */
+    @Test
+    void aWrappersRuleReachesAPositionInsideARecord() {
+        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+
+        assertEquals("invariant Wrapped (min)", lines.get("onHeld/v.w.n = 1").origin());
+        assertEquals("invariant NonEmptyBag (min)",
+                lines.get("onHeldBag/List.length(v.b.xs) = 1").origin());
+    }
+
+    /** And through as many names as are worn, since a name wrapped round a value is not a step. */
+    @Test
+    void aWrappersRuleReachesThroughAStackOfNames() {
+        Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
+
+        assertEquals("invariant W2 (min)", lines.get("onStacked/v.w.n = 2").origin());
+    }
 
     /**
      * A name wrapped round a record reaches the record's positions.
@@ -236,8 +288,6 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     void aNameWrappedRoundARecordReachesItsPositions() {
         Map<String, BoundaryAssessment> lines = linesOf(WRAPPERS, "wrappers");
 
-        assertEquals(Set.of("onWrapped/v.n = 1", "onNonEmpty/List.length(v.xs) = 1"),
-                lines.keySet());
         assertEquals("invariant Wrapped (min)", lines.get("onWrapped/v.n = 1").origin());
         assertEquals("invariant NonEmptyBag (min)",
                 lines.get("onNonEmpty/List.length(v.xs) = 1").origin());
@@ -493,6 +543,57 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * `String.length` edges out of the denominator across `souther-examples`, and the suite stays
      * green throughout. So the distinction is pinned where it is decided.
      */
+    /**
+     * A wrapper whose clause relates two of the record's fields, beside the record without it.
+     *
+     * <p>Both fields stop at 10 by their own types, and `a < b` leaves `a` stopping at 9 — the
+     * interval shape of #427, written one name up. The bare record beside it is the control: an edge
+     * that does not move proves nothing unless the same edge moves elsewhere.
+     */
+    private static final String WRAPPED_RELATION = """
+            module wrappedrelation
+
+            data A    = Int invariant value <= 10
+            data B    = Int invariant value <= 10
+            data Base = { a: A, b: B }
+
+            data Wrapped = Base invariant value.a.value < value.b.value
+
+            data Ok = { size: Int }
+
+            behavior onWrapped : (v: Wrapped) -> Ok
+                constructs Ok
+            let onWrapped (v) = Ok { size = v.a.value }
+
+            behavior onBare : (v: Base) -> Ok
+                constructs Ok
+            let onBare (v) = Ok { size = v.a.value }
+            """;
+
+    /**
+     * A wrapper's relational clause narrows the record's positions though it places no edge.
+     *
+     * <p>The half a wrapper read for its ends alone would drop. Such a clause leaves a range and not
+     * a line, so a reader taking only the lines from a wrapper keeps `a` stopping at 10 — a value no
+     * `Wrapped` holds, and a row asked for that nobody can write. Placing an edge and taking one in
+     * are separate acts, and a wrapper does both.
+     *
+     * <p>The line stays `A`'s and says who took it in, which is what a narrowed origin is for: the
+     * wrapper moved the edge and did not draw it.
+     */
+    @Test
+    void aWrappersRelationNarrowsThePositionsItPlacesNoEdgeOn() {
+        Map<String, BoundaryAssessment> lines = linesOf(WRAPPED_RELATION, "wrappedrelation");
+
+        assertTrue(lines.containsKey("onBare/v.a = 10"),
+                "`a` stops where its own type stops when nothing narrows it: " + lines.keySet());
+        assertTrue(lines.containsKey("onWrapped/v.a = 9"),
+                "and one step lower under the wrapper's clause: " + lines.keySet());
+        assertEquals("invariant A (max) within Wrapped",
+                lines.get("onWrapped/v.a = 9").origin(),
+                "the wrapper moved the edge `A` drew and did not draw one");
+    }
+
     /** A length floor over an element type nothing inhabits. Its own module, since a declaration that
      *  cannot be built leaves the module with nothing to build against. */
     private static final String UNINHABITED = """

@@ -68,13 +68,25 @@ about its own field, and that was the spelling that disappeared — the measure 
 constrained field in a newtype of its own, which is a modelling choice and not a rule about the
 domain.
 
-A clause reaches a position from wherever it governs it: the newtype chain of the position's own
-type, the record the position is a field of, the declarations under that record the position sits
-inside, and the names wrapped round that record. The last of those is a place the same rule can be
-written — `data NonEmptyBag = Bag invariant List.length(value.xs) >= 1` states what `Bag` could have
-stated about its own field — and leaving it out puts this whole question back one level up. A
-newtype's value is the same location as the newtype, so the clause names the `xs` a reader of a
-`NonEmptyBag` sees rather than a position under a `value`. A line is named by the declaration the clause is written on. `data Inner = { n: Int }
+A clause reaches a position from wherever it governs it: the position's own type and the names
+wrapped round it, the record the position is a field of, the declarations under that record, and the
+names wrapped round any of them. A name worn is a place the same rule can be written — `data
+NonEmptyBag = Bag invariant List.length(value.xs) >= 1` states what `Bag` could have stated about its
+own field — and leaving it out puts this whole question back one level up.
+
+Which is a fact about how a position is named rather than a list of places to look. A name wrapped
+round a value is not a step of the path: the atom of `w.value.n` *is* the atom of `w.n`, which is
+what the discharge check has always read by, so a reading that counted `value` as a step filed every
+position under a wrapper where nothing asks for it — and stopped at the wrapper rather than going
+through it. Counting it as no step reaches a wrapper at a parameter, a wrapper on a field, and a
+stack of them, because none of those is a separate case once the naming agrees.
+
+So a wrapper is read like any other governing declaration, and does all three things one does: it
+places ends, it projects ranges onto the positions under it, and it can hold a clause this could not
+read. `data Wrapped = Base invariant value.a < value.b` places no edge and still leaves `a` stopping
+one below where `b` stops. Lifted as ends alone, a wrapper's relation narrowed nothing and a guard
+beyond the narrowed range drew a line at a value no `Wrapped` holds; and an edge under a wrapper
+clause nothing could read came back certain. A line is named by the declaration the clause is written on. `data Inner = { n: Int }
 invariant n >= 1` names `Inner` at every position an `Inner` is held in, and `data Outer = { inner:
 Inner } invariant inner.n >= 5` names `Outer` where its clause is the tighter of the two. Where a
 record's own clause is the tighter, the line is the record's: `data Moved = { n: Count } invariant

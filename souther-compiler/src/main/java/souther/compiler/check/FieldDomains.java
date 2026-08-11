@@ -97,7 +97,11 @@ public final class FieldDomains {
         InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols, settled);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
-            if (data.newtype()) {
+            // The value itself is at no path, and its range is the one thing not worth handing back:
+            // it is the same position this is of, so there is no sibling to relate it to. What sits
+            // under it is another matter — a record inside a newtype has fields, and they are
+            // positions with ranges like any other.
+            if (field.isEmpty()) {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
@@ -110,7 +114,7 @@ public final class FieldDomains {
         // only ask the domain it came from — which is this one, while it is still here.
         Map<String, NumericDomain.Bounds> holds = new LinkedHashMap<>();
         seeded.held().forEach((field, atom) -> {
-            if (data.newtype()) {
+            if (field.isEmpty()) {
                 return;
             }
             NumericDomain.Bounds bounds = seeded.numbers().boundsOf(atom);
@@ -144,17 +148,6 @@ public final class FieldDomains {
      * @param lower    whether this bounds the coordinate below; otherwise above
      */
     public record Placed(String path, boolean measured, TypeName from, boolean lower, Endpoint end) {}
-
-    /**
-     * The ends one declaration's own clauses place, read for a caller that has no domains of it.
-     *
-     * <p>For the names wrapped round a record. A wrapper's clauses reach the record's positions and
-     * its ranges do not belong to them — {@link #at} of a newtype is empty by design, since its value
-     * is the same position it is — so what a wrapper contributes is these and nothing else.
-     */
-    public static List<Placed> placedBy(TypeName named, Ast.Data data, Symbols symbols) {
-        return of(named, data, symbols).placed();
-    }
 
     /** Every end the rules place, wherever it is. */
     public List<Placed> placed() {
