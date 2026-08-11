@@ -35,7 +35,13 @@ public record PartitionInput(TypeView view, Shape.PartitionInputShape shape) {
      * compiling rather than arriving somewhere further down as a position nothing divides.
      */
     public static PartitionInput of(Type type, Symbols symbols) {
-        TypeView view = TypeView.of(type, symbols);
+        return of(TypeView.of(type, symbols));
+    }
+
+    /** The same, of a position already read. The reading is the expensive half and the walk has one
+     *  of them per position, so what asks about the shape and what asks about the names it is
+     *  written under ask of the same reading. */
+    public static PartitionInput of(TypeView view) {
         return new PartitionInput(view, admitted(view));
     }
 

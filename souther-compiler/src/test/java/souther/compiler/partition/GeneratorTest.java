@@ -195,7 +195,8 @@ class GeneratorTest {
         for (long each : candidates) {
             values.add(FixtureTemplate.integer(each));
         }
-        return PartitionClass.of(id, id, _ -> Membership.NO_MATCH, () -> values);
+        return PartitionClass.of(id, id, _ -> Membership.NO_MATCH,
+                RepresentativeSource.of(values));
     }
 
     /**

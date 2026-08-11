@@ -83,6 +83,34 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
     }
 
     /**
+     * Issue #631. A sum under a name is that sum, so the position divides into its cases — where
+     * before it came back as one the model divides no way, which is the opposite of what the
+     * declaration says. Nothing about the reading of the model changed to make this true: the line
+     * a {@code guard} drew on the same position always read through the name, and it is the reading
+     * that asks what a position divides into that stopped there.
+     *
+     * <p>What the row is written as, and what a row already written is read back through, are
+     * {@link ANameGoesBackOnTheWayItCameOffTest}'s — an axis needs all three.
+     */
+    @Test
+    void aSumUnderANameDividesIntoTheCasesItWraps() {
+        PartitionEvidence evidence = measured("""
+                module demo
+                data Ok
+                data Rejected
+                data Approved = { id: Int }
+                data Decision = Approved | Rejected
+                data DecisionN = Decision
+                behavior run : (x: DecisionN) -> Ok constructs Ok
+                let run (x) = Ok
+                """, "run");
+
+        assertEquals(List.of("Approved", "Rejected"), evidence.axes().get(0).classes());
+        assertEquals(List.of(), evidence.notDerivable(),
+                "so there is nothing left to report about the position");
+    }
+
+    /**
      * And the other side of that. A collection's elements cannot be reached either, and a rule that
      * measures the collection itself still draws its line — so a block is what a position is left
      * with rather than a verdict on it, and this row is what stops that being forgotten.

@@ -2,9 +2,11 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.InvariantBound;
 import souther.compiler.check.NumericMeasures;
@@ -526,7 +528,10 @@ public final class Partitions {
                              List<Axis> out, Placed placed,
                              Map<NumericTerm, NumericDomain.Bounds> domains,
                              java.util.Set<NumericTerm> uncertain, List<UnreadRule> unread) {
-        List<PartitionClass> classes = classesOf(type, symbols);
+        // Once, and every phase asks of this reading: what classes the type states, and what is
+        // under the position where it states none, are two questions put to one reading of it.
+        TypeView read = TypeView.of(type, symbols);
+        List<PartitionClass> declared = classesOf(read, symbols);
         // Which number this position is measured at, and what its rules leave that number. Asked
         // together because they are one reading: whether a rule bounds the length of a string is how
         // it is known that the length is the number being measured.
@@ -554,6 +559,10 @@ public final class Partitions {
         if (admissible != null && !admissible.isEmpty()) {
             domains.put(term, admissible);
         }
+        // What the type declares, crossed with what the position can hold. Neither reading is the
+        // other's input: a case the rules refuse is still a case of the type, and it is here that
+        // it stops being a class of this position.
+        List<PartitionClass> classes = constructibleAt(declared, read, admissible, symbols);
         Bounds axis = nothingExists ? null : axisBounds(own, projected);
         List<Cut> cuts = nothingExists ? List.of()
                 : cutsOf(type, axis, own, placed == null ? null : placed.value());
@@ -571,7 +580,7 @@ public final class Partitions {
         // positions. The answer is not a verdict: a leaf and a block are both positions still to be
         // answered for, and each carries what it is left with if nothing answers.
         StructuralInspection found = StructuralInspection.of(
-                PartitionInput.of(type, symbols).shape(), depth < MAX_DEPTH);
+                PartitionInput.of(read).shape(), depth < MAX_DEPTH);
         if (found instanceof StructuralInspection.Children children) {
             for (Map.Entry<String, Type> field : children.under().entrySet()) {
                 walk(behavior, path.then(field.getKey()), field.getValue(), depth + 1, symbols, out,
@@ -761,64 +770,182 @@ public final class Partitions {
     // --- what a type divides its values into ------------------------------------------------------
 
     static List<PartitionClass> classesOf(Type type, Symbols symbols) {
-        if (type == Type.BOOL) {
-            return List.of(
-                    PartitionClass.of("true", "true", Classifier.byShape(v -> isBool(v, true)),
-                            RepresentativeSource.of(FixtureTemplate.bool(true))),
-                    PartitionClass.of("false", "false", Classifier.byShape(v -> isBool(v, false)),
-                            RepresentativeSource.of(FixtureTemplate.bool(false))));
-        }
-        if (type instanceof Type.OptionOf option) {
-            List<FixtureTemplate> some = representativesOf(option.element(), symbols);
-            return List.of(
-                    PartitionClass.of("None", "None",
-                            Classifier.byShape(v -> v instanceof ObservedValue.Absent),
-                            RepresentativeSource.of(FixtureTemplate.none())),
-                    some.isEmpty()
-                            ? PartitionClass.ungeneratable("Some", "Some",
-                                    Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
-                                    "nothing here composed a value of "
-                                            + Type.show(option.element()))
-                            : PartitionClass.of("Some", "Some",
-                                    Classifier.byShape(v -> !(v instanceof ObservedValue.Absent)),
-                                    () -> some));
-        }
-        if (TypeOps.isSumType(type, symbols)) {
-            List<PartitionClass> cases = new ArrayList<>();
-            for (TypeName leaf : TypeOps.leafCases(type, symbols)) {
-                cases.add(caseClass(leaf, symbols));
-            }
-            return cases;
-        }
-        // A numeric newtype's invariant does not divide the values a row can write. Everything outside
-        // it is refused at construction (E1903), so there is no class on the other side to cover — the
-        // bound leaves a boundary to reach, not a partition to fill. What does divide the values a row
-        // can write is a threshold a behavior compares against, which is read from the body.
-        return List.of();
+        return classesOf(TypeView.of(type, symbols), symbols);
     }
 
-    private static PartitionClass caseClass(TypeName leaf, Symbols symbols) {
-        Classifier is = Classifier.byShape(v -> switch (v) {
+    /**
+     * The class evidence this producer derives from a position's type, read through every name it
+     * is written under.
+     *
+     * <p>Through the names, because a newtype is the value it wraps (spec §primitives): a
+     * {@code data StageN = Stage} is the sum {@code Stage} and divides into its cases. Which is not
+     * what this asked before — it asked whether the type it was handed was a sum, stopped at the
+     * name, and reported a position the model divides three ways as one it divides no way (issue
+     * #631). The line drawn on that same position read straight through the name, so the two
+     * readings of one declaration disagreed.
+     *
+     * <p>And under them, because that is how a row writes the value. The names come off to say what
+     * the position is and go back on to say what stands at it — one fact, read from
+     * {@link TypeView} once, rather than each reader deciding again how far to look.
+     *
+     * <p><b>Empty is this producer having no class evidence, and never that the position has no
+     * classes.</b> The two read the same and are not the same claim: the second is a statement
+     * about the model, and it is not one this is in a position to make — the rules a body writes
+     * have not been read, and what is under the position has not been asked. A
+     * {@link Shape.Unresolved} answers empty here and is reported as a type this could not
+     * interpret, which the structural reading after this one supplies. Making the conclusion here
+     * is the defect the whole protocol is against, in one function.
+     *
+     * <p>Exhaustive over {@link Shape}, with no {@code default}, so that a shape added later stops
+     * this compiling rather than arriving as a position this quietly has no evidence about.
+     *
+     * <p>Nothing about the rules on the position. What its type declares and what its rules leave
+     * it able to hold are two facts, and this is the first of them — crossed with the second by
+     * {@link #constructibleAt}, which is where a case the model refuses stops being a class.
+     */
+    static List<PartitionClass> classesOf(TypeView view, Symbols symbols) {
+        List<TypeName> worn = view.wrappers().stream().map(TypeOps.Layer::named).toList();
+        return switch (view.shape()) {
+            // A `Bool` is two values. No other primitive has classes to read off its type: what a
+            // number's rules leave is a range with edges — everything outside a newtype's invariant
+            // is refused at construction (E1903), so there is no class on the other side to cover —
+            // and what does divide a number is a threshold, which is read from a body and not here.
+            case Shape.Scalar scalar -> scalar.prim() == Type.Prim.BOOL
+                    ? eitherWay(worn) : List.of();
+            case Shape.Sum sum -> caseClasses(Type.ref(sum.name()), worn, symbols);
+            case Shape.Cases cases -> caseClasses(Type.union(cases.members()), worn, symbols);
+            case Shape.Optional optional -> heldOrNot(optional.element(), worn, symbols);
+            // Shapes whose types state no division of their own. A record is made of positions and a
+            // collection holds its values inside something — what that comes to is the structural
+            // reading's answer, not this one's — and a unit data has one value, which no class of
+            // this producer's tells from another.
+            case Shape.Product _, Shape.Unit _, Shape.Sequence _, Shape.Mapping _,
+                 Shape.Tuple _, Shape.Function _,
+            // And the five that are not value shapes: nothing here was interpreted, so there is
+            // nothing to read classes off. What that means for the position is said where the
+            // provenance is, which is what the shape carries into the phase after this one.
+                 Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _, Shape.Undecided _,
+                 Shape.Unresolved _ -> List.of();
+        };
+    }
+
+    /** The two values of a {@code Bool}, under the names the position writes them under. */
+    private static List<PartitionClass> eitherWay(List<TypeName> worn) {
+        return List.of(
+                PartitionClass.of("true", "true",
+                        Classifier.under(worn, Classifier.byShape(v -> isBool(v, true))),
+                        RepresentativeSource.under(worn,
+                                RepresentativeSource.of(FixtureTemplate.bool(true)))),
+                PartitionClass.of("false", "false",
+                        Classifier.under(worn, Classifier.byShape(v -> isBool(v, false))),
+                        RepresentativeSource.under(worn,
+                                RepresentativeSource.of(FixtureTemplate.bool(false)))));
+    }
+
+    /** Whether an optional holds anything, which is the one division its type makes. */
+    private static List<PartitionClass> heldOrNot(Type element, List<TypeName> worn,
+                                                  Symbols symbols) {
+        List<FixtureTemplate> some = representativesOf(element, symbols);
+        return List.of(
+                PartitionClass.of("None", "None",
+                        Classifier.under(worn,
+                                Classifier.byShape(v -> v instanceof ObservedValue.Absent)),
+                        RepresentativeSource.under(worn,
+                                RepresentativeSource.of(FixtureTemplate.none()))),
+                some.isEmpty()
+                        ? PartitionClass.ungeneratable("Some", "Some",
+                                Classifier.under(worn, Classifier.byShape(
+                                        v -> !(v instanceof ObservedValue.Absent))),
+                                "nothing here composed a value of " + Type.show(element))
+                        : PartitionClass.of("Some", "Some",
+                                Classifier.under(worn, Classifier.byShape(
+                                        v -> !(v instanceof ObservedValue.Absent))),
+                                RepresentativeSource.under(worn,
+                                        RepresentativeSource.of(some))));
+    }
+
+    /** A sum's cases, each a class, under the names the position writes them under. */
+    private static List<PartitionClass> caseClasses(Type sum, List<TypeName> worn,
+                                                    Symbols symbols) {
+        List<PartitionClass> cases = new ArrayList<>();
+        for (TypeName leaf : TypeOps.leafCases(sum, symbols)) {
+            cases.add(caseClass(leaf, worn, symbols));
+        }
+        return cases;
+    }
+
+    /**
+     * The classes of {@code declared} the position can hold a value of.
+     *
+     * <p>Two facts crossed, and they are separate facts. That a type declares a case is read off
+     * the declaration; that a value of it can stand at <em>this</em> position is what the rules on
+     * the position leave. A {@code data StageI = Stage invariant value >= Qualified} declares three
+     * cases and holds two of them: {@code StageI(Prospecting)} is refused at construction (E1903)
+     * by the same rule, so a class for it is a row nobody can write.
+     *
+     * <p>Crossed here rather than by handing the bounds to the reading above. Each of the two is a
+     * function of the position and neither is a function of the other, so nothing depends on which
+     * is worked out first — and a producer that took the other's output would grow a dependency
+     * that only shows up as an admissible case coming back when someone tidies the order.
+     *
+     * <p>Dropped rather than kept and marked. What a body declines to answer for is still a class
+     * of the position's values and is reported as excluded ({@link Axis#excluding}); a case the
+     * position cannot hold is not one of its values at all, and the classes of an axis are over the
+     * values it has.
+     *
+     * @param within what the rules on the position leave its values, or null where nothing bounds
+     *               them
+     */
+    static List<PartitionClass> constructibleAt(List<PartitionClass> declared, TypeView view,
+                                                NumericDomain.Bounds within, Symbols symbols) {
+        if (within == null || declared.isEmpty()
+                || !(Carrier.ofValue(view.declared(), symbols) instanceof Carrier.Ordinal order)) {
+            return declared;   // no order for a rule to name a value on, so nothing is taken away
+        }
+        java.util.Set<String> refused = new java.util.LinkedHashSet<>();
+        for (TypeName each : order.cases()) {
+            Place at = order.at(each);
+            if (at != null && !within.admits(at)) {
+                refused.add(idOfCase(each));
+            }
+        }
+        return refused.isEmpty() ? declared
+                : declared.stream().filter(each -> !refused.contains(each.id())).toList();
+    }
+
+    /** What a case's class is called, in one place: a reading that decides which cases the position
+     *  holds names the same classes the reading above builds. */
+    private static String idOfCase(TypeName leaf) {
+        return leaf.name();
+    }
+
+    private static PartitionClass caseClass(TypeName leaf, List<TypeName> worn, Symbols symbols) {
+        Classifier is = Classifier.under(worn, Classifier.byShape(v -> switch (v) {
             case ObservedValue.Unit u -> leaf.equals(u.type());
             case ObservedValue.Constructed c -> leaf.equals(c.type());
             default -> false;
-        });
+        }));
         if (!(symbols.get(leaf) instanceof Ast.Data data)) {
-            return PartitionClass.of(leaf.name(), leaf.name(), is,
-                    RepresentativeSource.of(FixtureTemplate.unitCase(leaf)));   // naming it builds it
+            return PartitionClass.of(idOfCase(leaf), leaf.name(), is,   // naming it builds it
+                    RepresentativeSource.under(worn,
+                            RepresentativeSource.of(FixtureTemplate.unitCase(leaf))));
         }
         if (data.newtype()) {
             List<FixtureTemplate> inner = insideTheNewtype(leaf, symbols);
             return inner.isEmpty()
-                    ? PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
+                    ? PartitionClass.ungeneratable(idOfCase(leaf), leaf.name(), is,
                             "nothing here composed a value of what `" + leaf.name() + "` wraps")
-                    : PartitionClass.of(leaf.name(), leaf.name(), is,
-                            () -> inner.stream().map(t -> FixtureTemplate.newtype(leaf, t)).toList());
+                    : PartitionClass.of(idOfCase(leaf), leaf.name(), is,
+                            RepresentativeSource.under(worn, RepresentativeSource.under(
+                                    List.of(leaf), RepresentativeSource.of(inner))));
         }
         // A record case is written field by field, which is the generator's composition. So the class
         // names the constructor and the generator does the composing — the same walk every other
-        // record goes through, rules between the fields and all.
-        return PartitionClass.composed(leaf.name(), leaf.name(), is, leaf);
+        // record goes through, rules between the fields and all. Under the position's names either
+        // way: what is composed is an `Approved`, and what the row writes is `DecisionN(Approved
+        // { id = 1 })`.
+        return PartitionClass.of(idOfCase(leaf), leaf.name(), is,
+                RepresentativeSource.under(worn, new RepresentativeSource.Composed(leaf)));
     }
 
     // --- reading an invariant's bounds -------------------------------------------------------------
