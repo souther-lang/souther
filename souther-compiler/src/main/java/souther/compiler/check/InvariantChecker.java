@@ -275,7 +275,7 @@ public final class InvariantChecker {
         Denotations at = Denotations.none().locations(bindings.values());
         Known k = Known.top();
         boolean read = true;
-        List<Core> written = new ArrayList<>();
+        List<Written> written = new ArrayList<>();
         try {
             for (Ast.InvariantClause clause : c.clauses.of(named, data)) {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
@@ -283,7 +283,7 @@ public final class InvariantChecker {
                     read = false;
                     continue;
                 }
-                written.add(stated);
+                written.add(new Written(named, stated));
                 Predicates.Owed owed = c.predicates.obligations(stated, k, at, false);
                 read &= !owed.unreadable();
                 k = c.predicates.assume(owed, k, Known.Held.OF_THE_VALUE);
@@ -297,7 +297,8 @@ public final class InvariantChecker {
                     // No depth limit here: this is the reading a boundary is derived from, and a
                     // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                            k, at, 1, Integer.MAX_VALUE, new HashSet<>());
+                            k, at, 1, Integer.MAX_VALUE, new HashSet<>(),
+                            (from, clause) -> written.add(new Written(from, clause)));
                 }
             }
         } catch (RuntimeException why) {
@@ -319,7 +320,7 @@ public final class InvariantChecker {
         // by. A newtype has no siblings and its own clause is read where its value is a position, so
         // there is nothing here for one to place.
         List<Direct> directs = data.newtype() ? List.of()
-                : c.directsIn(written, named, at, atoms, keys, held, typeAt);
+                : c.directsIn(written, at, atoms, keys, held, typeAt);
         NumericDomain numbers = k.numbers();
         for (Map.Entry<String, Count> each : settled.entrySet()) {
             String atom = atoms.get(each.getKey());
@@ -393,6 +394,10 @@ public final class InvariantChecker {
      */
     record Direct(String path, boolean measured, TypeName from, InvariantBound bound) {}
 
+    /** One clause reaching a value, rebased onto the positions of that value, and the declaration it
+     * is written on. */
+    private record Written(TypeName from, Core clause) {}
+
     /** A coordinate a clause of this declaration could be about. */
     private record Coordinate(String path, boolean measured, Carrier carrier) {}
 
@@ -410,7 +415,7 @@ public final class InvariantChecker {
      * one naming a coordinate through arithmetic: what a line is drawn at has to be a value a row can
      * be written at, and neither {@code a < b} nor {@code 2 * n >= 4} names one.
      */
-    private List<Direct> directsIn(List<Core> stated, TypeName from, Denotations at,
+    private List<Direct> directsIn(List<Written> stated, Denotations at,
                                    Map<String, String> atoms, Map<String, String> keys,
                                    Map<String, String> held, Map<String, Type> typeAt) {
         Map<String, Coordinate> byName = new LinkedHashMap<>();
@@ -428,7 +433,7 @@ public final class InvariantChecker {
         // its sizes are spaced.
         held.forEach((path, atom) -> byName.put(atom, new Coordinate(path, true, Carrier.WHOLE)));
         List<Direct> out = new ArrayList<>();
-        stated.forEach(each -> direct(each, from, at, byName, out));
+        stated.forEach(each -> direct(each.clause(), each.from(), at, byName, out));
         return List.copyOf(out);
     }
 
@@ -1467,7 +1472,7 @@ public final class InvariantChecker {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>());
+        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>(), null);
     }
 
     /**
@@ -1482,9 +1487,17 @@ public final class InvariantChecker {
      * <p>{@code onPath} is the types entered on the way here, so a record that holds another of its
      * own kind stops rather than descending for ever. Kept per path and not for the whole walk: two
      * fields of one type are two positions and both are seeded.
+     *
+     * @param onClause told each clause as it is reached, with the declaration it is written on, or
+     *                 null where nobody is collecting. A clause governs a position from wherever it
+     *                 is written — the record the position is a field of, and the declarations under
+     *                 that record it sits inside — and this walk is where it is rebased onto the
+     *                 position it governs. A reader wanting that list has to be told here or walk the
+     *                 same descent again and rebase it a second way.
      */
     private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
-                         Set<TypeName> onPath) {
+                         Set<TypeName> onPath,
+                         java.util.function.BiConsumer<TypeName, Core> onClause) {
         if (depth > limit || !(root.type() instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data)
                 || !onPath.add(ref.name())) {
@@ -1502,6 +1515,9 @@ public final class InvariantChecker {
         Known out = k;
         List<Quantified> quantified = new ArrayList<>();
         for (Clauses.Stated stated : clauses.statedAt(ref.name(), data, given)) {
+            if (onClause != null) {
+                onClause.accept(ref.name(), stated.expr());
+            }
             predicates.quantifiedBy(stated.expr(), at, true, quantified);
             out = predicates.assume(predicates.obligations(stated.expr(), out, at, false), out,
                     Known.Held.OF_THE_VALUE);
@@ -1511,10 +1527,10 @@ public final class InvariantChecker {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
             Core value = given.get(bindings.get("value"));
-            out = value == null ? out : seedAt(value, out, at, depth + 1, limit, onPath);
+            out = value == null ? out : seedAt(value, out, at, depth + 1, limit, onPath, onClause);
         } else {
             for (Core value : given.values()) {
-                out = seedAt(value, out, at, depth + 1, limit, onPath);
+                out = seedAt(value, out, at, depth + 1, limit, onPath, onClause);
             }
         }
         onPath.remove(ref.name());
