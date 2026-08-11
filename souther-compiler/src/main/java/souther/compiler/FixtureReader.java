@@ -771,8 +771,11 @@ public final class FixtureReader {
      * representation reads as. Where the position is not declared, or is a kind a fixture is refused
      * at before this ({@link FixtureShape}), nothing here is asked.
      *
-     * <p>An optional is opened first: writing a value for a {@code T?} position writes a {@code T},
-     * and absence is written {@code None}, which is admitted wherever an optional stands.
+     * <p>An optional is one of these and not a reading around them: writing a value for a {@code T?}
+     * position writes a {@code T}, and absence is written {@code None}, which stands where an
+     * optional makes room for it and nowhere else. Opening the position instead loses the room it
+     * made, and {@code None} written at a unit case decoded as that case — a decoder that reads
+     * nothing reads a missing value as well as any other.
      */
     private sealed interface Admits {
 
@@ -784,6 +787,9 @@ public final class FixtureReader {
 
         /** Nothing is said about the position, so nothing is asked of what stands at it. */
         record Unsaid() implements Admits {}
+
+        /** Absence, or what the optional holds. */
+        record OrAbsent(Admits held) implements Admits {}
     }
 
     private static final Admits NO_NAME = new Admits.NoName();
@@ -801,7 +807,8 @@ public final class FixtureReader {
      * be a second rule about a position this cannot be asked about.
      */
     private Admits admits(Type position) {
-        return switch (NeutralForm.open(position)) {
+        return switch (position) {
+            case Type.OptionOf o -> new Admits.OrAbsent(admits(o.element()));
             case Type.Ref r when r.name().isPrimitive() -> NO_NAME;
             case Type.Ref r -> new Admits.OneOf(TypeOps.leafCases(Type.ref(r.name()), symbols));
             case Type.Prim _, Type.ListOf _, Type.SetOf _, Type.MapOf _, Type.TupleOf _ -> NO_NAME;
@@ -841,18 +848,25 @@ public final class FixtureReader {
      */
     private void admitWritten(Ast.Expr e, Type expected) {
         Admits admits = admits(expected);
-        if (admits instanceof Admits.Unsaid) {
+        Admits held = admits instanceof Admits.OrAbsent(Admits under) ? under : admits;
+        if (held instanceof Admits.Unsaid) {
             return;
         }
         switch (states(e)) {
-            case Stated.Elsewhere _, Stated.Absence _ -> { }
+            case Stated.Elsewhere _ -> { }
+            case Stated.Absence _ -> {
+                if (!(admits instanceof Admits.OrAbsent)) {
+                    throw new FixtureException("`None` is the absent value of a `?` position, and this"
+                            + " position holds a value of `" + Type.show(expected) + "`");
+                }
+            }
             case Stated.Name(TypeName named) -> {
-                if (!(admits instanceof Admits.OneOf(Set<TypeName> names) && names.contains(named))) {
-                    throw wrongName(named, admits, expected);
+                if (!(held instanceof Admits.OneOf(Set<TypeName> names) && names.contains(named))) {
+                    throw wrongName(named, held, expected);
                 }
             }
             case Stated.NoName _ -> {
-                if (admits instanceof Admits.OneOf(Set<TypeName> names)) {
+                if (held instanceof Admits.OneOf(Set<TypeName> names)) {
                     throw noName(names, expected);
                 }
             }

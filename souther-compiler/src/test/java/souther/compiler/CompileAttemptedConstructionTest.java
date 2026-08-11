@@ -294,7 +294,7 @@ class CompileAttemptedConstructionTest {
                 }
 
                 example take
-                    | "the invariant holds, so the value is built" : ("AB") -> Accepted { code = Code("AB") }
+                    | "the invariant holds, so the value is built" : ("AB") -> Accepted { code = "AB" }
                     | "the invariant fails, so it departs" : ("zzz") -> Rejected
                 """;
         Compiler.compile(src);   // an example that disagreed would fail the build (E1901)

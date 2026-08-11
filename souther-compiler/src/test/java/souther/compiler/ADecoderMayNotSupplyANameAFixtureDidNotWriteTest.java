@@ -98,6 +98,9 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 constructs Ok
             let takesHeld (h) = Ok
 
+            behavior takesOk : (x: Ok) -> Ok
+            let takesOk (x) = x
+
             behavior takesA : (a: A) -> Ok
                 constructs Ok
             let takesA (a) = Ok
@@ -413,6 +416,24 @@ class ADecoderMayNotSupplyANameAFixtureDidNotWriteTest {
                 example takesHeld
                     | (Held { amount = 1 }) -> Ok
                 """).contains("`AmountN`"));
+    }
+
+    @Test
+    void absenceStandsWhereAnOptionalMakesRoomForItAndNowhereElse() {
+        // A unit case is what this is written for: its decoder reads nothing, so it reads a missing
+        // value as readily as any other and would answer with the case the row never wrote.
+        assertTrue(refuses("""
+                example takesOk
+                    | (None) -> Ok
+                """).contains("`Ok`"));
+        assertTrue(refuses("""
+                example takesAmount
+                    | (None) -> Ok
+                """).contains("`AmountN`"));
+        assertTrue(refuses("""
+                example takesInt
+                    | (None) -> Ok
+                """).contains("`Int`"));
     }
 
     @Test
