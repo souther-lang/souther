@@ -127,8 +127,6 @@ final class Intervals {
         // What the counts in a label stand for. A day count is a carrier and never a name for the
         // line, so the class an author reads is spelled in dates where the position holds them.
         Carrier carrier = of.carrierAt(type, symbols);
-        souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
-                && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
             String label = range.label(carrier);
@@ -145,7 +143,7 @@ final class Intervals {
                         "no value this position can hold lies inside this range"));
                 continue;
             }
-            List<FixtureTemplate> values = standingIn(of, inside, type, wrapper, carrier, symbols);
+            List<FixtureTemplate> values = standingIn(of, inside, type, carrier, symbols);
             classes.add(values.isEmpty()
                     ? PartitionClass.ungeneratable(id, label, is,
                             "nothing here writes a value whose " + measureOf(of) + " is in this range")
@@ -195,10 +193,9 @@ final class Intervals {
      * only when the thing that builds them has none to give.
      */
     private static List<FixtureTemplate> standingIn(NumericTerm of, Count inside, Type type,
-                                                    souther.compiler.types.TypeName wrapper,
                                                     Carrier carrier, Symbols symbols) {
         if (of instanceof NumericTerm.ValueOf) {
-            return List.of(FixtureTemplate.on(carrier, inside, wrapper));
+            return List.of(Witnesses.wrapped(type, FixtureTemplate.on(carrier, inside), symbols));
         }
         int size = Counts.asSize(inside);
         if (size < 0) {

@@ -406,7 +406,7 @@ final class Witnesses {
             return null;
         }
         return wrapped(type, FixtureTemplate.on(
-                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at, null), symbols);
+                carrier == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE, at), symbols);
     }
 
     /** The value under every name the position wears, which is how it is written where the position

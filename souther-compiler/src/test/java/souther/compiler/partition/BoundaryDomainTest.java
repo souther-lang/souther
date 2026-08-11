@@ -63,38 +63,19 @@ class BoundaryDomainTest {
     }
 
     @Test
-    void aMidpointIsAnOrdinaryCountOfEitherCarrier() {
-        assertEquals(Optional.of(Count.of(50)),
-                BoundaryDomain.on(Carrier.WHOLE).midpoint(Count.of(0), Count.of(100)));
-        assertEquals(Optional.of(Count.of(new BigDecimal("50"))),
-                BoundaryDomain.on(Carrier.DENSE)
-                        .midpoint(Count.of(BigDecimal.ZERO), Count.of(new BigDecimal("100"))));
-    }
-
-    @Test
     void aPositionOnNoCarrierAnswersNothing() {
         assertTrue(BoundaryDomain.on(null).successor(Count.of(1)).isEmpty());
-        assertTrue(BoundaryDomain.on(null).midpoint(Count.of(0), Count.of(2)).isEmpty());
+        assertTrue(BoundaryDomain.on(null).predecessor(Count.of(1)).isEmpty());
     }
 
-    /**
-     * A date's neighbours and midpoint are whole days.
-     *
-     * <p>Two days apart by one have a midpoint, and it is one of them: the carrier counts days and
-     * there is no half a day in it. Taken over a carrier wider than the type — a count halfway
-     * between two days — the answer is not a date at all, and the value it would be written from is
-     * one no calendar has.
-     */
+    /** A date's neighbours are whole days, so what steps is the day it counts to. */
     @Test
-    void aDateStepsAndMeetsInWholeDays() {
+    void aDateStepsInWholeDays() {
         Count first = day("2026-01-01");
         Count second = day("2026-01-02");
         BoundaryDomain dates = BoundaryDomain.on(Carrier.DATE);
 
         assertEquals(Optional.of(second), dates.successor(first));
         assertEquals(Optional.of(first), dates.predecessor(second));
-        assertEquals(Optional.of(first), dates.midpoint(first, second),
-                "an odd number of days apart still meets at a day");
-        assertEquals(Optional.of(second), dates.midpoint(first, day("2026-01-03")));
     }
 }

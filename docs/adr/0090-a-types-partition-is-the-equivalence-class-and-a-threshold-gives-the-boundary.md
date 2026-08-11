@@ -102,6 +102,25 @@ values have (spec §primitives). That count never leaves the carrier: an ordinal
 which is the most plausible-looking wrong value any of the five has and the one a report is least
 likely to give away, so the cases are what a row carries and what a line is named by.
 
+The carrier is the enumeration itself, and not an order a value of it can be compared on. Which
+order two operands are comparable by is the wider question the type checker asks, and it answers with
+the sum for a case and for a union of cases as well — `Qualified < Won` compares on `Stage`. Which
+counts a position ranges over is narrower: a position declared as one case holds one value, and a
+union of cases holds some of them. Answered with the wider order, such a position took the whole
+enumeration's counts, and the line drawn on it asked for a row at a value the position cannot hold.
+So a position that is not the enumeration draws no line, and says so as a position whose comparison
+went unread — which names the compiler rather than the model, and is the coarser of the two things
+that could be said. Measuring a case or a sub-union would need the carrier to carry both the order
+and the values that position admits, and neither this nor anything else needs that yet.
+
+Which counts a carrier holds is the carrier's, and every producer of an end asks it. A strict
+comparison over a carrier that steps is sharpened onto the count beside the one it names, and where
+the carrier has none there, there is no end — read off the range of a `long` instead, `value > Won`
+sharpened past the last case and reached the reader that writes an obligation as the value it stands
+for. Holding a count is a question and not a correction: a date-time's counts sit on a grid at the
+nanosecond and what writes one rounds onto it, so a carrier handed a count between two moments says
+it holds none rather than naming the nearer one.
+
 A threshold on an enumeration gives boundaries and no classes. Every other carrier divides a
 position its type left whole, so the ranges a cut leaves are the classes; an enumeration already has
 one class per case, and `s < Qualified` divides `{Prospecting, Qualified, Won}` into `{Prospecting}`

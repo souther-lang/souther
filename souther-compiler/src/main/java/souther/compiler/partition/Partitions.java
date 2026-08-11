@@ -311,8 +311,6 @@ public final class Partitions {
                                                        NumericTerm term, Type type,
                                                        NumericDomain.Bounds within, Symbols symbols) {
         Carrier carrier = term.carrierAt(type, symbols);
-        TypeName wrapper = type instanceof Type.Ref ref && TypeOps.isSingleValueNewtype(type, symbols)
-                ? ref.name() : null;
         List<Count> values = new ArrayList<>();
         for (GuardThresholds.Guards.Singled each : points) {
             if (values.stream().noneMatch(had -> had.sameAs(each.value()))) {
@@ -324,7 +322,7 @@ public final class Partitions {
             String written = carrier.written(value);
             classes.add(PartitionClass.of(term + "/= " + written, "= " + written,
                     holding(term, carrier, at -> at.sameAs(value)),
-                    RepresentativeSource.of(FixtureTemplate.on(carrier, value, wrapper))));
+                    RepresentativeSource.of(standing(type, carrier, value, symbols))));
         }
         Count other = otherThan(values, within, carrier);
         String label = "/= " + String.join(", ",
@@ -336,8 +334,13 @@ public final class Partitions {
                                 + " singled out")
                 : PartitionClass.of(term + "/" + label, label,
                         holding(term, carrier, at -> values.stream().noneMatch(at::sameAs)),
-                        RepresentativeSource.of(FixtureTemplate.on(carrier, other, wrapper))));
+                        RepresentativeSource.of(standing(type, carrier, other, symbols))));
         return List.copyOf(classes);
+    }
+
+    /** A count written at a position, wearing every name that position declares. */
+    private static FixtureTemplate standing(Type type, Carrier carrier, Count at, Symbols symbols) {
+        return Witnesses.wrapped(type, FixtureTemplate.on(carrier, at), symbols);
     }
 
     /** A classifier that reads the term's count out of a row and answers about it. */
@@ -1034,7 +1037,7 @@ public final class Partitions {
         if (type == Type.INT || type == Type.DECIMAL) {
             Carrier carrier = type == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE;
             Count at = inside(within, carrier);
-            return at == null ? List.of() : List.of(FixtureTemplate.on(carrier, at, null));
+            return at == null ? List.of() : List.of(FixtureTemplate.on(carrier, at));
         }
         if (type == Type.STRING) {
             return List.of(FixtureTemplate.string("x"));
@@ -1178,10 +1181,7 @@ public final class Partitions {
         if (step == null) {
             return List.copyOf(base);
         }
-        TypeName wrapper = type instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()
-                ? ref.name() : null;
-        FixtureTemplate value = FixtureTemplate.on(carrier, step, wrapper);
+        FixtureTemplate value = standing(type, carrier, step, symbols);
         if (base.stream().anyMatch(each -> each.text().equals(value.text()))) {
             return List.copyOf(base);
         }
@@ -1252,7 +1252,7 @@ public final class Partitions {
         NumericDomain.Bounds bounds = admissibleBounds(own, within);
         Count held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
         if (held != null) {
-            candidates.add(FixtureTemplate.on(own.carrier(), held, null));
+            candidates.add(FixtureTemplate.on(own.carrier(), held));
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
@@ -1327,7 +1327,7 @@ public final class Partitions {
                 || bounds.max().at().sameAs(bounds.min().at())) {
             return List.of();
         }
-        FixtureTemplate held = FixtureTemplate.on(own.carrier(), bounds.max().at(), ref.name());
+        FixtureTemplate held = standing(type, own.carrier(), bounds.max().at(), symbols);
         // Nothing already on offer: a range whose far edge is the number the base type stands for
         // would otherwise hold the same value twice, once in each tier.
         return representativesOf(type, symbols, within).stream()

@@ -11,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -80,10 +81,52 @@ class AnOrdinalIsNeverWhatAnEnumerationIsWrittenAsTest {
                 BoundaryDomain.on(stage).successor(Count.of(1)));
     }
 
+    /**
+     * A position declared as one case is not on the enumeration's order.
+     *
+     * <p>Which order two operands can be compared on is a wider question than which counts a
+     * position ranges over, and the two have different answers: `Qualified < Won` compares on
+     * `Stage`, and a position declared as `Qualified` holds one value. Answered with the wider one,
+     * the position took the whole enumeration's counts and the line drawn on it asked for a row at
+     * `Won` — a value that position cannot hold.
+     */
+    @Test
+    void aPositionDeclaredAsOneCaseIsNotOnTheEnumerationsOrder() {
+        souther.compiler.query.Compilation compilation =
+                souther.compiler.query.Compilation.ofSource("""
+                        module example.onecase
+
+                        data Prospecting
+                        data Qualified
+                        data Won
+                        data Stage = Prospecting | Qualified | Won
+
+                        data Ok
+                        data No
+                        data Verdict = Ok | No
+
+                        behavior f : (s: Qualified) -> Verdict
+                            constructs Ok, No, Won
+                        let f (s) = { guard s < Won else Ok
+                            No }
+                        """, "Main");
+        compilation.answerEverything();
+        String module = compilation.modules().get(0);
+        souther.compiler.check.Symbols symbols =
+                compilation.db().ask(new souther.compiler.query.Shapes.Scope(module)).value();
+
+        assertNull(Carrier.ofValue(
+                souther.compiler.types.Type.ref(new TypeName("example.onecase", "Qualified")),
+                symbols), "one case of a sum is not the sum");
+        assertNotNull(Carrier.ofValue(
+                souther.compiler.types.Type.ref(new TypeName("example.onecase", "Stage")),
+                symbols), "and the sum itself still is");
+    }
+
     /** A row writes the case, which is what naming it builds. */
     @Test
     void aRowAtAnOrdinalCarriesTheCaseAndNotItsPlace() {
-        FixtureTemplate written = FixtureTemplate.on(carrier(), Count.of(1), null);
+        FixtureTemplate written = FixtureTemplate.on(carrier(), Count.of(1));
 
         assertEquals("Qualified", written.text());
         assertInstanceOf(souther.compiler.ast.Ast.Var.class, written.value(),

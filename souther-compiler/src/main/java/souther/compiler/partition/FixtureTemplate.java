@@ -123,10 +123,13 @@ public record FixtureTemplate(String text, Ast.Expr value) {
      * second count reached a row as an {@code Int}, and the decoder turned it down with nothing said
      * about why.
      *
-     * @param wrapper the single-value newtype the position is declared as, or null for a bare value
+     * <p>Bare. How many names the value wears at the position it is going to is a different question
+     * with its own answer ({@link Witnesses#wrapped}), which walks every layer; answered here as
+     * well, it was answered one layer deep, and a value of a newtype over a newtype came back
+     * missing the name in the middle.
      */
-    public static FixtureTemplate on(Carrier carrier, Count at, TypeName wrapper) {
-        FixtureTemplate literal = switch (carrier) {
+    public static FixtureTemplate on(Carrier carrier, Count at) {
+        return switch (carrier) {
             case Carrier.Whole _ -> integer(at.at().longValueExact());
             case Carrier.Dense _ -> decimal(at.at());
             // Written by the carrier, so the text on a row and the text in a report are the same
@@ -137,7 +140,6 @@ public record FixtureTemplate(String text, Ast.Expr value) {
             // place the case takes in its declaration.
             case Carrier.Ordinal ordinal -> unitCase(ordinal.caseAt(at));
         };
-        return wrapper == null ? literal : newtype(wrapper, literal);
     }
 
     /** A newtype around one value, written in the call form a row writes it in (ADR-0032). */

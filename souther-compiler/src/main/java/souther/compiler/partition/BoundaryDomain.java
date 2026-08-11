@@ -28,8 +28,6 @@ public interface BoundaryDomain {
 
     Optional<Count> predecessor(Count at);
 
-    Optional<Count> midpoint(Count low, Count high);
-
     /**
      * How the counts beside a boundary on {@code carrier} are found.
      *
@@ -57,11 +55,6 @@ public interface BoundaryDomain {
                 return spacing == Granularity.DISCRETE ? held(at.minus(1)) : Optional.empty();
             }
 
-            @Override
-            public Optional<Count> midpoint(Count low, Count high) {
-                return held(low.halfwayTo(high, spacing));
-            }
-
             /** Only where the carrier holds it. A step off the end of what a carrier counts is not a
              * value beside anything, and it reaches here the same way from every caller that steps. */
             private Optional<Count> held(Count at) {
@@ -79,11 +72,6 @@ public interface BoundaryDomain {
 
         @Override
         public Optional<Count> predecessor(Count at) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<Count> midpoint(Count low, Count high) {
             return Optional.empty();
         }
     };

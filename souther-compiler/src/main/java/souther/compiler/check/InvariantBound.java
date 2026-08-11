@@ -8,7 +8,6 @@ import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.Optional;
-import java.util.function.Function;
 
 /**
  * Where one conjunct of a numeric newtype's invariant leaves its value able to stop.
@@ -30,8 +29,6 @@ import java.util.function.Function;
 public record InvariantBound(boolean lower, Endpoint end) {
 
     private static final String VALUE = "value";
-    private static final BigDecimal LONG_MIN = BigDecimal.valueOf(Long.MIN_VALUE);
-    private static final BigDecimal LONG_MAX = BigDecimal.valueOf(Long.MAX_VALUE);
 
     /**
      * What {@code clause} says about a value on {@code carrier}, or empty where it says nothing a
@@ -51,8 +48,6 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (carrier == null || !(clause instanceof Ast.Binary bin)) {
             return Optional.empty();
         }
-        Granularity spacing = carrier.spacing();
-        Function<Ast.Expr, Count> literalOf = carrier::literalOf;
         // `0 <= value` says what `value >= 0` says: read the value-bearing side as the left one.
         Ast.Expr left = bin.left();
         Ast.Expr right = bin.right();
@@ -66,11 +61,11 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (!isValue(left)) {
             return Optional.empty();
         }
-        Count bound = literalOf.apply(right);
+        Count bound = carrier.literalOf(right);
         if (bound == null) {
             return Optional.empty();
         }
-        return ordered(op, bound, spacing == Granularity.DISCRETE);
+        return ordered(op, bound, carrier);
     }
 
     /**
@@ -101,7 +96,9 @@ public record InvariantBound(boolean lower, Endpoint end) {
         if (bound == null) {
             return Optional.empty();
         }
-        return ordered(op, bound, true);
+        // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
+        // where one does.
+        return ordered(op, bound, Carrier.WHOLE);
     }
 
     /**
@@ -138,14 +135,15 @@ public record InvariantBound(boolean lower, Endpoint end) {
         };
     }
 
-    /** One end, from the comparison and whether the values step. */
-    private static Optional<InvariantBound> ordered(Ast.BinOp op, Count bound, boolean whole) {
+    /** One end, from the comparison and how the carrier's counts are spaced. */
+    private static Optional<InvariantBound> ordered(Ast.BinOp op, Count bound, Carrier carrier) {
+        boolean steps = carrier.spacing() == Granularity.DISCRETE;
         return switch (op) {
             case GE -> Optional.of(new InvariantBound(true, Endpoint.inclusive(bound)));
             case LE -> Optional.of(new InvariantBound(false, Endpoint.inclusive(bound)));
-            case GT -> whole ? stepped(true, bound.plus(1))
+            case GT -> steps ? stepped(true, carrier.onTheGrid(bound.plus(1)))
                     : Optional.of(new InvariantBound(true, Endpoint.exclusive(bound)));
-            case LT -> whole ? stepped(false, bound.minus(1))
+            case LT -> steps ? stepped(false, carrier.onTheGrid(bound.minus(1)))
                     : Optional.of(new InvariantBound(false, Endpoint.exclusive(bound)));
             default -> Optional.empty();
         };
@@ -163,11 +161,21 @@ public record InvariantBound(boolean lower, Endpoint end) {
                 && call.function() instanceof Ast.Var fn && measure.equals(fn.denotes());
     }
 
-    /** A whole number's strict bound moved onto the value beside it — where the type has one. At the
-     * ends of what an {@code Int} holds there is nothing to move onto, and nothing is claimed. */
+    /**
+     * A strict bound moved onto the count beside it — where the carrier has one there.
+     *
+     * <p>Asked of the carrier, which is the one place that knows where its counts stop. Read off the
+     * range of a {@code long} instead, an end one step past the last case of an enumeration was a
+     * count no case is at: it reached a cut, an obligation, and the reader that writes an obligation
+     * as the value it stands for, which asked the carrier for a case that is not there.
+     *
+     * <p>No end where the carrier has no count there. Which is not the same as the rule being
+     * unsatisfiable, and this does not say which — the two look alike from here, and an end nothing
+     * can be written at is the one thing that must not be claimed.
+     */
     private static Optional<InvariantBound> stepped(boolean lower, Count onto) {
-        return onto.at().compareTo(LONG_MIN) < 0 || onto.at().compareTo(LONG_MAX) > 0
-                ? Optional.empty() : Optional.of(new InvariantBound(lower, Endpoint.inclusive(onto)));
+        return onto == null ? Optional.empty()
+                : Optional.of(new InvariantBound(lower, Endpoint.inclusive(onto)));
     }
 
     private static boolean isValue(Ast.Expr e) {

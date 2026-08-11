@@ -1193,14 +1193,13 @@ public final class Generator {
      */
     private static Edge edgeOf(Axis axis, Carrier carrier, Count at, Symbols symbols) {
         if (!(axis.term() instanceof NumericTerm.SizeOf)) {
-            // Written by the carrier the line was drawn on. Read off the boundary's own shape
-            // instead, a count on one carrier could be written as a literal of another — which is
-            // how a date-time's second count reached a row as an `Int`, and the decoder refused it
-            // with the report saying only that every value tried had been refused.
-            TypeName wrapper = axis.type() instanceof Type.Ref ref
-                    && symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()
-                    ? ref.name() : null;
-            return new Edge(List.of(FixtureTemplate.on(carrier, at, wrapper)), null, at, null);
+            // Written by the carrier the line was drawn on, and wearing every name the position
+            // declares. Read off the boundary's own shape instead, a count on one carrier could be
+            // written as a literal of another — which is how a date-time's second count reached a
+            // row as an `Int`, and the decoder refused it with the report saying only that every
+            // value tried had been refused.
+            return new Edge(List.of(Witnesses.wrapped(axis.type(),
+                    FixtureTemplate.on(carrier, at), symbols)), null, at, null);
         }
         int size = Counts.asSize(at);
         if (size < 0) {

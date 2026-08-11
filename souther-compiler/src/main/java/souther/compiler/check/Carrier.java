@@ -113,12 +113,18 @@ public sealed interface Carrier {
                 case STRING, BOOL, RAW -> null;
             };
         }
-        TypeName enumeration = TypeOps.orderingEnumeration(base, symbols);
-        if (enumeration == null || !(symbols.get(enumeration) instanceof Ast.SumData sum)) {
+        // The enumeration itself, and not an order a value of it can be compared on. Which order
+        // two operands are comparable by is a wider question and has its own answer
+        // ({@link TypeOps#comparisonEnumeration}): a case and a union of cases are both comparable
+        // on their sum's order without ranging over it. Answered with that wider order, a position
+        // declared as one case took the whole enumeration's counts, and the line drawn on it asked
+        // for a row at a value the position cannot hold.
+        if (!(base instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.SumData sum)
+                || !TypeOps.isUnitOnlySum(base, symbols)) {
             return null;
         }
         List<TypeName> cases = TypeOps.leafCases(sum, symbols);
-        return cases.isEmpty() ? null : new Ordinal(enumeration, cases);
+        return cases.isEmpty() ? null : new Ordinal(ref.name(), cases);
     }
 
     /** How the counts on this carrier are spaced, which is what decides whether a strict bound has a
@@ -164,7 +170,15 @@ public sealed interface Carrier {
                     ? count : null;
             case Ordinal ordinal -> count.whole() && within(count, 0, ordinal.cases().size() - 1)
                     ? count : null;
-            case Seconds _ -> DateTimes.secondOf(DateTimes.written(count));
+            // Round-tripped and then held to itself. What a date-time can be written as sits on a
+            // grid at the nanosecond, and the writer rounds onto it — so returning what came back
+            // would answer "the nearest count this carrier holds" to a question that asks whether it
+            // holds this one. A caller reading that as a yes offers a value between two moments as
+            // one of them.
+            case Seconds _ -> {
+                Count written = DateTimes.secondOf(DateTimes.written(count));
+                yield written != null && written.sameAs(count) ? count : null;
+            }
         };
     }
 
