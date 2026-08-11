@@ -14,6 +14,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.partition.Axis;
 import souther.compiler.partition.AxisId;
 import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Exclusions;
 import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.NumericTerm;
@@ -55,7 +56,7 @@ final class Coverages {
         GuardThresholds.Guards guards =
                 GuardThresholds.of(behavior.name(), body, plan, parameters, symbols);
         return Partitions.withThresholds(partitioning, guards.thresholds(), symbols,
-                guards.unread(), guards.singled());
+                guards.unread(), guards.singled(), guards.between());
     }
 
     /**
@@ -317,15 +318,16 @@ final class Coverages {
             BoundaryAssessment.Attempt attempt = attemptAt(each, coverage, probe);
             BoundaryAssessment made = new BoundaryAssessment(each, coverage,
                     writabilityOf(coverage, knownWritable, attempt), attempt);
-            out.merge(new Line(each.side(), each.at(), each.origin().line()), made,
+            out.merge(new Line(each.side(), each.target(), each.origin().line()), made,
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
     }
 
-    /** One line of one axis, told from another by what drew it and where — and not by which copy of
-     * the body the reading came off. */
-    private record Line(BoundaryObligation.BoundarySide side, Place at, OriginRef.Line drawn) {}
+    /** One line, told from another by where it is, what drew it and where that was — and not by which
+     * copy of the body the reading came off. */
+    private record Line(BoundaryObligation.BoundarySide side, BoundaryTarget at,
+                        OriginRef.Line drawn) {}
 
     /**
      * Which of two readings of one line the report keeps.
@@ -395,10 +397,85 @@ final class Coverages {
         if (absent != null) {
             return new BoundaryAssessment.Coverage.NotMeasured(absent);
         }
-        Met met = guard
-                ? evaluatedAt(axis, parameters, rows, symbols, obligation.at(),
-                        (OriginRef.GuardOrigin) obligation.origin())
-                : writtenAt(axis, parameters, rows, symbols, obligation.at());
+        Met met = switch (obligation.target()) {
+            case BoundaryTarget.AtCount place -> guard
+                    ? evaluatedAt(axis, parameters, rows, symbols, place.at(),
+                            (OriginRef.GuardOrigin) obligation.origin())
+                    : writtenAt(axis, parameters, rows, symbols, place.at());
+            case BoundaryTarget.EqualTerms line ->
+                    heldBetween(line, parameters, rows,
+                            (OriginRef.GuardOrigin) obligation.origin());
+        };
+        return verdictOf(met, guard, observed);
+    }
+
+    /**
+     * What was established about each line a body draws between two of its positions.
+     *
+     * <p>Beside the lines an axis carries rather than among them. A line between two positions is on
+     * neither of them, so there is no axis to hang it off — and a behavior can have one while having no
+     * axis at all, which is every model whose inputs are plain numbers nothing bounds.
+     *
+     * <p>Nothing is promised of one yet. Whether a row can be written on the line takes a count both
+     * positions admit, and until that is read the line is one nothing has shown to be writable — which
+     * is reported and not counted, the same account any other unpromised edge gets.
+     */
+    static List<BoundaryAssessment> assessBetween(
+            List<BoundaryObligation> between, List<String> parameters,
+            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
+        List<RowOutcome> rows = observed.rows();
+        List<BoundaryAssessment> out = new ArrayList<>();
+        for (BoundaryObligation each : between) {
+            BoundaryAssessment.Coverage.Reason absent =
+                    whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen());
+            BoundaryAssessment.Coverage coverage = absent != null
+                    ? new BoundaryAssessment.Coverage.NotMeasured(absent)
+                    : verdictOf(heldBetween((BoundaryTarget.EqualTerms) each.target(), parameters,
+                            rows, (OriginRef.GuardOrigin) each.origin()), true, observed);
+            out.add(new BoundaryAssessment(each, coverage,
+                    new BoundaryAssessment.Writability.Unknown(),
+                    new BoundaryAssessment.Attempt.NotAttempted(
+                            BoundaryAssessment.Attempt.Reason.NOT_MEASURED)));
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * Whether a row is on a line where two terms hold one count.
+     *
+     * <p>Both sides through the term's own reader, which is the one that reaches a count through the
+     * newtype a position may be written as. Compared as counts and not as observed values: the two
+     * positions are of one carrier and need not be of one type — {@code Charge} against {@code Ceiling}
+     * is what the domain this was found in is made of — and two values of different types are never
+     * equal however much the numbers inside them agree.
+     */
+    private static Met heldBetween(BoundaryTarget.EqualTerms line, List<String> parameters,
+                                   List<RowOutcome> rows, OriginRef.GuardOrigin origin) {
+        boolean unreadable = false;
+        for (RowOutcome row : rows) {
+            NumericTerm.Reading on = line.on()
+                    .read(RowClasses.valueAt(row, parameters, line.on().path()), line.carrier());
+            NumericTerm.Reading against = line.against()
+                    .read(RowClasses.valueAt(row, parameters, line.against().path()), line.carrier());
+            if (on instanceof NumericTerm.Reading.Missing
+                    || against instanceof NumericTerm.Reading.Missing) {
+                unreadable = true;
+                continue;
+            }
+            if (on instanceof NumericTerm.Reading.Number here
+                    && against instanceof NumericTerm.Reading.Number there
+                    && here.value().sameAs(there.value())
+                    && row.hits().contains(origin.site())) {
+                return Met.YES;
+            }
+        }
+        return unreadable ? Met.UNREADABLE : Met.NO;
+    }
+
+    /** What a reading of the rows comes to, once what could not be read is accounted for. */
+    private static BoundaryAssessment.Coverage verdictOf(
+            Met met, boolean guard, souther.compiler.query.Adequacy.Observed observed) {
+        List<RowOutcome> rows = observed.rows();
         if (met == Met.YES) {
             return new BoundaryAssessment.Coverage.Hit();
         }

@@ -1,26 +1,18 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.Carrier;
-import souther.compiler.numeric.Place;
-import souther.compiler.observe.ObservedValue;
-
 /**
- * One value a row has to be written at: a boundary, and the rule that drew it.
+ * One place a row has to be written at: a boundary, and the rule that drew it.
  *
- * <p>Carries the axis by id rather than the axis itself, so that what an obligation is about can be
- * held in a query answer without dragging the classes and their classifiers along with it.
+ * <p>Where the line is is {@link BoundaryTarget}'s to say, and it has more than one shape — a count of
+ * one position, or two positions holding the same count. Held apart from the rule and the side so that
+ * a reader asking which rule is owed this row does not have to know which shape the line has.
  *
  * <p>An obligation from an invariant is met by a row whose value is the boundary. One from a guard is
  * not: the comparison has to have produced a value as well, because a value can reach the input of a
  * behavior without reaching the comparison that cares about it. Which row did that is read off the
  * site the guard's origin carries, and every guard origin has one.
- *
- * <p>The place is the count and the carrier it is on. Everything that compares a row against this
- * compares counts, and everything that writes or prints it asks the carrier — so a report, a
- * generated row and the rule that drew the line cannot disagree about which value the line is at.
  */
-public record BoundaryObligation(AxisId axis, OriginRef origin, BoundarySide side,
-                                 Carrier carrier, Place at) {
+public record BoundaryObligation(BoundaryTarget target, OriginRef origin, BoundarySide side) {
 
     public enum BoundarySide {
         /** The largest value on the low side of the cut. */
@@ -31,13 +23,13 @@ public record BoundaryObligation(AxisId axis, OriginRef origin, BoundarySide sid
         ABOVE
     }
 
-    /** The boundary as a value, which is what a row carries and what a person reads. */
-    public ObservedValue value() {
-        return carrier.valueOf(at);
-    }
-
-    /** The boundary as an author would write it. */
-    public String written() {
-        return carrier.written(at);
+    /**
+     * How a row at this boundary describes itself.
+     *
+     * <p>The generator writes these same words on the row it offers, so a row and a note about the
+     * boundary it stands for name it the same way.
+     */
+    public String label() {
+        return target.left() + " = " + target.right();
     }
 }

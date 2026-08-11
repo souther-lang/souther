@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Generator;
 
 import java.math.BigDecimal;
@@ -183,9 +184,25 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
         return coverage instanceof Coverage.NotMeasured absent ? absent.reason() : null;
     }
 
-    /** The position this is on, as a report names it. */
+    /**
+     * The position this is on, as a report names it.
+     *
+     * <p>Asked of the shape of the line rather than of a field every shape was assumed to have. A line
+     * between two positions is on neither of them, and answering with one of the two would name a
+     * boundary after half of itself.
+     */
     public String axis() {
-        return obligation.axis().toString();
+        return obligation.target().named();
+    }
+
+    /** Whether this line is at a value of one position, which is what says whether {@link #value()}
+     * is one. A line between two positions is at no value: what stands on its right is the other
+     * position, and the value a row happens to satisfy it with is that row's and not the line's. */
+    public boolean isAtAValue() {
+        return switch (obligation.target()) {
+            case BoundaryTarget.AtCount _ -> true;
+            case BoundaryTarget.EqualTerms _ -> false;
+        };
     }
 
     /** The rule that drew the line. */
@@ -201,15 +218,23 @@ public record BoundaryAssessment(BoundaryObligation obligation, Coverage coverag
      * generator writes these same words on the row it offers, so a row and a note about the boundary
      * it stands for name it the same way. */
     public String label() {
-        return obligation.axis().term() + " = " + value();
+        return obligation.label();
     }
 
-    /** The value as an author would write it, not as a record prints itself. */
+    /** The left of the {@code left = right} a report names this line by. */
+    public String left() {
+        return obligation.target().left();
+    }
+
+    /**
+     * The right of it.
+     *
+     * <p>For a line at a count that is the value as an author would write it, asked of the carrier the
+     * line was drawn on: what the ranges hold is a count, and a reader that decided from the value's
+     * own shape how to print it was answering a question the carrier had already answered.
+     */
     public String value() {
-        // Asked of the carrier the line was drawn on. What the ranges hold is a count, and a reader
-        // that decided from the value's own shape how to print it was answering a question the
-        // carrier had already answered.
-        return obligation.written();
+        return obligation.target().right();
     }
 
     /**

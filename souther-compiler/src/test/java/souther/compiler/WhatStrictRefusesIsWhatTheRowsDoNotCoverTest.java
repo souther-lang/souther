@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.BoundaryTarget;
 import souther.compiler.partition.Partitions;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -238,10 +239,12 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     @Test
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
         BoundaryAssessment met = new BoundaryAssessment(
-                new BoundaryObligation(new AxisId("weigh", "w.a"),
+                new BoundaryObligation(
+                        new BoundaryTarget.AtCount(new AxisId("weigh", "w.a"), Carrier.WHOLE,
+                                Count.of(100)),
                         new OriginRef.InvariantOrigin(Optional.empty(),
                                 new TypeName("example.rate", "Amount"), "value <= 100"),
-                        BoundaryObligation.BoundarySide.AT, Carrier.WHOLE, Count.of(100)),
+                        BoundaryObligation.BoundarySide.AT),
                 new BoundaryAssessment.Coverage.Hit(),
                 new BoundaryAssessment.Writability.WitnessedByRow(),
                 new BoundaryAssessment.Attempt.NotAttempted(

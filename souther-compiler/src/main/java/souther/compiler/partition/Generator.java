@@ -317,14 +317,28 @@ public final class Generator {
      */
     public static BoundaryAttempt probe(Subject subject, BoundaryObligation obligation,
                                         CandidateCheck check) {
-        Axis axis = subject.axes().stream().filter(a -> a.id().equals(obligation.axis())).findFirst()
+        return switch (obligation.target()) {
+            case BoundaryTarget.AtCount place -> probeAt(subject, place, check);
+            // A row on a line between two positions takes a count both of them admit, and nothing
+            // here reads one yet. Said as a line with no value to stand for it rather than as a
+            // refusal: nothing was offered to the decoder, so nothing was refused.
+            case BoundaryTarget.EqualTerms line -> new BoundaryAttempt.Unresolved(
+                    new UnresolvedCombination(List.of(line.left() + " = " + line.right()),
+                            UnresolvedCombination.Reason.NO_REPRESENTATIVE));
+        };
+    }
+
+    /** A row at a line drawn at one count of one position. */
+    private static BoundaryAttempt probeAt(Subject subject, BoundaryTarget.AtCount place,
+                                           CandidateCheck check) {
+        Axis axis = subject.axes().stream().filter(a -> a.id().equals(place.axis())).findFirst()
                 .orElse(null);
         if (axis == null) {
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(),
                     UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
-        String label = axis.term() + " = " + obligation.written();
-        Edge edge = edgeOf(axis, obligation.carrier(), obligation.at(), subject.symbols());
+        String label = place.left() + " = " + place.right();
+        Edge edge = edgeOf(axis, place.carrier(), place.at(), subject.symbols());
         if (edge.values().isEmpty()) {
             return new BoundaryAttempt.Unresolved(
                     new UnresolvedCombination(List.of(label), edge.reason()));

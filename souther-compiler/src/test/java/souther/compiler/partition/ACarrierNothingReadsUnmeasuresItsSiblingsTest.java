@@ -105,7 +105,7 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                 ? " writable" : " not known to be writable";
         return Partitions.obligationsOf(axis, read.symbols(),
                         read.partitioning().domains().get(axis.term())).stream()
-                .map(o -> o.side() + " " + o.written() + standing).sorted().toList();
+                .map(o -> o.side() + " " + o.target().right() + standing).sorted().toList();
     }
 
     private record Read(Partitions.Partitioning partitioning, Symbols symbols) {}

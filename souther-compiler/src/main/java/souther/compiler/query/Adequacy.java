@@ -511,6 +511,10 @@ public final class Adequacy {
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, sig, symbols, body, plan, excluded);
             Coverages.Probe probe = probing(partitioning, sig, symbols, parameters, building);
+            // Two sources and not one. A line drawn at a count of a position comes off that position's
+            // axis; a line drawn between two positions comes off the comparison and has no axis to come
+            // off — the body of a behavior whose inputs are plain numbers nothing bounds draws lines
+            // while having no axis at all.
             List<BoundaryAssessment> out = new ArrayList<>();
             for (Axis axis : partitioning.axes()) {
                 if (!axis.measurable()) {
@@ -520,6 +524,8 @@ public final class Adequacy {
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
                         partitioning.domains().get(axis.term())));
             }
+            out.addAll(Coverages.assessBetween(partitioning.between(), parameters, observed,
+                    armsAsked));
             return List.copyOf(out);
         }
 
