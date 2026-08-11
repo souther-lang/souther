@@ -1102,8 +1102,14 @@ public final class Backend {
      * now may name something an older compiler cannot read, since a name may hold a character
      * outside the basic plane, which the older one scanned by UTF-16 unit and refused. The same
      * number covers a later Unicode version, which admits names that were not names before.
+     *
+     * <p>Version 14 widens which types may key a boundary map: a newtype is one exactly when what it
+     * wraps is one, so a newtype over a temporal, over an enumeration, or over another such newtype
+     * crosses where before only a newtype directly over {@code String} did (spec §collections). A
+     * signature is admitted again when it is read back out of a jar, and an older compiler asked
+     * about {@code Map<LoanDate, Int>} would refuse a declaration this one publishes.
      */
-    public static final int BOUNDARY_VERSION = 13;
+    public static final int BOUNDARY_VERSION = 14;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

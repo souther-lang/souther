@@ -273,6 +273,156 @@ class CompileMapKeyBoundaryTest {
                 """);
     }
 
+    // --- a newtype is a key exactly when what it wraps is one (issue #636) ---------------------
+
+    /** Compiles {@code body} onto the demo module and echoes {@code in} through {@code echo}, which
+     *  is the round trip: the field's keys are decoded into the key type and written back out. */
+    private Object echoed(String body, Object in) throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(
+                Compiler.compile("module demo\n\n" + body), getClass().getClassLoader());
+        Object decoded = Codecs.decoded(loader, "demo.In", Map.of("m", in));
+        Object out = Codecs.apply(
+                loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), decoded);
+        return ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("m");
+    }
+
+    private static String echoing(String key, String declarations) {
+        return declarations + """
+
+                data In = { m: Map<%s, Int> }
+                data Out = { m: Map<%s, Int> }
+
+                behavior echo : (i: In) -> Out constructs Out
+
+                let echo (i) = Out { m = i.m }
+                """.formatted(key, key);
+    }
+
+    @Test
+    void aNewtypeOverADateKeysAMapAtTheBoundary() throws Exception {
+        assertEquals(Map.of("2026-01-01", 3L),
+                echoed(echoing("LoanDate", "data LoanDate = Date"), Map.of("2026-01-01", 3L)));
+    }
+
+    @Test
+    void aNewtypeOverADateTimeKeysAMapAtTheBoundary() throws Exception {
+        assertEquals(Map.of("2026-01-01T09:00", 7L),
+                echoed(echoing("StampedAt", "data StampedAt = DateTime"),
+                        Map.of("2026-01-01T09:00", 7L)));
+    }
+
+    @Test
+    void aNewtypeOverAnEnumerationKeysAMapAtTheBoundary() throws Exception {
+        assertEquals(Map.of("Won", 2L),
+                echoed(echoing("Bracket", """
+                        data Won
+                        data Lost
+                        data Outcome = Won | Lost
+                        data Bracket = Outcome"""), Map.of("Won", 2L)));
+    }
+
+    @Test
+    void aNewtypeOverAStringBackedNewtypeKeysAMapAtTheBoundary() throws Exception {
+        assertEquals(Map.of("P-01", 4L),
+                echoed(echoing("Legacy", """
+                        data ProductId = String
+                        data Legacy = ProductId"""), Map.of("P-01", 4L)));
+    }
+
+    /** Three wrappers deep, so what is held is that the rule recurses rather than that it unwraps
+     *  one level more than it used to. */
+    @Test
+    void theRuleHoldsThreeWrappersDeep() throws Exception {
+        assertEquals(Map.of("2026-01-01", 1L),
+                echoed(echoing("C", """
+                        data A = Date
+                        data B = A
+                        data C = B"""), Map.of("2026-01-01", 1L)));
+    }
+
+    /** A wrapped key is decoded by the outermost type's own decoder, which delegates inward — so an
+     *  invariant declared on the base still runs on the key, and fails at that key's path. */
+    @Test
+    void aWrappedKeyRunsTheInvariantOfWhatItWraps() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data Code = String
+                invariant String.length(value) == 4
+
+                data Legacy = Code
+                data In = { m: Map<Legacy, Int> }
+                """), getClass().getClassLoader());
+
+        Result<?> r = Codecs.decode(loader, "demo.In", Map.of("m", Map.of("AB", 1L)));
+
+        assertTrue(r instanceof Err, "the key \"AB\" is not length 4, so the decode fails");
+        String at = ((Err<?>) r).issues().asList().get(0).path().toString();
+        assertTrue(at.contains("m") && at.contains("AB"), at);
+    }
+
+    /** A map inside a collection is emitted down the element-encoder path rather than the field one,
+     *  so a wrapped key has to be rendered there too. */
+    @Test
+    void aWrappedKeyRendersInANestedMapToo() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data LoanDate = Date
+                data Book = { pages: List<Map<LoanDate, Int>> }
+                data Out = { pages: List<Map<LoanDate, Int>> }
+
+                behavior echo : (b: Book) -> Out constructs Out
+
+                let echo (b) = Out { pages = b.pages }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.Book",
+                Map.of("pages", List.of(Map.of("2026-01-01", 1L))));
+        Object out = Codecs.apply(loader.loadClass("demo.Echo$Impl").getConstructor().newInstance(), in);
+
+        assertEquals(List.of(Map.of("2026-01-01", 1L)),
+                ((Map<?, ?>) Codecs.encode(loader, "demo.Out", out)).get("pages"));
+    }
+
+    /** The refusal is the base's, and wrapping does not launder it: an {@code Int} is a JSON number
+     *  in a field, so it is not a key, and neither is anything written round it. */
+    @Test
+    void aNewtypeOverAnIntBackedNewtypeStillCannotBeAField() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data EmployeeNo = Int
+                data Legacy = EmployeeNo
+                data Roster = { byNo: Map<Legacy, String> }
+                """));
+
+        assertTrue(e.getMessage().contains("Legacy"), e.getMessage());
+    }
+
+    @Test
+    void anExampleCanWriteAWrappedDateKeyedFixture() {
+        Compiler.compile("""
+                module demo
+
+                data LoanDate = Date
+                data Loans = { totals: Map<LoanDate, Int> }
+                data Out = { total: Int }
+
+                behavior sum : (l: Loans) -> Out constructs Out
+
+                let sum (l) = Out {
+                    total = List.fold((acc, v) -> acc + v, 0, Map.values(l.totals))
+                }
+
+                example sum
+                  | "adds the days up" :
+                      (Loans { totals = [ (LoanDate(Date("2026-01-01")), 300)
+                                        , (LoanDate(Date("2026-01-02")), 50) ] })
+                          -> Out { total = 350 }
+                """);
+    }
+
     /** A {@code LocalDate} reaching the neutral decoder as a key is the boundary's own form, so the
      *  in-language value is a {@code Date} and date arithmetic applies to it. */
     @Test

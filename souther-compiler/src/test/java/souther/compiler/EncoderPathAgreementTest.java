@@ -73,7 +73,7 @@ class EncoderPathAgreementTest {
         writtenAlike("Map<String, Code>", "Map.fromList([ (\"k\", Code(\"v\")) ])");
     }
 
-    // === the five kinds a boundary map may be keyed by ===
+    // === the kinds a boundary map may be keyed by ===
 
     @Test
     void aStringKeyedMapIsWrittenTheSameBothWays() throws Exception {
@@ -100,6 +100,14 @@ class EncoderPathAgreementTest {
         writtenAlike("Map<Outcome, Int>", "Map.fromList([ (Won, 7) ])");
     }
 
+    /** A newtype over a temporal. This is the row that holds the two paths to one key rendering:
+     *  each renders a named key through that type's own encoder, so neither can learn a base the
+     *  other does not have (issue #636). */
+    @Test
+    void aWrappedTemporalKeyedMapIsWrittenTheSameBothWays() throws Exception {
+        writtenAlike("Map<Day, Int>", "Map.fromList([ (Day(Date(\"2026-01-01\")), 7) ])");
+    }
+
     // === and at depth, where the key is not the type the behavior declared ===
 
     @Test
@@ -111,6 +119,11 @@ class EncoderPathAgreementTest {
     void aMapOfNewtypeKeyedMapsIsWrittenTheSameBothWays() throws Exception {
         writtenAlike("Map<String, Map<Code, Int>>",
                 "Map.fromList([ (\"a\", Map.fromList([ (Code(\"k\"), 7) ])) ])");
+    }
+
+    @Test
+    void aListOfWrappedTemporalKeyedMapsIsWrittenTheSameBothWays() throws Exception {
+        writtenAlike("List<Map<Day, Int>>", "[ Map.fromList([ (Day(Date(\"2026-01-01\")), 7) ]) ]");
     }
 
     // === the two paths ===
@@ -131,6 +144,7 @@ class EncoderPathAgreementTest {
         Files.writeString(file, """
                 module demo
                 data Code = String
+                data Day = Date
                 data Outcome = Won | Lost
                 data Holder = { v: %s }
                 behavior bare : (n: Int) -> %s%s
@@ -147,6 +161,9 @@ class EncoderPathAgreementTest {
     private static String builtBy(String value) {
         if (value.contains("Code(")) {
             return "Code";
+        }
+        if (value.contains("Day(")) {
+            return "Day";
         }
         return value.contains("Won") ? "Won" : "";
     }

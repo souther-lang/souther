@@ -155,7 +155,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
     /** A homogeneous list of {@code element}. */
     record ListOf(Type element) implements Compound {}
 
-    /** A {@code Map<key, value>}. The key is {@code String} or a String-backed newtype (ADR-0040);
+    /** A {@code Map<key, value>}. A key that crosses is one ADR-0040 admits;
      * at runtime the map is keyed by that value (value equality, ADR-0009) and its external
      * representation is a JSON object whose string keys are the key's bare form. */
     record MapOf(Type key, Type value) implements Compound {}
@@ -217,7 +217,7 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
         return new MapOf(STRING, value);
     }
 
-    /** A map with an explicit key type (a String or a String-backed newtype). */
+    /** A map with an explicit key type. */
     static Type map(Type key, Type value) {
         return new MapOf(key, value);
     }

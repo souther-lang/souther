@@ -1,10 +1,11 @@
-# ADR-0040: A Map key may be a String-backed newtype, not only String
+# ADR-0040: A Map key may be a newtype, not only String
 
-Status: Accepted. Amended — the restriction is a boundary rule, not a rule about every map, and a
-temporal key crosses too (see "Where the restriction applies"). The in-language type and operations
-are implemented, and so is the boundary codec: a keyed map may be a data field or behavior I/O,
-decoding each string key into the key type (a newtype invariant-checked, a temporal parsed from its
-ISO form) and encoding it back bare.
+Status: Accepted. Amended twice — the restriction is a boundary rule, not a rule about every map,
+and a temporal key crosses too (see "Where the restriction applies"); and a newtype is a key
+whenever what it wraps is one, not only when it wraps `String` (see "The rule is the base's"). The
+in-language type and operations are implemented, and so is the boundary codec: a keyed map may be a
+data field or behavior I/O, decoding each string key into the key type (a newtype invariant-checked,
+a temporal parsed from its ISO form) and encoding it back bare.
 
 ## Context
 
@@ -67,6 +68,36 @@ included (ADR-0069), so a key is the representation it already has: `{"stage": "
 `{"Won": 300}` carry the same string. Its key is decoded by the sum's own decoder, so a name no case
 answers to fails at that key's path, as a newtype's invariant does.
 
+## The rule is the base's
+
+The two paragraphs above admit a temporal and an enumeration by asking what a key must satisfy —
+renderable as, and parseable from, a bare string — of the type in hand. Asked of a newtype, that
+question has an answer already: a newtype is written as what it wraps is written (ADR-0014), so it
+renders as a bare string exactly when its base does. **A newtype is a key exactly when what it wraps
+is a key**, at any depth.
+
+That is the rule this ADR always stated, but the check implemented a reading of it that held only
+for `String`: it compared the written base against the token `String`, so `data LoanDate = Date` was
+refused, and so were a newtype over an enumeration and a newtype over a String-backed newtype —
+three shapes that each render as and parse from a bare string, refused by the rule that admits them
+(issue #636).
+
+What kept the check from recursing was the shape of its answer. The classification carried the base
+in the case's name — a `StringNewtype` case beside a `UnitEnum` one — so a wrapper could only be
+recognised over the one base a case existed for, and admitting another base meant another case. The
+base was in the name because one reader needed it: the bytecode encoder built its key-rendering
+function out of the newtype's `value()` accessor, which is typed `() -> String` only when the base is
+`String`. No other reader read it. So a local shortcut in code generation was deciding the language's
+admissible set.
+
+The classification is now two cases — a primitive written as its own lexical form, and a name
+written through its own derived codec — and the key-rendering function is built out of that codec in
+both the bytecode encoder and the runner, as the decode side already was. Nothing downstream knows
+what a named key wraps, so a base admitted later needs no case and no reader changed.
+
+An `Int`-backed newtype is still out, by the same rule rather than by an exception to it: `Int` is
+not a key, so nothing written round it is.
+
 ## Consequences
 
 `Map<ProductId, Stock>` and `Map<EmployeeId, authority>` are distinct types, and the key of a lookup is checked
@@ -78,9 +109,13 @@ not a silently accepted string.
 
 A boundary key stays string-rendered on purpose: admitting an arbitrary value key would need an
 entry-array representation (a JSON object cannot key by a non-string), which changes the boundary
-format. A String-backed newtype and a temporal both keep the `Map` a plain JSON object — the minimal,
-representation-preserving step (the option chosen over a value-key design). Inside a body no format
-is at stake, so nothing is restricted there.
+format. Every admitted key keeps the `Map` a plain JSON object — the minimal, representation-preserving
+step (the option chosen over a value-key design). Inside a body no format is at stake, so nothing is
+restricted there.
+
+Widening the admitted set moves `BOUNDARY_VERSION`: a signature is admitted again when it is read
+back out of a jar, so an older compiler asked about a declaration this one publishes would refuse
+it.
 
 ## References
 
