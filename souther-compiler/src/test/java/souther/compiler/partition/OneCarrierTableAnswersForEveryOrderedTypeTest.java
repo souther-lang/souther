@@ -52,10 +52,6 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         return new Measured(1, obligations, null);
     }
 
-    /** A carrier there is no count to embed into. The rule is named and not drawn. */
-    private static final Measured NO_CARRIER =
-            new Measured(0, 0, "it is compared against values no line can be drawn on here");
-
     /**
      * A carrier read all the way through at a position whose type already states classes of its own.
      *
@@ -241,7 +237,10 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardDenseBare", read(1));
         expected.put("guardDayBare", read(2));
         expected.put("guardMomentBare", read(1));
-        expected.put("guardTextBare", NO_CARRIER);
+        // The line and no value beside it. A string has no predecessor, which is the same answer
+        // a decimal and a date-time give and for the same reason — so it is one obligation short of
+        // the whole numbers rather than unread.
+        expected.put("guardTextBare", read(1));
         // The line and the case beside it, written as case names. The classes are still the three
         // cases: `read(2)` would say the cut replaced them, and it does not.
         expected.put("guardStageBare", readBesideItsClasses(2));
@@ -249,7 +248,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("guardDenseWrapped", read(1));
         expected.put("guardDayWrapped", read(2));
         expected.put("guardMomentWrapped", read(1));
-        expected.put("guardTextWrapped", NO_CARRIER);
+        expected.put("guardTextWrapped", read(1));
         // Not what the bare position answers, and not what this row is about. The line is drawn —
         // the carrier is asked of what the name wraps, as it is for every other newtype here — and
         // the classes are gone: a newtype over a sum loses the sum's cases, because the classes
@@ -275,7 +274,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         expected.put("boundDense", new Measured(0, 1, null));
         expected.put("boundDay", new Measured(0, 1, null));
         expected.put("boundMoment", new Measured(0, 1, null));
-        expected.put("boundText", NO_CARRIER);
+        expected.put("boundText", new Measured(0, 1, null));
         expected.put("boundStage", new Measured(0, 1, null));
 
         assertEquals(expected, measured(expected.keySet()));

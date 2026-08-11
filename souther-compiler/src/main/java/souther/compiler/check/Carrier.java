@@ -62,6 +62,17 @@ public sealed interface Carrier {
     record Seconds() implements Carrier {}
 
     /**
+     * A string, standing for itself.
+     *
+     * <p>The one carrier with no count under it. What that costs is the value beside a line and
+     * nothing else: a string has no predecessor, so the row just below a line cannot be written —
+     * which is what {@link Granularity#DENSE} already says of a carrier, and is the same answer a
+     * {@code Decimal} and a date-time get. What it does not cost is the line itself, the classes
+     * either side of it, or the row at it, and those were being lost with it.
+     */
+    record Text() implements Carrier {}
+
+    /**
      * The place a case takes in its enumeration's declaration, standing for the case.
      *
      * <p>Carries the cases because the count means nothing without them: 1 is a day, a second, a
@@ -97,6 +108,8 @@ public sealed interface Carrier {
     Carrier DATE = new Days();
     Carrier MOMENT = new Seconds();
 
+    Carrier TEXT = new Text();
+
     /**
      * The carrier a location's own content is counted on, or null where nothing here draws a line on
      * it.
@@ -113,9 +126,10 @@ public sealed interface Carrier {
                 case DECIMAL -> DENSE;
                 case DATE -> DATE;
                 case DATETIME -> MOMENT;
-                // `String` is ordered and has no count to embed into, so nothing here draws a line
-                // on it. `Bool` and `Raw` are not ordered at all.
-                case STRING, BOOL, RAW -> null;
+                // `String` is ordered lexicographically and stands for itself. `Bool` and `Raw` are
+                // not ordered at all.
+                case STRING -> TEXT;
+                case BOOL, RAW -> null;
             };
         }
         // The enumeration itself, and not an order a value of it can be compared on. Which order
@@ -139,7 +153,10 @@ public sealed interface Carrier {
             case Whole _, Days _, Ordinal _ -> Granularity.DISCRETE;
             // No smallest step this language names. A strict bound then leaves its end on the count
             // it names and says that count is not one of its own, rather than inventing a step in.
-            case Dense _, Seconds _ -> Granularity.DENSE;
+            // A string has no next string this language names, which is the same thing a decimal
+            // and a date-time have and is answered the same way: a strict bound leaves its end on
+            // the value it names, and the row beside a line is not asked for.
+            case Dense _, Seconds _, Text _ -> Granularity.DENSE;
         };
     }
 
@@ -160,8 +177,9 @@ public sealed interface Carrier {
             return null;
         }
         return switch (this) {
-            // A decimal holds every number: the ranges and the values are the same numbers.
-            case Dense _ -> count;
+            // A decimal holds every number and a string is every string: the ranges and the values
+            // are the same things.
+            case Dense _, Text _ -> count;
             // A whole number, a day count and an ordinal step, so a number between two of them is
             // neither, and each stops where what carries it stops. Asked here rather than at each
             // place that steps one, because a step off the end is the same non-value however it was
@@ -225,6 +243,9 @@ public sealed interface Carrier {
      * are not numbers had nothing to say through it.
      */
     default Place somethingInside(Endpoint low, Endpoint high) {
+        if (this instanceof Text) {
+            return someStringInside(low, high);
+        }
         Granularity spacing = spacing();
         if (spacing == Granularity.DISCRETE) {
             Endpoint lo = whole(low, true);
@@ -248,6 +269,36 @@ public sealed interface Carrier {
         // count the dense carrier holds, and inside both — and a step in where there is not.
         return high == null ? count(low).plus(1)
                 : count(low).halfwayTo(count(high), Granularity.DENSE);
+    }
+
+    /**
+     * A string inside a pair of ends, or null where nothing here names one.
+     *
+     * <p>An end the range holds is the string taken: it is what a boundary wants written anyway.
+     * Below an end the range stops short of, the empty string is under every other one and is taken
+     * — the least of them, and not a string this made up.
+     *
+     * <p>Above an end the range stops short of, nothing. Every string with that one as a prefix is
+     * greater, so a value exists; which one it is is a choice, and a choice made here would be a
+     * character this compiler picked appearing in a row somebody has to read. That is the same
+     * restraint a decimal and a date-time already get above a strict bound, reached for the same
+     * reason: the language names no next value, and inventing one tests a rule the model never
+     * stated.
+     */
+    private static Place someStringInside(Endpoint low, Endpoint high) {
+        if (low != null && low.inclusive()) {
+            return low.at();
+        }
+        if (low != null) {
+            return null;
+        }
+        if (high == null) {
+            return souther.compiler.numeric.Text.of("");
+        }
+        if (high.inclusive()) {
+            return high.at();
+        }
+        return high.at().key().isEmpty() ? null : souther.compiler.numeric.Text.of("");
     }
 
     /** An end moved onto the nearest whole count the range holds, which is always one it holds. */
@@ -356,6 +407,8 @@ public sealed interface Carrier {
             case Ordinal ordinal -> e instanceof Ast.Var v
                     && v.denotes() instanceof ValueName.OfType named
                     ? ordinal.at(named.type()) : null;
+            case Text _ -> e instanceof Ast.StringLit lit
+                    ? souther.compiler.numeric.Text.of(lit.value()) : null;
         };
     }
 
@@ -397,6 +450,8 @@ public sealed interface Carrier {
             // A case carries nothing but which case it is, so the observation is its name.
             case Ordinal ordinal ->
                     at instanceof ObservedValue.Unit u ? ordinal.at(u.type()) : null;
+            case Text _ -> at instanceof ObservedValue.Text t
+                    ? souther.compiler.numeric.Text.of(t.value()) : null;
         };
     }
 
@@ -414,6 +469,7 @@ public sealed interface Carrier {
             case Days _ -> new ObservedValue.Temporal(Dates.written(count));
             case Seconds _ -> new ObservedValue.Temporal(DateTimes.written(count));
             case Ordinal ordinal -> new ObservedValue.Unit(ordinal.caseAt(count));
+            case Text _ -> new ObservedValue.Text(count.key());
         };
     }
 
@@ -435,6 +491,9 @@ public sealed interface Carrier {
             // The case's name, which is the only thing a person ever writes at such a position. An
             // ordinal in a report would name a line at a number the model does not contain.
             case Ordinal ordinal -> ordinal.caseAt(count).name();
+            // Bare, as a date and a case are. A row's own description is quoted text, so a quote
+            // here ends it early and the rest of the line lands where the input goes.
+            case Text _ -> count.key();
         };
     }
 }

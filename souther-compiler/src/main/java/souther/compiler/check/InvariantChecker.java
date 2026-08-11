@@ -428,8 +428,17 @@ public final class InvariantChecker {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(layer.data(), symbols)) {
                 for (Ast.Expr each
                         : souther.compiler.codegen.InvariantConstraints.clauses(clause.expr())) {
-                    boolean read = carrier != null ? InvariantBound.of(each, carrier).isPresent()
-                            : souther.compiler.codegen.InvariantConstraints.of(each, base).isPresent();
+                    // A `String` is the one type two measures answer for — its own order, and the
+                    // length of it — so a rule about either is a rule that was read, and both are
+                    // asked. Every other carrier is measured one way, and asking the second reader
+                    // as well would call a rule read that no measure took in.
+                    boolean read = carrier instanceof Carrier.Text
+                            ? InvariantBound.of(each, carrier).isPresent()
+                                    || souther.compiler.codegen.InvariantConstraints
+                                            .of(each, base).isPresent()
+                            : carrier != null ? InvariantBound.of(each, carrier).isPresent()
+                                    : souther.compiler.codegen.InvariantConstraints
+                                            .of(each, base).isPresent();
                     if (!read) {
                         return false;
                     }

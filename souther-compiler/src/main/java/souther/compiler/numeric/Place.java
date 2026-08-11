@@ -11,16 +11,16 @@ package souther.compiler.numeric;
  *
  * <p>So the order and the arithmetic are told apart here. Everything the interval algebra needs of a
  * position's values in order to divide them — comparing two, telling two apart, writing one down — is
- * on this; what needs a number is on {@link Count}, which is the only case that has one. A reader
- * that steps to the next value or takes the middle of two is a reader that has already established
- * it is on a carrier whose values step or fill, and it holds a {@link Count} by then.
+ * on this; what needs a number is on {@link Count}, which is the case that has one. A reader that
+ * steps to the next value or takes the middle of two is a reader that has already established it is
+ * on a carrier whose values step or fill, and it holds a {@link Count} by then.
  *
  * <p><b>Two places are only ever compared on one carrier.</b> A threshold and the value a row holds
  * at the position it cuts are places on the same order by construction, and nothing in the algebra
  * brings two carriers' places together. Comparing across them is a mistake in this compiler rather
  * than anything a model can write, and it is said as one.
  */
-public sealed interface Place extends Comparable<Place> permits Count {
+public sealed interface Place extends Comparable<Place> permits Count, Text {
 
     /**
      * What makes two places one line: what they are, and not how they were written.

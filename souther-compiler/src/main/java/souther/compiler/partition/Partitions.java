@@ -610,15 +610,20 @@ public final class Partitions {
         Carrier carried = Carrier.ofValue(type, symbols);
         ValueName.Stdlib of = NumericMeasures.takenOf(type, symbols);
         List<UnreadRule> unread = unreadBoundsAt(path, type, symbols, carried, of);
-        if (carried != null) {
-            return new Measured(new NumericTerm.ValueOf(path),
-                    boundsOf(type, symbols, carried, null), unread);
-        }
+        // What the rules are about, and only then what the type could carry. A position has one
+        // axis, and a `String` is the one type that can be measured two ways — its own order, and
+        // the length of it — so which of them the model wrote about is what decides. Read off the
+        // carrier first, every rule anybody ever wrote about the length of a string would have
+        // become a rule about the string.
         if (of != null) {
             Bounds sized = boundsOf(type, symbols, Carrier.WHOLE, of);
             if (sized != null && !sized.isEmpty()) {
                 return new Measured(new NumericTerm.SizeOf(of, path), sized, unread);
             }
+        }
+        if (carried != null) {
+            return new Measured(new NumericTerm.ValueOf(path),
+                    boundsOf(type, symbols, carried, null), unread);
         }
         return new Measured(new NumericTerm.ValueOf(path), null, unread);
     }

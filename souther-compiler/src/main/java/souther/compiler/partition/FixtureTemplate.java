@@ -140,6 +140,9 @@ public record FixtureTemplate(String text, Ast.Expr value) {
             // Naming a case builds it, which is what a row writes at such a position — never the
             // place the case takes in its declaration.
             case Carrier.Ordinal ordinal -> unitCase(ordinal.caseAt(at));
+            // A string stands for itself, so what a row carries is the string, escaped the way the
+            // language reads one back.
+            case Carrier.Text _ -> string(at.key());
         };
     }
 

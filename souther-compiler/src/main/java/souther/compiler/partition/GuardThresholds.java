@@ -540,6 +540,10 @@ public final class GuardThresholds {
             // enumeration's declaration this is a value of neither, and the carrier says so.
             case Core.UnitValue unit -> carrier instanceof Carrier.Ordinal ordinal
                     ? ordinal.at(unit.data()) : null;
+            // A string, which stands for itself. Refused where the position is not on that order,
+            // so a string compared against something counted is not read as its place.
+            case Core.Str str -> carrier instanceof Carrier.Text
+                    ? souther.compiler.numeric.Text.of(str.value()) : null;
             case null, default -> null;
         };
     }
