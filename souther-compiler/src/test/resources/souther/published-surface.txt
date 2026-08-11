@@ -103,11 +103,18 @@ Date.daysBetween(from: Date, to: Date) : Int
 Date.year(d: Date) : Int
 Date.month(d: Date) : Int
 Date.day(d: Date) : Int
+Date.fromParts(year: Int, month: Int, day: Int) : Date | NotADate
+Time.fromParts(hour: Int, minute: Int, second: Int) : Time | NotATime
+Time.hour(t: Time) : Int
+Time.minute(t: Time) : Int
+Time.second(t: Time) : Int
 DateTime.addMinutes(minutes: Int, dt: DateTime) : DateTime
 DateTime.addHours(hours: Int, dt: DateTime) : DateTime
 DateTime.addDays(days: Int, dt: DateTime) : DateTime
 DateTime.minutesBetween(from: DateTime, to: DateTime) : Int
 DateTime.toDate(dt: DateTime) : Date
+DateTime.toTime(dt: DateTime) : Time
+DateTime.fromDateAndTime(d: Date, t: Time) : DateTime
 Int.divide(dividend: Int, divisor: Int) : Int | DivisionByZero
 Int.truncatingRemainder(dividend: Int, divisor: Int) : Int | DivisionByZero
 Int.add(a: Int, b: Int) : Int

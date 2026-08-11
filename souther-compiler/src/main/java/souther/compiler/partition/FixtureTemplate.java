@@ -90,14 +90,26 @@ public record FixtureTemplate(String text, Ast.Expr value) {
 
     /** A date, written the way a row writes one: the constructor applied to an ISO 8601 string. */
     public static FixtureTemplate date(String iso) {
-        return new FixtureTemplate("Date(\"" + iso + "\")",
-                new Ast.Apply("Date", List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
-                        NOWHERE, NO_SOURCE));
+        return temporal("Date", iso);
+    }
+
+    public static FixtureTemplate time(String iso) {
+        return temporal("Time", iso);
     }
 
     public static FixtureTemplate dateTime(String iso) {
-        return new FixtureTemplate("DateTime(\"" + iso + "\")",
-                new Ast.Apply("DateTime", List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
+        return temporal("DateTime", iso);
+    }
+
+    public static FixtureTemplate instant(String iso) {
+        return temporal("Instant", iso);
+    }
+
+    /** Every temporal is written the same way — the type's name applied to its ISO 8601 text — so the
+     *  four share this rather than repeating it and letting one of them drift. */
+    private static FixtureTemplate temporal(String type, String iso) {
+        return new FixtureTemplate(type + "(\"" + iso + "\")",
+                new Ast.Apply(type, List.of(new Ast.StringLit(iso, NOWHERE, NO_SOURCE)),
                         NOWHERE, NO_SOURCE));
     }
 

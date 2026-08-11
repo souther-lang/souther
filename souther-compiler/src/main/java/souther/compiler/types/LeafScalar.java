@@ -10,8 +10,8 @@ package souther.compiler.types;
  *
  * <p>One type for one fact, read by two questions that are not the same question. What a behavior's
  * boundary writes as itself is one; what a fixture can be decoded into is another. They list the
- * same six because both are asking which primitives a codec exists for — so that is what this says,
- * once. Written twice, agreeing today would be the whole of the guarantee, and the day a seventh is
+ * same primitives because both are asking which ones a codec exists for — so that is what this says,
+ * once. Written twice, agreeing today would be the whole of the guarantee, and the day another is
  * admitted or one is taken away only one of them would move.
  */
 public enum LeafScalar {
@@ -21,7 +21,9 @@ public enum LeafScalar {
     BOOL(Type.Prim.BOOL),
     DECIMAL(Type.Prim.DECIMAL),
     DATE(Type.Prim.DATE),
-    DATETIME(Type.Prim.DATETIME);
+    TIME(Type.Prim.TIME),
+    DATETIME(Type.Prim.DATETIME),
+    INSTANT(Type.Prim.INSTANT);
 
     private final Type.Prim prim;
 
@@ -42,7 +44,9 @@ public enum LeafScalar {
             case BOOL -> BOOL;
             case DECIMAL -> DECIMAL;
             case DATE -> DATE;
+            case TIME -> TIME;
             case DATETIME -> DATETIME;
+            case INSTANT -> INSTANT;
             case RAW -> null;
         };
     }

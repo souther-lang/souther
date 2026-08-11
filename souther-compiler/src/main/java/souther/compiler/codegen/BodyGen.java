@@ -1233,10 +1233,10 @@ final class BodyGen {
                 return;
             }
             switch (call.name()) {
-                case "Date", "DateTime" -> {
-                    // a written date: the checker has already parsed the literal, so the text is
+                case "Date", "Time", "DateTime", "Instant" -> {
+                    // a written temporal: the checker has already parsed the literal, so the text is
                     // known good and this is a plain parse of a constant string.
-                    ClassDesc cd = "Date".equals(call.name()) ? CD_LocalDate : CD_LocalDateTime;
+                    ClassDesc cd = JvmTypes.boxedPrim(Type.Prim.named(call.name()));
                     code.loadConstant(((Core.Str) call.args().get(0)).value());
                     code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
                 }
@@ -1741,11 +1741,17 @@ final class BodyGen {
                         case LT, LE, GT, GE -> true;
                         default -> false;
                     };
-                    if (ordering && (lt == Type.STRING || lt == Type.DECIMAL
-                            || lt == Type.DATE || lt == Type.DATETIME)) {
-                        // String, Decimal, Date, DateTime all carry as Comparable — String,
-                        // BigDecimal, LocalDate, LocalDateTime — so one compareTo reduces the order
-                        // to its sign against 0. BigDecimal.compareTo ignores scale, which matches
+                    // Which primitives compare through an object, asked of each one so that an
+                    // ordered primitive added later cannot fall past this into the paths below.
+                    boolean viaComparable = lt instanceof Type.Prim lp && switch (lp) {
+                        case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT -> true;
+                        // Int is ordered too, and is compared with the long instructions below
+                        case INT, BOOL, RAW -> false;
+                    };
+                    if (ordering && viaComparable) {
+                        // These all carry as Comparable — String, BigDecimal, LocalDate, LocalTime,
+                        // LocalDateTime, Instant — so one compareTo reduces the order to its sign
+                        // against 0. BigDecimal.compareTo ignores scale, which matches
                         // Decimal equality (spec §equality); the others order lexicographically / in time.
                         code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                         code.iconst_0();

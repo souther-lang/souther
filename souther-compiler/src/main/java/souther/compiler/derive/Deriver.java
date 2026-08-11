@@ -132,7 +132,9 @@ public final class Deriver {
             case BOOL -> Ast.RawKind.BOOL;
             case DECIMAL -> Ast.RawKind.DECIMAL;
             case DATE -> Ast.RawKind.DATE;
+            case TIME -> Ast.RawKind.TIME;
             case DATETIME -> Ast.RawKind.DATETIME;
+            case INSTANT -> Ast.RawKind.INSTANT;
             case INT -> Ast.RawKind.INT;
         };
     }
@@ -196,7 +198,7 @@ public final class Deriver {
             case STRING -> new Ast.TextRaw(access, pos);
             case BOOL -> new Ast.BoolRaw(access, pos);
             case DECIMAL -> new Ast.DecimalRaw(access, pos);
-            case DATE, DATETIME -> new Ast.IsoTextRaw(access, pos);
+            case DATE, TIME, DATETIME, INSTANT -> new Ast.IsoTextRaw(access, pos);
             case INT -> new Ast.IntRaw(access, pos);
         };
     }

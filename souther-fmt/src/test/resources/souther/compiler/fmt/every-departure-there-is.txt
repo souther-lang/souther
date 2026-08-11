@@ -125,6 +125,7 @@ one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / MEMBERS_TA
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
+one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / NOTHING_SHARES_A_COMMENTS_LINE at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / a group's own break at depth 1 and column 0
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / GUARD_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column further in of MEMBERS_TAKE_LINES_OF_THEIR_OWN / IF_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
@@ -157,6 +158,7 @@ one column further in of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / A_FILE_ENDS_W
 one column further in of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 one column further in of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / a group's own break at depth 1 and column 0
 one column further in of NOTHING_SHARES_A_COMMENTS_LINE / MODULE_HEADER / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
+one column further in of NOTHING_SHARES_A_COMMENTS_LINE / a comment / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 one column further in of NOTHING_SHARES_A_COMMENTS_LINE / a comment / NOTHING_SHARES_A_COMMENTS_LINE at depth 1 and column 0
 one column further in of a group's own break / APPLY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 one column further in of a group's own break / APPLY_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
@@ -180,6 +182,7 @@ one column further in of a group's own break / no place / A_FILE_ENDS_WITH_ONE_N
 one column further in of a group's own break / no place / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 one column further in of a group's own break / no place / a group's own break at depth 3 and column 8
 one column further in of the start of the file / SOURCE_FILE / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 0 and column 0
+one column further in of the start of the file / SOURCE_FILE / NOTHING_SHARES_A_COMMENTS_LINE at depth 0 and column 0
 one column further in of the start of the file / a comment / NOTHING_SHARES_A_COMMENTS_LINE at depth 0 and column 0
 run on into the next line of A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS / nothing / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 run on into the next line of A_BRACKET_TAKES_A_LINE_OF_ITS_OWN / no place / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
@@ -224,6 +227,7 @@ run on into the next line of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / A_FILE_EN
 run on into the next line of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 run on into the next line of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / a group's own break at depth 1 and column 0
 run on into the next line of NOTHING_SHARES_A_COMMENTS_LINE / MODULE_HEADER / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
+run on into the next line of NOTHING_SHARES_A_COMMENTS_LINE / a comment / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 run on into the next line of a group's own break / APPLY_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 run on into the next line of a group's own break / APPLY_EXPR / a group's own break at depth 2 and column 4
 run on into the next line of a group's own break / APPLY_EXPR / a group's own break at depth 3 and column 8
@@ -266,6 +270,7 @@ with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / MEMBE
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
+with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / NOTHING_SHARES_A_COMMENTS_LINE at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / a group's own break at depth 1 and column 0
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / GUARD_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a blank line under it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / IF_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
@@ -294,6 +299,7 @@ with a blank line under it of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / A_FILE_E
 with a blank line under it of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a blank line under it of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / a group's own break at depth 1 and column 0
 with a blank line under it of NOTHING_SHARES_A_COMMENTS_LINE / MODULE_HEADER / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
+with a blank line under it of NOTHING_SHARES_A_COMMENTS_LINE / a comment / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a blank line under it of NOTHING_SHARES_A_COMMENTS_LINE / a comment / NOTHING_SHARES_A_COMMENTS_LINE at depth 1 and column 0
 with a blank line under it of a group's own break / APPLY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a blank line under it of a group's own break / APPLY_EXPR / a group's own break at depth 2 and column 4
@@ -314,6 +320,7 @@ with a blank line under it of a group's own break / no place / A_BLANK_LINE_SEPA
 with a blank line under it of a group's own break / no place / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 2 and column 4
 with a blank line under it of a group's own break / no place / a group's own break at depth 3 and column 8
 with a blank line under it of the start of the file / SOURCE_FILE / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 0 and column 0
+with a blank line under it of the start of the file / SOURCE_FILE / NOTHING_SHARES_A_COMMENTS_LINE at depth 0 and column 0
 with a blank line under it of the start of the file / a comment / NOTHING_SHARES_A_COMMENTS_LINE at depth 0 and column 0
 with a space at the end of it of A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS / nothing / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a space at the end of it of A_BRACKET_TAKES_A_LINE_OF_ITS_OWN / no place / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
@@ -338,6 +345,7 @@ with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / ME
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
+with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / NOTHING_SHARES_A_COMMENTS_LINE at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / a group's own break at depth 1 and column 0
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / GUARD_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space at the end of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / IF_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
@@ -370,6 +378,7 @@ with a space at the end of it of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / A_FIL
 with a space at the end of it of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
 with a space at the end of it of NOTHING_SHARES_A_COMMENTS_LINE / FN_DEF / a group's own break at depth 1 and column 0
 with a space at the end of it of NOTHING_SHARES_A_COMMENTS_LINE / MODULE_HEADER / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
+with a space at the end of it of NOTHING_SHARES_A_COMMENTS_LINE / a comment / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a space at the end of it of NOTHING_SHARES_A_COMMENTS_LINE / a comment / NOTHING_SHARES_A_COMMENTS_LINE at depth 1 and column 0
 with a space at the end of it of a group's own break / APPLY_EXPR / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4
 with a space at the end of it of a group's own break / APPLY_EXPR / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
@@ -393,6 +402,7 @@ with a space at the end of it of a group's own break / no place / A_FILE_ENDS_WI
 with a space at the end of it of a group's own break / no place / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space at the end of it of a group's own break / no place / a group's own break at depth 3 and column 8
 with a space at the end of it of the start of the file / SOURCE_FILE / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 0 and column 0
+with a space at the end of it of the start of the file / SOURCE_FILE / NOTHING_SHARES_A_COMMENTS_LINE at depth 0 and column 0
 with a space at the end of it of the start of the file / a comment / NOTHING_SHARES_A_COMMENTS_LINE at depth 0 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / BEHAVIOR_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
@@ -411,6 +421,7 @@ with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FAKE_ROW / MEMBE
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / A_FILE_ENDS_WITH_ONE_NEWLINE at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 1 and column 0
+with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / NOTHING_SHARES_A_COMMENTS_LINE at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / FN_DEF / a group's own break at depth 1 and column 0
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / GUARD_STMT / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space doubled in it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / IF_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
@@ -452,6 +463,7 @@ with a space doubled in it of a group's own break / MATCH_EXPR / MEMBERS_TAKE_LI
 with a space doubled in it of a group's own break / TUPLE_EXPR / a group's own break at depth 3 and column 8
 with a space doubled in it of a group's own break / no place / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 2 and column 4
 with a space doubled in it of the start of the file / SOURCE_FILE / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 0 and column 0
+with a space doubled in it of the start of the file / SOURCE_FILE / NOTHING_SHARES_A_COMMENTS_LINE at depth 0 and column 0
 with a space taken out of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / APPLY_EXPR / A_BRACKET_TAKES_A_LINE_OF_ITS_OWN at depth 4 and column 12
 with a space taken out of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / ELSE_ARM / MEMBERS_TAKE_LINES_OF_THEIR_OWN at depth 3 and column 8
 with a space taken out of it of MEMBERS_TAKE_LINES_OF_THEIR_OWN / EXAMPLE_ROW / A_BLANK_LINE_SEPARATES_TOP_LEVEL_ITEMS at depth 2 and column 4

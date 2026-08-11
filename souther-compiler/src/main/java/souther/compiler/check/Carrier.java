@@ -126,8 +126,16 @@ public sealed interface Carrier {
                 case DECIMAL -> DENSE;
                 case DATE -> DATE;
                 case DATETIME -> MOMENT;
-                // `String` is ordered lexicographically and stands for itself. `Bool` and `Raw` are
-                // not ordered at all.
+                // `Time` and `Instant` are ordered and each has a count that would embed — a second
+                // of the day, a second from an epoch — so each could be a carrier, and neither is
+                // one yet. It is not an arm here on its own: a carrier owes both crossings and a
+                // spacing, and an `Instant`'s is not a `DateTime`'s now that a `DateTime` is held to
+                // the second. Two units in one carrier is what `Days` and `Seconds` are separate to
+                // avoid, so these answer nothing rather than borrowing a count that means something
+                // else.
+                case TIME, INSTANT -> null;
+                // `String` is ordered lexicographically and stands for itself, having no count to
+                // embed into and needing none. `Bool` and `Raw` are not ordered at all.
                 case STRING -> TEXT;
                 case BOOL, RAW -> null;
             };
@@ -150,23 +158,25 @@ public sealed interface Carrier {
      * next count to step to. */
     default Granularity spacing() {
         return switch (this) {
-            case Whole _, Days _, Ordinal _ -> Granularity.DISCRETE;
+            // A date-time steps too: it is held to the second (spec
+            // §a-local-temporal-is-held-to-the-second), which is the decision `DateTimes` recorded
+            // as nobody's, so a strict bound on one has a count to sharpen onto.
+            case Whole _, Days _, Ordinal _, Seconds _ -> Granularity.DISCRETE;
             // No smallest step this language names. A strict bound then leaves its end on the count
             // it names and says that count is not one of its own, rather than inventing a step in.
-            // A string has no next string this language names, which is the same thing a decimal
-            // and a date-time have and is answered the same way: a strict bound leaves its end on
-            // the value it names, and the row beside a line is not asked for.
-            case Dense _, Seconds _, Text _ -> Granularity.DENSE;
+            // A string has no next string this language names — naming it means choosing a
+            // character this language does not name either — so a strict bound leaves its end on the
+            // value it names and the row beside a line is not asked for.
+            case Dense _, Text _ -> Granularity.DENSE;
         };
     }
 
     /**
      * The count as this carrier can actually hold it, or null where it holds nothing there.
      *
-     * <p>Not every number between two of this carrier's counts is one of them. A date-time is dense
-     * in the sense that matters to a strict bound — there is no step to sharpen one onto — and the
-     * counts it can be written as still sit on a grid, at the nanosecond. Halfway between two
-     * adjacent ones is a number and not a date-time.
+     * <p>Not every number between two of this carrier's counts is one of them. Halfway between two
+     * adjacent moments is a number and not a date-time, because what a date-time can be written as
+     * sits on a grid at the second.
      *
      * <p>Asked wherever a count is about to stand for a value. Left unasked, a class open at both
      * ends between two adjacent moments offered the count between them, which was written back as one
@@ -196,21 +206,15 @@ public sealed interface Carrier {
                     ? count : null;
             case Ordinal ordinal -> whole(count) && within(count, 0, ordinal.cases().size() - 1)
                     ? count : null;
-            // Round-tripped and then held to itself. What a date-time can be written as sits on a
-            // grid at the nanosecond, and the writer rounds onto it — so returning what came back
-            // would answer "the nearest count this carrier holds" to a question that asks whether it
-            // holds this one. A caller reading that as a yes offers a value between two moments as
-            // one of them.
-            // Where the calendar stops first, and then on the grid inside it. A date-time is the
-            // one carrier whose counts are bounded at both ends and spaced besides, and asking the
-            // writer would be asking it to answer for a count it exists to write — which it does by
-            // throwing, out of a question whose whole job is to answer no.
+            // Where the calendar stops first, and then on the grid inside it. A date-time is
+            // bounded at both ends and spaced besides, and asking the writer alone would be asking
+            // it to answer for a count it exists to write — which it does by throwing, out of a
+            // question whose whole job is to answer no.
             //
-            // Round-tripped and then held to itself. What a date-time can be written as sits on a
-            // grid at the nanosecond, and the writer rounds onto it, so returning what came back
-            // would answer "the nearest count this carrier holds" to a question that asks whether
-            // it holds this one. A caller reading that as a yes offers a value between two moments
-            // as one of them.
+            // Round-tripped and then held to itself. The writer floors a count onto the second, so
+            // returning what came back would answer "the nearest count this carrier holds" to a
+            // question that asks whether it holds this one. A caller reading that as a yes offers a
+            // value between two moments as one of them.
             case Seconds _ -> {
                 if (!(count instanceof Count) || !DateTimes.holds(count)) {
                     yield null;

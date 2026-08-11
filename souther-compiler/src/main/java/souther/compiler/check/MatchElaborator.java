@@ -191,15 +191,11 @@ public final class MatchElaborator {
         if (!caseName.isPrimitive()) {
             return Type.ref(caseName);
         }
-        return switch (caseName.name()) {
-            case "Int" -> Type.INT;
-            case "String" -> Type.STRING;
-            case "Bool" -> Type.BOOL;
-            case "Decimal" -> Type.DECIMAL;
-            case "Date" -> Type.DATE;
-            case "DateTime" -> Type.DATETIME;
-            default -> null;
-        };
+        // Read back through the one spelling table rather than repeating it here. `Some`/`None` are
+        // primitive-module names too and denote no type, and neither does `Raw`, which no stage
+        // produces — those are the null this answers, as before.
+        Type.Prim prim = caseName.primitiveKind();
+        return prim == null || prim == Type.Prim.RAW ? null : prim;
     }
 
     /** A constructor-destructuring pattern {@code X(Y(s))} opens one newtype per layer: {@code X}
