@@ -29,6 +29,7 @@ class CompileNamingAnExpressionTest {
             "c.value + 1",                          // affine over one
             "c.value * 2",                          // a scalar product
             "c.value * n",                          // a variable product, outside the fragment
+            "c.value * n + 1",                      // one inside arithmetic the fragment does read
             "c.value / 2",                          // an integer divide, outside it too
             "Int.add(c.value, 1)",                  // the function form of an operator
             "Int.subtract(c.value, 1)",

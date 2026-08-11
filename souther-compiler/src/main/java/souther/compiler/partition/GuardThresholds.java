@@ -26,7 +26,7 @@ import java.util.List;
  * rows have to be written on both sides of.
  *
  * <p><b>A comparison is read wherever in a condition it is written</b> (spec
- * §a-boundary-is-drawn-on-a-term). Which position the model divides is not a question about the
+ * §boundary-coordinates). Which position the model divides is not a question about the
  * shape of the condition around the comparison, and it was answered as though it were: in
  *
  * <pre>if kind == Domestic &amp;&amp; cost &lt;= 100000</pre>

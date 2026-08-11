@@ -298,7 +298,7 @@ public final class InvariantChecker {
             Type type = fields.get(field.getKey());
             if (type != null) {
                 c.name(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
-                        field.getKey(), type, at, k, symbols, 1, atoms, typeAt);
+                        field.getKey(), type, at, symbols, 1, atoms, typeAt);
             }
         }
         NumericDomain numbers = k.numbers();
@@ -325,9 +325,9 @@ public final class InvariantChecker {
      * field of a field to something, and the bound that leaves on it is read at the path it sits at
      * rather than at the record it happens to be inside.
      */
-    private void name(Core value, String path, Type type, Denotations at, Known k, Symbols symbols,
+    private void name(Core value, String path, Type type, Denotations at, Symbols symbols,
                       int depth, Map<String, String> atoms, Map<String, Type> typeAt) {
-        String atom = terms.atomOf(value, at, k);
+        String atom = terms.atomOf(value, at);
         if (atom != null) {
             atoms.put(path, atom);
             typeAt.put(path, type);
@@ -338,7 +338,7 @@ public final class InvariantChecker {
         }
         for (Map.Entry<String, Type> field : clauses.fieldsOf(data).entrySet()) {
             name(new Core.FieldAccess(value, field.getKey(), field.getValue(), NOWHERE),
-                    path + "." + field.getKey(), field.getValue(), at, k, symbols, depth + 1,
+                    path + "." + field.getKey(), field.getValue(), at, symbols, depth + 1,
                     atoms, typeAt);
         }
     }
@@ -477,8 +477,20 @@ public final class InvariantChecker {
         return new Findings(c.errors, c.warnings, Status.COMPLETE);
     }
 
-    /** Records an analysis that fell over, for a test in this package to read. */
-    private static void gaveUp(String where, RuntimeException why) {
+    /**
+     * Records an analysis that fell over, for a test in this package to read.
+     *
+     * <p>Every place this check swallows a failure comes through here, so what must not be swallowed
+     * is refused in one place. A shape the walk has no rule for is what fail-open is for: the
+     * run-time check stands for the clause, and reporting the walk's limit as the author's problem is
+     * what the policy avoids. {@link Terms.OneKeyTwoKinds} is not that. It says this check called two
+     * values one value, and what it would produce if caught is a behavior with no findings — which
+     * is exactly what a behavior whose invariants all discharge produces.
+     */
+    static void gaveUp(String where, RuntimeException why) {
+        if (why instanceof Terms.OneKeyTwoKinds) {
+            throw why;
+        }
         List<GaveUp> watching = GAVE_UP;
         if (watching != null) {
             watching.add(new GaveUp(where, why));

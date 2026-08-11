@@ -125,11 +125,18 @@ class CompileInvariantOneDenotationTest {
                 "inline and named answer alike");
     }
 
+    /**
+     * A call nothing has said anything about is owed its clause, not excused it.
+     *
+     * <p>Being able to point at a value and knowing something about it are two things. The check
+     * names this call — the two writings of it are one value — and names nothing that settles
+     * {@code value >= 0} of it, which is a clause left standing rather than a clause never asked.
+     */
     @Test
-    void aCallNothingHasSpokenAboutIsSilent() {
-        assertEquals(0, warnings(Compiler.compileWithWarnings(
+    void aCallNothingHasSaidAnythingAboutIsOwedItsClause() {
+        assertEquals(1, warnings(Compiler.compileWithWarnings(
                         EACHES.formatted("Eaches(Int.floorMod(eaches.value, pack.value))"))),
-                "nothing is known of the call, so its construction is left to the run-time check");
+                "the call is a value the clause is read against, and nothing here discharges it");
     }
 
     private static final String GUARDED = """
