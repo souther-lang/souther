@@ -665,12 +665,23 @@ public final class Main {
      * list — and the name for one is this command's answer, since only it knows which files are in
      * front of the reader. Both renderings go through {@link #displayNames}, so a run cannot quote a
      * line from {@code a/model.sou} and then say the rows of {@code model.sou} were not read.
+     *
+     * <p>Matched on the id and nothing else, which is where this parts from {@link #indexOf}. That
+     * answers for a diagnostic, which may name no source at all: a compile of one file tags its
+     * problems with nothing, and the one file handed over is the answer however the diagnostic is
+     * tagged. A reason in a report always names one, so an id that is none of these files is an id
+     * about a source this command did not hand over, and answering with the only file would be
+     * inventing the very correspondence this is here to stop being guessed at.
      */
-    private static SourceNameResolver namesOf(List<Path> sources) {
+    static SourceNameResolver namesOf(List<Path> sources) {
         List<String> names = displayNames(sources);
         return id -> {
-            int at = indexOf(sources, id);
-            return at < 0 ? id : names.get(at);
+            for (int i = 0; i < sources.size(); i++) {
+                if (Compilation.idOfSourceIndex(i).equals(id)) {
+                    return names.get(i);
+                }
+            }
+            return id;
         };
     }
 
@@ -679,7 +690,13 @@ public final class Main {
         return SourceNames.of(sources.stream().map(Path::toString).toList());
     }
 
-    /** Which of the files handed over a source id names, or -1 when it names none of them. */
+    /**
+     * Which of the files handed over a source id names, or -1 when it names none of them.
+     *
+     * <p>For a diagnostic, which may name no source: a compile of one file tags its problems with
+     * nothing, so the single file is the answer whatever the id reads. Not for a reason in a report,
+     * which always names one — {@link #namesOf} matches on the id alone.
+     */
     private static int indexOf(List<Path> sources, String sourceId) {
         if (sources.size() == 1) {
             return 0;

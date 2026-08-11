@@ -2,6 +2,9 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.query.Compilation;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -144,6 +147,27 @@ class AReportNamesASourceTheWayItsCallerDoesTest {
             }
         }
         assertEquals(Map.of("example.other", "0", "example.zeroname", "1"), subjects, ran.out());
+    }
+
+    /**
+     * An id this command did not hand out is left as it is, and not read as the only file there is.
+     *
+     * <p>Two lookups run over the same list of files and answer differently, because they are asked
+     * different questions. A diagnostic may name no source at all — a compile of one file tags its
+     * problems with nothing, and the file handed over is the answer however the diagnostic is tagged
+     * — so that lookup takes the single source whatever the id reads. A reason in a report always
+     * names one, so an id that is none of these files is about a source this command did not hand
+     * over, and answering with the only file would invent the correspondence this whole change is
+     * about not guessing at.
+     */
+    @Test
+    void anIdThisCommandDidNotHandOverIsNotResolvedToItsOnlyFile() {
+        SourceNameResolver names = Main.namesOf(List.of(Path.of("a", "zeroname.sou")));
+
+        assertEquals("zeroname.sou", names.nameOf(Compilation.idOfSourceIndex(0)));
+        assertEquals("elsewhere.sou", names.nameOf("elsewhere.sou"),
+                "an id from another caller stands for itself");
+        assertEquals("1", names.nameOf("1"), "and so does a position this run has no file at");
     }
 
     /** The lines of the module's own section, which is where a reason about its sources is printed. */
