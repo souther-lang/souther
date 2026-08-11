@@ -479,23 +479,16 @@ public final class DataChecker {
             // asking the wrapped type about a rule that was never written on it.
             Type representation = fields.get("value");
             return representation != null
-                    && holds(representation, DeclaredBounds.leastCountOf(Type.ref(from), symbols),
+                    && holds(representation, DeclaredBounds.mayHoldNothing(Type.ref(from), symbols),
                             target, symbols, seen, new HashSet<>(Set.of(from)));
         }
-        FieldDomains domains = null;
         for (Map.Entry<String, Type> e : fields.entrySet()) {
             if (e.getValue() instanceof Type.OptionOf) {
                 continue;   // read before what it holds: None is a value of it whatever that is
             }
-            // What the record says about the field, asked only where something could be counted
-            // there. Reading a record's rules is work, and a field nothing counts has no floor to
-            // find in them.
-            if (domains == null && NumericMeasures.takenOf(e.getValue(), symbols) != null) {
-                domains = FieldDomains.of(from, d, symbols);
-            }
-            int least = DeclaredBounds.leastCountOf(e.getValue(), symbols,
-                    domains == null ? null : domains.heldAt(e.getKey()));
-            if (holds(e.getValue(), least, target, symbols, seen, new HashSet<>())) {
+            if (holds(e.getValue(),
+                    DeclaredBounds.mayHoldNothing(e.getValue(), symbols, d, e.getKey()),
+                    target, symbols, seen, new HashSet<>())) {
                 return true;
             }
         }
@@ -503,18 +496,18 @@ public final class DataChecker {
     }
 
     /**
-     * Whether a value of {@code type} standing at a position that has to hold {@code least} of
-     * whatever it counts reaches {@code target}.
+     * Whether a value of {@code type} standing at a position that {@code mayBeEmpty} says of reaches
+     * {@code target}.
      *
-     * <p>{@code least} belongs to the value and not to the type, so it carries across a newtype —
-     * which is the same value under another name — and stops at a collection's element, which is a
-     * different value the rules said nothing about. Carried the other way, a rule on the outer list of
-     * a {@code List<List<Tree>>} would be read as a rule on the inner one.
+     * <p>{@code mayBeEmpty} is about the value and not the type, so it carries across a newtype —
+     * which is the same value under another name — and is read again at a collection's element, which
+     * is a different value the rules said nothing about. Carried the other way, a rule on the outer
+     * list of a {@code List<List<Tree>>} would be read as a rule on the inner one.
      *
      * @param worn the names this value is already wearing, so a newtype reachable from its own
      *             representation ends the walk rather than repeating it
      */
-    private static boolean holds(Type type, int least, TypeName target, Symbols symbols,
+    private static boolean holds(Type type, boolean mayBeEmpty, TypeName target, Symbols symbols,
                                  Set<TypeName> seen, Set<TypeName> worn) {
         return switch (type) {
             case Type.OptionOf _ -> false;
@@ -525,15 +518,15 @@ public final class DataChecker {
                 if (symbols.get(ref.name()) instanceof Ast.Data data && data.newtype()) {
                     Type representation = TypeOps.fieldTypes(data, symbols).get("value");
                     yield representation != null && worn.add(ref.name())
-                            && holds(representation, least, target, symbols, seen, worn);
+                            && holds(representation, mayBeEmpty, target, symbols, seen, worn);
                 }
                 yield seen.add(ref.name()) && mandatoryReaches(ref.name(), target, symbols, seen);
             }
-            case Type.ListOf l -> least > 0 && contained(l.element(), target, symbols, seen, worn);
-            case Type.SetOf s -> least > 0 && contained(s.element(), target, symbols, seen, worn);
+            case Type.ListOf l -> !mayBeEmpty && contained(l.element(), target, symbols, seen, worn);
+            case Type.SetOf s -> !mayBeEmpty && contained(s.element(), target, symbols, seen, worn);
             // The value side and only that: a map a field holds is keyed by a string (ADR-0040), so
             // no recursion runs through a key. Widen what a key may be and this needs reading again.
-            case Type.MapOf m -> least > 0 && contained(m.value(), target, symbols, seen, worn);
+            case Type.MapOf m -> !mayBeEmpty && contained(m.value(), target, symbols, seen, worn);
             default -> false;
         };
     }
@@ -541,9 +534,9 @@ public final class DataChecker {
     /**
      * A value a collection holds.
      *
-     * <p>Its floor is read afresh: nothing but its own type speaks about it, there being no field for
-     * a record to have written a rule about, and what the collection has to hold is a count of these
-     * rather than a rule about any one of them.
+     * <p>Whether it can be empty is read afresh: nothing but its own type speaks about it, there
+     * being no field for a record to have written a rule about, and what the collection has to hold
+     * is a count of these rather than a rule about any one of them.
      *
      * <p>The names being worn do carry, because they are how the walk ends rather than anything the
      * rules say. A newtype holding a collection of itself would otherwise be entered again at every
@@ -551,7 +544,7 @@ public final class DataChecker {
      */
     private static boolean contained(Type type, TypeName target, Symbols symbols,
                                      Set<TypeName> seen, Set<TypeName> worn) {
-        return holds(type, DeclaredBounds.leastCountOf(type, symbols), target, symbols, seen, worn);
+        return holds(type, DeclaredBounds.mayHoldNothing(type, symbols), target, symbols, seen, worn);
     }
 
     static void checkData(CheckContext ctx,

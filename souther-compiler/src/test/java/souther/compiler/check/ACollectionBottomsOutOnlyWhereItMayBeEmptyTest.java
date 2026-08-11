@@ -74,7 +74,7 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
      */
     @Test
     void aCountRuleIsWrittenOnTheNameThatWrapsTheCollection() {
-        assertTrue(codesFor("""
+        assertEquals(List.of("E1317"), codesFor("""
                 module demo
 
                 data Kids = Inner
@@ -86,7 +86,30 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                     { kids: Kids
                     , v: Int
                     }
-                """).contains("E1317"), "the rule has nothing to count where it is written");
+                """), "the rule has nothing to count where it is written, and nothing reads it");
+    }
+
+    /**
+     * And nothing else in the module is read either, while a declaration is still wrong.
+     *
+     * <p>The cost of the gate, stated: a cycle that is real goes unreported beside a declaration that
+     * failed to check, and is reported once that is fixed. Taken over the alternative, which is
+     * refusing a type on the strength of a rule the author has already been told is wrong -- one of
+     * those is a diagnostic arriving a build later, and the other is a diagnostic that should never
+     * have been derived.
+     */
+    @Test
+    void aCycleIsNotReportedBesideADeclarationThatFailedToCheck() {
+        assertEquals(List.of("E1317"), codesFor("""
+                module demo
+
+                data Kids = Inner
+                    invariant nonEmpty = List.length(value) >= 1
+
+                data Inner = List<Int>
+
+                data Loop = { self: Loop }
+                """), "`Loop` has no value, and is not said to while a rule is wrong");
     }
 
     /** And where a layer below states it, which the name the field is written with reaches through. */
@@ -194,6 +217,92 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
 
                 data Kids = Map<String, Tree>
                     invariant nonEmpty = Map.size(value) >= 1
+
+                data Tree =
+                    { kids: Kids
+                    , v: Int
+                    }
+                """);
+    }
+
+    /**
+     * A rule states which counts a collection may have, and a floor is only one of the ways it can
+     * leave out none of them.
+     *
+     * <p>An equality states both ends at once and a disequality states neither, so neither is an end
+     * of a range and a reader asking a range where the values stop is told nothing by either. They
+     * remove the empty collection as plainly as a floor does. Each spelling is held at an occurrence
+     * with no record beside it to state the same thing another way, so what is asserted is this
+     * reading and not one standing in for it.
+     */
+    @Test
+    void anEqualityAboveNoneRemovesTheEmptyCollection() {
+        refuses("Nest", """
+                module demo
+
+                data Nest = List<Nest>
+                    invariant one = List.length(value) == 1
+                """);
+    }
+
+    @Test
+    void aDisequalityFromNoneRemovesTheEmptyCollection() {
+        refuses("Nest", """
+                module demo
+
+                data Nest = List<Nest>
+                    invariant some = List.length(value) /= 0
+                """);
+    }
+
+    /** And where the record holding the field is the one that says it. */
+    @Test
+    void theRecordsOwnDisequalityRemovesItToo() {
+        refuses("Tree", """
+                module demo
+
+                data Tree =
+                    { kids: List<Tree>
+                    , v: Int
+                    }
+                    invariant some = List.length(kids) /= 0
+                """);
+    }
+
+    /**
+     * And at a collection's element, which is the occurrence with nothing else to speak for it.
+     *
+     * <p>{@code Outer} holds at least one {@code Kids} and every {@code Kids} holds exactly one
+     * {@code Tree}, so the chain runs on. Both rules have to be read for that to be seen: the outer
+     * one is a floor and the inner one is not.
+     */
+    @Test
+    void anEqualityIsReadAtACollectionsElementAsWell() {
+        refuses("Outer", """
+                module demo
+
+                data Kids = List<Tree>
+                    invariant one = List.length(value) == 1
+
+                data Outer = List<Kids>
+                    invariant some = List.length(value) >= 1
+
+                data Tree =
+                    { outer: Outer
+                    , v: Int
+                    }
+                """);
+    }
+
+    /** A rule that leaves the count where it was is no rule about this at all. A cap says how many at
+     * most, and none is under every cap. */
+    @Test
+    void aDisequalityAwayFromNoneLeavesTheEmptyCollectionWhereItWas() {
+        admits("""
+                module demo
+
+                data Kids = List<Tree>
+                    invariant notThree = List.length(value) /= 3
 
                 data Tree =
                     { kids: Kids

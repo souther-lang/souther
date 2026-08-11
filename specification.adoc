@@ -947,7 +947,7 @@ data Department =
     } // no first value: the empty list is gone, so no Department bottoms out
 ----
 +
-Whether the collection may be empty is read from every rule that reaches the occurrence — those written on its own type, through each name it wears, and those the record holding it writes about that field.
+Whether the collection may be empty is read from every rule that reaches the occurrence — those written on its own type, through each name it wears, and those the record holding it writes about that field. A rule removes the empty collection by any of the ways it can leave that count out: a floor above none, an equality at a count that is not none, or a disequality from none. A rule stating only how many at most leaves it, since none is under every such rule.
 
 Which occurrence a cycle stops at is a property of the occurrence and not of the type standing there. The same `+Children+` is a base case at `+children: Children?+` and is not at `+children: Children+`. A count read at an occurrence carries through the names that value wears, and stops at what a collection holds, which is a value of its own.
 
