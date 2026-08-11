@@ -95,7 +95,13 @@ class ALeafIsNotAnAbsenceTest {
 
     // --- and what stops the derivation -------------------------------------------------------------
 
-    /** Issue #626, as this protocol states it: the shape is understood and the reaching is not made. */
+    /**
+     * Issue #626, as this protocol states it: the shape is understood and the reaching is not made.
+     *
+     * <p>A fallback and not a verdict. The same position takes a line from
+     * {@code guard List.length(items) < 3}, and where one is drawn this reason is never reported —
+     * what a block refuses is a rule about what is inside standing in for reaching inside.
+     */
     @Test
     void aSequenceIsBlockedOnReachingItsElements() {
         assertEquals(new StructuralInspection.Blocked(new BlockReason.UnsupportedTraversal(

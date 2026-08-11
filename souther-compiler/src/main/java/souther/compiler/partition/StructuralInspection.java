@@ -22,18 +22,27 @@ import java.util.Map;
  * turned into a report of a position the model does not divide; that conclusion needs the phases
  * after this one to have finished too.
  *
- * <p>{@link Blocked} is not open in the same way, and the asymmetry is the point. What stops a
- * derivation here is a reaching this compiler cannot make or a type it could not interpret, and no
- * rule written in a body lifts either. A threshold inside a list is the reason the elements would
- * have to be reached, not a way of not having to reach them.
+ * <p><b>{@link Blocked} is not a conclusion either.</b> It is the reason this position would be
+ * left with if nothing else answered for it, and something else still might: a bare
+ * {@code List<Item>} cannot have its elements reached, and a {@code guard List.length(items) < 3}
+ * draws a line on that same position all the same. So a block is a pending position carrying a
+ * fallback, exactly as a leaf is a pending position carrying none, and the two differ only in what
+ * is reported when the phases after this one find nothing.
+ *
+ * <p>{@link Children} is the one answer that is not pending, and that asymmetry is the existing
+ * semantics rather than an oversight: a position made of positions is given up in favour of what is
+ * under it, before any rule a body writes has been read. Which is why the evidence that decides a
+ * descent and the evidence that completes an axis are not the same set.
  */
 public sealed interface StructuralInspection {
 
     /**
      * The position is not made of positions.
      *
-     * <p>Says that and only that. See the type's own note: this is not "no axis can be derived",
-     * and reading it as one puts back the defect the whole protocol removes.
+     * <p>Says that and only that. Whether it divides is still open — the rules a body writes have
+     * not been read — so this is a position still to be answered for, and what it becomes if
+     * nothing answers is an absence. Reading it as one here puts back the defect the protocol
+     * removes.
      */
     record Leaf() implements StructuralInspection {}
 
@@ -44,8 +53,16 @@ public sealed interface StructuralInspection {
         }
     }
 
-    /** The derivation stopped, and {@code why} is what stopped it. Terminal: nothing read later
-     *  lifts any of these. */
+    /**
+     * There is something under the position and this could not reach it, or the type could not be
+     * interpreted at all.
+     *
+     * <p>{@code why} is the reason this position is left with if nothing else answers for it, not a
+     * verdict. A rule a body writes may still draw a line on this same position — a length, a size
+     * — and where one does, that is what the position is measured at and this reason is never
+     * reported. What it does not do is let a rule about what is <em>inside</em> stand in for
+     * reaching inside.
+     */
     record Blocked(BlockReason why) implements StructuralInspection {}
 
     /**
