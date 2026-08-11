@@ -502,13 +502,18 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     /**
      * A map nothing was paired for is not a search that stopped.
      *
-     * <p>{@code /= 0} says the map is not empty and no range holds it, so no minimum is read and no
-     * pairing is built — the position offers the empty map and it is refused. How many pairs the key
-     * and the value could have made between them says nothing about that, and a reader told the search
-     * stopped would be told about a search nothing here ran.
+     * <p>{@code /= 0} says the map is not empty, and a count is never below none, so what it says is
+     * that the map holds at least one pair. A minimum is read, pairings are built for it, and what
+     * stops is the search for a key and a value that clear eight rules apiece. So the reason is the
+     * search reaching its limit, and it is the reason because that is what happened.
+     *
+     * <p>This asked for the other reason while a disequality reached the domain as nothing at all:
+     * no minimum was read, the position offered the empty map, and it was refused. The distinction
+     * still matters — a reader told a search stopped would go looking for the pairing it stopped
+     * short of — but a map the rules will not let be empty is no longer an example of it.
      */
     @Test
-    void aMapNothingWasPairedForIsSaidAsARefusalAndNotASearch() {
+    void aMapWhoseSearchStoppedSaysSoRatherThanCallingItARefusal() {
         String formats = "";
         for (int i = 1; i <= 8; i++) {
             formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
@@ -534,11 +539,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 let look (t) = 1
                 """.formatted(formats, formats));
 
-        assertEquals(List.of(), filled.rows(), "the empty map is what was offered and it is refused");
+        assertEquals(List.of(), filled.rows(), "no key and value clearing all eight rules was found");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason
-                                .ALL_CANDIDATES_REJECTED),
-                "refused, because no pairing was built to be stopped short of: "
+                                .SEARCH_LIMIT),
+                "the pairing was built and the search for its parts is what stopped: "
                         + filled.unresolved());
     }
 

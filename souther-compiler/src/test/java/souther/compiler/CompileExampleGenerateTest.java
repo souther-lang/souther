@@ -859,7 +859,7 @@ class CompileExampleGenerateTest {
                 .filter(row -> row.classes().contains("bill = 0")).findFirst().orElse(null);
         assertNotNull(atTheEdge, "the edge on `bill` is a row somebody can write: "
                 + filling.boundaries().unresolved());
-        assertEquals("Paired { n = Count(5), xs = [0, 0, 0, 0, 0] }",
+        assertEquals("Paired { n = Count(1), xs = [0] }",
                 atTheEdge.inputs().get(1).text(),
                 "as many elements as the n this row settled on asks for");
     }

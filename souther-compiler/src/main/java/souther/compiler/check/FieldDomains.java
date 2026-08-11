@@ -141,9 +141,6 @@ public final class FieldDomains {
      * nothing. Wide is the safe direction: what this decides is that a recursion has nowhere to
      * bottom out, and a reader that guessed would refuse a type somebody can write.
      *
-     * <p>One shape it answers wrongly, and the reason is the domain's rather than this reading's. A
-     * disequality is a hole and the seeding keeps ranges, so {@code /= 0} arrives here widened to a
-     * floor of none. Read off the clause below, and only that shape, until the seeding keeps it.
      */
     public static boolean mayHoldNothingAt(TypeName named, Ast.Data data, String path,
                                            Symbols symbols) {
@@ -154,53 +151,9 @@ public final class FieldDomains {
         }
         NumericDomain.LinearForm none = NumericDomain.LinearForm.atom(counted);
         // A count is never below none, so leaving it no room above none is leaving it at none.
-        boolean holdsNothing = !seeded.numbers()
+        return !seeded.numbers()
                 .assume(none, NumericDomain.Rel.LE, Map.of(counted, Granularity.DISCRETE))
                 .isBottom();
-        return holdsNothing && !aHoleAtNone(named, data, path, symbols);
-    }
-
-    /**
-     * Whether a rule says the count is not none, in the one spelling the seeding widens away.
-     *
-     * <p>{@code /= 0} on the position, or on the value of the newtype standing there. Not the general
-     * reading: a disequality reached by any other route is one this does not see, and it is here to
-     * hold the plainest spelling rather than to be a second answer to the question above.
-     */
-    private static boolean aHoleAtNone(TypeName named, Ast.Data data, String path,
-                                       Symbols symbols) {
-        Type type = TypeOps.fieldTypes(data, symbols).get(path);
-        if (type == null) {
-            return false;
-        }
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return false;
-        }
-        if (statesAHoleAtNone(TypeOps.effectiveInvariants(data, symbols), counts, path)) {
-            return true;
-        }
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            if (statesAHoleAtNone(TypeOps.effectiveInvariants(layer.data(), symbols),
-                    counts, "value")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean statesAHoleAtNone(List<Ast.InvariantClause> clauses,
-                                             ValueName counts, String subject) {
-        for (Ast.InvariantClause clause : clauses) {
-            for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
-                InvariantBound.SizeComparison read =
-                        InvariantBound.sizeComparedIn(each, counts, subject).orElse(null);
-                if (read != null && read.op() == Ast.BinOp.NE && read.count().signum() == 0) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /**

@@ -255,6 +255,45 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                 """);
     }
 
+    /** And through the name the field wears, which is the same rule written where the record can
+     * reach it. */
+    @Test
+    void aDisequalityReachingThroughTheFieldsNameRemovesItToo() {
+        refuses("Tree", """
+                module demo
+
+                data Kids = List<Tree>
+
+                data Tree =
+                    { kids: Kids
+                    , v: Int
+                    }
+                    invariant some = List.length(kids.value) /= 0
+                """);
+    }
+
+    /**
+     * And where what it is not equal to is a sibling that is none.
+     *
+     * <p>Neither clause states a count on its own. What removes the empty list is the two together,
+     * and a count never being below none — which is the reading, and not a spelling anything here was
+     * taught to recognise.
+     */
+    @Test
+    void aDisequalityFromASiblingSettledAtNoneRemovesItAsWell() {
+        refuses("Tree", """
+                module demo
+
+                data Tree =
+                    { kids: List<Tree>
+                    , zero: Int
+                    , v: Int
+                    }
+                    invariant zeroIsZero = zero == 0
+                    invariant some = List.length(kids) /= zero
+                """);
+    }
+
     /** And where the record holding the field is the one that says it. */
     @Test
     void theRecordsOwnDisequalityRemovesItToo() {
