@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Carrier;
-import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Place;
 
 /**
  * What a line is drawn at.
@@ -22,9 +22,9 @@ import souther.compiler.numeric.Count;
 public sealed interface BoundaryTarget {
 
     /**
-     * A line at one count of one position.
+     * A line at one place of one position.
      *
-     * <p>The place is the count and the carrier it is on. Everything that compares a row against this
+     * <p>The place is where the value sits on its carrier's order, and the carrier it is on. Everything that compares a row against this
      * compares counts, and everything that writes or prints it asks the carrier — so a report, a
      * generated row and the rule that drew the line cannot disagree about which value the line is at.
      */
@@ -42,7 +42,7 @@ public sealed interface BoundaryTarget {
         BETWEEN_POSITIONS
     }
 
-    record AtCount(AxisId axis, Carrier carrier, Count at) implements BoundaryTarget {
+    record AtPlace(AxisId axis, Carrier carrier, Place at) implements BoundaryTarget {
 
         @Override
         public Shape shape() {

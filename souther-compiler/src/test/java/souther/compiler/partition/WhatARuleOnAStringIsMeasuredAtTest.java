@@ -180,7 +180,7 @@ class WhatARuleOnAStringIsMeasuredAtTest {
                         : "none");
             }
             Partitions.obligationsOf(axis, symbols, p.domains().get(axis.term()))
-                    .forEach(o -> owed.add(o.side() + " " + o.written()));
+                    .forEach(o -> owed.add(o.side() + " " + o.target().right()));
         }
         return new Measured(classes, stands, owed);
     }

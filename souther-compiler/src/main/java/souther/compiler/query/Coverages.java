@@ -282,7 +282,7 @@ final class Coverages {
         /** The same for a line between two positions, which is not at a count of its own: the count
          * to write at both of them is the rules' answer about the pair and is handed in. */
         souther.compiler.partition.Generator.BoundaryAttempt attemptBetween(
-                BoundaryTarget.EqualTerms line, Count at);
+                BoundaryTarget.EqualTerms line, Place at);
     }
 
     /**
@@ -402,7 +402,7 @@ final class Coverages {
             return new BoundaryAssessment.Coverage.NotMeasured(absent);
         }
         Met met = switch (obligation.target()) {
-            case BoundaryTarget.AtCount place -> guard
+            case BoundaryTarget.AtPlace place -> guard
                     ? evaluatedAt(axis, parameters, rows, symbols, place.at(),
                             (OriginRef.GuardOrigin) obligation.origin())
                     : writtenAt(axis, parameters, rows, symbols, place.at());
@@ -437,9 +437,9 @@ final class Coverages {
                     ? new BoundaryAssessment.Coverage.NotMeasured(absent)
                     : verdictOf(heldBetween(line, parameters, rows,
                             (OriginRef.GuardOrigin) each.origin()), true, observed);
-            // A count both positions admit is what a row on the line writes. Read once: it is what
+            // A place both positions admit is what a row on the line writes. Read once: it is what
             // says the line can be written on at all, and it is what a candidate would be built at.
-            Count at = Partitions.commonCount(partitioning.domains(), line);
+            Place at = Partitions.commonPlace(partitioning.domains(), line);
             BoundaryAssessment.Attempt attempt = attemptBetween(line, at, coverage, probe);
             // Proven rather than searched for, where every rule about both positions was read. A
             // count that exists under rules this read in full is one a row can carry, so no candidate
@@ -455,7 +455,7 @@ final class Coverages {
 
     /** What building a row on a line between two positions came to, where one was worth building. */
     private static BoundaryAssessment.Attempt attemptBetween(
-            BoundaryTarget.EqualTerms line, Count at, BoundaryAssessment.Coverage coverage,
+            BoundaryTarget.EqualTerms line, Place at, BoundaryAssessment.Coverage coverage,
             Probe probe) {
         if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
             return new BoundaryAssessment.Attempt.NotAttempted(

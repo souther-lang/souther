@@ -442,22 +442,21 @@ public final class Partitions {
     }
 
     /**
-     * A count both positions of a line between them can hold, or null where their rules leave none.
+     * A place both positions of a line between them can hold, or null where their rules leave none.
      *
      * <p>What proves a row can be written on such a line. The line is where the two positions are
-     * equal, so a row on it writes one count at both — and whether one exists is the two positions'
+     * equal, so a row on it writes one place at both — and whether one exists is the two positions'
      * ranges read together, which is a question the rules answer without anything being built.
      *
-     * <p>Asked of the counts and answered by the carrier. Which count a range gives up is
-     * {@link Endpoint#valueBetween}'s single rule, so a range open at both ends answers the same way
-     * here as anywhere else; whether the carrier holds what comes back is the carrier's, which is what
-     * keeps an enumeration's line inside its own cases.
+     * <p>Which place a pair of ends gives up is {@link Carrier#somethingInside}'s single rule, so a
+     * range open at both ends answers the same way here as anywhere else, and a carrier whose values
+     * are strings answers it the way a carrier whose values count does.
      *
-     * <p>Null is not a proof of the opposite. Two ranges that leave no count leave none, and that is a
+     * <p>Null is not a proof of the opposite. Two ranges that leave no place leave none, and that is a
      * fact about the rules; a range this could not read in full is a range this did not read, and the
      * caller is the one holding whether that happened.
      */
-    public static Count commonCount(Map<NumericTerm, NumericDomain.Bounds> domains,
+    public static Place commonPlace(Map<NumericTerm, NumericDomain.Bounds> domains,
                                     BoundaryTarget.EqualTerms line) {
         NumericDomain.Bounds on = domains.get(line.on());
         NumericDomain.Bounds against = domains.get(line.against());
@@ -465,8 +464,7 @@ public final class Partitions {
                 against == null ? null : against.min());
         Endpoint max = Endpoint.upper(on == null ? null : on.max(),
                 against == null ? null : against.max());
-        return line.carrier().onTheGrid(
-                Endpoint.valueBetween(min, max, line.carrier().spacing()));
+        return line.carrier().somethingInside(min, max);
     }
 
     /**
@@ -493,7 +491,7 @@ public final class Partitions {
             for (OriginRef origin : cut.origins()) {
                 if (reachable) {
                     out.add(new BoundaryObligation(
-                            new BoundaryTarget.AtCount(axis.id(), cut.carrier(), cut.at()),
+                            new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), cut.at()),
                             origin, BoundaryObligation.BoundarySide.AT));
                 }
                 // A line that singles a value out has no neighbour to ask for: the values either
@@ -508,13 +506,13 @@ public final class Partitions {
                         domain.successor(cut.at())
                                 .filter(next -> within == null || within.admits(next))
                                 .ifPresent(next -> out.add(new BoundaryObligation(
-                                        new BoundaryTarget.AtCount(axis.id(), cut.carrier(), next),
+                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), next),
                                         origin, BoundaryObligation.BoundarySide.ABOVE)));
                     } else {
                         domain.predecessor(cut.at())
                                 .filter(before -> within == null || within.admits(before))
                                 .ifPresent(before -> out.add(new BoundaryObligation(
-                                        new BoundaryTarget.AtCount(axis.id(), cut.carrier(), before),
+                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), before),
                                         origin, BoundaryObligation.BoundarySide.BELOW)));
                     }
                 }

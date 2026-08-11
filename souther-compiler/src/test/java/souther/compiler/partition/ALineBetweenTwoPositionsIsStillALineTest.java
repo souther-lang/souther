@@ -110,8 +110,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                 | "under" : (Bronze, Gold) -> No
             """;
 
-    /** Two {@code String} positions. Ordered, comparable, and counting on nothing. */
-    private static final String NO_CARRIER = """
+    /** Two {@code String} positions, which order on their own values. */
+    private static final String TEXT = """
             module example.text
 
             data No
@@ -128,6 +128,31 @@ class ALineBetweenTwoPositionsIsStillALineTest {
             example cmp
                 | "over" : ("m", "b") -> Yes { s = "m" }
                 | "under" : ("b", "m") -> No
+            """;
+
+    /** Two positions declared as cases of one sum. They compare, because the sum lists them both,
+     *  and a case is not an enumeration: neither carries places of its own. */
+    private static final String NO_CARRIER = """
+            module example.caserel
+
+            data Bronze
+            data Silver
+            data Gold
+            data Rank = Bronze | Silver | Gold
+
+            data No
+            data Yes = { r: Rank }
+            data Result = No | Yes
+
+            behavior cmp : (a: Bronze, b: Gold) -> Result
+                constructs No, Yes
+            let cmp (a, b) = {
+                guard a > b else No
+                Yes { r = a }
+            }
+
+            example cmp
+                | "under" : (Bronze, Gold) -> No
             """;
 
     /** An expression on one side, which names no position a row can be written at. */
@@ -216,10 +241,24 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         assertTrue(report.contains("no row is at cmp/a = b"), report);
     }
 
-    /** Recognised by the carrier and not by the type: `String` is ordered, compares, and counts on
-     *  nothing, so no line of this kind is drawn on it. */
+    /** A carrier whose values are strings reaches this the way one whose values count does. Nothing
+     *  here is about numbers: the line is where the two positions hold the same place on one order. */
     @Test
-    void aCarrierlessTypeDrawsNone() {
+    void aCarrierOfStringsDrawsOneToo() {
+        String report = report(TEXT);
+
+        assertTrue(report.contains("no row is at cmp/a = b"), report);
+    }
+
+    /**
+     * Recognised by the carrier and not by the type the comparison type-checked under.
+     *
+     * <p>Two cases of one sum order against each other — the sum lists them both — while neither is
+     * an enumeration and neither carries places of its own. So the comparison is legal and the line
+     * is not one anything can say where to write, and no line is drawn.
+     */
+    @Test
+    void aComparableTypeWithNoCarrierDrawsNone() {
         String report = report(NO_CARRIER);
 
         assertFalse(report.contains("no row is at cmp/a = b"), report);

@@ -318,7 +318,7 @@ public final class Generator {
     public static BoundaryAttempt probe(Subject subject, BoundaryObligation obligation,
                                         CandidateCheck check) {
         return switch (obligation.target()) {
-            case BoundaryTarget.AtCount place -> probeAt(subject, place, check);
+            case BoundaryTarget.AtPlace place -> probeAt(subject, place, check);
             // A line between two positions is not at a count of its own, so the one to write is
             // handed in. Reached only through `probeBetween`, which is where the caller has it.
             case BoundaryTarget.EqualTerms line -> new BoundaryAttempt.Unresolved(
@@ -339,7 +339,7 @@ public final class Generator {
      * as readily as one on it.
      */
     public static BoundaryAttempt probeBetween(Subject subject, BoundaryTarget.EqualTerms line,
-                                               Count at, CandidateCheck check) {
+                                               Place at, CandidateCheck check) {
         String label = line.left() + " = " + line.right();
         FixtureTemplate on = written(subject, line.on(), line.carrier(), at);
         FixtureTemplate against = written(subject, line.against(), line.carrier(), at);
@@ -350,7 +350,7 @@ public final class Generator {
         Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         decided.put(line.on().path().toString(), List.of(on));
         decided.put(line.against().path().toString(), List.of(against));
-        Map<String, Count> settled = new LinkedHashMap<>();
+        Map<String, Place> settled = new LinkedHashMap<>();
         settled.put(line.on().path().toString(), at);
         settled.put(line.against().path().toString(), at);
         List<FixtureTemplate> inputs = new ArrayList<>();
@@ -382,7 +382,7 @@ public final class Generator {
      * at the position, it is four characters somebody has to choose.
      */
     private static FixtureTemplate written(Subject subject, NumericTerm term, Carrier carrier,
-                                           Count at) {
+                                           Place at) {
         if (term instanceof NumericTerm.SizeOf) {
             return null;
         }
@@ -402,7 +402,7 @@ public final class Generator {
     }
 
     /** A row at a line drawn at one count of one position. */
-    private static BoundaryAttempt probeAt(Subject subject, BoundaryTarget.AtCount place,
+    private static BoundaryAttempt probeAt(Subject subject, BoundaryTarget.AtPlace place,
                                            CandidateCheck check) {
         Axis axis = subject.axes().stream().filter(a -> a.id().equals(place.axis())).findFirst()
                 .orElse(null);

@@ -240,7 +240,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     void anAxisDroppedPastTheLimitHoldsTheVerdictOpenOnlyWhereItCarriedAnObligation() {
         BoundaryAssessment met = new BoundaryAssessment(
                 new BoundaryObligation(
-                        new BoundaryTarget.AtCount(new AxisId("weigh", "w.a"), Carrier.WHOLE,
+                        new BoundaryTarget.AtPlace(new AxisId("weigh", "w.a"), Carrier.WHOLE,
                                 Count.of(100)),
                         new OriginRef.InvariantOrigin(Optional.empty(),
                                 new TypeName("example.rate", "Amount"), "value <= 100"),
