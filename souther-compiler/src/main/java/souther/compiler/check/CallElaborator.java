@@ -733,12 +733,36 @@ public final class CallElaborator {
         return toTheSecond(parsed, fn, text, at);
     }
 
-    /** An {@code Instant} is written in UTC — the {@code Z} form. {@code Instant.parse} also takes an
-     * offset and folds it into UTC, so text carrying one names a zone the language does not have
-     * (spec §primitives) and would be written back out as different text than it was written as.
-     * Refused after parsing, so text that is no instant at all is reported as that instead. */
+    /**
+     * A written {@code Instant}: refused where it names a second that does not exist, and where it is
+     * not spelled in UTC.
+     *
+     * <p>A leap second is the substitution this type exists not to make. {@code Instant.parse} takes
+     * {@code 23:59:60} and answers {@code 23:59:59}, so a written moment the language cannot
+     * represent would become a different one with nothing saying so — the defect this whole rule is
+     * about, made by the reader that enforces it. Java hands the fact over separately
+     * ({@code DateTimeFormatter.parsedLeapSecond}), and that is what is read.
+     *
+     * <p>The {@code Z} form is the other rule and a different kind of thing. A numeric offset names
+     * the same moment — {@code 09:30+09:00} and {@code 00:30Z} are one instant, and either determines
+     * it — so it is not refused for being wrong. It is refused because a written value is written the
+     * way the value is written back (spec §fixture-is-written-not-carried), and an {@code Instant} is
+     * written in UTC. A boundary reads either form.
+     *
+     * <p>An offset is a spelling and not a zone. A zone is a place with rules about when its offset
+     * changes ({@code ZoneId}), an offset is a displacement from UTC ({@code ZoneOffset}), and this
+     * language names neither — which is why the refusal above is about the written form and not
+     * about a zone leaking in.
+     *
+     * <p>Both are asked after parsing, so text that is no instant at all is still reported as that.
+     */
     private static java.time.Instant instantInUtc(String text, Region at) {
         java.time.Instant parsed = java.time.Instant.parse(text);
+        if (Boolean.TRUE.equals(java.time.format.DateTimeFormatter.ISO_INSTANT.parse(text)
+                .query(java.time.format.DateTimeFormatter.parsedLeapSecond()))) {
+            throw CompileException.of(Diagnostic
+                            .at(at).say(new TypeMessage.ALeapSecondIsNotAMoment(text)).build());
+        }
         if (!text.endsWith("Z")) {
             throw CompileException.of(Diagnostic
                             .at(at).say(new TypeMessage.AnInstantIsWrittenInUtc(text)).build());

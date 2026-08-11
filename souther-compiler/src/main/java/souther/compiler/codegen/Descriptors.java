@@ -357,6 +357,11 @@ final class Descriptors {
      *  temporal decoder itself, so a chain stays one. */
     static final MethodTypeDesc MTD_refineTemporal =
             MethodTypeDesc.of(CD_TemporalDecoder, CD_Predicate, CD_String, CD_String);
+    /** {@code StringDecoder.refine(Predicate, code, message)}: the text held to what the type can
+     *  name, before a parse that would fold what it says into something else. Returns the string
+     *  decoder itself, so the parse still chains off it. */
+    static final MethodTypeDesc MTD_refineString =
+            MethodTypeDesc.of(CD_StringDecoder, CD_Predicate, CD_String, CD_String);
     static final ClassDesc CD_Pattern = ClassDesc.of("java.util.regex.Pattern");
     static final MethodTypeDesc MTD_patternCompile = MethodTypeDesc.of(CD_Pattern, CD_String);
     static final MethodTypeDesc MTD_strLengthBound = MethodTypeDesc.of(CD_StringDecoder, ConstantDescs.CD_int);

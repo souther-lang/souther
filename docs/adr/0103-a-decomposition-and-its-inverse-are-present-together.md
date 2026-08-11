@@ -66,7 +66,15 @@ and not on the one composed from them.
 
 `Date`, `Time` and `DateTime` are held to the second. Text finer than that is refused where it is
 written (E1322) and at the boundary that carried it (a decode failure at that path), rather than
-being rounded on the way in. `Instant` is admitted as the type that keeps a sub-second reading and
+being rounded on the way in. Text naming a leap second is refused the same way and for a sharper
+reason: `Instant.parse` answers `23:59:59` for `23:59:60`, so admitting it would put a *different*
+moment in the model with nothing saying so.
+
+An offset is not refused at a boundary. `09:30:00+09:00` and `00:30:00Z` are one moment and either
+determines it, so reading the first loses nothing; what source refuses is the *spelling*, because a
+written value is written the way the value is written back. An offset is a displacement from UTC and
+a zone is a place with rules about when its offset changes; this language names neither, and saying
+so keeps the door open for either to be added later as its own type. `Instant` is admitted as the type that keeps a sub-second reading and
 an absolute moment, and it has **no operations at all**: naming its year or its hour needs a zone,
 the language names no zone, so there is nothing to read a part with and nothing to build one from
 parts either. The two directions are absent together, which is what keeps `Instant` from being the
@@ -79,6 +87,18 @@ no implementation to get a `DateTime` back — the same way it gets the current 
 `"2026-07-01T09:30:45.123"` at a `DateTime` field that a jar built now refuses, and a caller trusting
 the older number would be told a value crosses that no longer does. It widened too — `Time` and
 `Instant` are shapes an older compiler has no type for.
+
+**The resolution of a local temporal is one second, chosen and not inherited.** A business rule is
+stated in dates, hours and minutes; a domain that needs to tell two events a millisecond apart is
+asking about the timeline rather than about a clock reading, and that is `Instant`. Fixing the
+resolution is also what gives `Time` and `DateTime` a smallest step, which is what lets a boundary
+row be asked for beside a line on one — a dense carrier can only report *not derivable* there.
+
+That the old `DateTime` carried nanoseconds no model could read is the evidence that nothing is lost
+by choosing this, not the reason for choosing it: "there was no reader, so remove the values" is a
+bad general rule — it would take a scale off a `Decimal`. The claim here is the other one, that a
+second is the right resolution for a local temporal in this language. Should a millisecond ever be
+wanted, the question to argue is whether that resolution changes, not whether a gap is being fixed.
 
 Nothing in the corpus or the examples wrote a sub-second temporal. One test did —
 `OneCarrierTableAnswersForEveryOrderedTypeTest`, whose moments were a nanosecond apart to stand for
@@ -112,6 +132,18 @@ has a count that would embed — a second of the day, a second from an epoch —
 conversion both ways and a spacing of its own, so neither may borrow `MOMENT`'s. Two units in one
 carrier is what `DATE` and `MOMENT` are separate to avoid.
 
-The rule this ADR is named for is the one to apply next time. A reader added to a type is a claim
-that the type is made of what the reader answers, and a claim with no way back is the defect #623
-found — reachable by a route that cannot refuse, or not reachable at all.
+## The rule, and how far it reaches
+
+**A lossless decomposition and its inverse are present together.** `(year, month, day)` is all of a
+`Date` and `(hour, minute, second)` is all of a `Time`, so each pair is a claim that the type *is*
+what the readers answer — and a claim with no way back is the defect #623 found: reachable by a route
+that cannot refuse, or not reachable at all.
+
+It does not reach a reader that answers part of a value. `Date.dayOfWeek` and `Date.dayOfYear` are
+derived observations, and `Instant` would owe nothing for an epoch reader either: none of them
+determines the value, so none of them claims the type is made of it and none demands an inverse. The
+test is whether the readers together name the value, not whether a reader exists.
+
+Nor does it reach `Instant`, for the other reason. Its parts are not lossy — they are absent, since
+naming one needs a zone. The two directions are missing together, which is the state this rule wants
+and not the one it exists to correct.

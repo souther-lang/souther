@@ -127,6 +127,9 @@ public sealed interface TypeMessage extends Message {
     record AnInstantIsWrittenInUtc(String written) implements TypeMessage, Reported {}
 
     @Code(DiagnosticCode.E1322)
+    record ALeapSecondIsNotAMoment(String written) implements TypeMessage, Reported {}
+
+    @Code(DiagnosticCode.E1322)
     record ATimeOfDayIsWrittenToTheSecond(String type, String written) implements TypeMessage, Reported {}
 
     @Code(DiagnosticCode.E1320)
