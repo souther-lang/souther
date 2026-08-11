@@ -329,6 +329,34 @@ class GeneratorTest {
     }
 
     /**
+     * A position whose classes the body all rules out leaves no row to write anywhere else.
+     *
+     * <p>What that says is about the classes a row may be written at, and not about whether values
+     * of the position exist: every class here has a value, and the body is what refuses them. A
+     * reason that said no value can be written there would send an author looking for a type with
+     * no values.
+     */
+    @Test
+    void aPositionWithNoClassLeftOpenSaysThatAndNotThatNoValueExists() {
+        Symbols symbols = modelOf(TRIP, "submit").symbols();
+        Generator.Subject subject = twoNumbers(symbols,
+                List.of(number("shut", 1)), List.of(number("open", 10), number("wider", 20)));
+        Axis closed = subject.axes().get(0).excluding(List.of("shut"));
+        Generator.Subject shut = new Generator.Subject(subject.inputs(),
+                List.of(closed, subject.axes().get(1)));
+
+        Generator.GenerationResult filled =
+                Generator.fill(shut, List.of(), Generator.CandidateCheck.ANY);
+
+        assertEquals(List.of(), filled.rows(), "no row reaches a position with nothing open at it");
+        assertEquals(
+                List.of(Generator.UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION,
+                        Generator.UnresolvedCombination.Reason.NO_CLASS_OPEN_AT_POSITION),
+                filled.unresolved().stream().map(Generator.UnresolvedCombination::reason).toList(),
+                () -> "one per combination the closed position takes part in: " + filled.unresolved());
+    }
+
+    /**
      * A class that recorded why nothing was composed for it is not reported as one nothing can be
      * written for.
      *

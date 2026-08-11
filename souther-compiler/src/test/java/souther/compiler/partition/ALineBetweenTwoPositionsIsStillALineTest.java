@@ -411,7 +411,7 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         String rows = generated(NO_COMMON_COUNT);
 
         assertTrue(rows.contains("no row for `a = b`"), rows);
-        assertTrue(rows.contains("does not make the edge unwritable"), rows);
+        assertTrue(rows.contains("does not make one unwritable"), rows);
     }
 
     /**
@@ -423,8 +423,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
      * witness nothing is counted.
      *
      * <p>What is said about that matters more than the absence. Two strings of one length are the
-     * easiest row in the file to write by hand, so the sentence that licenses "no value can be
-     * written there" would be false, and the one written says what this could not do.
+     * easiest row in the file to write by hand, so a sentence saying no value can be written there
+     * would be false, and the one written says what this could not do.
      */
     @Test
     void aLineOnAMeasureIsReadAndPromisedByNothing() {
@@ -434,8 +434,8 @@ class ALineBetweenTwoPositionsIsStillALineTest {
         assertFalse(report.contains("no row is at cmp/String.length(a) = String.length(b)"), report);
         assertTrue(report.contains(
                 "not known to be writable: cmp/String.length(a) = String.length(b)"), report);
-        assertTrue(rows.contains("nothing here composes a value at that edge"), rows);
-        assertTrue(rows.contains("does not make the edge unwritable"), rows);
+        assertTrue(rows.contains("nothing here could build a representative for it"), rows);
+        assertTrue(rows.contains("does not make one unwritable"), rows);
     }
 
     /**
