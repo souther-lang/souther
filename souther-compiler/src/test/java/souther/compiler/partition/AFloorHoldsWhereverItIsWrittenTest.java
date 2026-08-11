@@ -10,6 +10,8 @@ import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -37,12 +39,18 @@ class AFloorHoldsWhereverItIsWrittenTest {
         }
     }
 
+    /** A model to read floors off, held to compiling. A rule the language refuses still reaches this
+     * reader and still comes back a number, so a model asserted only to have symbols can pin a floor
+     * that no program could have written. */
     private static Model modelOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         assertNotNull(symbols, "the model did not compile");
+        assertEquals(List.of(), compilation.diagnostics().values().stream()
+                        .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
+                "the model under test is a program that can be written");
         return new Model(symbols, module);
     }
 
@@ -144,28 +152,6 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 """);
 
         assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.symbols()));
-    }
-
-    /**
-     * And the other way up, where only the outer name states it.
-     *
-     * <p>The inner name is asserted at zero beside it. Together the two say that this floor is
-     * reachable at {@code Kids} and nowhere else, which is what a reader walking down from
-     * {@code Kids} would lose by asking again at each layer instead of carrying what it read.
-     */
-    @Test
-    void aFloorWrittenOnTheOuterNameIsNotFoundUnderIt() {
-        Model model = modelOf("""
-                module example.chain
-
-                data Kids = Inner
-                    invariant atLeastOne = List.length(value) >= 1
-
-                data Inner = List<Int>
-                """);
-
-        assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.symbols()));
-        assertEquals(0, Partitions.leastHeld(model.ref("Inner"), model.symbols()));
     }
 
     /**

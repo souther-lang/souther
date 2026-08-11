@@ -547,6 +547,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      *
      * <p>No value of it exists, so the giving up is the right answer and not a limit reached. What
      * matters is that it is reported the way any other refusal is, rather than descending forever.
+     *
+     * <p>Written through a sum, which is the shape of this the front end still admits: every case of
+     * {@code Shape} holds a {@code Shape}, so there is no first one, and whether a sum has a case that
+     * bottoms out is a judgement the construction check does not make. Written through a collection
+     * the rules will not let be empty, the model is refused before the descent is reached.
      */
     @Test
     void aTypeWrittenInTermsOfItselfIsGivenUpOn() {
@@ -559,10 +564,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 data Overseas
                 data Kind = Domestic | Overseas
 
-                data Nest = List<Nest>
-                    invariant someNest = List.length(value) >= 1
+                data Leaf = { s: Shape }
+                data Branch = { s: Shape }
+                data Shape = Leaf | Branch
 
-                data T = { kind: Kind, nest: Nest }
+                data T = { kind: Kind, shape: Shape }
 
                 behavior look : (t: T) -> Int
 
@@ -572,7 +578,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         assertEquals(List.of(), filled.rows(), "no value of it exists");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason
-                                .ALL_CANDIDATES_REJECTED),
+                                .NOTHING_COMPOSES_ONE),
                 "and the answer comes back rather than descending forever: "
                         + filled.unresolved());
     }
