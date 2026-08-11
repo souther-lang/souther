@@ -84,8 +84,8 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
      * itself and parses a {@code String} with {@code Instant::parse}; Raoh has no combinator that
      * lets the text be refined before that, and nothing on this side can stand between them.
      *
-     * <p>Written as an assertion of the rule rather than of the behaviour, and disabled, because the
-     * rule is what the specification says
+     * <p>Written as an assertion of the rule rather than of the behaviour, and disabled against
+     * issue #639, because the rule is what the specification says
      * (<<a-leap-second-is-no-moment>>: refused where it is written <em>and where it arrives</em>) and
      * a test asserting the other thing would make a violation look like a decision. It turns green
      * when Raoh refuses a leap second, which is where the fix belongs: an {@code iso8601()} that
@@ -93,8 +93,8 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
      * is answering about a different moment.
      */
     @Test
-    @org.junit.jupiter.api.Disabled("needs a Raoh that refuses a leap second, or one that lets the "
-            + "text be refined before it parses — see the note on this method")
+    @org.junit.jupiter.api.Disabled("issue #639: needs a Raoh that refuses a leap second, or one "
+            + "that lets the text be refined before it parses")
     void aLeapSecondIsRefusedAtTheNeutralDecoderToo() throws Exception {
         net.unit8.raoh.Result<?> r = decoded(AT_A_FIELD, fieldsWith("at", "2026-06-30T23:59:60Z"));
         assertTrue(!r.isOk(), "a leap second must not be admitted at a bare-value field");
