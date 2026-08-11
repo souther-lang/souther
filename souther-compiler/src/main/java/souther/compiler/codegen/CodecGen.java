@@ -134,20 +134,15 @@ final class CodecGen {
         switch (key) {
             // a named key runs its own decoder: a newtype's applies its invariant, an enumeration's
             // reads the case name
-            case MapKeyRepresentation.StringNewtype n -> invokeCodec(code, n.name(), "decoder", MTD_Rdecoder);
-            case MapKeyRepresentation.UnitEnum e -> invokeCodec(code, e.name(), "decoder", MTD_Rdecoder);
+            case MapKeyRepresentation.NamedKey n -> invokeCodec(code, n.name(), "decoder", MTD_Rdecoder);
             // text is the string leaf itself, which canonicalizes and does nothing else; a temporal
             // is that leaf parsed
             case MapKeyRepresentation.Text _ -> emitStringLeaf(code, CD_ObjectDecoders);
             // Through the same builder a field's leaf goes through. Spelled out here instead, a
             // key parsed the text and skipped the refinements beside it, so what a `Time` holds
             // depended on whether it stood at a field or under one.
-            case MapKeyRepresentation.Date _ -> emitTemporalFromText(code, CD_ObjectDecoders, Type.Prim.DATE);
-            case MapKeyRepresentation.Time _ -> emitTemporalFromText(code, CD_ObjectDecoders, Type.Prim.TIME);
-            case MapKeyRepresentation.DateTime _ ->
-                    emitTemporalFromText(code, CD_ObjectDecoders, Type.Prim.DATETIME);
-            case MapKeyRepresentation.Instant _ ->
-                    emitTemporalFromText(code, CD_ObjectDecoders, Type.Prim.INSTANT);
+            case MapKeyRepresentation.Lexical l ->
+                    emitTemporalFromText(code, CD_ObjectDecoders, l.leaf().type());
         }
     }
 
@@ -170,17 +165,12 @@ final class CodecGen {
     }
 
     /** The name of the generated per-$Dec helper that remaps a decoded {@code Map<String, V>}'s keys
-     *  into the key type, invariant-checked. A temporal key is named with a second {@code $} so it
+     *  into the key type, invariant-checked. A primitive key is named with a second {@code $} so it
      *  cannot collide with a data whose name is {@code Date}. */
     private static String rekeyMethod(MapKeyRepresentation key) {
         return switch (key) {
-            case MapKeyRepresentation.StringNewtype n -> "__rekey$" + n.name().qualified().replace('.', '$');
-            case MapKeyRepresentation.UnitEnum e -> "__rekey$" + e.name().qualified().replace('.', '$');
-            case MapKeyRepresentation.Text _ -> "__rekey$$STRING";
-            case MapKeyRepresentation.Date _ -> "__rekey$$DATE";
-            case MapKeyRepresentation.Time _ -> "__rekey$$TIME";
-            case MapKeyRepresentation.DateTime _ -> "__rekey$$DATETIME";
-            case MapKeyRepresentation.Instant _ -> "__rekey$$INSTANT";
+            case MapKeyRepresentation.NamedKey n -> "__rekey$" + n.name().qualified().replace('.', '$');
+            case MapKeyRepresentation.Lexical l -> "__rekey$$" + l.leaf();
         };
     }
 
@@ -197,44 +187,25 @@ final class CodecGen {
                 MTD_rekey);                                              // instantiatedMethodType: (Map,Path) -> Result
     }
 
-    /** {@code invokedynamic} producing a {@code Function<K, String>} over the key newtype's bare
-     *  {@code value()} accessor, for {@code Maps.mapKeys} when encoding a newtype-keyed map. The
-     *  accessor is typed {@code () -> String} because the case is a String-backed newtype; a newtype
-     *  over another base would need a rendering step here, and is a case this does not have. */
-    private DynamicCallSiteDesc keyValueCallSite(MapKeyRepresentation key) {
-        return switch (key) {
-            // an enumeration key renders as its case's name, the same string its decoder reads
-            case MapKeyRepresentation.UnitEnum e -> DynamicCallSiteDesc.of(
-                    BSM_METAFACTORY, "apply",
-                    MethodTypeDesc.of(CD_Function),
-                    MethodTypeDesc.of(CD_Object, CD_Object),
-                    MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
-                            cd(e.name()), TAG_METHOD, MTD_tag),
-                    MTD_tag);
-            case MapKeyRepresentation.StringNewtype n -> {
-                DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                        DirectMethodHandleDesc.Kind.VIRTUAL, cd(n.name()), "value", MTD_value);
-                yield DynamicCallSiteDesc.of(
-                        BSM_METAFACTORY, "apply",
-                        MethodTypeDesc.of(CD_Function),                  // no captures: () -> Function
-                        MethodTypeDesc.of(CD_Object, CD_Object),         // samMethodType: (Object) -> Object
-                        impl,                                            // implMethod: K.value() -> String
-                        MethodTypeDesc.of(CD_String, cd(n.name())));     // (K) -> String
-            }
-            // a temporal renders as its ISO form, which is its `toString` — the same rendering an
-            // IsoTextRaw field gets
-            case MapKeyRepresentation.Date _, MapKeyRepresentation.Time _,
-                 MapKeyRepresentation.DateTime _, MapKeyRepresentation.Instant _ -> DynamicCallSiteDesc.of(
-                    BSM_METAFACTORY, "apply",
-                    MethodTypeDesc.of(CD_Function),
-                    MethodTypeDesc.of(CD_Object, CD_Object),
-                    MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_String,
-                            "valueOf", MethodTypeDesc.of(CD_String, CD_Object)),
-                    MethodTypeDesc.of(CD_String, CD_Object));
-            // text is already the string the map encoder wants; needsKeyRender keeps it from here
-            case MapKeyRepresentation.Text _ ->
-                    throw new IllegalStateException("a text key is not rendered");
-        };
+    /**
+     * Pushes a {@code Function<K, String>} rendering a key as the text it crosses as, for
+     * {@code Maps.mapKeys} before the String-keyed map encoder runs.
+     *
+     * <p>It is the key type's own encoder in both arms — a leaf factory for a primitive, the derived
+     * {@code encoder()} for a named key — so what a name wraps is never read here. That is what
+     * keeps this call site out of the admissible set: a newtype over a base admitted later writes
+     * itself through the same two instructions, with nothing to add.
+     *
+     * <p>The same two {@code Runner.encodeKey} takes, reflectively. Both go through an encoder rather
+     * than through an accessor, so neither can spell a key the other would not.
+     */
+    private void pushKeyRenderer(CodeBuilder code, MapKeyRepresentation key) {
+        switch (key) {
+            case MapKeyRepresentation.NamedKey n -> invokeCodec(code, n.name(), "encoder", MTD_Rencoder);
+            case MapKeyRepresentation.Lexical l ->
+                    code.invokestatic(CD_ObjectEncoders, leafEncoderName(l.leaf()), MTD_Rencode_leaf);
+        }
+        code.invokedynamic(encodeAsFunctionCallSite());     // Encoder<K, Object> -> Function<K, String>
     }
 
     /** Whether a map's keys are rendered before the String-keyed encoder sees them: a {@code String}
@@ -709,7 +680,7 @@ final class CodecGen {
                 ctx.dischargeInvariants()::get);
     }
 
-    /** Collects the String-backed newtypes used as map keys anywhere in a derived decoder. */
+    /** Collects the named types used as map keys anywhere in a derived decoder. */
     private void collectKeyedMapTypes(Ast.DecoderDef dec, Map<String, MapKeyRepresentation> out) {
         switch (dec) {
             case Ast.ObjectDecoder obj -> {
@@ -740,10 +711,10 @@ final class CodecGen {
 
     /**
      * Emits {@code static Result __rekey$K(Map src, Path path)}: it remaps a decoded
-     * {@code Map<String, V>}'s keys into the String-backed newtype {@code K}, running {@code K}'s own
-     * decoder (which applies K's invariant) on each key. Key issues accumulate across the whole map
-     * (spec §case-propagation) and a failure lands at the key's path; on success it returns a {@code Map<K, V>} in
-     * iteration order. Materialised as a {@code BiFunction} for {@code Decoder.flatMapWithPath}.
+     * {@code Map<String, V>}'s keys into the key type {@code K}, running {@code K}'s own decoder
+     * (which applies K's invariant, and that of anything K wraps) on each key. Key issues accumulate
+     * across the whole map (spec §case-propagation) and a failure lands at the key's path; on
+     * success it returns a {@code Map<K, V>} in iteration order. Materialised as a {@code BiFunction} for {@code Decoder.flatMapWithPath}.
      */
     private void emitRekeyHelper(ClassBuilder cb, MapKeyRepresentation key) {
         cb.withMethodBody(rekeyMethod(key), MTD_rekey, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
@@ -1676,7 +1647,7 @@ final class CodecGen {
                 gen.expr(me.source());                                          // Map<K,V>
                 if (needsKeyRender(me.key())) {
                     // Render the keys bare before the String-keyed map encoder.
-                    code.invokedynamic(keyValueCallSite(me.key()));             // Function<K,String>
+                    pushKeyRenderer(code, me.key());                            // Function<K,String>
                     code.invokestatic(CD_Maps, "mapKeys", MTD_mapKeys);         // Map<String,V>
                 }
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
@@ -1765,7 +1736,7 @@ final class CodecGen {
                 pushElemEncoder(code, m.value());
                 code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);
                 if (needsKeyRender(m.key())) {
-                    code.invokedynamic(keyValueCallSite(m.key()));          // Function<K, String>
+                    pushKeyRenderer(code, m.key());                         // Function<K, String>
                     code.invokedynamic(mapKeysCallSite());                  // Function<Map<K,V>, Map<String,V>>
                     code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
                 }

@@ -69,7 +69,7 @@ class OneBoundaryAnswerReachesTheReaderTest {
         // than a shape — a list or an option cannot be written there at all.
         BoundaryInput.MapOf by = assertInstanceOf(BoundaryInput.MapOf.class, sig.ins().get(3));
         assertEquals("UserId",
-                assertInstanceOf(MapKeyRepresentation.StringNewtype.class, by.key().representation()).name().name());
+                assertInstanceOf(MapKeyRepresentation.NamedKey.class, by.key().representation()).name().name());
         assertInstanceOf(BoundaryInput.Nominal.class, by.value());
 
         assertEquals("Note", assertInstanceOf(BoundaryOutput.Nominal.class, sig.out()).name().name());

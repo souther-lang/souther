@@ -148,11 +148,8 @@ final class SignatureBoundary {
             throw notAKey(key, where);
         }
         switch (representation) {
-            case MapKeyRepresentation.StringNewtype n -> nominal(n.name(), where, symbols);
-            case MapKeyRepresentation.UnitEnum e -> nominal(e.name(), where, symbols);
-            case MapKeyRepresentation.Text _, MapKeyRepresentation.Date _,
-                 MapKeyRepresentation.Time _, MapKeyRepresentation.DateTime _,
-                 MapKeyRepresentation.Instant _ -> { }
+            case MapKeyRepresentation.NamedKey n -> nominal(n.name(), where, symbols);
+            case MapKeyRepresentation.Lexical _ -> { }
         }
         return new BoundaryMapKey(representation);
     }

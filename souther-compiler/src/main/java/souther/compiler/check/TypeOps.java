@@ -1129,16 +1129,6 @@ public final class TypeOps {
         return null;
     }
 
-    /** Whether {@code name} is a newtype over {@code String} ({@code data X = String}). A key is a
-     *  JSON object's key, so what a newtype wraps has to be text already; a newtype over another
-     *  base would be converted and rendered differently, which is a case of its own in
-     *  {@link BoundaryMapKey} rather than a widening of this. */
-    private static boolean isStringNewtype(TypeName name, Symbols symbols) {
-        return symbols.get(name) instanceof Ast.Data d && d.newtype()
-                && d.fields().size() == 1
-                && d.fields().get(0).type() instanceof Ast.TypeRef base && "String".equals(base.name());
-    }
-
     /**
      * Whether {@code key} may stand as a {@code Map} key in a signature. This is not the question the
      * codecs ask: a type variable may be written — the {@code core}'s {@code Map<'k, 'a>} signatures
@@ -1152,9 +1142,20 @@ public final class TypeOps {
     /**
      * What a concrete {@code key} would be converted through, or null when it has no representation
      * at all. A map's external form is a JSON object, whose keys are strings, so a key that has one
-     * renders as and parses from a bare string: {@code String} itself, a String-backed newtype
-     * (ADR-0040), a temporal as the ISO form a {@code Date} field already travels as, or an
-     * enumeration as its case's name (issue #161).
+     * renders as and parses from a bare string: {@code String} itself, a temporal as the ISO form a
+     * {@code Date} field already travels as, an enumeration as its case's name (issue #161), or a
+     * newtype over any of those (ADR-0040).
+     *
+     * <p>The newtype rule is the base's rule, asked again of the base: a newtype is written as what
+     * it wraps is written, so it is a key exactly when what it wraps is a key. That is why the walk
+     * recurses and why the recursion is here and nowhere else. What it answers with is the outermost
+     * name, never the base's representation — a wrapper is read and written by its own derived
+     * codec, which is what carries its invariant, so a reader that reached for the base's would be
+     * reaching past the type the map is keyed by.
+     *
+     * <p>An {@code Int}-backed newtype stays out because {@code Int} does, and for the reason
+     * ADR-0040 gives: {@code Int} is written as a JSON number in a field, so writing it as a string
+     * in a key would make a type's external form depend on where it stands.
      *
      * <p>This classifies and does not admit. Whether a key of a given representation may stand in a
      * given position is the position's own question — a behavior's boundary refuses a name the
@@ -1167,6 +1168,11 @@ public final class TypeOps {
      * of them asks the type again.
      */
     public static MapKeyRepresentation classifyConcreteMapKey(Type key, Symbols symbols) {
+        return classifyMapKey(key, symbols, new HashSet<>());
+    }
+
+    private static MapKeyRepresentation classifyMapKey(Type key, Symbols symbols,
+                                                       Set<TypeName> unwrapping) {
         // Exhaustive over the primitives: whether a key has a text form is a question about each one,
         // and a chain of comparisons answers "no" for a primitive added later without being asked.
         if (key instanceof Type.Prim p) {
@@ -1181,15 +1187,16 @@ public final class TypeOps {
                 case INT, BOOL, DECIMAL, RAW -> null;
             };
         }
-        if (key instanceof Type.Ref r) {
-            if (isStringNewtype(r.name(), symbols)) {
-                return new MapKeyRepresentation.StringNewtype(r.name());
-            }
-            if (isUnitOnlySum(key, symbols)) {
-                return new MapKeyRepresentation.UnitEnum(r.name());
-            }
+        if (!(key instanceof Type.Ref r) || !unwrapping.add(r.name())) {
+            return null;   // a newtype reaching itself; DataChecker reports it, this must terminate
         }
-        return null;
+        if (isUnitOnlySum(key, symbols)) {
+            return new MapKeyRepresentation.NamedKey(r.name());
+        }
+        Type base = newtypeInner(r.name(), symbols);
+        return base != null && classifyMapKey(base, symbols, unwrapping) != null
+                ? new MapKeyRepresentation.NamedKey(r.name())
+                : null;
     }
 
     /**

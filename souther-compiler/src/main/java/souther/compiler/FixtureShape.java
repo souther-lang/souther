@@ -169,13 +169,8 @@ public sealed interface FixtureShape {
     /** A key a boundary map carries, as the position a fixture writes it at. */
     private static FixtureShape key(souther.compiler.check.BoundaryMapKey key) {
         return switch (key.representation()) {
-            case MapKeyRepresentation.Text _ -> new Scalar(LeafScalar.STRING);
-            case MapKeyRepresentation.Date _ -> new Scalar(LeafScalar.DATE);
-            case MapKeyRepresentation.Time _ -> new Scalar(LeafScalar.TIME);
-            case MapKeyRepresentation.DateTime _ -> new Scalar(LeafScalar.DATETIME);
-            case MapKeyRepresentation.Instant _ -> new Scalar(LeafScalar.INSTANT);
-            case MapKeyRepresentation.StringNewtype n -> new Nominal(n.name());
-            case MapKeyRepresentation.UnitEnum e -> new Nominal(e.name());
+            case MapKeyRepresentation.Lexical l -> new Scalar(l.leaf());
+            case MapKeyRepresentation.NamedKey n -> new Nominal(n.name());
         };
     }
 

@@ -1,7 +1,7 @@
 package souther.compiler.types;
 
 /**
- * What a {@code Map} key is converted through. A map's external form is a JSON object, whose keys are
+ * How a {@code Map} key is written as text. A map's external form is a JSON object, whose keys are
  * strings, so a key that has a representation at all both renders as and parses from a bare string —
  * and which string is what this names (ADR-0040).
  *
@@ -12,79 +12,99 @@ package souther.compiler.types;
  * {@link souther.compiler.check.BoundaryMapKey} says, and it is made from one of these rather than
  * instead of it.
  *
- * <p>The cases are flat, and {@link StringNewtype} names the base it wraps rather than holding it.
- * A nested case — a newtype carrying its representation inside it — would be a distinction no reader
- * reads: a named key is decoded by that type's own generated {@code decoder()}, which has the
- * conversion and the invariant inside it, and encoded through a {@code value()} accessor typed
- * {@code () -> String}. Both hold of a String-backed newtype and of nothing else, so the base
- * belongs in the case's name, where admitting a newtype over another base is a new case and every
- * reader is asked what to do with it. Nested, the same widening would leave the newtype arm
- * untouched and compiling.
+ * <p>Two cases, because a reader has two things to do. A {@link Lexical} key is a primitive, written
+ * as the leaf's own form and read back through it. A {@link NamedKey} is a type a model declared,
+ * written by that type's derived {@code encoder()} and read by its {@code decoder()} — which carry
+ * the conversion and the invariant — so the reader names the type and the codec does the rest.
  *
- * <p>What the set closes over is that: the representations a reader branches on, not the types a key
- * may be written as. Another {@code data CustomerId = String} is a {@link StringNewtype} and moves
- * nothing.
+ * <p>Nothing here says what a named key is made of. Which types may be keys is settled before this
+ * is built: a newtype is one exactly when what it wraps is one, and
+ * {@link souther.compiler.check.TypeOps#classifyConcreteMapKey} answers that by unwrapping. What
+ * comes out is the outermost name, because that is whose codec runs. So a wrapper over a base
+ * already admitted needs no case of its own and no reader branch: a newtype over a temporal, over
+ * an enumeration, or over another newtype arrives as the same {@link NamedKey} a newtype over
+ * {@code String} does.
+ *
+ * <p>That is the one axis this is open on, and the other is closed on purpose. A new primitive key
+ * is not admitted by anything here — the classifier answers for each primitive by name and
+ * {@link Lexical} lists the ones there are — so a primitive that rendered as a bare string without
+ * being a temporal would be a case here and a branch where a key is decoded. What that buys is that
+ * a type does not key a map merely for having a leaf codec, which {@code Int} and {@code Decimal}
+ * have.
  */
 public sealed interface MapKeyRepresentation {
 
-    /** The type in the language a key of this representation has — what the map it keys is a map of.
-     *  Answered per case rather than by switching, so a case added here cannot forget it. */
+    /** The type in the language a key of this representation has — what the map it keys is a map of. */
     Type type();
 
-    /** A bare string, {@code String} itself. */
-    record Text() implements MapKeyRepresentation {
+    /**
+     * A primitive key, written as the leaf's own text. Closed at the text and the four temporals: a
+     * JSON object's key is a string, and {@code Int}, {@code Bool} and {@code Decimal} are written
+     * as themselves elsewhere, so admitting one here would make a type's external form depend on
+     * where it stands.
+     */
+    sealed interface Lexical extends MapKeyRepresentation {
+
+        /** The leaf the key is written through and read back by. */
+        LeafScalar leaf();
+
         @Override
-        public Type type() {
-            return Type.STRING;
+        default Type type() {
+            return leaf().type();
+        }
+    }
+
+    /** A bare string, {@code String} itself. */
+    record Text() implements Lexical {
+        @Override
+        public LeafScalar leaf() {
+            return LeafScalar.STRING;
         }
     }
 
     /** A {@code Date}, as the ISO form a date field already crosses with. */
-    record Date() implements MapKeyRepresentation {
+    record Date() implements Lexical {
         @Override
-        public Type type() {
-            return Type.DATE;
+        public LeafScalar leaf() {
+            return LeafScalar.DATE;
         }
     }
 
     /** A {@code Time}, as its ISO form. */
-    record Time() implements MapKeyRepresentation {
+    record Time() implements Lexical {
         @Override
-        public Type type() {
-            return Type.TIME;
+        public LeafScalar leaf() {
+            return LeafScalar.TIME;
         }
     }
 
     /** A {@code DateTime}, as its ISO form. */
-    record DateTime() implements MapKeyRepresentation {
+    record DateTime() implements Lexical {
         @Override
-        public Type type() {
-            return Type.DATETIME;
+        public LeafScalar leaf() {
+            return LeafScalar.DATETIME;
         }
     }
 
     /** An {@code Instant}, as its ISO form. */
-    record Instant() implements MapKeyRepresentation {
+    record Instant() implements Lexical {
         @Override
-        public Type type() {
-            return Type.INSTANT;
+        public LeafScalar leaf() {
+            return LeafScalar.INSTANT;
         }
     }
 
-    /** A newtype over {@code String} ({@code data X = String}): built by its own decoder, which
-     *  applies its invariant, and rendered by its {@code value()}, which is the bare string. Both
-     *  hold because the base is text, which is why the base is in the name. */
-    record StringNewtype(TypeName name) implements MapKeyRepresentation {
-        @Override
-        public Type type() {
-            return Type.ref(name);
-        }
-    }
-
-    /** A sum every case of which is a unit data: it crosses as the case's name, a bare string
-     *  (issue #161). Not a {@link StringNewtype}: it is built from and rendered to that name rather
-     *  than wrapping a value, which is a difference the encoder's call site branches on. */
-    record UnitEnum(TypeName name) implements MapKeyRepresentation {
+    /**
+     * A type a model declared: a newtype over anything that is itself a key, or an enumeration — a
+     * sum every case of which is a unit data, which crosses as that case's name (issue #161).
+     *
+     * <p>Both go through the named type's own codec, so what it wraps does not reach here. A
+     * {@code data ProductId = String} writes its bare value, a {@code data LoanDate = Date} writes
+     * the ISO form its base writes, and an enumeration writes its case's name — each because that is
+     * what its derived {@code encoder()} does, and each read back by the {@code decoder()} that
+     * inverts it.
+     */
+    record NamedKey(TypeName name) implements MapKeyRepresentation {
         @Override
         public Type type() {
             return Type.ref(name);

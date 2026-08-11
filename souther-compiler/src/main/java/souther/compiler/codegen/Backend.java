@@ -1109,8 +1109,15 @@ public final class Backend {
      * older jar's promise would be told a value crossed that no longer does. {@code Time} and
      * {@code Instant} are new primitives, so a jar built now may declare a boundary shape an older
      * compiler has no type for at all.
+     *
+     * <p>Version 15 widens which types may key a boundary map: a newtype is one exactly when what it
+     * wraps is one, so a newtype over any of the four temporals, over an enumeration, or over
+     * another such newtype crosses where before only a newtype directly over {@code String} did
+     * (spec §collections). A signature is admitted again when it is read back out of a jar, and an
+     * older compiler asked about {@code Map<LoanDate, Int>} would refuse a declaration this one
+     * publishes.
      */
-    public static final int BOUNDARY_VERSION = 14;
+    public static final int BOUNDARY_VERSION = 15;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

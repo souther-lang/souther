@@ -62,6 +62,6 @@ the value-step form (a value step is the `Just v -> Just (f v)` case of it).
 - ADR-0051 (`fold` is a recursive helper, not a privileged loop)
 - ADR-0011 (`Option` is not a surface-writable type — why `update`'s step is `value -> value`)
 - ADR-0037 (tuple types in signatures — `toList`'s `List<(K, V)>`, which `fold` destructures)
-- ADR-0040 (typed map keys — the key a step receives is `String` or a String-backed newtype)
+- ADR-0040 (typed map keys — which types a boundary map's key may have)
 - Specification: `[#stdlib-map]`
 - Prior art: Elm `Dict.foldl` / `Dict.map` / `Dict.update`; F# `Map.fold` / `Map.mapValues`
