@@ -421,19 +421,28 @@ final class Coverages {
      * is reported and not counted, the same account any other unpromised edge gets.
      */
     static List<BoundaryAssessment> assessBetween(
-            List<BoundaryObligation> between, List<String> parameters,
+            Partitions.Partitioning partitioning, List<String> parameters,
             souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
         List<RowOutcome> rows = observed.rows();
         List<BoundaryAssessment> out = new ArrayList<>();
-        for (BoundaryObligation each : between) {
+        for (BoundaryObligation each : partitioning.between()) {
+            BoundaryTarget.EqualTerms line = (BoundaryTarget.EqualTerms) each.target();
             BoundaryAssessment.Coverage.Reason absent =
                     whyNoGuardLine(rows, armsAsked, observed.armsUnseen(), observed.someRowsUnseen());
             BoundaryAssessment.Coverage coverage = absent != null
                     ? new BoundaryAssessment.Coverage.NotMeasured(absent)
-                    : verdictOf(heldBetween((BoundaryTarget.EqualTerms) each.target(), parameters,
-                            rows, (OriginRef.GuardOrigin) each.origin()), true, observed);
+                    : verdictOf(heldBetween(line, parameters, rows,
+                            (OriginRef.GuardOrigin) each.origin()), true, observed);
+            // Proven rather than searched for. A count both positions admit is what a row on the line
+            // writes, and where every rule about both of them was read, one that exists is one a row
+            // can carry — so no candidate has to be built for the line to be counted.
+            boolean known = partitioning.edgeIsKnownWritable(line.on())
+                    && partitioning.edgeIsKnownWritable(line.against())
+                    && Partitions.commonCount(partitioning.domains(), line) != null;
             out.add(new BoundaryAssessment(each, coverage,
-                    new BoundaryAssessment.Writability.Unknown(),
+                    writabilityOf(coverage, known,
+                            new BoundaryAssessment.Attempt.NotAttempted(
+                                    BoundaryAssessment.Attempt.Reason.NOT_MEASURED)),
                     new BoundaryAssessment.Attempt.NotAttempted(
                             BoundaryAssessment.Attempt.Reason.NOT_MEASURED)));
         }

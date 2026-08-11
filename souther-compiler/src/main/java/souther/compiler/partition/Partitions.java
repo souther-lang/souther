@@ -442,6 +442,34 @@ public final class Partitions {
     }
 
     /**
+     * A count both positions of a line between them can hold, or null where their rules leave none.
+     *
+     * <p>What proves a row can be written on such a line. The line is where the two positions are
+     * equal, so a row on it writes one count at both — and whether one exists is the two positions'
+     * ranges read together, which is a question the rules answer without anything being built.
+     *
+     * <p>Asked of the counts and answered by the carrier. Which count a range gives up is
+     * {@link Endpoint#valueBetween}'s single rule, so a range open at both ends answers the same way
+     * here as anywhere else; whether the carrier holds what comes back is the carrier's, which is what
+     * keeps an enumeration's line inside its own cases.
+     *
+     * <p>Null is not a proof of the opposite. Two ranges that leave no count leave none, and that is a
+     * fact about the rules; a range this could not read in full is a range this did not read, and the
+     * caller is the one holding whether that happened.
+     */
+    public static Count commonCount(Map<NumericTerm, NumericDomain.Bounds> domains,
+                                    BoundaryTarget.EqualTerms line) {
+        NumericDomain.Bounds on = domains.get(line.on());
+        NumericDomain.Bounds against = domains.get(line.against());
+        Endpoint min = Endpoint.lower(on == null ? null : on.min(),
+                against == null ? null : against.min());
+        Endpoint max = Endpoint.upper(on == null ? null : on.max(),
+                against == null ? null : against.max());
+        return line.carrier().onTheGrid(
+                Endpoint.valueBetween(min, max, line.carrier().spacing()));
+    }
+
+    /**
      * The values a row has to be written at, one per rule that drew a cut.
      *
      * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so

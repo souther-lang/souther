@@ -524,8 +524,7 @@ public final class Adequacy {
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
                         partitioning.domains().get(axis.term())));
             }
-            out.addAll(Coverages.assessBetween(partitioning.between(), parameters, observed,
-                    armsAsked));
+            out.addAll(Coverages.assessBetween(partitioning, parameters, observed, armsAsked));
             return List.copyOf(out);
         }
 

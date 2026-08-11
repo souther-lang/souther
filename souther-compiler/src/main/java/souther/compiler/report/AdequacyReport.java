@@ -576,6 +576,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 }
             }
         }
+        undivided(out, behavior);
         // Counted where both questions have an answer: the line was measured against the rows, and
         // something has shown a row can be written at it. The two are separate observations and are
         // filtered separately — a line nobody measured and a line nothing promises are not the same
@@ -618,6 +619,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             out.append(String.format("      · not known to be writable: %s = %s (%s)%s%n",
                     b.axis(), b.value(), b.origin(), whatWasTried(b.attempt())));
         }
+    }
+
+    /**
+     * What the classes measure could not say, said under the classes measure.
+     *
+     * <p>Under the line these are about, which is the partition and not the boundary. A comparison
+     * between two positions divides neither of them and draws a line all the same, so the note saying
+     * the position went undivided sat two rows under a boundary count that was counting the line that
+     * very comparison drew — one measure's silence printed as though it were the other's.
+     */
+    private static void undivided(StringBuilder out, BehaviorReport behavior) {
         for (Adequacy.Finding f : behavior.of(Adequacy.Kind.PARTITION_NOT_DERIVABLE)) {
             out.append(String.format("      · not derivable: %s%n", f.args().get(0)));
         }
