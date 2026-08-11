@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.partition.Partitions;
@@ -198,9 +199,11 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
 
         assertEquals(Adequacy.Level.WITNESS, armsNotAsked.askedLevel());
         assertTrue(armsNotAsked.adequacyGaps().stream()
-                .noneMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED), armsNotAsked.human());
+                        .noneMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED),
+                armsNotAsked.human(SourceNameResolver.identity()));
         assertTrue(armsAsked.adequacyGaps().stream()
-                .anyMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED), armsAsked.human());
+                        .anyMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED),
+                armsAsked.human(SourceNameResolver.identity()));
     }
 
     /**
@@ -215,8 +218,9 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     void aCompositionHasNoArmsOfItsOwnAndDoesNotHoldTheVerdictOpen() {
         AdequacyReport report = reportOf(COMPOSED, Adequacy.Level.ALL);
 
-        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(), report.human());
-        assertFalse(report.human().contains("the arms were not measured"), report.human());
+        String human = report.human(SourceNameResolver.identity());
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(), human);
+        assertFalse(human.contains("the arms were not measured"), human);
     }
 
     /**
@@ -350,10 +354,12 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         AdequacyReport covered = whole.only(null, "baseRate");
         AdequacyReport uncovered = whole.only(null, "submit");
 
-        assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, whole.adequacy(), whole.human());
-        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, covered.adequacy(), covered.human());
+        assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, whole.adequacy(),
+                whole.human(SourceNameResolver.identity()));
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, covered.adequacy(),
+                covered.human(SourceNameResolver.identity()));
         assertEquals(AdequacyReport.AdequacyStatus.NOT_SATISFIED, uncovered.adequacy(),
-                uncovered.human());
+                uncovered.human(SourceNameResolver.identity()));
         assertEquals(whole.askedLevel(), covered.askedLevel());
     }
 

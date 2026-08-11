@@ -1,5 +1,6 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;
 
 import java.util.List;
@@ -80,14 +81,19 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
         at = at == null ? Optional.empty() : at;
     }
 
-    /** Which kind of name {@link #subject} is. Derived, so it cannot disagree with what it names. */
+    /** Which kind of thing {@link #subject} identifies. Derived, so it cannot disagree with it. */
     public Scope scope() {
         return target.scope();
     }
 
-    /** What it happened to, as a report prints it. */
+    /** What it happened to, as an identity: what a build reads and what two reasons are compared on. */
     public String subject() {
         return target.subject();
+    }
+
+    /** The same, as a person is shown it — a source under the name {@code names} gives it. */
+    public String shown(SourceNameResolver names) {
+        return target.shown(names);
     }
 
     public static Incompleteness of(Code code, Scope scope, String subject) {

@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
@@ -248,7 +249,7 @@ class CompilePartialAdequacyTest {
                 "the flag's classes are undecided, so nothing is written for them");
         assertFalse(generated.get("take").pairs().reasons().isEmpty(),
                 "and the position that could not be read is named");
-        String written = GeneratedRows.of("example.budget", generated, true);
+        String written = GeneratedRows.of("example.budget", generated, true, SourceNameResolver.identity());
         assertFalse(written.contains("example take"), "no row is offered: " + written);
         assertTrue(written.contains("no rows offered at"),
                 "the position it could not read is what there is to say: " + written);
@@ -406,7 +407,7 @@ class CompilePartialAdequacyTest {
 
         assertEquals(List.of(), generated.get("take").pairs().rows());
         assertEquals(List.of(), generated.get("take").boundaries().rows());
-        String written = GeneratedRows.of("example.split", generated, true);
+        String written = GeneratedRows.of("example.split", generated, true, SourceNameResolver.identity());
         assertFalse(written.contains("example take"),
                 "the row may be sitting in the file that could not be read: " + written);
         assertTrue(written.contains("generation stopped"),
@@ -438,7 +439,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aSignatureLineUnderPartialDoesNotAssert() {
-        String human = AdequacyReport.of(split()).human();
+        String human = AdequacyReport.of(split()).human(SourceNameResolver.identity());
 
         assertTrue(human.contains("undecided whether a row expects `Refused`"), human);
         assertFalse(human.contains("· no row expects"), human);
@@ -478,7 +479,8 @@ class CompilePartialAdequacyTest {
                 why.get(0).code());
         assertEquals(java.util.Optional.of("take"), why.get(0).behavior(),
                 "a position is inside one behavior");
-        assertTrue(report.human().contains("the observation at"), report.human());
+        String human = report.human(SourceNameResolver.identity());
+        assertTrue(human.contains("the observation at"), human);
     }
 
     /**
@@ -531,8 +533,8 @@ class CompilePartialAdequacyTest {
         assertEquals(4, partition.pairs().total());
         assertEquals(MeasurementStatus.PARTIAL, partition.pairs().status(),
                 "the one row could not be placed at either position");
-        assertFalse(AdequacyReport.of(compilation).human().contains("untried"),
-                AdequacyReport.of(compilation).human());
+        assertFalse(AdequacyReport.of(compilation).human(SourceNameResolver.identity()).contains("untried"),
+                AdequacyReport.of(compilation).human(SourceNameResolver.identity()));
     }
 
     /**

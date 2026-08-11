@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
@@ -84,7 +85,7 @@ class AnEqualityDividesTheValuesInTwoTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        return AdequacyReport.of(compilation).human();
+        return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
     }
 
     /** The position is divided, and into the two classes the behavior tells apart. */
@@ -141,7 +142,7 @@ class AnEqualityDividesTheValuesInTwoTest {
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
-        return GeneratedRows.of("example.ratio", all, false);
+        return GeneratedRows.of("example.ratio", all, false, SourceNameResolver.identity());
     }
 
     /** An ordering comparison beside it is a distinction the model does draw, and is kept. */

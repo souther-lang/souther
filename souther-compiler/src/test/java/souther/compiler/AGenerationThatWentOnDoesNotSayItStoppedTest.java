@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.Axis;
@@ -77,7 +78,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
     private static String written(Generator.GenerationResult result) {
         return GeneratedRows.of("example.trip",
                 Map.of("submit", new Adequacy.Filling(result, Generator.GenerationResult.NONE, List.of())),
-                false);
+                false, SourceNameResolver.identity());
     }
 
     /**
