@@ -9,6 +9,7 @@ import souther.compiler.check.BoundaryOutput;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.TypeView;
 import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.ExampleMessage;
@@ -634,7 +635,7 @@ public final class ExampleVerifier {
                 state.failed(FailurePhase.INPUT_FIXTURE);
                 return;
             }
-            state.inputCases.add(caseWritten(fixtures, row.inputs().get(i)));
+            state.inputCases.add(caseWritten(fixtures, row.inputs().get(i), ins.get(i).type()));
             state.inputs.add(fixtures.observed(args[i]));
         }
         // validate the expected arm/value against the output cases before running. Which case the row
@@ -726,11 +727,19 @@ public final class ExampleVerifier {
         state.failurePhase = FailurePhase.NONE;
     }
 
-    /** The case an input fixture constructs, or null where its text does not say. A form this cannot
-     * read is not a reason to lose the row: the measure that reads it says it could not classify. */
-    private static TypeName caseWritten(FixtureReader fixtures, Ast.Expr fixture) {
+    /**
+     * The case an input fixture supplies at {@code position}, or null where its text does not say. A
+     * form this cannot read is not a reason to lose the row: the measure that reads it says it could
+     * not classify.
+     *
+     * <p>Read at the position and not off the fixture alone. A position writing its values under a
+     * name divides into what its base divides into, so what a row there supplies is the case under
+     * that name — the same projection, in the direction that reads rather than the one that derives.
+     */
+    private TypeName caseWritten(FixtureReader fixtures, Ast.Expr fixture, Type position) {
         try {
-            return fixtures.constructedCase(fixture);
+            return fixtures.caseUnder(TypeView.of(position, symbols).wrappers().stream()
+                    .map(TypeOps.Layer::named).toList(), fixture);
         } catch (RuntimeException e) {
             if (overspending(e) != null) {
                 throw e;   // the row's budget is gone; it is not a form that could not be read
