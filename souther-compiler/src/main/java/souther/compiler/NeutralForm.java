@@ -454,6 +454,27 @@ final class NeutralForm {
                 + " writes it");
     }
 
+    /** Whether a live value is the absent optional. */
+    static boolean isAbsent(Object live) {
+        return live != null && simpleName(live).equals("Option$None");
+    }
+
+    /** What a live optional holds. A `?` position takes the value itself as well as a `Some` around
+     *  it, so anything that is not one is what it stands for. */
+    static Object heldBy(Object live) {
+        if (live == null || !simpleName(live).equals("Option$Some")) {
+            return live;
+        }
+        try {
+            java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod("value");
+            accessor.setAccessible(true);
+            return accessor.invoke(live);
+        } catch (ReflectiveOperationException _) {
+            throw new FixtureException("an optional's value cannot be read back: `"
+                    + simpleName(live) + "` has no `value` to read");
+        }
+    }
+
     /** Whether a value is a neutral scalar, so it can be shown as written rather than by class name. */
     static boolean isScalar(Object v) {
         return v instanceof String || v instanceof Long || v instanceof Boolean
