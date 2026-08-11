@@ -69,21 +69,29 @@ class AnAtomExistsBeforeAnythingIsSaidOfItTest {
                 "and one more subtraction is not something it establishes");
     }
 
-    /** Guards about one value answer the same in either order: what a guard states does not depend on
-     * whether an earlier one happened to mention the same value. */
+    /**
+     * Guards about one value answer the same in either order, and what they answer is discharged.
+     *
+     * <p>Both are said rather than only that the two agree. Two orders that both report is agreement
+     * as much as two that both discharge, and it is the answer this is about: the second statement
+     * is what establishes the construction, so an order in which it goes unread is an order in which
+     * the construction is reported.
+     */
     @Test
     void guardsAboutOneValueAnswerTheSameInEitherOrder() {
-        assertEquals(warnings(LIST, "xs, bill", """
+        long spokenFirst = warnings(LIST, "xs, bill", """
                 let t = List.sum(xs)
                     guard t >= 0 else Fine
                     guard t >= bill else Fine
-                    NonNeg(t - bill)"""),
-                warnings(LIST, "xs, bill", """
+                    NonNeg(t - bill)""");
+        long spokenSecond = warnings(LIST, "xs, bill", """
                 let t = List.sum(xs)
                     guard t >= bill else Fine
                     guard t >= 0 else Fine
-                    NonNeg(t - bill)"""),
-                "the same two statements, in the other order");
+                    NonNeg(t - bill)""");
+        assertEquals(0, spokenFirst, "`t >= bill` establishes it, stated second");
+        assertEquals(0, spokenSecond, "and stated first");
+        assertEquals(spokenFirst, spokenSecond, "the same two statements, in the other order");
     }
 
     /** Written out or named, one call is one value — in both directions, so that neither spelling is

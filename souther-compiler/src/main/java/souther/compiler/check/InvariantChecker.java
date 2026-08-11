@@ -67,8 +67,11 @@ import java.util.Set;
  * asks them in order.
  *
  * <p>The walk mirrors {@link TotalityChecker}: a {@code switch} over {@link Core} threading an
- * immutable environment. It is fail-open — any internal error is swallowed so an analysis bug can
- * never reject a valid program.
+ * immutable environment. It is fail-open for what it cannot analyze — an expression or a shape it
+ * has no rule for is swallowed, so a limit of this analysis can never reject a valid program. It is
+ * not fail-open for this analysis disagreeing with itself: {@link Terms.OneKeyTwoKinds} says one
+ * name was given two values, and swallowing it produces a behavior with no findings, which is what a
+ * behavior whose invariants all discharge produces. That one is rethrown ({@link #gaveUp}).
  */
 public final class InvariantChecker {
 
@@ -76,9 +79,9 @@ public final class InvariantChecker {
      * What one analysis came to.
      *
      * <p>{@code status} is not about the model. It says whether the findings are all of the findings
-     * there were: this check is fail-open, so an analysis that fell over produces exactly what an
-     * analysis that finished and found nothing produces, and a consumer reading only the two lists
-     * cannot tell them apart. Production does not need to — the run-time check is the backstop
+     * there were: this check is fail-open for what it cannot read, so an analysis that fell over on
+     * one of those produces exactly what an analysis that finished and found nothing produces, and a
+     * consumer reading only the two lists cannot tell them apart. Production does not need to — the run-time check is the backstop
      * either way — but a test asserting that a construction is discharged is asserting something
      * about an analysis that ran, and without this it would pass just as well on one that did not.
      */
@@ -244,8 +247,10 @@ public final class InvariantChecker {
      */
     record Seeded(NumericDomain numbers, Map<String, String> atoms, boolean everyClauseRead) {}
 
-    /** {@link Seeded} for one declaration. Never throws: a declaration this cannot read is one whose
-     * fields it says nothing about, which is the same answer as a declaration with no rules. */
+    /** {@link Seeded} for one declaration. A declaration this cannot read is one whose fields it says
+     * nothing about, which is the same answer as a declaration with no rules — so nothing about the
+     * declaration throws. {@link Terms.OneKeyTwoKinds} is not about the declaration and is not
+     * caught ({@link #gaveUp}). */
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols) {
         return seedFields(named, data, symbols, Map.of());
     }
@@ -452,9 +457,10 @@ public final class InvariantChecker {
     private static final SourcePos NOWHERE = new SourcePos(0, 0);
 
     /**
-     * Analyzes one behavior body against the bindings its inputs are. Never throws. A {@code null}
-     * body is one the analysis representation could not be built or typed for, and is not analyzed at
-     * all.
+     * Analyzes one behavior body against the bindings its inputs are. Nothing the body is throws:
+     * a walk that cannot get through one comes back {@code ABANDONED}. {@link Terms.OneKeyTwoKinds}
+     * is not something the body is and is not caught ({@link #gaveUp}). A {@code null} body is one
+     * the analysis representation could not be built or typed for, and is not analyzed at all.
      */
     static Findings analyze(Core body, Map<TypeName, List<Ast.InvariantClause>> invariants,
                             Scope params, Symbols symbols) {

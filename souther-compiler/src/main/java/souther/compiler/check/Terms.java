@@ -34,7 +34,7 @@ import java.util.Set;
  * is what the seeding writes about. What a value is called, is a key: two expressions with one key
  * compute one value, which is the whole of what the fact set knows. What can be said of a value, is
  * whether a clause read against it could ever be discharged — a location always can, and so does a
- * number, which is named by whatever computes it; a value of another kind only where a rule or a
+ * number this grammar names, whatever computes it; a value of another kind only where a rule or a
  * guard reaches it — and it is what decides whether a construction is reported at all.
  *
  * <p>The middle question does not wait on the third. A value is called something because it can be
@@ -261,9 +261,10 @@ final class Terms {
 
     /**
      * The canonical atom key of a numeric value: a location ({@code x}, {@code p.a}, a newtype's
-     * value), a size call over a nameable container, or anything else this can name — and
-     * {@code null} where the value is not a number the domain carries, or where nothing here names
-     * it.
+     * value), a size call over a nameable container, or anything else {@link #termKey} names — and
+     * {@code null} where the value is not a number the domain carries, or where the term grammar
+     * names it nothing. A call the representation did not keep standing is the second of those: what
+     * a behavior answered is outside that grammar, so it is no more an atom than it was.
      *
      * <p>An atom exists because a value can be pointed at, not because anything is known of it. Two
      * writings of one value are one atom and so one unknown, which is the whole of what an atom
@@ -390,8 +391,10 @@ final class Terms {
      *
      * <p>What is named. A location is: the seeding writes about locations, so a clause reading one
      * reads something. A container built by an operation the table covers is, since the table is a
-     * rule about it. A number is, whatever computes it — the domain carries it, and a clause reading
-     * it reads an unknown the guards may or may not have settled. A value of any other kind is named
+     * rule about it. A number the term grammar names is, whatever computes it — the domain carries
+     * it, and a clause reading it reads an unknown the guards may or may not have settled. A number
+     * that grammar names nothing, such as what a behavior answered, is not. A value of any other kind
+     * is named
      * only where a guard on this path spoke about it, since a clause reading it has otherwise nothing
      * to be read against.
      *
