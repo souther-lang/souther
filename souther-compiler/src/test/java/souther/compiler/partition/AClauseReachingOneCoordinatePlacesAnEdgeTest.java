@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryAssessment;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.ValueName;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
@@ -306,6 +308,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             data NumbersN = Set<Int>        invariant Set.size(value) >= 3
             data FlagsR   = { s: Set<Bool> } invariant Set.size(s) >= 3
             data NumbersR = { s: Set<Int> }  invariant Set.size(s) >= 3
+            data TextR    = { s: String }    invariant String.length(s) >= 3
 
             data Ok = { size: Int }
 
@@ -324,6 +327,10 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             behavior onNumbersR : (v: NumbersR) -> Ok
                 constructs Ok
             let onNumbersR (v) = Ok { size = Set.size(v.s) }
+
+            behavior onTextR : (v: TextR) -> Ok
+                constructs Ok
+            let onTextR (v) = Ok { size = String.length(v.s) }
             """;
 
     /**
@@ -347,7 +354,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
 
         assertEquals(Set.of("onFlagsN/Set.size(v) = 3", "onNumbersN/Set.size(v) = 3",
-                        "onFlagsR/Set.size(v.s) = 3", "onNumbersR/Set.size(v.s) = 3"),
+                        "onFlagsR/Set.size(v.s) = 3", "onNumbersR/Set.size(v.s) = 3",
+                        "onTextR/String.length(v.s) = 3"),
                 lines.keySet(), "one line each, and the record's is on the count of the field");
         assertFalse(lines.get("onFlagsN/Set.size(v) = 3").writability().known(),
                 "two booleans are all there are");
@@ -357,6 +365,26 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 "three integers are three integers");
         assertTrue(lines.get("onNumbersR/Set.size(v.s) = 3").writability().known(),
                 "and a record holding them is a value that can be built");
+    }
+
+    /**
+     * Which counts the projection may not stand behind, held at the rule rather than through it.
+     *
+     * <p>Through the measure there is nothing to hold. A length edge in a model this size is settled
+     * by the value the generator builds for it, so it stays counted whether or not the projection was
+     * entitled to say so, and an assertion on its verdict would pass with the rule reverted. What
+     * shows the difference is a corpus: declining the proof at every count takes twenty
+     * `String.length` edges out of the denominator across `souther-examples`, and the suite stays
+     * green throughout. So the distinction is pinned where it is decided.
+     */
+    @Test
+    void onlyACountOfDistinctThingsIsCappedByWhatThereIsToCount() {
+        assertTrue(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("Set", "size")));
+        assertTrue(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("Map", "size")));
+        assertFalse(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("List", "length")),
+                "a list repeats an element");
+        assertFalse(NumericMeasures.countsDistinct(ValueName.Stdlib.operation("String", "length")),
+                "and a string repeats a character");
     }
 
     private static String report(String source) {

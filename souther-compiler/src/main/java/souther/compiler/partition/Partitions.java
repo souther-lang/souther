@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -92,14 +93,22 @@ public final class Partitions {
          * refuse that value as easily as the one beyond it — so the edge is not known to be writable
          * and asking for a row at it is asking for work nobody may be able to do.
          *
-         * <p>And false at a count, whatever the rules came to. What the projection settles is which
-         * numbers the rules leave, and a count of three is a number the rules leave whether or not
-         * three of the thing exist: a `Set<Bool>` has two elements to be made of and the domain has
-         * no term for that. So a count's edge is settled by a value rather than by an argument — a
-         * row at it, or one this built — which is the account an edge nothing has settled already
-         * gets. Read as a proof, a floor no value reaches became a row an author was told to write. */
+         * <p>And false at a count of distinct things, whatever the rules came to. What the projection
+         * settles is which numbers the rules leave, and a count of three is a number they leave
+         * whether or not three of the thing exist: a `Set<Bool>` has two elements to be made of and
+         * the domain has no term for that. Such an edge is settled by a value rather than by an
+         * argument — a row at it, or one this built — which is the account an edge nothing has
+         * settled already gets. Read as a proof, a floor no value reaches became a row an author was
+         * told to write.
+         *
+         * <p>A length is not one of these. It counts positions rather than distinctions and a
+         * position is always to be had, so the number the rules leave is a number some value holds
+         * ({@link NumericMeasures#countsDistinct}). Declining the proof there would take away every
+         * `String.length` edge in a corpus over one `Set<Bool>` that has no values. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return !uncertain.contains(term) && !(term instanceof NumericTerm.SizeOf);
+            return !uncertain.contains(term)
+                    && !(term instanceof NumericTerm.SizeOf size
+                            && NumericMeasures.countsDistinct(size.measure()));
         }
 
         /** Only the positions the model actually divides. */

@@ -90,13 +90,20 @@ the denominator, and refuses no build — which is what ADR-0091 already does wi
 has settled, for the same reason. What settles it is a witness rather than an argument: a row at the
 value went through the decoder, and from then on the edge is counted like any other.
 
-Nor is an edge at a count, whatever the rules came to. What the projection settles is which numbers
-the rules leave, and a count of three is a number they leave whether or not three of the thing exist:
-a `Set<Bool>` has two elements to be made of, and the domain has no term for that. So a count's edge
-is settled by a value — a row at it, or one this built — and not by an argument, which is the account
-an edge nothing has settled already gets. This is what the projection was never entitled to say, and
-it went unsaid only while a count could be bounded from one place: read as a proof, a floor no value
-reaches becomes a row an author is told to write.
+Nor is an edge at a count of distinct things, whatever the rules came to. What the projection settles
+is which numbers the rules leave, and a count of three is a number they leave whether or not three of
+the thing exist: a `Set<Bool>` has two elements to be made of, and the domain has no term for that.
+So such an edge is settled by a value — a row at it, or one this built — and not by an argument,
+which is the account an edge nothing has settled already gets. The projection was never entitled to
+say it, and it went unsaid only while a count could be bounded from the position's own type alone:
+given a second place to write the rule, a floor no value reaches becomes a row an author is told to
+write.
+
+A length is not one of these. It counts positions rather than distinctions, and a position is always
+to be had — a list repeats an element, a string repeats a character — so the number the rules leave
+is a number some value holds. The two have to be told apart or the repair costs more than the defect:
+declining the proof at every count takes away every `String.length` edge in the corpus, twenty of
+them, over one `Set<Bool>` that has no values.
 
 Whether the rules were all read is asked of the value and not of the position. A bound is about one
 position; a row at its edge is a whole value with that edge in it, and a rule about any other position
@@ -233,6 +240,18 @@ Reading the size terms turned 232 of those reported positions into measured ones
 `undetermined` to `not satisfied`, which is the answer they should have had: the obligations were
 always there and nothing was asking for them. No position gained a not-derivable line it did not
 have, because a term is only taken of a position some rule measures.
+
+Reading the clause wherever it is written moved four positions in `souther-examples` and the
+boundaries owed went from 75 to 78. All four are one declaration — a CRM lead whose record states
+`touches >= 1` beside a rule relating two of its dates — and the shape is the one the issue was found
+on: an aggregate with a second field has to write the rule about its own field. The corpus is thin
+evidence of how common that is rather than of whether it is right, since it has few record-stated
+bounds on input types; what it does show is that no adequacy verdict moved and nothing that was
+measured stopped being.
+
+One position left the report for it. A behavior that gained an axis pushed another past the axis
+limit, which is reported as omitted rather than dropped in silence. That is the limit doing what it
+is for, and it is worth knowing that adding lines spends that budget.
 
 Deriving the line and writing a value at it are separate abilities, and only the first is here.
 Nothing composes a string of a given length (#528), so those edges are reported as unmet with the

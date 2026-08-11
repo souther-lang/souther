@@ -48,6 +48,24 @@ public final class NumericMeasures {
     }
 
     /**
+     * Whether the operation counts things no two of which are alike.
+     *
+     * <p>Here with the rest because it is the same question one step on: what a value of this type
+     * is counted by, and what that count is capped at. A count of distinct things is capped by how
+     * many there are to be distinct — a {@code Set<Bool>} holds two and no rule makes it hold three
+     * — while a length counts positions, and a position is always to be had: a list repeats an
+     * element and a string repeats a character.
+     *
+     * <p>Which is the one thing a range cannot answer. The rules leave a count of three whether or
+     * not three of the thing exist, so a reader treating the range as a proof that a value of that
+     * count can be written has to know which of these it is looking at.
+     */
+    public static boolean countsDistinct(ValueName operation) {
+        return operation.equals(ValueName.Stdlib.operation("Set", "size"))
+                || operation.equals(ValueName.Stdlib.operation("Map", "size"));
+    }
+
+    /**
      * The operation that counts what a value of {@code type} holds, or null where nothing counts it.
      *
      * <p>Which one it is follows from what the value is, so a rule read off a declaration and an
