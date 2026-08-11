@@ -522,7 +522,28 @@ public final class FixtureReader {
             }
             fields.put(f.getKey(), new Asserted.Value(new ObservedValue.Absent()));
         }
-        return new Asserted.Built(built, fields);
+        Asserted.Built whole = new Asserted.Built(built, fields);
+        admitsItself(whole, nd, built);
+        return whole;
+    }
+
+    /**
+     * A construction's own invariant, over the value it states.
+     *
+     * <p>The same two stages a newtype goes through, for the same reason. Whether every field states
+     * what this type declares it to be is asked of what the row wrote; only where it does is there a
+     * value of this type to ask the invariant about, and only there can building one read nothing as
+     * something else. A row whose field states another type is not a value whose invariant failed —
+     * it is the disagreement it reports, and asking a rule about a value nobody wrote would answer
+     * for a value nobody wrote.
+     */
+    private void admitsItself(Asserted.Built whole, Ast.NewData nd, TypeName built) {
+        if (TypeOps.effectiveInvariants(declared(built), symbols).isEmpty()
+                || !states(whole, Type.ref(built))) {
+            return;
+        }
+        decode(FixtureShape.of(Type.ref(built), symbols),
+                neutral.shaped(raw(nd, Type.ref(built), Admission.HELD), Type.ref(built)));
     }
 
     private Asserted assertedApply(Ast.Apply c, Type position) {
@@ -693,15 +714,6 @@ public final class FixtureReader {
         return true;
     }
 
-    private boolean each(List<Asserted> elements, Type element) {
-        for (Asserted e : elements) {
-            if (!states(e, element)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /** The name a written value wears, or null where it wears none. */
     private static TypeName named(Asserted a) {
         return switch (a) {
@@ -712,17 +724,22 @@ public final class FixtureReader {
         };
     }
 
-    /** Whether a written value with no parts is how {@code name} is spelled. */
+    /** Whether a written value with no parts is of {@code name}. Asked of what the row wrote, which
+     *  is why it is not asked of a decoder: one reads a whole number where a `Decimal` stands, and a
+     *  row writing `1` there wrote an `Int`. */
     private static boolean spells(ObservedValue v, TypeName name) {
-        return switch (name.name()) {
-            case "Int" -> v instanceof ObservedValue.Integer;
-            case "String" -> v instanceof ObservedValue.Text;
-            case "Bool" -> v instanceof ObservedValue.Bool;
-            case "Decimal" -> v instanceof ObservedValue.Decimal || v instanceof ObservedValue.Integer;
-            case "Date", "Time", "DateTime", "Instant" -> v instanceof ObservedValue.Temporal;
-            default -> false;
-        };
+        return name.primitiveKind() != null && name.primitiveKind() == ValueRendering.primitiveOf(v);
     }
+
+    private boolean each(List<Asserted> elements, Type element) {
+        for (Asserted e : elements) {
+            if (!states(e, element)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 
     /** Whether a type is one whose values have no parts, so a value of it is settled by the one value
      *  standing there and a decoder for it reads no position but its own. */
