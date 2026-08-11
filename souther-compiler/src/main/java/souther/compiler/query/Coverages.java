@@ -447,41 +447,33 @@ final class Coverages {
             BoundaryAssessment.Attempt attempt = attemptBetween(line, at, coverage, probe);
             out.merge(new Line(each.side(), each.target(), each.origin().line()),
                     new BoundaryAssessment(each, coverage,
-                            writabilityOf(coverage, provenWritable(partitioning, line, at), attempt),
-                            attempt),
+                            writabilityOf(coverage, false, attempt), attempt),
                     Coverages::whicheverSawMore);
         }
         return List.copyOf(out.values());
     }
 
     /**
-     * Whether the rules alone prove a row can be written on a line between two positions.
+     * Why a line between two positions is never counted on the strength of the rules alone.
      *
-     * <p>Two ranges overlapping is not two positions holding one value. A place in both is a place
-     * each of them admits *on its own*, and a rule relating them can refuse the pair that each half
-     * would have taken: under {@code data Pair = { a: Int, b: Int } invariant a < b} the ranges of
-     * {@code a} and {@code b} overlap everywhere and the line {@code a = b} has no value at all.
-     * Projecting a range and completing an assignment are two questions of one rule set, which is why
-     * {@link souther.compiler.check.FieldDomains} asks the second with the first already settled.
+     * <p>Two ranges overlapping is not two positions holding one value. A place in both is one each of
+     * them admits *on its own*, and what refuses the pair need not appear in either range: a rule
+     * relating two fields of one record does not — under {@code invariant a < b} the two ranges run
+     * over each other everywhere and the line {@code a = b} holds nothing — and neither does a rule
+     * the ranges could not take in, since a range says nothing is missing where a disequality left a
+     * hole and a pattern left one string.
      *
-     * <p>So the projection proves this only where no rule can relate the two: two positions under
-     * different parameters. A behavior's parameters are constructed one at a time and a model has no
-     * way to write a rule across them, so a value each admits is a pair both admit. Under one
-     * parameter that does not hold, and what settles the line there is a witness — a row already on
-     * it, or a value the module's own decoder took, which is the one thing here that answers whether
-     * a rule relating two fields accepts the pair.
+     * <p>Nor is "every rule was read" the question. That says the checker understood each clause, not
+     * that each clause reached the ranges: {@code String.matches} is read and bounds nothing, so a
+     * position admitting one string looks unbounded from here.
      *
-     * <p>Not a claim that such a line cannot be written. Nothing is counted for want of a proof, and
-     * the line is reported as one nothing has promised — which is what any other unpromised edge gets.
+     * <p>So the line is settled by a witness and by nothing else — a row already on it, or a value the
+     * module's own decoder took, which is the one thing here that reads every rule of a value at once.
+     * That is not a claim that a line without one cannot be written: it is reported as one nothing has
+     * promised, which is the account any other unpromised edge gets, and a witness found later counts
+     * it. A line at a place of one position keeps its own proof, where the rules that bound it are the
+     * rules that drew it.
      */
-    private static boolean provenWritable(Partitions.Partitioning partitioning,
-                                          BoundaryTarget.EqualTerms line, Place at) {
-        boolean independent = !line.on().path().head().equals(line.against().path().head());
-        return at != null && independent
-                && partitioning.edgeIsKnownWritable(line.on())
-                && partitioning.edgeIsKnownWritable(line.against());
-    }
-
     /** What building a row on a line between two positions came to, where one was worth building. */
     private static BoundaryAssessment.Attempt attemptBetween(
             BoundaryTarget.EqualTerms line, Place at, BoundaryAssessment.Coverage coverage,

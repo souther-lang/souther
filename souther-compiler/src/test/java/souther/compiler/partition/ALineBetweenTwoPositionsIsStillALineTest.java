@@ -204,6 +204,33 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     private static final String ALLOWED_BY_THE_RECORD =
             RULED_OUT_BY_THE_RECORD.replace("invariant a < b", "invariant a <= b");
 
+    /** Two positions under different parameters whose rules the ranges cannot hold: a hole against a
+     *  single value. Their ranges overlap at zero and one of them refuses zero. */
+    private static final String A_HOLE_AND_A_POINT = """
+            module example.holeneg
+
+            data NonZero = Int
+                invariant value /= 0
+
+            data Zero = Int
+                invariant value == 0
+
+            data No
+            data Yes
+            data Result = No | Yes
+
+            behavior cmp : (a: NonZero, b: Zero) -> Result
+                constructs No, Yes
+            let cmp (a, b) = {
+                guard a.value > b.value else No
+                Yes
+            }
+
+            example cmp
+                | "over" : (NonZero(1), Zero(0)) -> Yes
+                | "under" : (NonZero(-1), Zero(0)) -> No
+            """;
+
     /** An expression on one side, which names no position a row can be written at. */
     private static final String NOT_A_TERM = """
             module example.offset
@@ -388,25 +415,46 @@ class ALineBetweenTwoPositionsIsStillALineTest {
     }
 
     /**
-     * A line on a measure of two positions is drawn, counted, and offered no row.
+     * A line on a measure of two positions is drawn and read, and nothing here promises it.
      *
-     * <p>Three answers and not one. The line is where the two lengths are equal, and the rows can be
-     * read against it; the rules prove a length both positions admit, so it is a row somebody is
-     * owed; and nothing here writes a value from a length — four is not what goes at the position,
-     * it is four characters somebody has to choose.
+     * <p>Three answers and not one. The line is where the two lengths are equal and the rows can be
+     * read against it; nothing here writes a value from a length — four is not what goes at the
+     * position, it is four characters somebody has to choose — so no witness is found; and with no
+     * witness nothing is counted.
      *
-     * <p>What the block says about that matters more than the absence. A search that came to nothing
-     * says so about itself: two strings of one length are the easiest row in the file to write by
-     * hand, and the sentence that licenses "no value can be written there" would be false.
+     * <p>What is said about that matters more than the absence. Two strings of one length are the
+     * easiest row in the file to write by hand, so the sentence that licenses "no value can be
+     * written there" would be false, and the one written says what this could not do.
      */
     @Test
-    void aLineOnAMeasureIsCountedAndOfferedNoRow() {
+    void aLineOnAMeasureIsReadAndPromisedByNothing() {
         String report = report(MEASURED);
         String rows = generated(MEASURED);
 
-        assertTrue(report.contains("no row is at cmp/String.length(a) = String.length(b)"), report);
+        assertFalse(report.contains("no row is at cmp/String.length(a) = String.length(b)"), report);
+        assertTrue(report.contains(
+                "not known to be writable: cmp/String.length(a) = String.length(b)"), report);
         assertTrue(rows.contains("nothing here composes a value at that edge"), rows);
         assertTrue(rows.contains("does not make the edge unwritable"), rows);
+    }
+
+    /**
+     * A rule the ranges could not take in is not a range that says nothing is missing.
+     *
+     * <p>{@code /= 0} leaves a hole and {@code == 0} leaves one value, and the two positions are
+     * under different parameters, so nothing relates them and their ranges overlap at zero. Read as a
+     * proof, that asks for a diagonal row at a value one of the two refuses outright.
+     *
+     * <p>Nor does "every rule was read" answer it. The checker understands a disequality perfectly
+     * well and it reaches no range, so a position with a hole in it looks unbounded from there.
+     */
+    @Test
+    void aRuleTheRangesCouldNotTakeInIsNotAProofEither() {
+        String report = report(A_HOLE_AND_A_POINT);
+
+        assertFalse(report.contains("no row is at cmp/a = b"),
+                "zero is the only place both ranges hold and one position refuses it:\n" + report);
+        assertTrue(report.contains("not known to be writable: cmp/a = b"), report);
     }
 
     /**
