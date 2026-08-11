@@ -275,11 +275,43 @@ class ALineBetweenTwoPositionsIsStillALineTest {
                         + " rather than dividing it)"), report);
     }
 
+    /**
+     * The row offered for such a line puts one value at both positions.
+     *
+     * <p>Which is the whole of what makes it a row on the line. A search that settled one position
+     * and left the other to its own range would offer a row beside the line as readily as one on it,
+     * and the row a person is handed is the one they answer.
+     */
+    @Test
+    void theRowOfferedForTheLinePutsOneValueAtBothPositions() {
+        String rows = generated(TWO_NEWTYPES);
+
+        assertTrue(rows.contains("(Charge(1000), Ceiling(1000))"), rows);
+    }
+
+    /** A count both positions admit is what the offer is written at, and where the rules leave none
+     *  there is no offer — and no claim that the line cannot be written on either. */
+    @Test
+    void aLineNoCountSatisfiesIsOfferedNoRowAndCalledNoNames() {
+        String rows = generated(NO_COMMON_COUNT);
+
+        assertTrue(rows.contains("no row for `a = b`"), rows);
+        assertTrue(rows.contains("does not make the edge unwritable"), rows);
+    }
+
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         return AdequacyReport.of(compilation).human(SourceNameResolver.identity());
+    }
+
+    private static String generated(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        return souther.compiler.report.GeneratedRows.of(compilation, null, null, true,
+                SourceNameResolver.identity());
     }
 
     /** Held here so a rename of the report's own words does not quietly turn every assertion above

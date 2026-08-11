@@ -524,7 +524,8 @@ public final class Adequacy {
                         partitioning.edgeIsKnownWritable(axis.term()), probe,
                         partitioning.domains().get(axis.term())));
             }
-            out.addAll(Coverages.assessBetween(partitioning, parameters, observed, armsAsked));
+            out.addAll(Coverages.assessBetween(partitioning, parameters, observed, armsAsked,
+                    probe));
             return List.copyOf(out);
         }
 
@@ -545,14 +546,31 @@ public final class Adequacy {
                     partitioning.axes(), symbols);
             Generator.CandidateCheck check =
                     (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
-            return obligation -> {
-                try {
-                    return Generator.probe(subject, obligation, check);
-                } catch (LinkageError _) {
-                    // The generated classes would not link, so nothing can be built to find out
-                    // what a model admits. Nothing was tried, which is not the same as everything
-                    // tried being refused, and neither of them says the edge cannot be written.
-                    return null;
+            return new Coverages.Probe() {
+
+                @Override
+                public Generator.BoundaryAttempt attempt(
+                        souther.compiler.partition.BoundaryObligation obligation) {
+                    return built(() -> Generator.probe(subject, obligation, check));
+                }
+
+                @Override
+                public Generator.BoundaryAttempt attemptBetween(
+                        souther.compiler.partition.BoundaryTarget.EqualTerms line,
+                        souther.compiler.numeric.Count at) {
+                    return built(() -> Generator.probeBetween(subject, line, at, check));
+                }
+
+                private Generator.BoundaryAttempt built(
+                        java.util.function.Supplier<Generator.BoundaryAttempt> attempt) {
+                    try {
+                        return attempt.get();
+                    } catch (LinkageError _) {
+                        // The generated classes would not link, so nothing can be built to find out
+                        // what a model admits. Nothing was tried, which is not the same as everything
+                        // tried being refused, and neither of them says the edge cannot be written.
+                        return null;
+                    }
                 }
             };
         }

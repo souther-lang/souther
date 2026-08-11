@@ -273,12 +273,16 @@ final class Coverages {
      * pair each field would have accepted alone — and it answers it one way: what it builds is a
      * witness, and what it refuses is a refusal of the candidates it tried.
      */
-    @FunctionalInterface
     interface Probe {
 
         /** What building a row at this boundary came to, or null where the attempt could not be made
          * at all — which leaves the edge unknown rather than refused. */
         souther.compiler.partition.Generator.BoundaryAttempt attempt(BoundaryObligation obligation);
+
+        /** The same for a line between two positions, which is not at a count of its own: the count
+         * to write at both of them is the rules' answer about the pair and is handed in. */
+        souther.compiler.partition.Generator.BoundaryAttempt attemptBetween(
+                BoundaryTarget.EqualTerms line, Count at);
     }
 
     /**
@@ -422,7 +426,7 @@ final class Coverages {
      */
     static List<BoundaryAssessment> assessBetween(
             Partitions.Partitioning partitioning, List<String> parameters,
-            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked) {
+            souther.compiler.query.Adequacy.Observed observed, boolean armsAsked, Probe probe) {
         List<RowOutcome> rows = observed.rows();
         List<BoundaryAssessment> out = new ArrayList<>();
         for (BoundaryObligation each : partitioning.between()) {
@@ -433,20 +437,56 @@ final class Coverages {
                     ? new BoundaryAssessment.Coverage.NotMeasured(absent)
                     : verdictOf(heldBetween(line, parameters, rows,
                             (OriginRef.GuardOrigin) each.origin()), true, observed);
-            // Proven rather than searched for. A count both positions admit is what a row on the line
-            // writes, and where every rule about both of them was read, one that exists is one a row
-            // can carry — so no candidate has to be built for the line to be counted.
-            boolean known = partitioning.edgeIsKnownWritable(line.on())
-                    && partitioning.edgeIsKnownWritable(line.against())
-                    && Partitions.commonCount(partitioning.domains(), line) != null;
+            // A count both positions admit is what a row on the line writes. Read once: it is what
+            // says the line can be written on at all, and it is what a candidate would be built at.
+            Count at = Partitions.commonCount(partitioning.domains(), line);
+            BoundaryAssessment.Attempt attempt = attemptBetween(line, at, coverage, probe);
+            // Proven rather than searched for, where every rule about both positions was read. A
+            // count that exists under rules this read in full is one a row can carry, so no candidate
+            // has to be built for the line to be counted.
+            boolean known = at != null
+                    && partitioning.edgeIsKnownWritable(line.on())
+                    && partitioning.edgeIsKnownWritable(line.against());
             out.add(new BoundaryAssessment(each, coverage,
-                    writabilityOf(coverage, known,
-                            new BoundaryAssessment.Attempt.NotAttempted(
-                                    BoundaryAssessment.Attempt.Reason.NOT_MEASURED)),
-                    new BoundaryAssessment.Attempt.NotAttempted(
-                            BoundaryAssessment.Attempt.Reason.NOT_MEASURED)));
+                    writabilityOf(coverage, known, attempt), attempt));
         }
         return List.copyOf(out);
+    }
+
+    /** What building a row on a line between two positions came to, where one was worth building. */
+    private static BoundaryAssessment.Attempt attemptBetween(
+            BoundaryTarget.EqualTerms line, Count at, BoundaryAssessment.Coverage coverage,
+            Probe probe) {
+        if (coverage instanceof BoundaryAssessment.Coverage.Hit) {
+            return new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.A_ROW_IS_ALREADY_THERE);
+        }
+        if (!worthBuilding(coverage)) {
+            return new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.NOT_MEASURED);
+        }
+        if (at == null) {
+            // The rules leave the two positions no count in common. Said as the search coming to
+            // nothing rather than as a search nobody ran: this is what was asked and what came back.
+            return new BoundaryAssessment.Attempt.Unresolved(
+                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                            List.of(line.left() + " = " + line.right()),
+                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                    .NOTHING_COMPOSES_ONE));
+        }
+        if (probe == null) {
+            return new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.NO_CLASSES);
+        }
+        souther.compiler.partition.Generator.BoundaryAttempt made = probe.attemptBetween(line, at);
+        return switch (made) {
+            case null -> new BoundaryAssessment.Attempt.NotAttempted(
+                    BoundaryAssessment.Attempt.Reason.LINKAGE_FAILED);
+            case souther.compiler.partition.Generator.BoundaryAttempt.Built built ->
+                    new BoundaryAssessment.Attempt.Built(built.row());
+            case souther.compiler.partition.Generator.BoundaryAttempt.Unresolved left ->
+                    new BoundaryAssessment.Attempt.Unresolved(left.why());
+        };
     }
 
     /**
