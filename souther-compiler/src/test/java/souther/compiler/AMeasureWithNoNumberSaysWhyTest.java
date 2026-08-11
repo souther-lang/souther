@@ -157,14 +157,14 @@ class AMeasureWithNoNumberSaysWhyTest {
                   widen                    implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                    boundary    not measured (no line was derived at any position)
                       · not derivable: w.v
+                    boundary    not measured (no line was derived at any position)
                     branch      not measured (no row names this behavior)
                   narrow                   implemented   rows 0    pending 0
                     signature   not applicable (this behavior's output is not a sum)
                     partition   not measured (no partition axis was derived at any position)
-                    boundary    not measured (no line was derived at any position)
                       · not derivable: m.v
+                    boundary    not measured (no line was derived at any position)
                     branch      not measured (no row names this behavior)
                   both                     implemented   rows 1    pending 0
                     signature   not applicable (this behavior's output is not a sum)

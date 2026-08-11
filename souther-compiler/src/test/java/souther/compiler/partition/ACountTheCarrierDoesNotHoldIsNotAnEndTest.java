@@ -216,7 +216,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
         return p.axes().stream()
                 .flatMap(axis -> Partitions.obligationsOf(axis, symbols,
                         p.domains().get(axis.term())).stream())
-                .map(o -> o.side() + " " + o.written())
+                .map(o -> o.side() + " " + o.target().right())
                 .toList();
     }
 }

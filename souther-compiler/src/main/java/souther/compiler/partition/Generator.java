@@ -317,14 +317,104 @@ public final class Generator {
      */
     public static BoundaryAttempt probe(Subject subject, BoundaryObligation obligation,
                                         CandidateCheck check) {
-        Axis axis = subject.axes().stream().filter(a -> a.id().equals(obligation.axis())).findFirst()
+        return switch (obligation.target()) {
+            case BoundaryTarget.AtPlace place -> probeAt(subject, place, check);
+            // A line between two positions is not at a count of its own, so the one to write is
+            // handed in. Reached only through `probeBetween`, which is where the caller has it.
+            case BoundaryTarget.EqualTerms line -> new BoundaryAttempt.Unresolved(
+                    new UnresolvedCombination(List.of(line.left() + " = " + line.right()),
+                            UnresolvedCombination.Reason.NO_REPRESENTATIVE));
+        };
+    }
+
+    /**
+     * A row on a line between two positions, written at a count both of them admit.
+     *
+     * <p>The count comes in rather than off the line. Where the line is is that the two are equal, and
+     * which count satisfies that is the rules' answer about the pair — written into the line it would
+     * make one row at it a different boundary from another.
+     *
+     * <p>Both positions are fixed at once, which is the whole of what makes this a row on the line. A
+     * search that settled one and left the other to its own range would produce a row beside the line
+     * as readily as one on it.
+     */
+    public static BoundaryAttempt probeBetween(Subject subject, BoundaryTarget.EqualTerms line,
+                                               Place at, CandidateCheck check) {
+        String label = line.left() + " = " + line.right();
+        FixtureTemplate on = written(subject, line.on(), line.carrier(), at);
+        FixtureTemplate against = written(subject, line.against(), line.carrier(), at);
+        if (on == null || against == null) {
+            // What this has no way to write, and not a position with no values. The line may be the
+            // easiest row in the file to write by hand — two strings of one length are — and
+            // `NO_REPRESENTATIVE` is the answer that licenses "no value can be written there".
+            return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(label),
+                    UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE));
+        }
+        Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
+        decided.put(line.on().path().toString(), List.of(on));
+        decided.put(line.against().path().toString(), List.of(against));
+        Map<String, Place> settled = new LinkedHashMap<>();
+        settled.put(line.on().path().toString(), at);
+        settled.put(line.against().path().toString(), at);
+        List<FixtureTemplate> inputs = new ArrayList<>();
+        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
+            String head = subject.parameters().get(p);
+            Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
+            if (line.on().path().head().equals(head)) {
+                here.put(line.on().path().toString(), decided.get(line.on().path().toString()));
+            }
+            if (line.against().path().head().equals(head)) {
+                here.put(line.against().path().toString(),
+                        decided.get(line.against().path().toString()));
+            }
+            Outcome tried = valueAt(subject, p, here, settled, Map.of(), check);
+            if (tried.value() == null) {
+                return new BoundaryAttempt.Unresolved(
+                        new UnresolvedCombination(List.of(label), tried.reason(), tried.detail()));
+            }
+            inputs.add(tried.value());
+        }
+        return new BoundaryAttempt.Built(new GeneratedRow(List.of(label), inputs));
+    }
+
+    /**
+     * One count written as the value the position it stands at is declared as.
+     *
+     * <p>Null where nothing here can say what that is — a position whose type this cannot reach, and a
+     * term that is a measure of a value rather than the value: a length of four is not a count to write
+     * at the position, it is four characters somebody has to choose.
+     */
+    private static FixtureTemplate written(Subject subject, NumericTerm term, Carrier carrier,
+                                           Place at) {
+        if (term instanceof NumericTerm.SizeOf) {
+            return null;
+        }
+        Type declared = null;
+        for (Axis axis : subject.axes()) {
+            if (axis.term().equals(term)) {
+                declared = axis.type();
+                break;
+            }
+        }
+        if (declared == null && term.path().fields().isEmpty()) {
+            int at1 = subject.parameters().indexOf(term.path().head());
+            declared = at1 < 0 || at1 >= subject.types().size() ? null : subject.types().get(at1);
+        }
+        return declared == null ? null
+                : Witnesses.wrapped(declared, FixtureTemplate.on(carrier, at), subject.symbols());
+    }
+
+    /** A row at a line drawn at one count of one position. */
+    private static BoundaryAttempt probeAt(Subject subject, BoundaryTarget.AtPlace place,
+                                           CandidateCheck check) {
+        Axis axis = subject.axes().stream().filter(a -> a.id().equals(place.axis())).findFirst()
                 .orElse(null);
         if (axis == null) {
             return new BoundaryAttempt.Unresolved(new UnresolvedCombination(List.of(),
                     UnresolvedCombination.Reason.NO_REPRESENTATIVE));
         }
-        String label = axis.term() + " = " + obligation.written();
-        Edge edge = edgeOf(axis, obligation.carrier(), obligation.at(), subject.symbols());
+        String label = place.left() + " = " + place.right();
+        Edge edge = edgeOf(axis, place.carrier(), place.at(), subject.symbols());
         if (edge.values().isEmpty()) {
             return new BoundaryAttempt.Unresolved(
                     new UnresolvedCombination(List.of(label), edge.reason()));

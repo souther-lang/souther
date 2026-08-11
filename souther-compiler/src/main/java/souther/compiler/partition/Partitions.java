@@ -70,7 +70,8 @@ public final class Partitions {
                                Map<NumericTerm, NumericDomain.Bounds> domains,
                                java.util.Set<NumericTerm> uncertain,
                                List<UndividedPosition> undivided,
-                               List<UnreadRule> unread) {
+                               List<UnreadRule> unread,
+                               List<BoundaryObligation> between) {
         public Partitioning {
             axes = List.copyOf(axes);
             omitted = List.copyOf(omitted);
@@ -78,6 +79,7 @@ public final class Partitions {
             uncertain = java.util.Set.copyOf(uncertain);
             undivided = List.copyOf(undivided);
             unread = List.copyOf(unread);
+            between = List.copyOf(between);
         }
 
         /** Whether an edge of this term is a value some row could carry.
@@ -145,7 +147,7 @@ public final class Partitions {
             undivided.add(why == null ? each : each.because(why));
         }
         return new Partitioning(kept, omitted, domains, uncertain, undivided,
-                List.copyOf(unread));
+                List.copyOf(unread), List.of());
     }
 
     /**
@@ -211,6 +213,22 @@ public final class Partitions {
                                               Symbols symbols,
                                               List<UnreadRule> unread,
                                               List<GuardThresholds.Guards.Singled> singled) {
+        return withThresholds(base, thresholds, symbols, unread, singled, List.of());
+    }
+
+    /**
+     * The same, with the lines a body draws between two of its positions.
+     *
+     * <p>Carried through rather than derived here. A line between two positions divides neither of
+     * them, so nothing about it belongs to an axis — it is read where the comparison is and travels
+     * beside the partition, which is what keeps a position the classes could say nothing about from
+     * losing the line its body draws about it.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols,
+                                              List<UnreadRule> unread,
+                                              List<GuardThresholds.Guards.Singled> singled,
+                                              List<BoundaryObligation> between) {
         List<Axis> out = new ArrayList<>();
         for (Axis axis : base.axes()) {
             NumericTerm declared = axis.term();
@@ -298,7 +316,7 @@ public final class Partitions {
             undivided.add(stopped == null ? had : had.because(stopped));
         }
         return new Partitioning(out, base.omitted(), domainsOf(base, out), base.uncertain(),
-                undivided, List.copyOf(rules));
+                undivided, List.copyOf(rules), between);
     }
 
     /**
@@ -424,6 +442,32 @@ public final class Partitions {
     }
 
     /**
+     * A place both positions of a line between them can hold, or null where their rules leave none.
+     *
+     * <p>What proves a row can be written on such a line. The line is where the two positions are
+     * equal, so a row on it writes one place at both — and whether one exists is the two positions'
+     * ranges read together, which is a question the rules answer without anything being built.
+     *
+     * <p>Which place a pair of ends gives up is {@link Carrier#somethingInside}'s single rule, so a
+     * range open at both ends answers the same way here as anywhere else, and a carrier whose values
+     * are strings answers it the way a carrier whose values count does.
+     *
+     * <p>Null is not a proof of the opposite. Two ranges that leave no place leave none, and that is a
+     * fact about the rules; a range this could not read in full is a range this did not read, and the
+     * caller is the one holding whether that happened.
+     */
+    public static Place commonPlace(Map<NumericTerm, NumericDomain.Bounds> domains,
+                                    BoundaryTarget.EqualTerms line) {
+        NumericDomain.Bounds on = domains.get(line.on());
+        NumericDomain.Bounds against = domains.get(line.against());
+        Endpoint min = Endpoint.lower(on == null ? null : on.min(),
+                against == null ? null : against.min());
+        Endpoint max = Endpoint.upper(on == null ? null : on.max(),
+                against == null ? null : against.max());
+        return line.carrier().somethingInside(min, max);
+    }
+
+    /**
      * The values a row has to be written at, one per rule that drew a cut.
      *
      * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so
@@ -446,8 +490,9 @@ public final class Partitions {
             boolean reachable = within == null || within.admits(cut.at());
             for (OriginRef origin : cut.origins()) {
                 if (reachable) {
-                    out.add(new BoundaryObligation(axis.id(), origin,
-                            BoundaryObligation.BoundarySide.AT, cut.carrier(), cut.at()));
+                    out.add(new BoundaryObligation(
+                            new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), cut.at()),
+                            origin, BoundaryObligation.BoundarySide.AT));
                 }
                 // A line that singles a value out has no neighbour to ask for: the values either
                 // side of it are one class, so a row over there is a row the class's own already is.
@@ -461,14 +506,14 @@ public final class Partitions {
                         domain.successor(cut.at())
                                 .filter(next -> within == null || within.admits(next))
                                 .ifPresent(next -> out.add(new BoundaryObligation(
-                                        axis.id(), origin, BoundaryObligation.BoundarySide.ABOVE,
-                                        cut.carrier(), next)));
+                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), next),
+                                        origin, BoundaryObligation.BoundarySide.ABOVE)));
                     } else {
                         domain.predecessor(cut.at())
                                 .filter(before -> within == null || within.admits(before))
                                 .ifPresent(before -> out.add(new BoundaryObligation(
-                                        axis.id(), origin, BoundaryObligation.BoundarySide.BELOW,
-                                        cut.carrier(), before)));
+                                        new BoundaryTarget.AtPlace(axis.id(), cut.carrier(), before),
+                                        origin, BoundaryObligation.BoundarySide.BELOW)));
                     }
                 }
             }

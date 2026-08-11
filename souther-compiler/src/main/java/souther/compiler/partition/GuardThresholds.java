@@ -58,10 +58,11 @@ public final class GuardThresholds {
      * say and cannot be made to say (see {@link GuardEdge}).
      */
     public record Guards(List<Threshold> thresholds, List<GuardEdge> edges,
-                         List<UnreadRule> unread, List<Singled> singled) {
+                         List<UnreadRule> unread, List<Singled> singled,
+                         List<BoundaryObligation> between) {
 
         public static final Guards NONE =
-                new Guards(List.of(), List.of(), List.of(), List.of());
+                new Guards(List.of(), List.of(), List.of(), List.of(), List.of());
 
         /**
          * A value a body singles out rather than orders.
@@ -78,6 +79,7 @@ public final class GuardThresholds {
             edges = List.copyOf(edges);
             unread = List.copyOf(unread);
             singled = List.copyOf(singled);
+            between = List.copyOf(between);
         }
     }
 
@@ -90,16 +92,18 @@ public final class GuardThresholds {
         List<GuardEdge> edges = new ArrayList<>();
         List<UnreadRule> unread = new ArrayList<>();
         List<Guards.Singled> singled = new ArrayList<>();
-        walk(behavior, body, plan, parameters, symbols, found, edges, unread, singled);
-        return new Guards(found, edges, unread, singled);
+        List<BoundaryObligation> between = new ArrayList<>();
+        walk(behavior, body, plan, parameters, symbols, found, edges, unread, singled, between);
+        return new Guards(found, edges, unread, singled, between);
     }
 
     private static void walk(String behavior, Core e, CoverageSites.Plan plan,
                              List<String> parameters, Symbols symbols, List<Threshold> out,
                              List<GuardEdge> edges, List<UnreadRule> unread,
-                             List<Guards.Singled> singled) {
+                             List<Guards.Singled> singled, List<BoundaryObligation> between) {
         if (e instanceof Core.If iff) {
-            List<Core> read = read(behavior, iff, plan, parameters, symbols, out, edges, singled);
+            List<Core> read =
+                    read(behavior, iff, plan, parameters, symbols, out, edges, singled, between);
             // Every comparison this condition holds that nothing turned into a line — asked of the
             // comparisons and not of the positions. One position carries more than one statement,
             // and a line read at it says nothing about the rest: kept per position, a threshold on
@@ -114,8 +118,8 @@ public final class GuardThresholds {
         // A match case's body and an attempted construction's departure are expression slots, so the
         // generic walk reaches them; only the arms themselves are not children, and this walk does not
         // number arms.
-        Core.forEachChild(e, child ->
-                walk(behavior, child, plan, parameters, symbols, out, edges, unread, singled));
+        Core.forEachChild(e, child -> walk(behavior, child, plan, parameters, symbols, out, edges,
+                unread, singled, between));
     }
 
     /**
@@ -237,18 +241,99 @@ public final class GuardThresholds {
     private static List<Core> read(String behavior, Core.If iff, CoverageSites.Plan plan,
                                    List<String> parameters, Symbols symbols,
                                    List<Threshold> out, List<GuardEdge> edges,
-                                   List<Guards.Singled> singled) {
+                                   List<Guards.Singled> singled, List<BoundaryObligation> between) {
         // The comparisons a line came of, and not the positions they were about. A position carries
         // more than one statement and reading one of them settles nothing about the others.
         List<Core> made = new ArrayList<>();
+        // What a row leaves behind at these comparisons, taken before any of them is read. Which
+        // shape of line a comparison draws is a later question and not one this depends on — read
+        // after a constant had been found, the site was a thing only a line against a constant could
+        // have, and a comparison of two positions had no way to say what had reached it.
+        CoverageSites.GuardRef guard = guardOf(plan, iff);
+        if (guard == null) {
+            return made;   // no site for this `if`: nothing could answer for it
+        }
         for (Placed each : comparisonsIn(iff.cond())) {
-            TermPath here =
-                    readOne(behavior, iff, each, plan, parameters, symbols, out, edges, singled);
+            // The plan numbered every comparison of an instrumented condition before anything read a
+            // line off one, so this is here. Required rather than looked up leniently: a line whose
+            // comparison has no site is this reader and the plan disagreeing about what a condition
+            // is made of.
+            int site = plan.requireComparisonSiteOf(each.comparison());
+            TermPath here = readOne(behavior, iff, each, plan, guard, site, parameters, symbols,
+                    out, edges, singled);
             if (here != null) {
                 made.add(each.comparison());
+                continue;
             }
+            // A line this could not read as a count of one position may still be one between two.
+            // Not added to `made`: what the partition could not read here it still could not read,
+            // and a boundary answering does not answer for it (spec §example-partition).
+            between(behavior, iff, each, plan, guard, site, parameters, symbols, between);
         }
         return made;
+    }
+
+    /**
+     * The line a comparison between two positions draws: the place where the two hold one count.
+     *
+     * <p>Read where a threshold could not be, and about the same comparison. A rule relating two
+     * positions is not a partition of either (spec §what-a-position-admits), and that is an answer
+     * about the classes rather than about the line — the row on the line is what tells a rule written
+     * {@code >} from one written {@code >=}, and it is writable whenever the two positions have a
+     * count they can both hold.
+     *
+     * <p>Asked of the carrier and not of the type. Two operands compare only when they are of one type,
+     * and a type is not what makes a line measurable: an enumeration's case is comparable on its sum's
+     * order while carrying no places of its own, and two newtypes of one base are two types whose
+     * values are ordered alike. What both sides can be read as is the carrier, so that is what is
+     * required to be one.
+     *
+     * <p>An equality is not one of these. {@code a == b} puts the whole of one arm on the line, and
+     * that arm is already a row the branch measure asks for.
+     */
+    private static void between(String behavior, Core.If iff, Placed placed, CoverageSites.Plan plan,
+                                CoverageSites.GuardRef guard, int site, List<String> parameters,
+                                Symbols symbols, List<BoundaryObligation> out) {
+        Core.Binary comparison = placed.comparison();
+        if (!ordersStrictly(comparison.op())) {
+            return;
+        }
+        NumericTerm on = termOf(comparison.left(), parameters, symbols);
+        NumericTerm against = termOf(comparison.right(), parameters, symbols);
+        if (on == null || against == null) {
+            return;   // a position inside an expression is not a place a row can be written at
+        }
+        Carrier carrier = Carrier.ofValue(comparison.left().type(), symbols);
+        if (carrier == null || !carrier.equals(Carrier.ofValue(comparison.right().type(), symbols))) {
+            return;
+        }
+        // Below and inclusive are what a threshold's arms are read off, and neither is a question this
+        // line answers: the two sides of it are decided by both positions at once. `singles` is false
+        // because this is a line and not a value singled out, and the row that meets it is the row on
+        // it.
+        OriginRef.GuardOrigin origin = new OriginRef.GuardOrigin(guard, site,
+                plan.site(site).obligation(), new SourceRef(guard.at().sourceId(), iff.pos()),
+                true, placed.witness(), holdsAtTheLine(comparison.op()), false);
+        BoundaryObligation made = new BoundaryObligation(
+                new BoundaryTarget.EqualTerms(behavior, on, against, carrier), origin,
+                BoundaryObligation.BoundarySide.AT);
+        if (out.stream().noneMatch(had -> had.equals(made))) {
+            out.add(made);
+        }
+    }
+
+    /** Whether an operator orders its two sides, which {@code ==} and {@code /=} do not. */
+    private static boolean ordersStrictly(Ast.BinOp op) {
+        return switch (op) {
+            case LT, LE, GT, GE -> true;
+            case EQ, NE, AND, OR, ADD, SUB, MUL, DIV, CONCAT -> false;
+        };
+    }
+
+    /** Whether the line's own values satisfy the comparison, which is what tells {@code <} from
+     * {@code <=} and is the whole of what the row on the line shows. */
+    private static boolean holdsAtTheLine(Ast.BinOp op) {
+        return op == Ast.BinOp.LE || op == Ast.BinOp.GE;
     }
 
     /** One comparison of a condition, and which arms of the {@code if} prove it was evaluated. */
@@ -342,7 +427,8 @@ public final class GuardThresholds {
 
     /** The position a line was drawn on by one comparison, or null where none was. */
     private static TermPath readOne(String behavior, Core.If iff, Placed placed,
-                                    CoverageSites.Plan plan, List<String> parameters,
+                                    CoverageSites.Plan plan, CoverageSites.GuardRef guard, int site,
+                                    List<String> parameters,
                                     Symbols symbols, List<Threshold> out, List<GuardEdge> edges,
                                     List<Guards.Singled> singled) {
         Core.Binary comparison = placed.comparison();
@@ -369,14 +455,6 @@ public final class GuardThresholds {
             case LT, GE -> Boolean.FALSE;   // and here it is on the high side
             default -> null;                // EQ / NE do not order the values, so they cut nothing
         };
-        CoverageSites.GuardRef guard = guardOf(plan, iff);
-        if (guard == null) {
-            return null;   // no site for this `if`: nothing could answer for it
-        }
-        // The plan numbered every comparison of an instrumented condition before anything read a line
-        // off one, so this is here. Required rather than looked up leniently: a line whose comparison
-        // has no site is this reader and the plan disagreeing about what a condition is made of.
-        int site = plan.requireComparisonSiteOf(comparison);
         if (below == null) {
             // An equality singles the value out instead. Recorded as that rather than as a place to
             // cut, because the values either side of it are not a distinction the model has drawn.
