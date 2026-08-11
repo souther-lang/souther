@@ -223,14 +223,25 @@ class AStandInIsAdmittedByWhatItStandsForTest {
     // --- what a stand-in may still be written as ------------------------------------------------
 
     @Test
-    void aBaseLiteralStillBuildsTheNewtypeTheDependencyAnswersWith() {
-        // What an input position admits, a stand-in admits: a newtype's derived decoder reads its
-        // base representation, and `2` is how an `Amount` is written where the type is known.
+    void theNewtypeTheDependencyAnswersWithIsWrittenUnderItsOwnName() {
         assertDoesNotThrow(() -> Compiler.compile(NEWTYPE + """
 
                 example bill
-                    | "a base literal" : (Amount(1)) with quote = 2 -> Receipt { total = Amount(2) }
+                    | "the name" : (Amount(1)) with quote = Amount(2) -> Receipt { total = Amount(2) }
                 """));
+    }
+
+    @Test
+    void aBaseLiteralDoesNotStandInForTheNewtypeTheDependencyAnswersWith() {
+        // A newtype's derived decoder reads its base representation and answers with the newtype, so
+        // `2` and `Amount(2)` reach it as the one form and the name is the decoder's to supply. What
+        // a stand-in states is a value of the dependency's output, and a number is not one however
+        // the decoder reads it.
+        refusedAsAStandIn(NEWTYPE + """
+
+                example bill
+                    | "a base literal" : (Amount(1)) with quote = 2 -> Receipt { total = Amount(2) }
+                """, ExampleMessage.TheFakeValueCouldNotBeBuilt.class);
     }
 
     @Test

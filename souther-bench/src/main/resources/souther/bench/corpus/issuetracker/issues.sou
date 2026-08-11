@@ -111,7 +111,7 @@ fake createIssue
 example openIssue
     | "case and spacing collapse into one label, and the issue is stored" :
         (NewIssue { id = IssueId("i-1"), title = "crash on save", labels = "Bug, bug , UI",
-            assignee = "kawasima" })
+            assignee = Assignee("kawasima") })
         -> crashOnSave
     | "blank pieces leave no labels, so nothing is written" :
         (NewIssue { id = IssueId("i-2"), title = "whitespace", labels = " , ", assignee = None })
@@ -208,7 +208,7 @@ let assigneeOf (issue) =
 example assigneeOf
     | "an assigned issue names its assignee" :
         (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
-            assignee = "kawasima" })
+            assignee = Assignee("kawasima") })
         -> Assigned { name = "kawasima" }
     | "an unassigned issue takes the None arm" :
         (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None })
@@ -247,7 +247,7 @@ example countByLabel
             [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
                 assignee = None }
             , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
-                assignee = "kawasima" } ] })
+                assignee = Assignee("kawasima") } ] })
         -> LabelCounts { counts = [ ("bug", 2), ("ui", 1) ] }
     | "an empty board counts nothing" : (Board { issues = [] }) -> LabelCounts { counts = [] }
 
@@ -362,11 +362,11 @@ example groupByAssignee
     | "each assignee holds the issues assigned to them, in board order" :
         (Board { issues =
             [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
-                assignee = "kawasima" }
+                assignee = Assignee("kawasima") }
             , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("ui") ],
-                assignee = "aoyagi" }
+                assignee = Assignee("aoyagi") }
             , Issue { id = IssueId("i-3"), title = "c", labels = [ Label("bug") ],
-                assignee = "kawasima" } ] })
+                assignee = Assignee("kawasima") } ] })
         -> Workload { byAssignee =
             [ ("kawasima", [ IssueId("i-1"), IssueId("i-3") ])
             , ("aoyagi", [ IssueId("i-2") ]) ] }

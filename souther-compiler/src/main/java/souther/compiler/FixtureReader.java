@@ -658,6 +658,25 @@ public final class FixtureReader {
      * they agree.
      */
     private Object raw(Ast.Expr e, Type expected) {
+        return raw(e, expected, Admission.HERE_AND_BELOW);
+    }
+
+    /**
+     * Whether the value written in this frame is held to the name its position is written under.
+     *
+     * <p>A frame states a value at its position, and is held to it. What a spread supplies is not
+     * that: {@code Filed { ...d, filedOn = on }} copies a {@code Document}'s fields, which is how the
+     * language writes one record from another, so holding {@code d} to being a {@code Filed} would
+     * refuse it. The frame a spread opens therefore states no value of its own — and only that frame,
+     * since every position under it is written the way any other is.
+     */
+    private enum Admission { HERE_AND_BELOW, BELOW_ONLY }
+
+    /** As above, saying whether this frame is one that states a value at {@code expected}. */
+    private Object raw(Ast.Expr e, Type expected, Admission admission) {
+        if (admission == Admission.HERE_AND_BELOW) {
+            admitWritten(e, expected);
+        }
         return switch (e) {
             case Ast.IntLit i -> i.value();
             case Ast.DecimalLit d -> d.value();
@@ -689,6 +708,121 @@ public final class FixtureReader {
             }
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
+    }
+
+    // --- the name a position is written under ---------------------------------------------------
+
+    /**
+     * The names a value written at {@code position} may be, or none where the position asks for no
+     * name at all.
+     *
+     * <p>{@link TypeOps#leafCases} is the answer rather than a reading of its own. It expands a sum to
+     * its cases and stops at everything else, so a record admits itself, a sum admits the cases it
+     * lists, and a newtype admits its own name — which is the whole of what a position may be written
+     * under, with no arm here for any of the three.
+     *
+     * <p>An optional is opened first: writing a value for a {@code T?} position writes a {@code T},
+     * and absence is written {@code None}, which names no type and is admitted where a name is.
+     */
+    private Set<TypeName> admits(Type position) {
+        Type at = NeutralForm.open(position);
+        return at instanceof Type.Ref r && !r.name().isPrimitive()
+                ? TypeOps.leafCases(at, symbols) : Set.of();
+    }
+
+    /**
+     * Holds what is written in this frame to the name its position is written under.
+     *
+     * <p>A derived decoder reads the form its base reads and returns a value of its own type, so the
+     * name a position is written under is one the decoder supplies: another name over the same base,
+     * and no name at all, reach it as the one form. What holds the row to that name is here, before
+     * anything reaches a decoder, and at every frame rather than at the outermost one — a field, an
+     * element and a helper's argument are each a position a value is written at.
+     *
+     * <p>Three of the forms state a name here. The rest state one somewhere else and are left to say
+     * it there: a name and a {@code let} open a frame at this same position, and an application has
+     * no name to read at all — what it answers with is the only thing that says what it supplied, so
+     * {@link #admitBuilt} asks the value once the helper has run.
+     */
+    private void admitWritten(Ast.Expr e, Type expected) {
+        Set<TypeName> admits = admits(expected);
+        if (admits.isEmpty()) {
+            return;
+        }
+        switch (e) {
+            // A `let` opens a frame at this same position, and its body is read against it again.
+            case Ast.LetIn _ -> { }
+            // Nothing in the text says what a helper supplied; the value it answers with does.
+            case Ast.Apply c when appliedHelper(c) != null -> { }
+            case Ast.Var v -> admitNamed(v, admits, expected);
+            case Ast.Apply c when neutral.isNewtype(c.written()) ->
+                    require(symbols.resolveCase(c.written()), admits, expected);
+            case Ast.NewData nd -> require(nd.typeName().denotes(), admits, expected);
+            // A literal, a written collection, an arithmetic fold, a written temporal: a value of what
+            // the position is written from, which is not a value of the position.
+            default -> throw noName(admits, expected);
+        }
+    }
+
+    /**
+     * A bare name, held to the position where the name is what says which value it is.
+     *
+     * <p>Only where it says it here. A binding and a value open a frame at this same position — what
+     * they stand for is read against it, and holds there — and a name that is not a value at all is
+     * refused for being what it is, by {@link #named(Ast.Var, Type)}. Answering for those here would
+     * take a row that named a behavior and tell it about a type instead.
+     */
+    private void admitNamed(Ast.Var v, Set<TypeName> admits, Type expected) {
+        switch (v.denotes()) {
+            case ValueName.OfType of -> require(of.type(), admits, expected);
+            // `None` is absence, which the optional this position opened holds rather than a value.
+            case ValueName.Builtin b when b.name().equals("None") -> { }
+            // `Map.empty` / `Set.empty`: the empty collection, which is no value of a nominal position.
+            case ValueName.Stdlib lib when Prelude.isEmptyCollectionValue(lib.qualified()) ->
+                    throw noName(admits, expected);
+            case null, default -> { }
+        }
+    }
+
+    /** What a helper answered with, held to the same position. The value is the whole of the evidence:
+     * what the helper was declared to answer with is not read, so a helper that declares nothing is
+     * held to the same rule as one that declares everything. */
+    private void admitBuilt(Object answer, Type expected, String written) {
+        Set<TypeName> admits = admits(expected);
+        if (admits.isEmpty() || caseOfValue(answer, NeutralForm.open(expected)) != null) {
+            return;
+        }
+        throw new FixtureException("`" + written + "` answered with a `" + nameOfBuilt(answer)
+                + "`, which is not a value of `" + Type.show(NeutralForm.open(expected)) + "`");
+    }
+
+    private void require(TypeName supplied, Set<TypeName> admits, Type expected) {
+        if (supplied == null) {
+            throw noName(admits, expected);
+        }
+        if (!admits.contains(supplied)) {
+            throw new FixtureException("`" + supplied.name() + "` is written where a value of `"
+                    + Type.show(NeutralForm.open(expected)) + "` stands; one is written "
+                    + writtenAs(admits));
+        }
+    }
+
+    private FixtureException noName(Set<TypeName> admits, Type expected) {
+        return new FixtureException("nothing here names a value of `" + Type.show(NeutralForm.open(expected))
+                + "`; one is written " + writtenAs(admits));
+    }
+
+    /** How a value of an admitted name is written, which is the declaration's own form and not a rule
+     *  of this reading: a newtype takes its value in parens, a record its fields in braces, a unit
+     *  case is the bare name. */
+    private String writtenAs(Set<TypeName> admits) {
+        List<String> forms = new ArrayList<>();
+        for (TypeName name : admits) {
+            forms.add(neutral.isNewtype(name) ? "`" + name.name() + "(...)`"
+                    : symbols.get(name) instanceof Ast.Data ? "`" + name.name() + " { ... }`"
+                    : "`" + name.name() + "`");
+        }
+        return admits.size() == 1 ? forms.get(0) : "as one of " + String.join(", ", forms);
     }
 
     /**
@@ -820,6 +954,11 @@ public final class FixtureReader {
     private final Deque<ValueName> expanding = new ArrayDeque<>();
 
     private Object expandedValue(ValueName named, Ast.Expr body, Type expected) {
+        return expandedValue(named, body, expected, Admission.HERE_AND_BELOW);
+    }
+
+    private Object expandedValue(ValueName named, Ast.Expr body, Type expected,
+                                 Admission admission) {
         if (expanding.contains(named)) {
             List<String> cycle = new ArrayList<>();
             expanding.forEach(open -> cycle.add(open.name()));
@@ -829,7 +968,7 @@ public final class FixtureReader {
         }
         expanding.addLast(named);
         try {
-            return raw(body, expected);
+            return raw(body, expected, admission);
         } finally {
             expanding.removeLast();
         }
@@ -944,7 +1083,12 @@ public final class FixtureReader {
      * {@link #helperAnswer}: there the value itself is what the row asserts.
      */
     private Object applied(Ast.Apply c, Applied helper, Type expected) {
-        return neutral.of(answered(c, helper), expected, c.written());
+        Object answer = answered(c, helper);
+        // Before the value becomes a form. A neutral form is what its position reads, so a `Long`
+        // read as an `Amount` is a form nothing can tell from the one `Amount(1)` writes — which is
+        // the whole of what this holds the helper to.
+        admitBuilt(answer, expected, c.written());
+        return neutral.of(answer, expected, c.written());
     }
 
     /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
@@ -1042,8 +1186,12 @@ public final class FixtureReader {
                 throw new FixtureException("`" + spread
                         + "` is not a value a fixture can spread");
             }
+            // The fields of a value of another type, which is how the language writes one record from
+            // another (`Filed { ...d, filedOn = on }`, where `d` is a `Document`). So the frame this
+            // opens states no value of the construction's type, while the fields it copies were
+            // written at their own positions and hold there.
             Object copied = expandedValue(ref.denotes(), value,
-                    Type.ref(nd.typeName().denotes()));
+                    Type.ref(nd.typeName().denotes()), Admission.BELOW_ONLY);
             if (!(copied instanceof Map<?, ?> fields)) {
                 throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
                         + " spread");
