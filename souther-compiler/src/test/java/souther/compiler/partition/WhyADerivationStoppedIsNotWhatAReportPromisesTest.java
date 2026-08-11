@@ -27,7 +27,7 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
     void everyMissingTraversalIsOneWordInAReport() {
         for (BlockReason.Traversal traversal : BlockReason.Traversal.values()) {
             assertEquals(UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL,
-                    BlockReason.reported(new BlockReason.UnsupportedTraversal(traversal)),
+                    ReportedReason.of(new BlockReason.UnsupportedTraversal(traversal)),
                     traversal + " is reported as a traversal this does not make");
         }
     }
@@ -36,9 +36,9 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
     @Test
     void theOthersAreTheirOwnWord() {
         assertEquals(UndividedPosition.Reason.TYPE_UNRESOLVED,
-                BlockReason.reported(new BlockReason.TypeUnresolved()));
+                ReportedReason.of(new BlockReason.TypeUnresolved()));
         assertEquals(UndividedPosition.Reason.DEPTH_LIMIT,
-                BlockReason.reported(new BlockReason.DepthLimit()));
+                ReportedReason.of(new BlockReason.DepthLimit()));
     }
 
     /**
@@ -63,7 +63,7 @@ class WhyADerivationStoppedIsNotWhatAReportPromisesTest {
                 new BlockReason.TypeUnresolved(),
                 new BlockReason.DepthLimit(),
                 new BlockReason.UnsupportedTraversal(BlockReason.Traversal.SEQUENCE_ELEMENT)}) {
-            assertNotNull(BlockReason.reported(reason), reason + " is reported as something");
+            assertNotNull(ReportedReason.of(reason), reason + " is reported as something");
         }
     }
 }

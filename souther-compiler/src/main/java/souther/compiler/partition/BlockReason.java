@@ -14,9 +14,10 @@ package souther.compiler.partition;
  * and need not remove a word out there, which other cases may still be reaching; and a distinction
  * worth recording here need not be a distinction the document promises.
  *
- * <p>Sealed, and projected to the public vocabulary by one exhaustive switch with no
- * {@code default} ({@link #reported()}). A reason added here and not said out there stops the
- * compile rather than arriving in a report as a word chosen because it was nearest.
+ * <p>This knows nothing about how it is reported. Which word a document writes for one of these is
+ * {@link ReportedReason}'s, so a second surface may say more of the same reason without this having
+ * an opinion, and so the direction stays one way: a published vocabulary does not reach back into
+ * what this compiler is allowed to know.
  */
 public sealed interface BlockReason {
 
@@ -58,24 +59,4 @@ public sealed interface BlockReason {
         MAPPING_CONTENT
     }
 
-    /**
-     * The word an adequacy document writes for {@code reason}.
-     *
-     * <p>Deliberately coarser: what a reader of the document is promised is which kind of thing
-     * stopped the derivation, not which capability this compiler is missing this month. Three
-     * traversals are one word out there because a reader cannot act on the difference — the model
-     * is the same either way, and which of them this compiler cannot walk is this compiler's news.
-     *
-     * <p>In one place rather than answered per case, because a coarsening is only reviewable where
-     * the collapses are visible together: what wants checking is which reasons share a word, and a
-     * method on each case shows a reader one mapping at a time. No {@code default}, so a reason
-     * added above stops the compile here until it has been said what a report calls it.
-     */
-    static UndividedPosition.Reason reported(BlockReason reason) {
-        return switch (reason) {
-            case TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;
-            case DepthLimit _ -> UndividedPosition.Reason.DEPTH_LIMIT;
-            case UnsupportedTraversal _ -> UndividedPosition.Reason.UNSUPPORTED_TRAVERSAL;
-        };
-    }
 }
