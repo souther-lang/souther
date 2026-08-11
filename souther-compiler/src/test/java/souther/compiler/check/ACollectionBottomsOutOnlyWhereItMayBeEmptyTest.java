@@ -328,6 +328,67 @@ class ACollectionBottomsOutOnlyWhereItMayBeEmptyTest {
                 """);
     }
 
+    /**
+     * A rule counting the same thing under another spelling.
+     *
+     * <p>{@code Kids} says nothing of itself, and the record counts what it wraps by reaching through
+     * the name. A reader matching the shape {@code List.length(kids)} sees no rule here at all, and
+     * there is no end to the shapes it would have to be taught.
+     */
+    @Test
+    void aRecordsRuleReachingThroughTheFieldsNameIsStillItsRule() {
+        refuses("Tree", """
+                module demo
+
+                data Kids = List<Tree>
+
+                data Tree =
+                    { kids: Kids
+                    , v: Int
+                    }
+                    invariant nonEmpty = List.length(kids.value) >= 1
+                """);
+    }
+
+    /**
+     * And a rule that says it through a second field.
+     *
+     * <p>Neither clause on its own removes the empty list: {@code least} could be none, and a count of
+     * at least none is every count. Together they leave none out, which is a fact about the two rules
+     * and not about either.
+     */
+    @Test
+    void aFloorStatedThroughASiblingIsStillAFloor() {
+        refuses("Tree", """
+                module demo
+
+                data Tree =
+                    { kids: List<Tree>
+                    , least: Int
+                    , v: Int
+                    }
+                    invariant atLeastOne = least >= 1
+                    invariant enough = List.length(kids) >= least
+                """);
+    }
+
+    /**
+     * A rule leaving the count nowhere to be leaves out the empty collection along with the rest.
+     *
+     * <p>A count is never below none, so a ceiling under none admits nothing. Held because a reader
+     * taking every ceiling for a rule that keeps the empty collection would call this a base case, on
+     * the strength of the one rule that removes every value there is.
+     */
+    @Test
+    void aCeilingBelowNoneLeavesNoCollectionAtAll() {
+        refuses("Nest", """
+                module demo
+
+                data Nest = List<Nest>
+                    invariant impossible = List.length(value) < 0
+                """);
+    }
+
     // ---- and where something can still be empty --------------------------------------------------
 
     /**

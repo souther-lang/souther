@@ -16,10 +16,13 @@ import java.util.List;
  * said so.
  *
  * <p>Read here rather than by whoever needs it, because more than one thing needs it and they are
- * not the same reader: what a position is divided and bounded at, what values can be produced to
- * stand for it, and whether a collection may be empty where a recursion is looking for somewhere to
- * bottom out. Each working it out for itself is how a reading of one invariant came to mean two
+ * not the same reader: what a position is divided and bounded at, and what values can be produced to
+ * stand for it. Each working it out for itself is how a reading of one invariant came to mean two
  * things.
+ *
+ * <p>A range, and only what a range can hold. What the rules leave out between their ends is not
+ * here — a caller asking whether some particular value is admitted is asking the domain the rules
+ * seed ({@link FieldDomains#mayHoldNothingAt}) and not this.
  *
  * <p>Below whoever composes it with anything else. What a declaration's rules say is a fact about the
  * declaration, and a reader that had to reach a generator to ask it would be reaching past the
@@ -162,79 +165,6 @@ public final class DeclaredBounds {
     public static int leastCountOf(Type type, Symbols symbols, FieldDomains.Held held) {
         return Math.max(leastCountOf(type, symbols),
                 held == null ? 0 : CountDomain.leastFrom(held.bounds().min()));
-    }
-
-    /**
-     * Whether the rules on {@code type} leave it able to hold nothing at all.
-     *
-     * <p>Not {@link #leastCountOf} above zero. A floor is one way a rule refuses the value that holds
-     * nothing and it is not the only one: {@code == 1} states both ends at once and {@code /= 0}
-     * states neither, so neither reaches a range, and a reader that asked a range where the values
-     * stop would be told nothing by rules that plainly remove the empty one. The two questions are
-     * separate here for that reason -- what a position is bounded at is a range, and whether a
-     * collection can be empty is not.
-     *
-     * <p>Answers yes where nothing counts the value, so that only a reader that knows it has a
-     * collection in front of it reads anything into that.
-     */
-    public static boolean mayHoldNothing(Type type, Symbols symbols) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return true;
-        }
-        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
-            if (refusesNone(TypeOps.effectiveInvariants(layer.data(), symbols), counts, "value")) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * The same at a field, where the record that has it can say so as well.
-     *
-     * <p>Either rule refusing the empty value is enough: a construction has to satisfy both, so a
-     * value they disagree about is refused by the one that refuses it.
-     */
-    public static boolean mayHoldNothing(Type type, Symbols symbols, Ast.Data owner, String field) {
-        if (!mayHoldNothing(type, symbols)) {
-            return false;
-        }
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        return counts == null
-                || !refusesNone(TypeOps.effectiveInvariants(owner, symbols), counts, field);
-    }
-
-    /** Whether any of {@code clauses} refuses a count of none of {@code subject}. */
-    private static boolean refusesNone(List<Ast.InvariantClause> clauses, ValueName counts,
-                                       String subject) {
-        for (Ast.InvariantClause clause : clauses) {
-            for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
-                InvariantBound.SizeComparison read =
-                        InvariantBound.sizeComparedIn(each, counts, subject).orElse(null);
-                if (read != null && refusesNone(read)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether one comparison refuses a count of none.
-     *
-     * <p>A ceiling never does: nothing is under every one of them. A floor does where it is above
-     * none, and a strict one where it is at none or above. An equality does unless it is at none, and
-     * a disequality only where it is.
-     */
-    private static boolean refusesNone(InvariantBound.SizeComparison read) {
-        return switch (read.op()) {
-            case GE -> read.count().signum() > 0;
-            case GT -> read.count().signum() >= 0;
-            case EQ -> read.count().signum() != 0;
-            case NE -> read.count().signum() == 0;
-            default -> false;
-        };
     }
 
     private DeclaredBounds() {}

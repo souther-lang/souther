@@ -2,10 +2,14 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Granularity;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.Type;
 
 import souther.compiler.numeric.Count;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -117,6 +121,86 @@ public final class FieldDomains {
                 // answer is, and not before: a caller filling a row wants the bounds and nothing
                 // else.
                 () -> InvariantChecker.everyRuleRead(named, data, symbols));
+    }
+
+    /**
+     * Whether the rules leave the value at {@code path} in {@code data} able to hold nothing.
+     *
+     * <p>Asked of the domain the rules seed rather than read off the clauses. A rule removes the
+     * empty value in more ways than a floor written at the position: {@code List.length(kids.value)}
+     * counts the same thing under another spelling, {@code >= least} beside {@code least >= 1} says
+     * it through a second field, and an equality says it without stating an end a range would keep.
+     * Reading the clauses for the shapes one reader thought of leaves the rest of them saying
+     * nothing, and there is no end to the shapes. The seeding already relates all of them, so the
+     * question goes there: settle the count at none and see whether anything is left.
+     *
+     * <p>Both the record's rules and the field's own type's reach the same domain — the seeding puts
+     * each field's type in beside the clauses — so this is one reading and not two agreeing.
+     *
+     * <p>Yes where the seeding could not read the rules, and yes where the position is counted by
+     * nothing. Wide is the safe direction: what this decides is that a recursion has nowhere to
+     * bottom out, and a reader that guessed would refuse a type somebody can write.
+     *
+     * <p>One shape it answers wrongly, and the reason is the domain's rather than this reading's. A
+     * disequality is a hole and the seeding keeps ranges, so {@code /= 0} arrives here widened to a
+     * floor of none. Read off the clause below, and only that shape, until the seeding keeps it.
+     */
+    public static boolean mayHoldNothingAt(TypeName named, Ast.Data data, String path,
+                                           Symbols symbols) {
+        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols);
+        String counted = seeded.held().get(path);
+        if (counted == null) {
+            return true;   // nothing counts what is there, so no rule here is about how much it holds
+        }
+        NumericDomain.LinearForm none = NumericDomain.LinearForm.atom(counted);
+        // A count is never below none, so leaving it no room above none is leaving it at none.
+        boolean holdsNothing = !seeded.numbers()
+                .assume(none, NumericDomain.Rel.LE, Map.of(counted, Granularity.DISCRETE))
+                .isBottom();
+        return holdsNothing && !aHoleAtNone(named, data, path, symbols);
+    }
+
+    /**
+     * Whether a rule says the count is not none, in the one spelling the seeding widens away.
+     *
+     * <p>{@code /= 0} on the position, or on the value of the newtype standing there. Not the general
+     * reading: a disequality reached by any other route is one this does not see, and it is here to
+     * hold the plainest spelling rather than to be a second answer to the question above.
+     */
+    private static boolean aHoleAtNone(TypeName named, Ast.Data data, String path,
+                                       Symbols symbols) {
+        Type type = TypeOps.fieldTypes(data, symbols).get(path);
+        if (type == null) {
+            return false;
+        }
+        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
+        if (counts == null) {
+            return false;
+        }
+        if (statesAHoleAtNone(TypeOps.effectiveInvariants(data, symbols), counts, path)) {
+            return true;
+        }
+        for (TypeOps.Layer layer : TypeOps.newtypeChain(type, symbols)) {
+            if (statesAHoleAtNone(TypeOps.effectiveInvariants(layer.data(), symbols),
+                    counts, "value")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean statesAHoleAtNone(List<Ast.InvariantClause> clauses,
+                                             ValueName counts, String subject) {
+        for (Ast.InvariantClause clause : clauses) {
+            for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
+                InvariantBound.SizeComparison read =
+                        InvariantBound.sizeComparedIn(each, counts, subject).orElse(null);
+                if (read != null && read.op() == Ast.BinOp.NE && read.count().signum() == 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

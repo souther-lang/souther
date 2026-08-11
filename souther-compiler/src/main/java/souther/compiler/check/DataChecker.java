@@ -479,7 +479,8 @@ public final class DataChecker {
             // asking the wrapped type about a rule that was never written on it.
             Type representation = fields.get("value");
             return representation != null
-                    && holds(representation, DeclaredBounds.mayHoldNothing(Type.ref(from), symbols),
+                    && holds(representation,
+                            FieldDomains.mayHoldNothingAt(from, d, "value", symbols),
                             target, symbols, seen, new HashSet<>(Set.of(from)));
         }
         for (Map.Entry<String, Type> e : fields.entrySet()) {
@@ -487,7 +488,7 @@ public final class DataChecker {
                 continue;   // read before what it holds: None is a value of it whatever that is
             }
             if (holds(e.getValue(),
-                    DeclaredBounds.mayHoldNothing(e.getValue(), symbols, d, e.getKey()),
+                    FieldDomains.mayHoldNothingAt(from, d, e.getKey(), symbols),
                     target, symbols, seen, new HashSet<>())) {
                 return true;
             }
@@ -544,7 +545,20 @@ public final class DataChecker {
      */
     private static boolean contained(Type type, TypeName target, Symbols symbols,
                                      Set<TypeName> seen, Set<TypeName> worn) {
-        return holds(type, DeclaredBounds.mayHoldNothing(type, symbols), target, symbols, seen, worn);
+        // Rules reach it only through a name it wears: a collection written out has no declaration
+        // for anything to have been written on.
+        boolean mayBeEmpty = !(type instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data held && held.newtype())
+                || FieldDomains.mayHoldNothingAt(ref(type), heldData(type, symbols), "value", symbols);
+        return holds(type, mayBeEmpty, target, symbols, seen, worn);
+    }
+
+    private static TypeName ref(Type type) {
+        return ((Type.Ref) type).name();
+    }
+
+    private static Ast.Data heldData(Type type, Symbols symbols) {
+        return (Ast.Data) symbols.get(ref(type));
     }
 
     static void checkData(CheckContext ctx,
