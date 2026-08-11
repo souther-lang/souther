@@ -121,7 +121,7 @@ class ExampleMultipleFailuresTest {
 
         List<Diagnostic> ds = e.diagnostics();
         assertEquals(2, ds.size());
-        assertEquals("名札 { id = \"a\" }", ds.get(0).diff().actualType());
-        assertEquals("名札 { id = \"b\" }", ds.get(1).diff().actualType());
+        assertEquals("名札 { id = 従業員ID(\"a\") }", ds.get(0).diff().actualType());
+        assertEquals("名札 { id = 従業員ID(\"b\") }", ds.get(1).diff().actualType());
     }
 }

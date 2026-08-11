@@ -148,6 +148,11 @@ final class ObservedValues {
 
     /** One field, through the accessor every data has (ADR-0065). The class may be package-private, so
      * the declared method is taken and opened, the way a codec is. */
+    static Object readOrNull(Object live, String name) {
+        Object value = read(live, name);
+        return value == FAILED ? null : value;
+    }
+
     private static Object read(Object live, String name) {
         try {
             java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);

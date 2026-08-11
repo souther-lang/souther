@@ -48,6 +48,11 @@ public sealed interface ExampleMessage extends Message {
     @Code(DiagnosticCode.E1905)
     record TheRowDoesNotHold() implements ExampleMessage, Reported {}
 
+    /** Where the two are not of one type, which reading the two values does not say: an encoder
+     *  writes a newtype as the base it wraps, so both sides read alike. */
+    record TheTwoAreOfDifferentTypes(String at, String expected, String actual)
+            implements ExampleMessage, Supporting {}
+
     /** What the row said and what came back. */
     record WhatTheRowSaid(String said) implements ExampleMessage, Supporting {}
 
