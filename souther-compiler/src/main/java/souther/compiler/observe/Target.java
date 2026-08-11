@@ -1,5 +1,7 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.SourceNameResolver;
+
 /**
  * What an {@link Incompleteness} is about, as the thing itself rather than as a name and a word for
  * what kind of name it is.
@@ -21,10 +23,21 @@ package souther.compiler.observe;
  */
 public sealed interface Target {
 
-    /** What a report prints, and what two reasons are compared on. */
+    /** What this is about, as an identity: what two reasons are compared on and what a build reads. */
     String subject();
 
-    /** Which kind of name {@link #subject} is. */
+    /**
+     * The same, as a person is shown it, given what the caller calls its sources.
+     *
+     * <p>Answered by the sum rather than by the renderer, because which subjects are identities and
+     * which are already names is what the kinds differ in. A behavior, a module and a position are
+     * written as the author wrote them and are shown as they are; a source is named by the caller,
+     * whose id for it may be a number. A renderer asking {@link #subject} and printing the answer
+     * cannot tell those apart, and printed a source index as though it were a file name.
+     */
+    String shown(SourceNameResolver names);
+
+    /** Which kind of thing {@link #subject} identifies. */
     Incompleteness.Scope scope();
 
     /**
@@ -50,6 +63,11 @@ public sealed interface Target {
         }
 
         @Override
+        public String shown(SourceNameResolver names) {
+            return behavior;
+        }
+
+        @Override
         public Incompleteness.Scope scope() {
             return Incompleteness.Scope.BEHAVIOR;
         }
@@ -61,14 +79,25 @@ public sealed interface Target {
     }
 
     /**
-     * One source, named. What it holds is not part of it: a source id is a file, and which
-     * behaviors wrote rows in it is the compilation's answer rather than the name's.
+     * One source, as the compile identifies it.
+     *
+     * <p>{@code sourceId} is opaque: it is whatever the caller handed its sources over as, which is
+     * a position in a list for a build and a document URI for an editor. Nothing here may read it as
+     * a file name — {@link #shown} asks the caller for that — and nothing may read a path out of it.
+     *
+     * <p>What it holds is not part of it either: which behaviors wrote rows in it is the
+     * compilation's answer rather than the id's.
      */
     record OfSource(String sourceId) implements Target {
 
         @Override
         public String subject() {
             return sourceId;
+        }
+
+        @Override
+        public String shown(SourceNameResolver names) {
+            return names.nameOf(sourceId);
         }
 
         @Override
@@ -91,6 +120,11 @@ public sealed interface Target {
         }
 
         @Override
+        public String shown(SourceNameResolver names) {
+            return module;
+        }
+
+        @Override
         public Incompleteness.Scope scope() {
             return Incompleteness.Scope.MODULE;
         }
@@ -107,6 +141,11 @@ public sealed interface Target {
         @Override
         public String subject() {
             return behavior + "/" + path;
+        }
+
+        @Override
+        public String shown(SourceNameResolver names) {
+            return subject();
         }
 
         @Override

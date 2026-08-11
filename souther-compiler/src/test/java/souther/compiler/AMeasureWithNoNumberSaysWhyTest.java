@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
@@ -125,7 +126,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         Compilation compilation = Compilation.ofSource(NO_ROWS, "Main");
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        String judge = behaviorBlock(AdequacyReport.of(compilation).human(), "judge");
+        String judge = behaviorBlock(
+                AdequacyReport.of(compilation).human(SourceNameResolver.identity()), "judge");
 
         assertTrue(judge.contains("signature   not measured (no row names this behavior)"), judge);
     }
@@ -138,7 +140,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     }
 
     private static String human() {
-        return AdequacyReport.of(compiled()).human();
+        return AdequacyReport.of(compiled()).human(SourceNameResolver.identity());
     }
 
     /**
@@ -428,7 +430,8 @@ class AMeasureWithNoNumberSaysWhyTest {
     @Test
     void aMeasureThatWasNotMadeHoldsTheVerdictOpenAndAnInapplicableOneDoesNot() {
         AdequacyReport report = AdequacyReport.of(compiled());
-        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(), report.human());
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
+                report.human(SourceNameResolver.identity()));
 
         List<Object[]> measures = allMeasures();
         assertTrue(measures.stream().anyMatch(m -> m[1] == MeasurementStatus.NOT_APPLICABLE),

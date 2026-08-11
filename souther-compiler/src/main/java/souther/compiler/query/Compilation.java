@@ -27,11 +27,11 @@ import java.util.Set;
 public final class Compilation {
 
     private final Db db = new Db();
-    /** Which source each id was, for a caller that names sources by index. */
+    /** Which source each id was, for a caller that identifies sources by index. */
     private final Map<String, Integer> indexOfId = new LinkedHashMap<>();
-    /** Whether a diagnostic of this compilation names the source it is in. A compile of one source
+    /** Whether a diagnostic of this compilation says which source it is in. A compile of one source
      *  does not: the caller knows the file it handed over. */
-    private boolean namesSources = true;
+    private boolean saysWhichSource = true;
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
     private final Set<String> held = new LinkedHashSet<>();
 
@@ -42,8 +42,8 @@ public final class Compilation {
         db.set(new Front.Policy(), souther.compiler.EvaluationPolicy.fromSettings());
     }
 
-    /** A compile of several sources named by their position, the way a build hands them over. An
-     * import naming no module among them is resolved against {@code path}. */
+    /** A compile of several sources identified by their position, the way a build hands them over.
+     * An import naming no module among them is resolved against {@code path}. */
     public static Compilation ofSources(List<String> sources, ModulePath path) {
         Compilation c = new Compilation();
         List<String> ids = new ArrayList<>();
@@ -59,11 +59,16 @@ public final class Compilation {
     }
 
     /**
-     * What a compile handed a plain list of sources calls the {@code i}-th of them.
+     * The source id a compile handed a plain list of sources gives the {@code i}-th of them.
      *
-     * <p>A build names its sources by where they are in the list it passed, and a diagnostic carries
-     * that name back out. Both ends have to agree on it, so it is written once here rather than
-     * assumed at each of them.
+     * <p>A build identifies its sources by where they are in the list it passed, and a result carries
+     * that id back out. Both ends have to agree on it, so it is written once here rather than assumed
+     * at each of them.
+     *
+     * <p>An id, and not a name. Nothing downstream may print one at a person or read a path out of
+     * one: what to call a file is the caller's answer and depends on which others are in front of the
+     * reader, so a renderer asks for it. A report printed this number where a file name belongs for
+     * as long as that was left unsaid.
      */
     public static String idOfSourceIndex(int i) {
         return String.valueOf(i);
@@ -91,12 +96,12 @@ public final class Compilation {
         // There is only one source, so an error carries no origin: the caller knows which file it
         // handed over, and a rendered id would be a file number nobody asked for.
         c.indexOfId.clear();
-        c.namesSources = false;
+        c.saysWhichSource = false;
         return c;
     }
 
     /**
-     * A compile of a workspace, where each source is named by the caller — a document URI.
+     * A compile of a workspace, where each source is identified by the caller — a document URI.
      * {@code broken} names the modules whose sources the caller held back because they will not
      * parse, so an importer of one is left alone rather than told the module is unknown.
      */
@@ -490,7 +495,7 @@ public final class Compilation {
      * told — none, for a compile of one source, where that caller knows the file it handed over.
      */
     public String sourceIdOf(Db.Found found) {
-        return namesSources ? locatedSourceIdOf(found) : null;
+        return saysWhichSource ? locatedSourceIdOf(found) : null;
     }
 
     /**

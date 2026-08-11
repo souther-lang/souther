@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
@@ -123,7 +124,7 @@ class ABoundaryIsDrawnOnATermAndNotAPositionTest {
     /** The report stops saying the model draws no line through a position its own type bounds. */
     @Test
     void noneOfThemIsReportedAsAPositionNothingDivides() {
-        String human = AdequacyReport.of(compiled(MODEL)).human();
+        String human = AdequacyReport.of(compiled(MODEL)).human(SourceNameResolver.identity());
         assertFalse(human.contains("not derivable"), human);
     }
 

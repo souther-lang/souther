@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.FixtureTemplate;
@@ -42,9 +43,13 @@ public final class GeneratedRows {
      * searches the pair space, and nobody who only wanted the report should pay for that. The rows at
      * the edges cost nothing here: each was built where the boundary was measured, and this reads what
      * that attempt produced.
+     *
+     * <p>{@code names} is what the caller calls its sources, for the same reason the report beside
+     * this block asks for it: a note here is read in the same terminal, and a source id is an
+     * identity rather than a name.
      */
     public static String of(Compilation compilation, String module, String behavior,
-                            boolean boundaries) {
+                            boolean boundaries, SourceNameResolver names) {
         StringBuilder out = new StringBuilder();
         for (String name : compilation.modules()) {
             if (module != null && !module.equals(name)) {
@@ -62,7 +67,7 @@ public final class GeneratedRows {
                 }
                 filling = only;
             }
-            out.append(of(name, filling, boundaries));
+            out.append(of(name, filling, boundaries, names));
         }
         return out.toString();
     }
@@ -73,9 +78,10 @@ public final class GeneratedRows {
      * @param module     the module the rows are about, which an attached file names in its header
      * @param generated  one filling per behavior, keyed the way a report keys them
      * @param boundaries whether to add the rows that sit on an edge nothing has been written at
+     * @param names      what the caller calls its sources, for the notes that name one
      */
     public static String of(String module, Map<String, Adequacy.Filling> generated,
-                            boolean boundaries) {
+                            boolean boundaries, SourceNameResolver names) {
         List<Map.Entry<String, List<Generator.GeneratedRow>>> asked = new ArrayList<>();
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
             List<Generator.GeneratedRow> here =
@@ -102,7 +108,7 @@ public final class GeneratedRows {
             out.append(commented(blocks(module, offered)));
         }
         for (Map.Entry<String, Adequacy.Filling> behavior : generated.entrySet()) {
-            notes(out, behavior.getKey(), behavior.getValue(), boundaries);
+            notes(out, behavior.getKey(), behavior.getValue(), boundaries, names);
         }
         return out.toString();
     }
@@ -235,7 +241,7 @@ public final class GeneratedRows {
      * the rows it was offering were printed two lines above the line saying it had stopped.
      */
     private static void notes(StringBuilder out, String behavior, Adequacy.Filling filling,
-                              boolean boundaries) {
+                              boolean boundaries, SourceNameResolver names) {
         Set<String> said = new LinkedHashSet<>();
         List<Generator.UnresolvedCombination> left =
                 new ArrayList<>(filling.pairs().unresolved());
@@ -295,7 +301,7 @@ public final class GeneratedRows {
                     StringBuilder lines = new StringBuilder();
                     for (Incompleteness because : unread.because()) {
                         lines.append(String.format("// generation stopped for `%s`: %s%n",
-                                unread.behavior(), Reasons.said(because)));
+                                unread.behavior(), Reasons.said(because, names)));
                     }
                     yield lines.toString();
                 }

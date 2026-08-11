@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BoundaryAssessment;
@@ -138,7 +139,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
         compilation.answerEverything();
 
         String block = souther.compiler.report.GeneratedRows.of(
-                compilation, "example.proven", "place", true);
+                compilation, "example.proven", "place", true, SourceNameResolver.identity());
 
         assertTrue(block.contains("no row for `amount = 0` in `place`"), block);
         assertTrue(block.contains("every value tried was refused"), block);
@@ -366,7 +367,7 @@ class AnEdgeIsWritableBecauseSomethingSaidSoTest {
             compilation.measure(Adequacy.Asked.reportOnly());
             compilation.answerEverything();
             String block = souther.compiler.report.GeneratedRows.of(
-                    compilation, "example.temporal", each[0], true);
+                    compilation, "example.temporal", each[0], true, SourceNameResolver.identity());
 
             assertTrue(block.contains("no row for `" + each[1] + "`"), block);
             assertTrue(block.contains("does not make the combination impossible"), block);

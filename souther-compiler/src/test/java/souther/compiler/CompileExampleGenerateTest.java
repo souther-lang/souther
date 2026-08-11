@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -315,7 +316,8 @@ class CompileExampleGenerateTest {
                 inputs(generated(tabbed).get("take").pairs()),
                 "the tab is written the way a literal spells one");
 
-        String block = GeneratedRows.of("example.tabbed", generated(tabbed), false);
+        String block = GeneratedRows.of("example.tabbed", generated(tabbed), false,
+                SourceNameResolver.identity());
         String pasted = tabbed + block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example take"))
                 .map(line -> line.substring("// ".length()).replace("<?>", "Ok { n = 0 }"))
@@ -635,7 +637,8 @@ class CompileExampleGenerateTest {
 
     /** The rows of the block, with the placeholder answered the way an author answers it. */
     private static String answered(String source, String expected) {
-        String block = GeneratedRows.of("example.trip", generated(source), false);
+        String block = GeneratedRows.of("example.trip", generated(source), false,
+                SourceNameResolver.identity());
         String rows = block.lines()
                 .filter(line -> line.startsWith("//     ") || line.equals("// example submit"))
                 .map(line -> line.substring("// ".length()).replace("<?>", expected))
@@ -680,7 +683,8 @@ class CompileExampleGenerateTest {
             assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
                     row.description() + " -> " + row.failurePhase());
         }
-        assertEquals("", GeneratedRows.of("example.trip", generated(source), false),
+        assertEquals("", GeneratedRows.of("example.trip", generated(source), false,
+                        SourceNameResolver.identity()),
                 "nothing is left to fill");
     }
 
@@ -707,14 +711,16 @@ class CompileExampleGenerateTest {
      */
     @Test
     void theBlockPastedUnchangedLeavesTheModelWhereItWas() {
-        String block = GeneratedRows.of("example.trip", generated(TRIP), false);
+        String block = GeneratedRows.of("example.trip", generated(TRIP), false,
+                SourceNameResolver.identity());
         String pasted = TRIP + block;
 
         Compilation compilation = Compilation.ofSource(pasted, "Main");
         compilation.answerEverything();
 
         assertEquals(1, outcomes(compilation).size(), "no row was added");
-        assertEquals(block, GeneratedRows.of("example.trip", generated(pasted), false),
+        assertEquals(block, GeneratedRows.of("example.trip", generated(pasted), false,
+                        SourceNameResolver.identity()),
                 "the same rows are still owed");
     }
 
@@ -783,7 +789,7 @@ class CompileExampleGenerateTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
-        String block = GeneratedRows.of(compilation, null, null, false);
+        String block = GeneratedRows.of(compilation, null, null, false, SourceNameResolver.identity());
 
         assertEquals(declared, block.lines()
                         .filter(line -> line.startsWith("// example "))
@@ -801,6 +807,7 @@ class CompileExampleGenerateTest {
                     | (Request { kind = Overseas, urgent = false }) -> Accepted { at = "now" }
                 """;
 
-        assertEquals("", GeneratedRows.of("example.trip", generated(covered), false));
+        assertEquals("", GeneratedRows.of("example.trip", generated(covered), false,
+                SourceNameResolver.identity()));
     }
 }

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -246,7 +247,8 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
      */
     @Test
     void everyRowTheGeneratorOffersCompiles() {
-        String offered = GeneratedRows.of(measured(MODEL), "example.probe", "pick", false);
+        String offered = GeneratedRows.of(measured(MODEL), "example.probe", "pick", false,
+                SourceNameResolver.identity());
 
         assertTrue(offered.contains("(Pending)"), offered);
         assertFalse(offered.contains("(Off)"), offered);

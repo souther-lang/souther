@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -282,7 +283,7 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
         return GeneratedRows.of("example.kind",
                 Map.of("pick", new Adequacy.Filling(stopped(why), stopped(alsoAtTheEdges),
                         List.of())),
-                true);
+                true, SourceNameResolver.identity());
     }
 
     private static souther.compiler.partition.Generator.GenerationResult stopped(
@@ -333,7 +334,7 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
         Compilation compilation = compiled(POLICY);
         Map<String, Adequacy.Filling> generated =
                 compilation.db().ask(new Adequacy.Generated("example.policy")).value();
-        String block = GeneratedRows.of("example.policy", generated, true);
+        String block = GeneratedRows.of("example.policy", generated, true, SourceNameResolver.identity());
 
         assertTrue(block.contains("`then`"),
                 "the arm nothing offers a row for is named: " + block);

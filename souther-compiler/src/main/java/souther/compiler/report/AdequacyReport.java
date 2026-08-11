@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import souther.compiler.ExampleVerifier;
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.InputCaseEvidence;
@@ -378,7 +379,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     // --- rendering --------------------------------------------------------------------------------
 
-    public String human() {
+    /**
+     * The report as a person reads it, with the sources under the names {@code names} gives them.
+     *
+     * <p>The names are asked for rather than held. What a report is about is identified by whatever
+     * the caller handed its sources over as — an index under a build, a document URI under an editor
+     * — and what to call one of them is neither of those: it is the shortest thing that tells this
+     * reader's files apart, so it is a fact about the set in front of them. A caller with no names to
+     * give says so with {@link SourceNameResolver#identity}, and the ids stand for themselves.
+     */
+    public String human(SourceNameResolver names) {
         StringBuilder out = new StringBuilder();
         int implemented = 0;
         int injected = 0;
@@ -405,10 +415,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 // only reasons naming one were rare; a position that could not be read is not.
                 said(out, module.incompleteness().stream()
                         .filter(gap -> gap.behavior().map(behavior.name()::equals).orElse(false))
-                        .toList());
+                        .toList(), names);
             }
             said(out, module.incompleteness().stream()
-                    .filter(gap -> gap.behavior().isEmpty()).toList());
+                    .filter(gap -> gap.behavior().isEmpty()).toList(), names);
         }
         int total = implemented + injected;
         out.append(String.format("%n%d %s: %d implemented, %d injected; %d %s waiting for a `let`.%n",
@@ -422,9 +432,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     }
 
     /** The reasons, in the one shape a reason is printed in wherever it sits. */
-    private static void said(StringBuilder out, List<Incompleteness> gaps) {
+    private static void said(StringBuilder out, List<Incompleteness> gaps,
+                             SourceNameResolver names) {
         for (Incompleteness gap : gaps) {
-            out.append(String.format("    · %s%n", Reasons.said(gap)));
+            out.append(String.format("    · %s%n", Reasons.said(gap, names)));
         }
     }
 
