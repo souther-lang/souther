@@ -831,19 +831,27 @@ public final class Generator {
         // the rules allow was offered. A position that read a count past what a row is built to carry,
         // or that has more pairings than are built at once, held something back, and saying so is the
         // difference between a fact about the model and a fact about this.
-        UnresolvedCombination.Reason held = heldBack(subject, p, decided, recipes);
+        UnresolvedCombination.Reason held = heldBack(subject, p, decided, settled, recipes);
         return held == null ? product : new Outcome(null, held, null);
     }
 
-    /** Why a position of this parameter offered less than its rules allow, or null where none did. */
+    /**
+     * Why a position of this parameter offered less than its rules allow, or null where none did.
+     *
+     * <p>Under the same settled positions the values were chosen against. A rule counting one field
+     * against another asks for nothing in particular until the row fixes the other, so a reading
+     * without them answers about a rule this row is no longer under — and would say "every value
+     * tried was refused" of a position whose values were never built.
+     */
     private static UnresolvedCombination.Reason heldBack(Subject subject, int p,
                                                          Map<String, List<FixtureTemplate>> decided,
+                                                         Map<String, Place> settled,
                                                          Map<String, RepresentativeSource.Evaluation.Compose> recipes) {
         List<Position> found = new ArrayList<>();
         TermPath root = TermPath.of(subject.parameters().get(p));
         Type declared = subject.types().get(p);
         positionsUnder(declared, root, subject.symbols(), 0, found, decided.keySet(), recipes);
-        FieldDomains rules = rulesOf(declared, subject.symbols(), Map.of());
+        FieldDomains rules = rulesOf(declared, subject.symbols(), under(root, settled));
         UnresolvedCombination.Reason held = null;
         for (Position each : found) {
             String field = fieldUnder(root, each.path());
@@ -983,15 +991,11 @@ public final class Generator {
             return fixed;
         }
         TermPath at = TermPath.of(subject.parameters().get(p));
-        Type parameter = subject.types().get(p);
-        FieldDomains left = parameter instanceof Type.Ref ref
-                && subject.symbols().get(ref.name()) instanceof Ast.Data data && !data.newtype()
-                ? FieldDomains.of(ref.name(), data, subject.symbols(), under(at, settled))
-                : FieldDomains.NONE;
-        String under = position.path().equals(at.toString()) ? null
-                : position.path().substring(at.toString().length() + 1);
+        FieldDomains left = rulesOf(subject.types().get(p), subject.symbols(), under(at, settled));
+        String field = fieldUnder(at, position.path());
         return Partitions.displacedRepresentativesOf(position.type(), subject.symbols(),
-                under == null ? null : left.at(under));
+                field == null ? null : left.at(field),
+                field == null ? null : left.heldAt(field));
     }
 
     /** The positions under one parameter, in the order they are composed. The same rule

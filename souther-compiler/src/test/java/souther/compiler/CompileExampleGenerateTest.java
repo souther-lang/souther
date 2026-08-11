@@ -545,6 +545,11 @@ class CompileExampleGenerateTest {
      * <p>The choices multiply, so a row is tried at a bounded number of assignments. Past that bound
      * the ones not reached were not refused — nothing was written and nothing built — and calling them
      * refused tells an author their model rules out a combination it does not.
+     *
+     * <p>What refuses every value here is a pattern the record states about one field, which nothing
+     * derives a value from: the field's own type says its values are x's, and the record wants y's.
+     * A rule counting the field would not do — a floor is read now, and the value built for it is
+     * one this model would accept.
      */
     @Test
     void whatTheSearchDidNotReachIsNotReportedAsRefused() {
@@ -567,7 +572,7 @@ class CompileExampleGenerateTest {
                 data Flag = Yes | No
 
                 data Req = { %sflag: Flag }
-                    invariant String.length(a.value) > 1000
+                    invariant String.matches("y+", a.value)
 
                 data Ok = { n: Int }
 
@@ -810,4 +815,89 @@ class CompileExampleGenerateTest {
         assertEquals("", GeneratedRows.of("example.trip", generated(covered), false,
                 SourceNameResolver.identity()));
     }
+
+    /**
+     * A floor a settled sibling made concrete is offered where the value is chosen, too.
+     *
+     * <p>The value at a position is chosen twice over: once with every position taking its value
+     * knowing only what the caller settled, and again a position at a time, each from what is left
+     * once the ones before it are asserted. A rule counting one field against another asks for
+     * nothing in particular in the first pass — {@code n} could be anything the domain keeps — and
+     * asks for something definite in the second, once {@code n} has been chosen. A second pass
+     * reading only what its siblings leave a <em>number</em> offers the list that holds nothing,
+     * which is the value the rule refuses.
+     *
+     * <p>The edge is on {@code bill}, so nothing settles {@code n} from outside and the row has to
+     * choose it. {@code n} cannot be zero and the domain keeps no hole, so the first pass offers a
+     * zero the model refuses and the row is left to the second.
+     */
+    @Test
+    void aFloorReachedByChoosingASiblingFirstIsOfferedThere() {
+        String correlated = """
+                module example.paired
+
+                data Yen = Int
+                    invariant value >= 0
+
+                data Count = Int
+                    invariant within = value >= 0 && value <= 5
+                    invariant notNone = value /= 0
+
+                data Paired = { n: Count, xs: List<Int> }
+                    invariant enough = List.length(xs) >= n.value
+
+                data Accepted = { at: String }
+
+                behavior submit : (bill: Yen, request: Paired) -> Accepted
+                    constructs Accepted
+
+                let submit (bill, request) = Accepted { at = "now" }
+                """;
+        Adequacy.Filling filling = generated(correlated).get("submit");
+
+        Generator.GeneratedRow atTheEdge = filling.boundaries().rows().stream()
+                .filter(row -> row.classes().contains("bill = 0")).findFirst().orElse(null);
+        assertNotNull(atTheEdge, "the edge on `bill` is a row somebody can write: "
+                + filling.boundaries().unresolved());
+        assertEquals("Paired { n = Count(5), xs = [0, 0, 0, 0, 0] }",
+                atTheEdge.inputs().get(1).text(),
+                "as many elements as the n this row settled on asks for");
+    }
+
+    /**
+     * And why nothing was built reads that floor too, where the edge is what made it concrete.
+     *
+     * <p>The row is at {@code n}'s upper edge, so the list it needs is a hundred thousand long —
+     * more than a row is built to carry. What is owed is "nothing here composes one", which is about
+     * this compiler; "every value tried was refused" would send an author looking for the rule that
+     * refuses the empty list, and the rule that refuses it is the one this row settled.
+     */
+    @Test
+    void aFloorAnEdgeMadeConcreteIsWhyNothingWasBuilt() {
+        String correlated = """
+                module example.paired
+
+                data Count = Int
+                    invariant within = value >= 0 && value <= 100000
+
+                data Paired = { n: Count, xs: List<Int> }
+                    invariant enough = List.length(xs) >= n.value
+
+                data Accepted = { at: String }
+
+                behavior submit : (request: Paired) -> Accepted
+                    constructs Accepted
+
+                let submit (request) = Accepted { at = "now" }
+                """;
+        Generator.GenerationResult edges = generated(correlated).get("submit").boundaries();
+
+        Generator.UnresolvedCombination atTheTop = edges.unresolved().stream()
+                .filter(left -> left.subject().contains("100000")).findFirst().orElse(null);
+        assertNotNull(atTheTop, "the top edge is owed a row and got none: " + edges.unresolved()
+                + " rows " + inputs(edges));
+        assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE,
+                atTheTop.reason(), atTheTop.toString());
+    }
+
 }

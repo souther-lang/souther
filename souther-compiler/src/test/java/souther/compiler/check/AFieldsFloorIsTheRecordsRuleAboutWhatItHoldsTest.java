@@ -26,6 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
 
     private static FieldDomains domainsIn(String source, String type) {
+        return domainsIn(source, type, java.util.Map.of());
+    }
+
+    private static FieldDomains domainsIn(String source, String type,
+                                          java.util.Map<String, Count> settled) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
@@ -34,7 +39,45 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
         TypeName named = new TypeName(module, type);
         Ast.Data data = (Ast.Data) symbols.get(named);
         assertNotNull(data, "no `" + type + "` in " + module);
-        return FieldDomains.of(named, data, symbols);
+        return FieldDomains.of(named, data, symbols, settled);
+    }
+
+    private static final String AGAINST_A_SIBLING = """
+            module example.bag
+
+            data Bag =
+                { n: Int
+                , xs: List<Int>
+                }
+                invariant enough = List.length(xs) >= n
+            """;
+
+    /** A rule counting one field against another asks for nothing in particular until something says
+     * what the other is: a count is never negative, and that is the whole of what is left of the
+     * rule while {@code n} is open. */
+    @Test
+    void aFloorStatedAgainstASiblingAsksForNothingWhileTheSiblingIsOpen() {
+        FieldDomains.Held held = domainsIn(AGAINST_A_SIBLING, "Bag").heldAt("xs");
+
+        assertNotNull(held, "a count of no less than none is still what the domain holds");
+        assertEquals(0, BigDecimal.ZERO.compareTo(Count.number(held.bounds().min().at()).at()),
+                "and none of them is a list any value meets");
+    }
+
+    /**
+     * And is one once the sibling is settled, which is what settling a field is for.
+     *
+     * <p>The same projection {@link FieldDomains#at} has always made of a number beside a settled
+     * number, asked of how much a value holds. A caller reading this without the settled fields gets
+     * the answer above — no floor — for a position that has one.
+     */
+    @Test
+    void aFloorStatedAgainstASettledSiblingIsAFloor() {
+        FieldDomains.Held held = domainsIn(AGAINST_A_SIBLING, "Bag",
+                java.util.Map.of("n", Count.of(7L))).heldAt("xs");
+
+        assertNotNull(held, "seven is what the list has to hold once n is seven");
+        assertEquals(0, BigDecimal.valueOf(7).compareTo(Count.number(held.bounds().min().at()).at()));
     }
 
     @Test

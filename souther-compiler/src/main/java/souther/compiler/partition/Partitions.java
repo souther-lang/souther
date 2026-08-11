@@ -900,14 +900,16 @@ public final class Partitions {
      * write.
      */
     static List<FixtureTemplate> displacedRepresentativesOf(Type type, Symbols symbols,
-                                                            NumericDomain.Bounds within) {
-        List<FixtureTemplate> base = new ArrayList<>(representativesOf(type, symbols, within));
+                                                            NumericDomain.Bounds within,
+                                                            FieldDomains.Held held) {
+        List<FixtureTemplate> base =
+                new ArrayList<>(representativesHolding(type, symbols, within, held));
         // What a position holds back for the product search's second pass is on offer here from the
         // start. This pass runs only where both of those have already failed, and a position keeping
         // a value from the last search there is a value nothing will ever be tried at.
-        for (FixtureTemplate held : inReserve(type, symbols, within)) {
-            if (base.stream().noneMatch(each -> each.text().equals(held.text()))) {
-                base.add(held);
+        for (FixtureTemplate kept : inReserve(type, symbols, within)) {
+            if (base.stream().noneMatch(each -> each.text().equals(kept.text()))) {
+                base.add(kept);
             }
         }
         Type numeric = TypeOps.numericBase(type, symbols);
