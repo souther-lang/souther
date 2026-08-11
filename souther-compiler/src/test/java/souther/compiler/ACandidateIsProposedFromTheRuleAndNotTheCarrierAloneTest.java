@@ -502,13 +502,18 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     /**
      * A map nothing was paired for is not a search that stopped.
      *
-     * <p>{@code /= 0} says the map is not empty and no range holds it, so no minimum is read and no
-     * pairing is built — the position offers the empty map and it is refused. How many pairs the key
-     * and the value could have made between them says nothing about that, and a reader told the search
-     * stopped would be told about a search nothing here ran.
+     * <p>{@code /= 0} says the map is not empty, and a count is never below none, so what it says is
+     * that the map holds at least one pair. A minimum is read, pairings are built for it, and what
+     * stops is the search for a key and a value that clear eight rules apiece. So the reason is the
+     * search reaching its limit, and it is the reason because that is what happened.
+     *
+     * <p>This asked for the other reason while a disequality reached the domain as nothing at all:
+     * no minimum was read, the position offered the empty map, and it was refused. The distinction
+     * still matters — a reader told a search stopped would go looking for the pairing it stopped
+     * short of — but a map the rules will not let be empty is no longer an example of it.
      */
     @Test
-    void aMapNothingWasPairedForIsSaidAsARefusalAndNotASearch() {
+    void aMapWhoseSearchStoppedSaysSoRatherThanCallingItARefusal() {
         String formats = "";
         for (int i = 1; i <= 8; i++) {
             formats += "    invariant p%d = String.matches(\"[a-h]{%d}\", value)\n".formatted(i, i);
@@ -534,11 +539,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 let look (t) = 1
                 """.formatted(formats, formats));
 
-        assertEquals(List.of(), filled.rows(), "the empty map is what was offered and it is refused");
+        assertEquals(List.of(), filled.rows(), "no key and value clearing all eight rules was found");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason
-                                .ALL_CANDIDATES_REJECTED),
-                "refused, because no pairing was built to be stopped short of: "
+                                .SEARCH_LIMIT),
+                "the pairing was built and the search for its parts is what stopped: "
                         + filled.unresolved());
     }
 
@@ -547,6 +552,16 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
      *
      * <p>No value of it exists, so the giving up is the right answer and not a limit reached. What
      * matters is that it is reported the way any other refusal is, rather than descending forever.
+     *
+     * <p>Written through a sum, which is the shape of this the front end still admits: every case of
+     * {@code Shape} holds a {@code Shape}, so there is no first one, and whether a sum has a case that
+     * bottoms out is a judgement the construction check does not make. Written through a collection
+     * the rules will not let be empty, the model is refused before the descent is reached.
+     *
+     * <p>So this asks its question through the gap rather than around it, and holds only while the
+     * gap is open. Have the construction check decide a sum's inhabitance and no model reaching the
+     * descent is left to ask it with — at which point what this asserts has to be asked of a type the
+     * check still admits, or the question has stopped being one the generator can be posed.
      */
     @Test
     void aTypeWrittenInTermsOfItselfIsGivenUpOn() {
@@ -559,10 +574,11 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 data Overseas
                 data Kind = Domestic | Overseas
 
-                data Nest = List<Nest>
-                    invariant someNest = List.length(value) >= 1
+                data Leaf = { s: Shape }
+                data Branch = { s: Shape }
+                data Shape = Leaf | Branch
 
-                data T = { kind: Kind, nest: Nest }
+                data T = { kind: Kind, shape: Shape }
 
                 behavior look : (t: T) -> Int
 
@@ -572,7 +588,7 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
         assertEquals(List.of(), filled.rows(), "no value of it exists");
         assertTrue(filled.unresolved().stream().allMatch(left ->
                         left.reason() == Generator.UnresolvedCombination.Reason
-                                .ALL_CANDIDATES_REJECTED),
+                                .NOTHING_COMPOSES_ONE),
                 "and the answer comes back rather than descending forever: "
                         + filled.unresolved());
     }

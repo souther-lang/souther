@@ -10,6 +10,8 @@ import souther.compiler.query.Shapes;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -37,12 +39,18 @@ class AFloorHoldsWhereverItIsWrittenTest {
         }
     }
 
+    /** A model to read floors off, held to compiling. A rule the language refuses still reaches this
+     * reader and still comes back a number, so a model asserted only to have symbols can pin a floor
+     * that no program could have written. */
     private static Model modelOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
         Symbols symbols = compilation.db().ask(new Shapes.Scope(module)).value();
         assertNotNull(symbols, "the model did not compile");
+        assertEquals(List.of(), compilation.diagnostics().values().stream()
+                        .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
+                "the model under test is a program that can be written");
         return new Model(symbols, module);
     }
 
@@ -128,5 +136,41 @@ class AFloorHoldsWhereverItIsWrittenTest {
                 domains.heldAt("accounts")), "an empty list of accounts stands beside a contact");
         assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
                 domains.heldAt("contacts")), "and the same the other way round");
+    }
+
+    /** A rule a layer down is the outer name's rule too: the reader reaches every name the value
+     * wears, so which layer the author wrote it on does not change what the value has to hold. */
+    @Test
+    void aFloorWrittenUnderANameIsReadAtTheNameOverIt() {
+        Model model = modelOf("""
+                module example.chain
+
+                data Kids = Inner
+
+                data Inner = List<Int>
+                    invariant atLeastOne = List.length(value) >= 1
+                """);
+
+        assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.symbols()));
+    }
+
+    /**
+     * A count is not always a count of elements.
+     *
+     * <p>{@code String.length} is one of the measures, so a string's rule reaches this reader and
+     * comes back a number like any other. What that number counts is settled by the type it was read
+     * on, and a caller taking every floor above zero for a collection that cannot be empty would be
+     * reading characters as elements.
+     */
+    @Test
+    void aStringsRuleIsAFloorOnItsCharacters() {
+        Model model = modelOf("""
+                module example.name
+
+                data Name = String
+                    invariant nonEmpty = String.length(value) >= 1
+                """);
+
+        assertEquals(1, Partitions.leastHeld(model.ref("Name"), model.symbols()));
     }
 }

@@ -2,6 +2,8 @@ package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DeclaredBounds;
+import souther.compiler.check.HelperInvariants;
 import souther.compiler.check.Shape;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
@@ -13,6 +15,7 @@ import souther.compiler.check.NumericMeasures;
 import souther.compiler.codegen.InvariantConstraints;
 import souther.compiler.diag.SourceRef;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
@@ -910,44 +913,15 @@ public final class Partitions {
         return List.of(FixtureTemplate.record(record, chosen));
     }
 
-    /**
-     * How many of whatever counts a value the rules on its type require it to hold, or 0 where they
-     * require none.
-     *
-     * <p>Which operation counts it is asked of {@link NumericMeasures}, the one list of them, so that
-     * a rule this reads and a rule a boundary is drawn on are read off the same call. Not asked of the
-     * decoder's constraints: Raoh has no entry for a set's size — a set crosses the boundary as a list
-     * and a size chained after the mapping that drops duplicates would count the wrong things — and
-     * that absence is a fact about the decoder rather than about what the rule says.
-     */
+    /** How many of whatever counts a value the rules on it require it to hold, read where the rules
+     * are: {@link DeclaredBounds#leastCountOf}. */
     static int leastHeld(Type type, Symbols symbols) {
-        ValueName.Stdlib counts = NumericMeasures.takenOf(type, symbols);
-        if (counts == null) {
-            return 0;
-        }
-        TypeBounds.Bounds sized = TypeBounds.of(type, symbols, Carrier.WHOLE, counts);
-        if (sized == null || sized.min() == null) {
-            return 0;
-        }
-        return Counts.leastFrom(sized.min().at());
+        return DeclaredBounds.leastCountOf(type, symbols);
     }
 
-    /**
-     * The same, where the record the position sits in has a rule about it too.
-     *
-     * <p>The higher of the two, because both are rules the construction has to satisfy. A value
-     * clearing one and not the other is refused as surely as one clearing neither, so reading either
-     * alone offers a value something refuses — which is the whole of #650 read from the other side:
-     * the type's floor was the only one a position was ever asked for, and a field whose floor was
-     * its record's got the value that holds nothing.
-     *
-     * <p>Both readings end at {@link Counts#leastFrom}, so what a floor comes to as a count is
-     * settled once. A second reading here could put a record's {@code > 3} at three while the type's
-     * came to four, and the two would disagree about one rule written twice.
-     */
+    /** The same, where the record the position sits in has a rule about it too. */
     static int leastHeld(Type type, Symbols symbols, FieldDomains.Held held) {
-        return Math.max(leastHeld(type, symbols),
-                held == null ? 0 : Counts.leastFrom(held.bounds().min()));
+        return DeclaredBounds.leastCountOf(type, symbols, held);
     }
 
     /**
@@ -990,7 +964,7 @@ public final class Partitions {
         if (base == null) {
             return null;
         }
-        NumericDomain.Bounds range = TypeBounds.admissible(TypeBounds.of(type, symbols), null);
+        NumericDomain.Bounds range = TypeBounds.admissible(DeclaredBounds.of(type, symbols), null);
         Place from = inside(range, base == Type.DECIMAL ? Carrier.DENSE : Carrier.WHOLE);
         if (from == null || base != Type.INT) {
             return from != null && index == 0 ? from : null;
@@ -1069,7 +1043,7 @@ public final class Partitions {
         if (numeric == null) {
             return List.copyOf(base);
         }
-        NumericDomain.Bounds range = TypeBounds.admissible(TypeBounds.of(type, symbols), within);
+        NumericDomain.Bounds range = TypeBounds.admissible(DeclaredBounds.of(type, symbols), within);
         Carrier carrier = numeric == Type.INT ? Carrier.WHOLE : Carrier.DENSE;
         Place step = displaced(range, carrier);
         if (step == null) {
@@ -1142,7 +1116,7 @@ public final class Partitions {
         Type base = TypeOps.newtypeInner(newtype, symbols);
         List<FixtureTemplate> candidates = new ArrayList<>();
 
-        TypeBounds.Bounds own = TypeBounds.of(new Type.Ref(newtype), symbols);
+        DeclaredBounds.Bounds own = DeclaredBounds.of(new Type.Ref(newtype), symbols);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
         Place held = bounds == null || bounds.isEmpty() ? null : inside(bounds, own.carrier());
         if (held != null) {
@@ -1150,7 +1124,7 @@ public final class Partitions {
         }
         if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
             for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-                for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
+                for (Ast.Expr each : HelperInvariants.conjunctsOf(clause.expr())) {
                     if (InvariantConstraints.of(each, base).orElse(null)
                             instanceof InvariantConstraints.Pattern format) {
                         PatternValues.shortestAccepted(format.regex())
@@ -1211,7 +1185,7 @@ public final class Partitions {
                 || !data.newtype()) {
             return List.of();
         }
-        TypeBounds.Bounds own = TypeBounds.of(type, symbols);
+        DeclaredBounds.Bounds own = DeclaredBounds.of(type, symbols);
         NumericDomain.Bounds bounds = TypeBounds.admissible(own, within);
         // The far end has to be a value the position holds. Where the range stops short of it there
         // is nothing there to hold back, and a dense order has no value beside it to hold back

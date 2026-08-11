@@ -35,6 +35,12 @@ class AConstructionMeansWhatItsFormMeansTest {
                 invariant List.length(value) >= 1
             data Amounts = List<AmountN>
             data Wrapped = Receipt
+            data Span = { from: Int, to: Int }
+                invariant from <= to
+            data Priced = { at: Decimal }
+                invariant at > 0m
+            data Stamped = { from: DateTime, to: DateTime }
+                invariant from <= to
             data Boxed = { held: AmountN? }
             data Receipt = { total: AmountN }
             data Held = { total: AmountN, note: String? }
@@ -67,6 +73,19 @@ class AConstructionMeansWhatItsFormMeansTest {
             behavior boxedOf : (n: Int) -> Boxed
                 constructs Boxed, AmountN
             let boxedOf (n) = Boxed { held = AmountN(n) }
+
+            behavior widen : (s: Span) -> Span
+                constructs Span
+            let widen (s) = Span { from = s.from, to = s.to + 1 }
+
+            behavior pricedOf : (n: Int) -> Priced
+                constructs Priced
+            let pricedOf (n) = Priced { at = 1m }
+
+            behavior stampedOf : (n: Int) -> Stamped
+                constructs Stamped
+            let stampedOf (n) = Stamped { from = DateTime("2026-07-20T09:00"),
+                to = DateTime("2026-07-21T09:00") }
 
             behavior positiveOf : (n: Int) -> Positive
                 constructs Positive
@@ -280,6 +299,67 @@ class AConstructionMeansWhatItsFormMeansTest {
                 example boxedOf
                     | (1) -> Boxed { held = None }
                 """);
+    }
+
+    @Test
+    void aRecordReadsItsOwnInvariantToo() {
+        // A construction's invariant is its own, as a newtype's is, and it is read of the value the
+        // row wrote once every field states what this type declares it to be. Reading it only where
+        // something was built through a decoder left it to whether that path happened to run.
+        holds("""
+                example widen
+                    | (Span { from = 1, to = 1 }) -> Span { from = 1, to = 2 }
+                """);
+        assertTrue(couldNotBuild("""
+                example widen
+                    | (Span { from = 1, to = 2 }) -> Span { from = 5, to = 1 }
+                """).contains("invariant"), "the row is told its own construction refused it");
+    }
+
+    @Test
+    void anInvariantIsNotReadOfAValueTheRowDidNotWrite() {
+        // The other half of the rule above, and the one that says which of the two a failure is.
+        // `-1` at a `Decimal` field is an `Int`: the row wrote a value of another type, which is the
+        // disagreement it reports. Reading it as the amount a boundary would have made of it and then
+        // asking `at > 0m` would report a rule broken by a value nobody wrote.
+        holds("""
+                example pricedOf
+                    | (1) -> Priced { at = 1m }
+                """);
+        doesNotHold("""
+                example pricedOf
+                    | (1) -> Priced { at = -1 }
+                """);
+        // And the same reading, where no invariant is involved at all.
+        doesNotHold("""
+                example pricedOf
+                    | (1) -> Priced { at = 1 }
+                """);
+    }
+
+    @Test
+    void oneTemporalIsNotAnother() {
+        // The four temporals were one written form to this reading, so a row could write any of them
+        // where another stands. `Stamped` carries an invariant so the gate in front of it is the one
+        // being asked: reading a `Date` as a value of a `DateTime` field is what would put it through
+        // that field's decoder and report the row for a rule about a value it never wrote.
+        holds("""
+                example stampedOf
+                    | (1) -> Stamped { from = DateTime("2026-07-20T09:00"),
+                        to = DateTime("2026-07-21T09:00") }
+                """);
+        Diagnostic d = only("""
+                example stampedOf
+                    | (1) -> Stamped { from = Date("2026-07-20"),
+                        to = DateTime("2026-07-21T09:00") }
+                """);
+        assertEquals("E1905", d.code(), d.said().toString());
+        assertTrue(d.notes().stream().anyMatch(note ->
+                        note.said() instanceof ExampleMessage.TheTwoAreOfDifferentTypes(
+                                String at, String stated, String answered)
+                                && at.equals("$.from") && stated.equals("Date")
+                                && answered.equals("DateTime")),
+                "which two temporals it is between: " + d.notes());
     }
 
     @Test

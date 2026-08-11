@@ -8,6 +8,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.TypeView;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.Classification;
 import souther.compiler.observe.ObservedValue;
@@ -1336,7 +1337,7 @@ public final class Generator {
             return new Edge(List.of(Witnesses.wrapped(axis.type(),
                     FixtureTemplate.on(carrier, at), symbols)), null, at, null);
         }
-        int size = Counts.asSize(at);
+        int size = CountDomain.asCount(at);
         if (size < 0) {
             return Edge.none(UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE);
         }

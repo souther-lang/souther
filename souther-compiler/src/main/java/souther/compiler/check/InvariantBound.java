@@ -78,28 +78,50 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * it — every one of them counts something.
      */
     public static Optional<InvariantBound> ofSize(Ast.Expr clause, ValueName measure) {
+        // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
+        // where one does.
+        return sizeComparedIn(clause, measure, VALUE)
+                .flatMap(read -> ordered(read.op(), Count.of(read.count()), Carrier.WHOLE));
+    }
+
+    /**
+     * A comparison of a counted number against a literal, as it was written.
+     *
+     * @param op    the operator, with the count on the left however the clause was spelled
+     * @param count what it is compared against
+     */
+    public record SizeComparison(Ast.BinOp op, BigDecimal count) {}
+
+    /**
+     * The comparison {@code clause} makes about {@code measure} taken of {@code subject}, or empty
+     * where it makes none.
+     *
+     * <p>Before any reading of what it means. {@link #ofSize} turns one of these into an end of a
+     * range and answers nothing for the comparisons that are not ends — an equality states both ends
+     * at once and a disequality states neither, so a range has nowhere to put them. A reader asking
+     * something a range cannot hold, such as whether a count of none is refused, needs the comparison
+     * itself. Recognised here so that the shape is read in one place and what it means in as many as
+     * there are questions.
+     */
+    public static Optional<SizeComparison> sizeComparedIn(Ast.Expr clause, ValueName measure,
+                                                          String subject) {
         if (!(clause instanceof Ast.Binary bin)) {
             return Optional.empty();
         }
         Ast.Expr left = bin.left();
         Ast.Expr right = bin.right();
         Ast.BinOp op = bin.op();
-        if (!takesSizeOfValue(left, measure) && takesSizeOfValue(right, measure)) {
+        if (!takesSizeOf(left, measure, subject) && takesSizeOf(right, measure, subject)) {
             Ast.Expr swap = left;
             left = right;
             right = swap;
             op = mirrored(op);
         }
-        if (!takesSizeOfValue(left, measure)) {
+        if (!takesSizeOf(left, measure, subject)) {
             return Optional.empty();
         }
-        Place bound = Count.of(wholeLiteral(right));
-        if (bound == null) {
-            return Optional.empty();
-        }
-        // A size is a whole number whatever it is a size of, so it steps like an `Int` and stops
-        // where one does.
-        return ordered(op, bound, Carrier.WHOLE);
+        BigDecimal count = wholeLiteral(right);
+        return count == null ? Optional.empty() : Optional.of(new SizeComparison(op, count));
     }
 
     /**
@@ -191,7 +213,14 @@ public record InvariantBound(boolean lower, Endpoint end) {
      * every clause written that way while looking as though it had read them.
      */
     private static boolean takesSizeOfValue(Ast.Expr e, ValueName measure) {
-        return e instanceof Ast.Apply call && call.args().size() == 1 && isValue(call.args().get(0))
+        return takesSizeOf(e, measure, VALUE);
+    }
+
+    /** The same of a named subject: {@code value} inside a newtype's rule, a field's name inside the
+     * rule of the record that has it. */
+    private static boolean takesSizeOf(Ast.Expr e, ValueName measure, String subject) {
+        return e instanceof Ast.Apply call && call.args().size() == 1
+                && call.args().get(0) instanceof Ast.Var arg && arg.name().equals(subject)
                 && call.function() instanceof Ast.Var fn && measure.equals(fn.denotes());
     }
 
