@@ -4,9 +4,15 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.BoundaryAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -284,6 +290,73 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
         assertTrue(report.contains("no row is at onMoved/v.n = 5 (invariant Moved (min))"), report);
         assertFalse(report.contains("within Moved"), report);
+    }
+
+    /**
+     * A floor no value of the type reaches, written both ways.
+     *
+     * <p>A `Set<Bool>` holds two elements at most, so a floor of three is a line nothing stands at.
+     * No row can name such a value, which is why nothing here writes one: what the line comes to is
+     * asked of the measure, and the measure answers without a row.
+     */
+    private static final String UNMEETABLE = """
+            module unmeetable
+
+            data FlagsN   = Set<Bool>       invariant Set.size(value) >= 3
+            data NumbersN = Set<Int>        invariant Set.size(value) >= 3
+            data FlagsR   = { s: Set<Bool> } invariant Set.size(s) >= 3
+            data NumbersR = { s: Set<Int> }  invariant Set.size(s) >= 3
+
+            data Ok = { size: Int }
+
+            behavior onFlagsN : (v: FlagsN) -> Ok
+                constructs Ok
+            let onFlagsN (v) = Ok { size = Set.size(v.value) }
+
+            behavior onNumbersN : (v: NumbersN) -> Ok
+                constructs Ok
+            let onNumbersN (v) = Ok { size = Set.size(v.value) }
+
+            behavior onFlagsR : (v: FlagsR) -> Ok
+                constructs Ok
+            let onFlagsR (v) = Ok { size = Set.size(v.s) }
+
+            behavior onNumbersR : (v: NumbersR) -> Ok
+                constructs Ok
+            let onNumbersR (v) = Ok { size = Set.size(v.s) }
+            """;
+
+    /**
+     * A line the record placed is settled the way one on a newtype is.
+     *
+     * <p>The route an edge arrived by is not evidence about whether a row can be written at it, and
+     * this issue adds a second route. A floor of three on a `Set<Bool>` is not known to be writable
+     * and stays out of the denominator whichever way it is written; the same floor on a `Set<Int>`
+     * is a row somebody owes, also either way. Held because the whole of #649 is that the two
+     * spellings state one rule: a repair that made the record's line a counted obligation where the
+     * newtype's is not would have granted that rule two meanings again.
+     */
+    @Test
+    void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
+        Map<String, BoundaryAssessment> lines = new LinkedHashMap<>();
+        Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        compilation.db().ask(new Adequacy.Coverage("unmeetable")).value()
+                .forEach((behavior, evidence) -> evidence.boundaries()
+                        .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
+
+        assertEquals(Set.of("onFlagsN/Set.size(v) = 3", "onNumbersN/Set.size(v) = 3",
+                        "onFlagsR/Set.size(v.s) = 3", "onNumbersR/Set.size(v.s) = 3"),
+                lines.keySet(), "one line each, and the record's is on the count of the field");
+        assertFalse(lines.get("onFlagsN/Set.size(v) = 3").writability().known(),
+                "two booleans are all there are");
+        assertFalse(lines.get("onFlagsR/Set.size(v.s) = 3").writability().known(),
+                "and writing the rule on the record does not add a third");
+        assertTrue(lines.get("onNumbersN/Set.size(v) = 3").writability().known(),
+                "three integers are three integers");
+        assertTrue(lines.get("onNumbersR/Set.size(v.s) = 3").writability().known(),
+                "and a record holding them is a value that can be built");
     }
 
     private static String report(String source) {

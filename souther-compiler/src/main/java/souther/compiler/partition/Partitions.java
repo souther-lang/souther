@@ -90,9 +90,16 @@ public final class Partitions {
          * <p>False where a rule reaching the value the term is taken of was not read in full. Every
          * edge here is then where the rules this could read stop, and a rule it could not read can
          * refuse that value as easily as the one beyond it — so the edge is not known to be writable
-         * and asking for a row at it is asking for work nobody may be able to do. */
+         * and asking for a row at it is asking for work nobody may be able to do.
+         *
+         * <p>And false at a count, whatever the rules came to. What the projection settles is which
+         * numbers the rules leave, and a count of three is a number the rules leave whether or not
+         * three of the thing exist: a `Set<Bool>` has two elements to be made of and the domain has
+         * no term for that. So a count's edge is settled by a value rather than by an argument — a
+         * row at it, or one this built — which is the account an edge nothing has settled already
+         * gets. Read as a proof, a floor no value reaches became a row an author was told to write. */
         public boolean edgeIsKnownWritable(NumericTerm term) {
-            return !uncertain.contains(term);
+            return !uncertain.contains(term) && !(term instanceof NumericTerm.SizeOf);
         }
 
         /** Only the positions the model actually divides. */

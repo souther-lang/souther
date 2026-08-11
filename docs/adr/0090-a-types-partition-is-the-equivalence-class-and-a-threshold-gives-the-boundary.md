@@ -90,6 +90,14 @@ the denominator, and refuses no build — which is what ADR-0091 already does wi
 has settled, for the same reason. What settles it is a witness rather than an argument: a row at the
 value went through the decoder, and from then on the edge is counted like any other.
 
+Nor is an edge at a count, whatever the rules came to. What the projection settles is which numbers
+the rules leave, and a count of three is a number they leave whether or not three of the thing exist:
+a `Set<Bool>` has two elements to be made of, and the domain has no term for that. So a count's edge
+is settled by a value — a row at it, or one this built — and not by an argument, which is the account
+an edge nothing has settled already gets. This is what the projection was never entitled to say, and
+it went unsaid only while a count could be bounded from one place: read as a proof, a floor no value
+reaches becomes a row an author is told to write.
+
 Whether the rules were all read is asked of the value and not of the position. A bound is about one
 position; a row at its edge is a whole value with that edge in it, and a rule about any other position
 can refuse to be part of one. A pattern on a label narrows no minute and still leaves every minute
