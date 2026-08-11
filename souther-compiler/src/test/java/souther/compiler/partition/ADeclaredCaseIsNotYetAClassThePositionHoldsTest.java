@@ -60,7 +60,7 @@ class ADeclaredCaseIsNotYetAClassThePositionHoldsTest {
     @Test
     void theTypeDeclaresEveryCaseWhateverItsRulesSay() {
         assertEquals(List.of("Prospecting", "Qualified", "Won"),
-                Partitions.classesOf(Type.ref(symbols.own("StageI")), symbols).stream()
+                PartitionClasses.of(Type.ref(symbols.own("StageI")), symbols).stream()
                         .map(PartitionClass::id).toList());
     }
 

@@ -60,7 +60,7 @@ class ALeafIsNotAnAbsenceTest {
     void aSumIsALeafAndASumIsWhatDivides() {
         assertInstanceOf(StructuralInspection.Leaf.class, under(named("Stage")));
 
-        assertFalse(Partitions.classesOf(named("Stage"), symbols).isEmpty(),
+        assertFalse(PartitionClasses.of(named("Stage"), symbols).isEmpty(),
                 "the same position divides three ways, which the leaf above did not deny");
     }
 

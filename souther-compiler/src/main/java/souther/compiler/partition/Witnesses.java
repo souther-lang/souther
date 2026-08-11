@@ -370,7 +370,7 @@ final class Witnesses {
      */
     private static List<FixtureTemplate> dividesInto(Type type, Symbols symbols) {
         List<FixtureTemplate> out = new ArrayList<>();
-        for (PartitionClass each : Partitions.classesOf(type, symbols)) {
+        for (PartitionClass each : PartitionClasses.of(type, symbols)) {
             if (each.generatable()) {
                 out.addAll(each.representatives().candidates());
             }
