@@ -129,4 +129,62 @@ class AFloorHoldsWhereverItIsWrittenTest {
         assertEquals(0, Partitions.leastHeld(new Type.ListOf(Type.INT), model.symbols(),
                 domains.heldAt("contacts")), "and the same the other way round");
     }
+
+    /** A rule a layer down is the outer name's rule too: the reader reaches every name the value
+     * wears, so which layer the author wrote it on does not change what the value has to hold. */
+    @Test
+    void aFloorWrittenUnderANameIsReadAtTheNameOverIt() {
+        Model model = modelOf("""
+                module example.chain
+
+                data Kids = Inner
+
+                data Inner = List<Int>
+                    invariant atLeastOne = List.length(value) >= 1
+                """);
+
+        assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.symbols()));
+    }
+
+    /**
+     * And the other way up, where only the outer name states it.
+     *
+     * <p>The inner name is asserted at zero beside it. Together the two say that this floor is
+     * reachable at {@code Kids} and nowhere else, which is what a reader walking down from
+     * {@code Kids} would lose by asking again at each layer instead of carrying what it read.
+     */
+    @Test
+    void aFloorWrittenOnTheOuterNameIsNotFoundUnderIt() {
+        Model model = modelOf("""
+                module example.chain
+
+                data Kids = Inner
+                    invariant atLeastOne = List.length(value) >= 1
+
+                data Inner = List<Int>
+                """);
+
+        assertEquals(1, Partitions.leastHeld(model.ref("Kids"), model.symbols()));
+        assertEquals(0, Partitions.leastHeld(model.ref("Inner"), model.symbols()));
+    }
+
+    /**
+     * A count is not always a count of elements.
+     *
+     * <p>{@code String.length} is one of the measures, so a string's rule reaches this reader and
+     * comes back a number like any other. What that number counts is settled by the type it was read
+     * on, and a caller taking every floor above zero for a collection that cannot be empty would be
+     * reading characters as elements.
+     */
+    @Test
+    void aStringsRuleIsAFloorOnItsCharacters() {
+        Model model = modelOf("""
+                module example.name
+
+                data Name = String
+                    invariant nonEmpty = String.length(value) >= 1
+                """);
+
+        assertEquals(1, Partitions.leastHeld(model.ref("Name"), model.symbols()));
+    }
 }

@@ -4,6 +4,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.types.Type;
 
@@ -196,7 +197,7 @@ final class Intervals {
         if (of instanceof NumericTerm.ValueOf) {
             return List.of(Witnesses.wrapped(type, FixtureTemplate.on(carrier, inside), symbols));
         }
-        int size = Counts.asSize(inside);
+        int size = CountDomain.asCount(inside);
         if (size < 0) {
             return List.of();
         }
