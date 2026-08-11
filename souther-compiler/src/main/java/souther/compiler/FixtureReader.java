@@ -587,18 +587,102 @@ public final class FixtureReader {
      */
     private Asserted assertedNewtype(TypeName built, Ast.Expr argument, String written) {
         Type base = neutral.shapeOf(neutral.newtypeBaseType(built));
-        Map<String, Asserted> field = new LinkedHashMap<>();
-        if (scalar(base)) {
-            // The value is built here, through this newtype's own decoder over its own base: that is
-            // what refuses `Amount("x")` and what runs the invariant a newtype declares, neither of
-            // which is a disagreement with the behavior. The type the decoder is chosen from is this
-            // node's, and the argument is read at the base this node declares — nothing enclosing it
-            // was consulted for either.
-            Object inner = neutral.shaped(raw(argument, base, Admission.HELD), base);
-            return assertedLive(decode(FixtureShape.of(Type.ref(built), symbols), inner));
+        Asserted held = asserted(argument, base);
+        // First: what this newtype takes. Asked of the value as the row wrote it, which is why it is
+        // asked here and not by running anything — putting `[ 1 ]` through the decoder of an
+        // `Amounts = List<AmountN>` is exactly what would read the number as an `AmountN`.
+        if (base != null && !states(held, base)) {
+            throw new FixtureException("`" + written + "` takes a `" + Type.show(base) + "`, and `"
+                    + new ValueRendering(neutral).show(held) + "` is not one");
         }
-        field.put("value", asserted(argument, base));
+        // Then: whether a value of the base is one this newtype admits. Its own invariant, over its
+        // own base, and only once nothing is left for a reading to get wrong — every part already
+        // states the type this newtype requires of it, so its decoder has nothing it could coerce.
+        if (base != null && !TypeOps.effectiveInvariants(declared(built), symbols).isEmpty()) {
+            decode(FixtureShape.of(Type.ref(built), symbols),
+                    neutral.shaped(raw(argument, base, Admission.HELD), base));
+        }
+        Map<String, Asserted> field = new LinkedHashMap<>();
+        field.put("value", held);
         return new Asserted.Built(built, field);
+    }
+
+    private Ast.Data declared(TypeName name) {
+        return symbols.get(name) instanceof Ast.Data data ? data : null;
+    }
+
+    /**
+     * Whether what a row wrote is a value of {@code type}, read off what the row wrote and nothing
+     * else.
+     *
+     * <p>The twin of {@link #holds}, which asks it of a value that exists. This asks it of a written
+     * one, so it is what a construction holds its own parts to before any of them is built into
+     * anything. Shallow at a name, because what stands under that name is that value's own question
+     * and not this one's — a {@code DecisionN(Approved { id = 1 })} whose {@code id} is written as a
+     * number is a disagreement about the {@code id}, not a {@code DecisionN} that cannot be built.
+     */
+    private boolean states(Asserted a, Type type) {
+        Type open = NeutralForm.open(type);
+        if (a instanceof Asserted.Value(ObservedValue v) && v instanceof ObservedValue.Absent) {
+            return type instanceof Type.OptionOf;
+        }
+        return switch (open) {
+            case Type.Prim p -> a instanceof Asserted.Value(ObservedValue v)
+                    && spells(v, TypeName.primitive(p));
+            case Type.Ref r when r.name().isPrimitive() -> a instanceof Asserted.Value(ObservedValue v)
+                    && spells(v, r.name());
+            case Type.Ref _, Type.Union _ -> named(a) != null
+                    && TypeOps.leafCases(open, symbols).contains(named(a));
+            case Type.ListOf l -> a instanceof Asserted.Elements(Asserted.Container stated,
+                    List<Asserted> elements)
+                    && stated != Asserted.Container.SET && each(elements, l.element());
+            case Type.SetOf s -> a instanceof Asserted.Elements(Asserted.Container stated,
+                    List<Asserted> elements)
+                    && stated != Asserted.Container.LIST && each(elements, s.element());
+            case Type.MapOf m -> {
+                if (!(a instanceof Asserted.Entries entries)) {
+                    yield false;
+                }
+                for (Asserted.Entry e : entries.entries()) {
+                    if (!states(e.key(), m.key()) || !states(e.value(), m.value())) {
+                        yield false;
+                    }
+                }
+                yield true;
+            }
+            case null, default -> true;
+        };
+    }
+
+    private boolean each(List<Asserted> elements, Type element) {
+        for (Asserted e : elements) {
+            if (!states(e, element)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The name a written value wears, or null where it wears none. */
+    private static TypeName named(Asserted a) {
+        return switch (a) {
+            case Asserted.Built built -> built.type();
+            case Asserted.Value(ObservedValue v) when v instanceof ObservedValue.Unit unit ->
+                    unit.type();
+            default -> null;
+        };
+    }
+
+    /** Whether a written value with no parts is how {@code name} is spelled. */
+    private static boolean spells(ObservedValue v, TypeName name) {
+        return switch (name.name()) {
+            case "Int" -> v instanceof ObservedValue.Integer;
+            case "String" -> v instanceof ObservedValue.Text;
+            case "Bool" -> v instanceof ObservedValue.Bool;
+            case "Decimal" -> v instanceof ObservedValue.Decimal || v instanceof ObservedValue.Integer;
+            case "Date", "Time", "DateTime", "Instant" -> v instanceof ObservedValue.Temporal;
+            default -> false;
+        };
     }
 
     /** Whether a type is one whose values have no parts, so a value of it is settled by the one value
@@ -1932,8 +2016,8 @@ public final class FixtureReader {
         return new ValueRendering(neutral).show(a);
     }
 
-    String shown(ObservedValue v) {
-        return new ValueRendering(neutral).show(v);
+    String shown(ObservedValue v, Type position) {
+        return new ValueRendering(neutral).show(v, position);
     }
 
     /** What a value is, named as the language names it. */
@@ -1941,8 +2025,8 @@ public final class FixtureReader {
         return new ValueRendering(neutral).typeShown(a);
     }
 
-    String typeShown(ObservedValue v) {
-        return new ValueRendering(neutral).typeShown(v);
+    String typeShown(ObservedValue v, Type position) {
+        return new ValueRendering(neutral).typeShown(v, position);
     }
 
     java.util.Optional<String> refuse(BoundaryInput at, Ast.Expr fixture) {

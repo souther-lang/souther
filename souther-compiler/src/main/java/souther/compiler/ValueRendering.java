@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -66,13 +67,47 @@ final class ValueRendering {
         return switch (a) {
             case Asserted.Value(ObservedValue v) -> typeShown(v);
             case Asserted.Built built -> built.type().name();
-            case Asserted.Elements elements ->
-                    elements.stated() == Asserted.Container.SET ? "a set" : "a collection";
+            case Asserted.Elements elements -> switch (elements.stated()) {
+                case SET -> "a set";
+                case LIST -> "a list";
+                case UNSTATED -> "a collection";
+            };
             case Asserted.Entries _ -> "a map";
         };
     }
 
-    /** The value as a row would write it. */
+    /** What came out, written the way a row writes one. {@code position} is what the behavior
+     *  declares here, which is the only thing that says whether a sequence is a list or a set — the
+     *  same reading the comparison used, handed on rather than worked out a second time. */
+    String show(ObservedValue v, Type position) {
+        Type open = NeutralForm.open(position);
+        if (v instanceof ObservedValue.Sequence s && open instanceof Type.SetOf set) {
+            List<String> out = new ArrayList<>();
+            for (ObservedValue e : s.elements()) {
+                out.add(show(e, set.element()));
+            }
+            return "Set.fromList(" + (out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]") + ")";
+        }
+        if (v instanceof ObservedValue.Sequence s && open instanceof Type.ListOf list) {
+            List<String> out = new ArrayList<>();
+            for (ObservedValue e : s.elements()) {
+                out.add(show(e, list.element()));
+            }
+            return out.isEmpty() ? "[]" : "[ " + String.join(", ", out) + " ]";
+        }
+        return show(v);
+    }
+
+    /** What came out is, named as the language names it, at the position that says what it is. */
+    String typeShown(ObservedValue v, Type position) {
+        Type open = NeutralForm.open(position);
+        if (v instanceof ObservedValue.Sequence) {
+            return open instanceof Type.SetOf ? "a set" : "a list";
+        }
+        return typeShown(v);
+    }
+
+    /** The value as a row would write it, where nothing says what its sequences are. */
     String show(ObservedValue v) {
         return switch (v) {
             case ObservedValue.Bool b -> String.valueOf(b.value());

@@ -734,7 +734,7 @@ public final class ExampleVerifier {
                 // they part: a row that wrote a name the answer does not wear differs at one position
                 // by its type, which reading two whole values does not say on its own.
                 out.add(mismatch(fixtures, row, fixtures.shown(asserted),
-                        fixtures.shown(fixtures.structured(result)), differs));
+                        fixtures.shown(fixtures.structured(result), sig.outputType()), differs));
                 state.failed(FailurePhase.COMPARISON);
                 return;
             }
@@ -1038,7 +1038,7 @@ public final class ExampleVerifier {
         if (differs != null && differs.reason() == ValueMatch.Reason.TYPE) {
             b.hint(new ExampleMessage.TheTwoAreOfDifferentTypes(differs.path(),
                     fixtures.typeShown(differs.asserted()),
-                    fixtures.typeShown(differs.observed())));
+                    fixtures.typeShown(differs.observed(), differs.position())));
         }
         if (row.description() != null) {
             b.hint(new ExampleMessage.WhatTheRowSaid(row.description()));
