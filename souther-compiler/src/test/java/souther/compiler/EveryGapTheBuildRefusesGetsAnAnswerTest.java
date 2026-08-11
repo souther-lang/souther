@@ -285,8 +285,11 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
         assertEquals("rows here are composed from what the input positions divide into, and nothing"
                         + " searches for one by the case it would answer with",
                 GenerationOutcome.NotSupported.Reason.NO_STRATEGY_FOR_AN_OUTPUT_CASE.said());
-        assertEquals("no axis was derived at the position this case belongs to, so there are no"
-                        + " classes here to compose a row from",
+        // A position past the axis limit has its cases in the declaration and in no partition, so
+        // what is missing is a derivation and not the classes. Said as there being none, the
+        // sentence is about the model again — the thing the other two stopped doing.
+        assertEquals("no axis was derived at the position this case belongs to, so no classes were"
+                        + " derived there to compose a row from",
                 GenerationOutcome.NotSupported.Reason.NO_AXIS_AT_THIS_POSITION.said());
     }
 

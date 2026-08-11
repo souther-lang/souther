@@ -48,10 +48,13 @@ public sealed interface GenerationOutcome {
          *
          * <p><b>Which the words have to carry too.</b> A sentence saying nothing composes an input
          * for an arm is read as there being no input that reaches it, and an author who writes the
-         * row in one line has been told something false — the row for a case somebody added to an
-         * enumeration is two lines, and this said no input for it could be composed (issue #643).
-         * So each of these says what is missing here, and what a reader does about it is write the
-         * row that this cannot.
+         * row by hand has been told something false (issue #643). So each of these says what is
+         * missing here, and what a reader does about it is write the row that this cannot.
+         *
+         * <p>Including where what is missing is upstream of the strategies. No axis at a position
+         * is no classes <em>derived</em> there, and the position may well have cases — the one this
+         * is written for is a sum past the axis limit, whose cases are in the declaration and in no
+         * partition. Said as there being no classes, it is the model that reads as having none.
          */
         public enum Reason {
 
@@ -67,7 +70,7 @@ public sealed interface GenerationOutcome {
 
             /** The position the case belongs to is not one any axis was derived at. */
             NO_AXIS_AT_THIS_POSITION("no axis was derived at the position this case belongs to, so"
-                    + " there are no classes here to compose a row from");
+                    + " no classes were derived there to compose a row from");
 
             private final String said;
 
