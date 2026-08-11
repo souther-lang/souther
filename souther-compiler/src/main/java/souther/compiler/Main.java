@@ -362,7 +362,7 @@ public final class Main {
             AdequacyReport report = assessed.only(module, behavior);
             if (assessable) {
                 SourceNameResolver names = namesOf(sources);
-                String rendered = render.json() ? report.json() + System.lineSeparator()
+                String rendered = render.json() ? report.json(names) + System.lineSeparator()
                         : report.human(names);
                 System.out.print(rendered);
                 // After the report, because the rows are what to do about what the report just said.

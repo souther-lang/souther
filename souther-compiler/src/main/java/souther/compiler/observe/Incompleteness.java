@@ -1,5 +1,6 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.DocumentSources;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;
 
@@ -94,6 +95,12 @@ public record Incompleteness(Code code, Target target, Optional<SourceRef> at) {
     /** The same, as a person is shown it — a source under the name {@code names} gives it. */
     public String shown(SourceNameResolver names) {
         return target.shown(names);
+    }
+
+    /** The same, as a document carries it, with a source registered as an identity that document has
+     *  to explain. */
+    public String carried(DocumentSources sources) {
+        return target.carried(sources);
     }
 
     public static Incompleteness of(Code code, Scope scope, String subject) {

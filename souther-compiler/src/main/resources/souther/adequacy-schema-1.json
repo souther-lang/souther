@@ -26,6 +26,11 @@
     "modules": {
       "type": "array",
       "items": { "$ref": "#/$defs/module" }
+    },
+    "sources": {
+      "type": "object",
+      "description": "What each source identity written elsewhere in this document is called, keyed on the identity. Every identity the document carries has an entry — a `source` subject, and the `sourceId` of every `at`. Not a list of what the compile was handed: a source this report says nothing about has no entry, so this says which files the report is about rather than which files were read. The names are the ones the same run's diagnostics use, which are chosen from the set of files in front of a reader and are neither stable across runs nor a key — which is why they are here and not in place of the identities. Not in `required`: a document written before this field existed is still a document of this version.",
+      "additionalProperties": { "type": "string" }
     }
   },
   "$defs": {
@@ -338,7 +343,7 @@
         },
         "subject": {
           "type": "string",
-          "description": "What the reason is about, as an identity. A `behavior`, a `module` and a `position` are named as the author wrote them. A `source` is named as the compile was handed it, which is the caller's own identity for the file and not a name to show a reader: a build passing a list of files gets that file's position in the list, and an editor keyed on document URIs gets the URI. What to call a source in front of a person is decided where a report is rendered, since it depends on which other files are being read beside it."
+          "description": "What the reason is about, as an identity. A `behavior`, a `module` and a `position` are named as the author wrote them. A `source` is named as the compile was handed it, which is the caller's own identity for the file and not a name to show a reader: a build passing a list of files gets that file's position in the list, and an editor keyed on document URIs gets the URI. What to call a source in front of a person is decided where a report is rendered, since it depends on which other files are being read beside it — and `sources` says what this run decided, so the identity can be looked up without holding what was handed over."
         },
         "at": { "$ref": "#/$defs/at" }
       }
@@ -349,7 +354,10 @@
       "required": ["sourceId", "line", "column"],
       "additionalProperties": false,
       "properties": {
-        "sourceId": { "type": "string" },
+        "sourceId": {
+          "type": "string",
+          "description": "The source, as an identity, read the way a `source` subject is. `sources` says what it is called."
+        },
         "line": { "type": "integer" },
         "column": { "type": "integer" }
       }

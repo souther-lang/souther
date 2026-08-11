@@ -2,7 +2,9 @@ package souther.compiler.report;
 
 import souther.compiler.ExampleVerifier;
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.DocumentSources;
 import souther.compiler.diag.SourceNameResolver;
+import souther.compiler.diag.SourceRef;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.InputCaseEvidence;
@@ -805,7 +807,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         return injected ? "injected" : "implemented";
     }
 
-    public String json() {
+    /**
+     * The report as a build reads it, explaining the source identities it carries.
+     *
+     * <p>The names are asked for here for the reason {@link #human} asks for them, and are put to a
+     * different use. What this document says about a source is said with the identity the caller
+     * handed the source over as, because that is what two runs compare on and what a name is not.
+     * That leaves the document unreadable on its own — a position in a list says nothing to anyone who
+     * does not also hold the list — so the identities are written and the {@code sources} table says
+     * what each of them was, and a consumer holding neither the argument list nor the editor's
+     * documents can still say which file a reason is about.
+     *
+     * <p>Which identities get an entry is not decided here. Everything that writes one asks
+     * {@link DocumentSources} for the string to write, so the table is what the document turned out to
+     * carry rather than a second list of the places an identity can appear.
+     */
+    public String json(SourceNameResolver names) {
+        DocumentSources sources = new DocumentSources(names);
         ObjectNode root = JSON.createObjectNode();
         root.put("schemaVersion", schemaVersion);
         root.put("compilerVersion", compilerVersion);
@@ -821,13 +839,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 ObjectNode g = gaps.addObject();
                 g.put("code", word(gap.code()));
                 g.put("scope", word(gap.scope()));
-                g.put("subject", gap.subject());
-                gap.at().ifPresent(where -> {
-                    ObjectNode at = g.putObject("at");
-                    at.put("sourceId", where.sourceId());
-                    at.put("line", where.pos().line());
-                    at.put("column", where.pos().column());
-                });
+                // Which subjects are a source's identity is the reason's own answer. A renderer that
+                // read the scope and decided for itself would be the same list of kinds again, kept
+                // in step with the sum by whoever remembered it was there.
+                g.put("subject", gap.carried(sources));
+                gap.at().ifPresent(where -> at(g, where, sources));
             }
             ArrayNode behaviors = m.putArray("behaviors");
             for (BehaviorReport behavior : module.behaviors()) {
@@ -839,10 +855,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 b.put("status", wire(behavior.status()));
                 signature(b, behavior.signature());
                 partition(b, behavior.partition());
-                branch(b, behavior.branch());
+                branch(b, behavior.branch(), sources);
             }
         }
+        // Last, because what it explains is what was written above it. Where a field sits in an
+        // object is nothing a reader of JSON reads, and collecting the identities first would mean
+        // walking the report twice to learn what writing it says anyway.
+        ObjectNode table = root.putObject("sources");
+        sources.table().forEach(table::put);
         return root.toPrettyString();
+    }
+
+    /**
+     * Where in which source, written once for everything that says it.
+     *
+     * <p>One writer for the shape, so that a source identity has one way into this document. It was
+     * spelled out at each of the two places that point into a source, which is two places to write a
+     * position and a line and two places to know that the id needs explaining — and a third would
+     * have been written the way the first two were.
+     */
+    private static void at(ObjectNode into, SourceRef where, DocumentSources sources) {
+        ObjectNode at = into.putObject("at");
+        at.put("sourceId", sources.written(where.sourceId()));
+        at.put("line", where.pos().line());
+        at.put("column", where.pos().column());
     }
 
     private static void signature(ObjectNode behavior, Adequacy.SignatureEvidence signature) {
@@ -944,7 +980,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
         partition.omitted().forEach(o -> omitted.add(o.axis().toString()));
     }
 
-    private static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch) {
+    private static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch,
+                               DocumentSources sources) {
         if (branch == null) {
             return;
         }
@@ -962,10 +999,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
             ObjectNode a = unreached.addObject();
             a.put("label", arm.label());
             a.put("kind", word(arm.kind()));
-            ObjectNode at = a.putObject("at");
-            at.put("sourceId", arm.at().sourceId());
-            at.put("line", arm.at().pos().line());
-            at.put("column", arm.at().pos().column());
+            at(a, arm.at(), sources);
         }
     }
 

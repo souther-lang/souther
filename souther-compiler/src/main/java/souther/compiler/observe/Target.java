@@ -1,5 +1,6 @@
 package souther.compiler.observe;
 
+import souther.compiler.diag.DocumentSources;
 import souther.compiler.diag.SourceNameResolver;
 
 /**
@@ -37,6 +38,19 @@ public sealed interface Target {
      */
     String shown(SourceNameResolver names);
 
+    /**
+     * The same, as a document carries it, telling {@code sources} about an identity it will have to
+     * explain.
+     *
+     * <p>Answered by the sum for the reason {@link #shown} is: a source is named by the caller and the
+     * rest are named by the author, and only the kinds know which. A document carries the identity —
+     * that is what makes two statements about one file the same statement — so this writes what
+     * {@link #subject} does, and the difference is that a source's is registered rather than merely
+     * written. A renderer deciding that for itself would be a list of the subjects that are sources,
+     * kept in step with this one by hand.
+     */
+    String carried(DocumentSources sources);
+
     /** Which kind of thing {@link #subject} identifies. */
     Incompleteness.Scope scope();
 
@@ -64,6 +78,11 @@ public sealed interface Target {
 
         @Override
         public String shown(SourceNameResolver names) {
+            return behavior;
+        }
+
+        @Override
+        public String carried(DocumentSources sources) {
             return behavior;
         }
 
@@ -101,6 +120,11 @@ public sealed interface Target {
         }
 
         @Override
+        public String carried(DocumentSources sources) {
+            return sources.written(sourceId);
+        }
+
+        @Override
         public Incompleteness.Scope scope() {
             return Incompleteness.Scope.SOURCE;
         }
@@ -125,6 +149,11 @@ public sealed interface Target {
         }
 
         @Override
+        public String carried(DocumentSources sources) {
+            return module;
+        }
+
+        @Override
         public Incompleteness.Scope scope() {
             return Incompleteness.Scope.MODULE;
         }
@@ -145,6 +174,11 @@ public sealed interface Target {
 
         @Override
         public String shown(SourceNameResolver names) {
+            return subject();
+        }
+
+        @Override
+        public String carried(DocumentSources sources) {
             return subject();
         }
 
