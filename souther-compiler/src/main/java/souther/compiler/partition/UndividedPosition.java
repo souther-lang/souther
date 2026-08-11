@@ -50,7 +50,21 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         UNSUPPORTED_PARTITION_SHAPE,
         /** The walk stopped before it reached the fields under this position. */
-        DEPTH_LIMIT
+        DEPTH_LIMIT,
+        /**
+         * The type at this position could not be interpreted, so nothing about its values is
+         * established. A model carrying one compiles, which is why this is a word a report writes
+         * rather than a state nothing reaches.
+         */
+        TYPE_UNRESOLVED,
+        /**
+         * The position holds its values inside something this does not reach into — the elements of
+         * a collection, what an optional holds, what a map holds. One word for all of them: which
+         * reaching is missing is a fact about this compiler, and the model reads the same either
+         * way. What this compiler could not do is told apart internally
+         * ({@link BlockReason.UnsupportedTraversal}).
+         */
+        UNSUPPORTED_TRAVERSAL
     }
 
     public static UndividedPosition absent(TermPath at) {

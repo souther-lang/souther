@@ -44,7 +44,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
      * @param obligations lines some rule drew that a row is owed at
      * @param unread      what stopped a rule being read, or null where nothing did
      */
-    private record Measured(int axes, int obligations, String unread) {}
+    private record Measured(int axes, int obligations, UndividedPosition.Reason unread) {}
 
     /** A carrier read all the way through: an axis, the line and the value beside it where the
      *  values step, and nothing left unread. */
@@ -418,23 +418,12 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
         for (String behavior : behaviors) {
             PartitionEvidence evidence = coverage.get(behavior);
             assertNotNull(evidence, behavior + " was measured");
-            String unread = evidence.unread().isEmpty() ? null
-                    : said(evidence.unread().get(0).why());
+            UndividedPosition.Reason unread = evidence.unread().isEmpty() ? null
+                    : evidence.unread().get(0).why();
             out.put(behavior, new Measured(evidence.axes().size(),
                     evidence.boundaries().size(), unread));
         }
         return out;
-    }
-
-    /** The reason as the report writes it, so a cell says what an author would read. */
-    private static String said(UndividedPosition.Reason reason) {
-        return switch (reason) {
-            case UNSUPPORTED_SYNTAX -> "a comparison here is written in a form this does not read";
-            case UNSUPPORTED_DOMAIN -> "it is compared against values no line can be drawn on here";
-            case UNSUPPORTED_PARTITION_SHAPE ->
-                    "the comparison relates it to another position rather than dividing it";
-            case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
-        };
     }
 
     /**

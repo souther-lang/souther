@@ -1602,6 +1602,9 @@ public final class Adequacy {
                 case UNSUPPORTED_PARTITION_SHAPE ->
                         "the comparison relates it to another position rather than dividing it";
                 case DEPTH_LIMIT -> "the walk stopped before reaching what is under it";
+                case TYPE_UNRESOLVED -> "its type could not be worked out here";
+                case UNSUPPORTED_TRAVERSAL ->
+                        "its values are held inside something this does not reach into";
             };
         }
 
