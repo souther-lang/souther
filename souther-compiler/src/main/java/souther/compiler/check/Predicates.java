@@ -228,9 +228,26 @@ final class Predicates {
         return obligations(inv, k, at, unnamed, true, decidesFalse);
     }
 
+    /**
+     * A clause is read as the comparison it states, and where an order call states one there are two
+     * readings of it: the order the call decides, and the bound on the sign that decides it. Which of
+     * them this construction can be read against is not known until it is read — a date the check can
+     * name is one thing, and the date a day after it is another — so the one that answers is the one
+     * taken. Reading a predicate never takes a reading away.
+     */
     private Owed obligations(Core rawInv, Known k, Denotations at, Set<Core> unnamed,
                              boolean positive, boolean decidesFalse) {
-        Core inv = asSizeComparison(rawInv);
+        Core sized = asSizeComparison(rawInv);
+        Core ordered = asOrderComparison(sized, at);
+        Owed read = read(ordered, k, at, unnamed, positive, decidesFalse);
+        return ordered != sized && read.unreadable()
+                ? read(sized, k, at, unnamed, positive, decidesFalse) : read;
+    }
+
+    /** What {@code inv} owes, read as it stands. Its parts are read through {@link #obligations},
+     * which is where each of them is taken as the comparison it states. */
+    private Owed read(Core inv, Known k, Denotations at, Set<Core> unnamed,
+                      boolean positive, boolean decidesFalse) {
         if (inv instanceof Core.Binary b && b.op() == Ast.BinOp.AND && positive) {
             // Each conjunct on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
@@ -298,6 +315,13 @@ final class Predicates {
      * outside the affine fragment, leave {@code k} unchanged (sound). */
     Known assumeCond(Core rawCond, Known k, Denotations at, boolean positive) {
         Core cond = asSizeComparison(rawCond);
+        Core ordered = asOrderComparison(cond, at);
+        if (ordered != cond) {
+            // Both hold of the same values: the order the call decides, and the bound on the sign
+            // that decides it. Which one a clause is read against is settled where the clause is
+            // read, so a guard states each of them rather than choosing here.
+            k = assumeCond(ordered, k, at, positive);
+        }
         // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
         if (cond instanceof Core.Binary b
                 && (b.op() == Ast.BinOp.AND && positive || b.op() == Ast.BinOp.OR && !positive)) {
@@ -672,6 +696,67 @@ final class Predicates {
                 default -> null;
             };
         }
+    }
+
+    /**
+     * A comparison against zero of an operation answering an order, as the comparison of the two
+     * values it orders — or {@code e} unchanged.
+     *
+     * <p>What such an operation answers is a sign ({@link DischargeRules#orderStatedBy}), so where
+     * its answer stands against zero the comparison is between the two arguments themselves. One
+     * account: the relation is the one written, taken between the argument a positive answer says is
+     * the greater and the other one, so the six relations and the two sides of the zero are all read
+     * from the row the library's operation has rather than from a case for each.
+     *
+     * <p>Only against zero. A sign compared with anything else bounds how far the answer is from
+     * zero, which is a statement about the number and not about the order it decides.
+     *
+     * <p>And only where both values are ones this check can name. The sign is a number the domain
+     * carries whatever it is the order of, so a comparison of two values it cannot name is less than
+     * what it already had: a clause reading {@code daysBetween(acquiredOn, lostOn) >= 0} is a bound
+     * on that count, and rewriting it into a comparison of two dates the check cannot relate would
+     * leave the clause unreadable — a construction dropped from the check where it had been reported.
+     * Reading a predicate never takes a reading away.
+     */
+    Core asOrderComparison(Core e, Denotations at) {
+        if (!(e instanceof Core.Binary b) || relOf(b.op()) == null) {
+            return e;
+        }
+        boolean callFirst = b.left() instanceof Core.PreservedCall;
+        Core side = callFirst ? b.left() : b.right();
+        Core zero = callFirst ? b.right() : b.left();
+        if (!(side instanceof Core.PreservedCall call) || call.args().size() != 2
+                || !isZero(zero)) {
+            return e;
+        }
+        DischargeRules.PositiveOrder positive = DischargeRules.orderStatedBy(call.operation());
+        if (positive == null
+                || terms.bodyKey(call.args().get(0), at) == null
+                || terms.bodyKey(call.args().get(1), at) == null) {
+            return e;
+        }
+        // The relation the source wrote, read from the sign's side of the zero, and between the
+        // arguments in the order this operation counts them.
+        Ast.BinOp written = callFirst ? b.op() : mirrored(b.op());
+        return comparison(written, positive.greaterOf(call), positive.lesserOf(call), b);
+    }
+
+    /** Whether {@code e} is the number zero as written. */
+    private static boolean isZero(Core e) {
+        return e instanceof Core.Int i && i.value() == 0
+                || e instanceof Core.Decimal d && d.value().signum() == 0;
+    }
+
+    /** {@code op} with its two sides exchanged: what the same fact is called when it is written the
+     * other way round. */
+    static Ast.BinOp mirrored(Ast.BinOp op) {
+        return switch (op) {
+            case LT -> Ast.BinOp.GT;
+            case GT -> Ast.BinOp.LT;
+            case LE -> Ast.BinOp.GE;
+            case GE -> Ast.BinOp.LE;
+            default -> op;
+        };
     }
 
     /** An emptiness check as the comparison it means, or {@code e} unchanged. */

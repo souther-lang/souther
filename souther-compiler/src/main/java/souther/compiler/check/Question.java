@@ -214,6 +214,35 @@ enum Question {
         }
     },
 
+    /**
+     * Whether it answers the order of its two arguments ({@link DischargeRules#decidesOrder}). Asked
+     * of an operation answering an {@code Int} from two values of one type — which is what an order
+     * is answered from, whatever the values are ordered by.
+     */
+    ORDER("whether it answers the order of its two arguments") {
+        @Override
+        boolean asksOf(Prelude.Signature signature) {
+            return signature.result() == Type.Prim.INT
+                    && signature.params().size() == 2
+                    && signature.params().get(0).equals(signature.params().get(1));
+        }
+
+        @Override
+        boolean answeredFor(ValueName operation) {
+            return DischargeRules.decidesOrder(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.orderings();
+        }
+
+        @Override
+        Set<ValueName> nothingSaidOf() {
+            return DischargeRules.DECIDES_NO_ORDER;
+        }
+    },
+
     /** Which operator it is the function form of ({@link DischargeRules#operator}). Asked of an
      * operation over two numbers answering a number of the same kind. */
     OPERATOR("which operator it computes") {

@@ -440,7 +440,14 @@ class CompileHelperBodyTypingTest {
                 let f (x) = call(x)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertInstanceOf(BehaviorMessage.ABehaviorCannotBeCalledFromHere.class, e.diagnostic().said(), e.getMessage());
+        // Which of the errors leads is where in the source it is, so what this test is about is that
+        // the call is what the author is told about and the annotation is never asked for.
+        assertTrue(e.diagnostics().stream()
+                        .anyMatch(d -> d.said() instanceof BehaviorMessage.ABehaviorCannotBeCalledFromHere),
+                e.getMessage());
+        assertTrue(e.diagnostics().stream()
+                        .noneMatch(d -> d.said() instanceof HelperMessage.AParameterNeedsItsType),
+                e.getMessage());
     }
 
     @Test
@@ -610,10 +617,13 @@ class CompileHelperBodyTypingTest {
     void aLyingReturnTypeIsRejectedOnABodyTypedParameter() {
         // The declared return type is checked against the body on the completed environment, whether
         // the parameter was written or determined by the body.
+        // `f` passes its input through, so its `constructs` is left off: declaring one it does not
+        // build is an error of its own (E1006), and a fixture carrying two errors says nothing about
+        // which of them this test is for.
         String src = """
                 module demo
                 data X = Int
-                behavior f : (x: X) -> X constructs X
+                behavior f : (x: X) -> X
                 let g (n): String = n * 2
                 let f (x) = x
                 """;

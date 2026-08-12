@@ -362,6 +362,71 @@ final class DischargeRules {
             op("Int", "min"), op("Int", "max"), op("Int", "floorMod"), op("Int", "compare"),
             op("Decimal", "min"), op("Decimal", "max"));
 
+    /**
+     * Which of the two arguments a positive answer names as the greater. That is the whole of what a
+     * row of {@link #ORDERS} says, and it is two cases, so it is written as a type with two — not as
+     * one of the language's operators, which would say the same thing in a type where most of the
+     * values say nothing and the ones that do have to be agreed on somewhere else.
+     *
+     * <p>Each case carries the two positions itself, since which argument is the lesser is settled by
+     * which is the greater and there is no reading where the two are chosen apart.
+     */
+    enum PositiveOrder {
+        FIRST_ARGUMENT_GREATER(0, 1),
+        SECOND_ARGUMENT_GREATER(1, 0);
+
+        private final int greater;
+        private final int lesser;
+
+        PositiveOrder(int greater, int lesser) {
+            this.greater = greater;
+            this.lesser = lesser;
+        }
+
+        /** The argument of {@code call} a positive answer names as the greater. */
+        Core greaterOf(Core.PreservedCall call) {
+            return call.args().get(greater);
+        }
+
+        /** The other one. */
+        Core lesserOf(Core.PreservedCall call) {
+            return call.args().get(lesser);
+        }
+    }
+
+    /**
+     * The operations answering the order of their two arguments as the sign of a number, and which
+     * argument a positive answer names as the greater. Zero states the equality, and a negative
+     * answer the relation the other way, so one row is the whole of what such an operation says.
+     *
+     * <p>Which relation a guard writing one states then follows from where the sign stands against
+     * zero and from nothing else, so the six relations and the two operand orders are one account
+     * rather than twelve rows ({@link Predicates#asOrderComparison}). The direction is not the same
+     * for all of them: {@code compare(a, b)} is positive where {@code a} is the greater, and
+     * {@code daysBetween(from, to)} counts forward from its first argument, so it is positive where
+     * the second one is.
+     */
+    private static final Map<ValueName, PositiveOrder> ORDERS = Map.of(
+            op("Int", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
+            op("Decimal", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
+            op("Date", "daysBetween"), PositiveOrder.SECOND_ARGUMENT_GREATER);
+
+    /**
+     * The operations answering a number from two values of one type whose sign is not their order.
+     *
+     * <p>Arithmetic and a choice between two values are not orders at all: what {@code Int.subtract}
+     * answers has the sign of one and says how far apart they are as well, which is what a term
+     * already reads it as, and {@code min} answers one of the two rather than anything about the
+     * pair. {@code DateTime.minutesBetween} is the one that has to be told apart: it counts whole
+     * minutes, so a zero says the two are less than a minute apart rather than that they are equal,
+     * and a non-negative count does not say the second is not the earlier. Its strict signs do state
+     * the order, and a rule that holds for four of the six relations is not this one.
+     */
+    static final Set<ValueName> DECIDES_NO_ORDER = Set.of(
+            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+            op("Int", "min"), op("Int", "max"), op("Int", "floorMod"),
+            op("DateTime", "minutesBetween"));
+
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool", "not");
 
@@ -427,6 +492,10 @@ final class DischargeRules {
 
     static Set<ValueName> operatorForms() {
         return OPERATOR_CALLS.keySet();
+    }
+
+    static Set<ValueName> orderings() {
+        return ORDERS.keySet();
     }
 
     /** Those of them the building table has, by name, for the test that holds each to a construction
@@ -592,6 +661,17 @@ final class DischargeRules {
     /** The operator {@code operation} is, where it is one written as a function, else null. */
     static Ast.BinOp operator(ValueName operation) {
         return OPERATOR_CALLS.get(operation);
+    }
+
+    /** Which argument a positive answer from {@code operation} names as the greater, or null where
+     * its sign is not an order. */
+    static PositiveOrder orderStatedBy(ValueName operation) {
+        return ORDERS.get(operation);
+    }
+
+    /** Whether {@code operation} answers the order of its two arguments as a sign. */
+    static boolean decidesOrder(ValueName operation) {
+        return ORDERS.containsKey(operation);
     }
 
     /** Whether the check has a rule about what a call answers, rather than only about how to render
