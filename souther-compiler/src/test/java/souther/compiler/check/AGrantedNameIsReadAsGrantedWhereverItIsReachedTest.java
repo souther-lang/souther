@@ -17,14 +17,23 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  *
  * <p>What tells a lack of its own from one answering for another is the supposing: take a
  * declaration to have values and see what is still without them. The supposing is only as good as
- * the readings that honour it, and a declaration is reached in more ways than one — the answer said
- * of it, the rules it wrote that are read wherever it is held, and the shape under the name it wears.
- * A reading that honours two of the three undoes the supposing at the third, and what comes back is
- * a declaration reported for a lack that is not its own.
+ * the readings that honour it, and there are three of those.
  *
- * <p>So this is held of the reading rather than of the report. Each model below is one where the
- * reader has no value while nothing is granted — the row would say nothing otherwise — and a value
- * once the one it reaches is granted one.
+ * <pre>
+ * the count       what the solution says of the name is UNKNOWN
+ * the rules       the seeding stops at the name: neither what it wrote nor
+ *                 anything guaranteed under it is read
+ * the shape       the name is not opened onto what it wraps
+ * </pre>
+ *
+ * <p>Which of them a model needs depends on how one declaration reaches another. A case of a sum and
+ * a member of a union read the count and nothing else. A field, a value a collection holds, and a
+ * count taken beside one go through the rules as well. A name worn over a value needs all three.
+ *
+ * <p>A reading that honours two of them undoes the supposing at the third, and what comes back is a
+ * declaration reported for a lack that is not its own. So this is held of the reading rather than of
+ * the report: each model below is one where the reader has no value while nothing is granted — the
+ * row would say nothing otherwise — and a value once the one it reaches is granted one.
  */
 class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 

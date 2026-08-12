@@ -1623,14 +1623,16 @@ public final class InvariantChecker {
     private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
                          Set<TypeName> onPath,
                          java.util.function.BiConsumer<TypeName, Core> onClause, Reach reach) {
+        // Read before the path is entered, so that the one name and the other stay paired: a stop
+        // taken after entering would leave the name on the path with nothing to take it off, and the
+        // next field of the same type would be passed over as one already read. Supposed to hold
+        // values, so nothing written under it is read: what is under it is what would say it holds
+        // none, and reading it here is the supposing undone one step in.
         if (depth > limit || !(root.type() instanceof Type.Ref ref)
-                || !(symbols.get(ref.name()) instanceof Ast.Data data)
-                || !onPath.add(ref.name())) {
+                || reach.stopAt().test(ref.name())) {
             return k;
         }
-        if (reach.stopAt().test(ref.name())) {
-            // Supposed to hold values, so nothing written under it is read: what is under it is what
-            // would say it holds none, and reading it here is the supposing undone one step in.
+        if (!(symbols.get(ref.name()) instanceof Ast.Data data) || !onPath.add(ref.name())) {
             return k;
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
