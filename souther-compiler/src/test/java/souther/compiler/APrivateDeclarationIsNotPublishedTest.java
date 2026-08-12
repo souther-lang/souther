@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.check.Prelude;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;

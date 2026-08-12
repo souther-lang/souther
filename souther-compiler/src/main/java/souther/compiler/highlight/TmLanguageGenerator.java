@@ -1,6 +1,6 @@
 package souther.compiler.highlight;
 
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.IdentifierAlphabet;
 import souther.compiler.editor.EditorSymbols;

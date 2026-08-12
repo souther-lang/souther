@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

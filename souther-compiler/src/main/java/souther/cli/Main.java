@@ -1,5 +1,7 @@
-package souther.compiler;
+package souther.cli;
 
+import souther.compiler.Compiler;
+import souther.compiler.Reserved;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.CompileException;

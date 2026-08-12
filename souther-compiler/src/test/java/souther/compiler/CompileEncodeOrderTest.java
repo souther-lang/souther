@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.cli.Runner;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.math.BigDecimal;

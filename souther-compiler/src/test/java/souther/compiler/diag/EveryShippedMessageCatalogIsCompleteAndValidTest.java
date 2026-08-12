@@ -9,7 +9,7 @@ import souther.compiler.diag.msg.MessageValues;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 
 import java.io.BufferedReader;
 import java.io.IOException;

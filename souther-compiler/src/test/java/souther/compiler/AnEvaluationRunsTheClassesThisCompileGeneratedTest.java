@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.examples.MemoryClassLoader;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;

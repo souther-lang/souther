@@ -1,5 +1,10 @@
 package souther.compiler;
 
+import souther.cli.Main;
+import souther.compiler.examples.Deadline;
+import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.examples.ExampleStatements;
+import souther.compiler.examples.ExampleVerifier;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;

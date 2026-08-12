@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.MemoryClassLoader;
+import souther.compiler.examples.MemoryClassLoader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
@@ -454,9 +454,9 @@ public final class Output {
      * compiles in one JVM may differ and so that a long-lived one — a build daemon, an editor's
      * language server — is not held for its whole life to whatever the first compile in it read.
      */
-    public static souther.compiler.EvaluationPolicy policyOf(Db db) {
-        souther.compiler.EvaluationPolicy said = db.ask(new Front.Policy()).value();
-        return said == null ? souther.compiler.EvaluationPolicy.DEFAULT : said;
+    public static souther.compiler.examples.EvaluationPolicy policyOf(Db db) {
+        souther.compiler.examples.EvaluationPolicy said = db.ask(new Front.Policy()).value();
+        return said == null ? souther.compiler.examples.EvaluationPolicy.DEFAULT : said;
     }
 
     /**
@@ -466,10 +466,10 @@ public final class Output {
      * it is for is stating that a particular row does not come back, rather than writing a model
      * that does not come back and racing a clock to observe it.
      */
-    static souther.compiler.Deadline deadlineOf(Db db) {
-        souther.compiler.Deadline said = db.ask(new Front.ExampleDeadline()).value();
+    static souther.compiler.examples.Deadline deadlineOf(Db db) {
+        souther.compiler.examples.Deadline said = db.ask(new Front.ExampleDeadline()).value();
         return said != null ? said
-                : souther.compiler.Deadline.ofMillis(exampleBudgetMs(db),
+                : souther.compiler.examples.Deadline.ofMillis(exampleBudgetMs(db),
                         policyOf(db).workerStackBytes());
     }
 
@@ -594,7 +594,7 @@ public final class Output {
      * disagreements says that with the same empty list it says agreement with.
      */
     public record Disagreements(String name)
-            implements Key<souther.compiler.ExampleStatements.Readings> {
+            implements Key<souther.compiler.examples.ExampleStatements.Readings> {
 
         @Override
         public String module() {
@@ -602,7 +602,7 @@ public final class Output {
         }
 
         @Override
-        public Answer<souther.compiler.ExampleStatements.Readings> compute(Db db) {
+        public Answer<souther.compiler.examples.ExampleStatements.Readings> compute(Db db) {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -611,7 +611,7 @@ public final class Output {
             }
             if (db.ask(new Bodies.Checked(name)).value() == null) {
                 // a module that did not check states nothing yet
-                return Answer.of(souther.compiler.ExampleStatements.Readings.NONE);
+                return Answer.of(souther.compiler.examples.ExampleStatements.Readings.NONE);
             }
             Map<String, byte[]> classes =
                     db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
@@ -627,7 +627,7 @@ public final class Output {
             // `requirements` is asked for above as a readiness condition — a module whose
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
-            return Answer.of(souther.compiler.ExampleStatements.disagreements(prepared.value(),
+            return Answer.of(souther.compiler.examples.ExampleStatements.disagreements(prepared.value(),
                     scope.value(), sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     deadlineOf(db), policyOf(db)));
@@ -670,17 +670,17 @@ public final class Output {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            souther.compiler.ExampleStatements.Readings read =
+            souther.compiler.examples.ExampleStatements.Readings read =
                     db.ask(new Disagreements(name)).value();
             if (read == null) {
                 return Answer.of(true);
             }
             List<Report> reports = new ArrayList<>();
-            for (souther.compiler.ExampleStatements.Disagreement d : read.disagreements()) {
+            for (souther.compiler.examples.ExampleStatements.Disagreement d : read.disagreements()) {
                 reports.add(Report.saidAt(said(d),
                         Report.Delivery.atEveryRegionOf(d.recorded().sourceId())));
             }
-            for (souther.compiler.ExampleStatements.UnreadFake f : read.unread()) {
+            for (souther.compiler.examples.ExampleStatements.UnreadFake f : read.unread()) {
                 reports.add(Report.saidAt(unread(f),
                         Report.Delivery.atEveryRegionOf(f.at().sourceId())));
             }
@@ -688,10 +688,10 @@ public final class Output {
         }
 
         /** One fake that could not be read: the caret on the behavior it names, and what stopped. */
-        private static Diagnostic unread(souther.compiler.ExampleStatements.UnreadFake f) {
+        private static Diagnostic unread(souther.compiler.examples.ExampleStatements.UnreadFake f) {
             // Which of the three it was travels into the message, because what to do about them
             // differs — and one of them is not about the model at all.
-            souther.compiler.ExampleStatements.Unread why = f.why();
+            souther.compiler.examples.ExampleStatements.Unread why = f.why();
             Diagnostic.Builder said = Diagnostic.at(f.at().pos(), f.width())
                     .say(why.isDepth()
                             ? new ExampleMessage.NotComparedTheTableReachedItsDepthLimit(
@@ -716,9 +716,9 @@ public final class Output {
 
         /** One disagreement: the caret on the recorded row, a second region on the stand-in in
          * whichever file it was written in, and what each of them answers. */
-        private static Diagnostic said(souther.compiler.ExampleStatements.Disagreement d) {
-            souther.compiler.ExampleStatements.Statement recorded = d.recorded();
-            souther.compiler.ExampleStatements.Statement standIn = d.standIn();
+        private static Diagnostic said(souther.compiler.examples.ExampleStatements.Disagreement d) {
+            souther.compiler.examples.ExampleStatements.Statement recorded = d.recorded();
+            souther.compiler.examples.ExampleStatements.Statement standIn = d.standIn();
             boolean viaWith = d.viaWith();
             // The second region names its source only when that is another file: within one file
             // there is nothing to say, and the renderer would quote the same name twice.
@@ -850,7 +850,7 @@ public final class Output {
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
             // As above: `requirements` says this module is ready to be read, not what to read.
-            return souther.compiler.ExampleStatements.fakeTables(prepared.value(), scope.value(),
+            return souther.compiler.examples.ExampleStatements.fakeTables(prepared.value(), scope.value(),
                     sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     deadlineOf(db), policyOf(db));
@@ -900,8 +900,8 @@ public final class Output {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.ModuleDefinitions(name)).value();
-            souther.compiler.ExampleVerifier.Observations observed =
-                    souther.compiler.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
+            souther.compiler.examples.ExampleVerifier.Observations observed =
+                    souther.compiler.examples.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
                             requirements, evaluationLoader(db),
                             values == null ? Map.of() : values, sourceId, deadlineOf(db),
                             policyOf(db));

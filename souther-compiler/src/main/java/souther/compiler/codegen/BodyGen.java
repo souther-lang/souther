@@ -6,7 +6,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.DiagnosticCode;
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CheckContext;
 import souther.compiler.check.Elaborator;

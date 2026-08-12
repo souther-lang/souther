@@ -1,9 +1,9 @@
 package souther.compiler.query;
 
+import souther.compiler.Compiler;
 import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
-import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;

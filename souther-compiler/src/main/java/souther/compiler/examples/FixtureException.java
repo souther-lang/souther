@@ -1,4 +1,6 @@
-package souther.compiler;
+package souther.compiler.examples;
+
+import souther.compiler.check.Prelude;
 
 /**
  * A fixture an {@code example} writes cannot be built: an unsupported form, a value that breaks the

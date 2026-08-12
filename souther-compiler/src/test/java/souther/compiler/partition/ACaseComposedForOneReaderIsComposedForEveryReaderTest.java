@@ -1,7 +1,7 @@
 package souther.compiler.partition;
 
+import souther.cli.Main;
 import org.junit.jupiter.api.Test;
-import souther.compiler.Main;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Symbols;

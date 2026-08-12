@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.examples;
 
 import org.junit.jupiter.api.Test;
 

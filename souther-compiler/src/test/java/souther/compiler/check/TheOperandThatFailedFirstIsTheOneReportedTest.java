@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.Compiler;
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.diag.Located;
 
 import org.junit.jupiter.api.Test;

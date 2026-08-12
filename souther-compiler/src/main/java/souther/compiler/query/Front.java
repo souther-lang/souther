@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -84,11 +84,11 @@ public final class Front {
      * row evaluated, or one written statement read to compare it against another.
      *
      * <p>Not what decides a row. What a row is held to is counted
-     * ({@link souther.compiler.EvaluationPolicy#stepLimit}), and this is the wait after which an
+     * ({@link souther.compiler.examples.EvaluationPolicy#stepLimit}), and this is the wait after which an
      * evaluation that has stopped answering is given up on — which is reported as the compiler
      * failing to decide, not as the model failing to terminate.
      *
-     * <p>Absent means {@link souther.compiler.EvaluationPolicy#outerTimeout}. Nothing but a caller
+     * <p>Absent means {@link souther.compiler.examples.EvaluationPolicy#outerTimeout}. Nothing but a caller
      * with a reason to differ has to know this exists.
      */
     public record ExampleBudget() implements Input<Long> {}
@@ -104,7 +104,7 @@ public final class Front {
      * that does finish is reported as work that did not. A deadline that decides by what the work is
      * lets the test state the fact instead.
      */
-    public record ExampleDeadline() implements Input<souther.compiler.Deadline> {}
+    public record ExampleDeadline() implements Input<souther.compiler.examples.Deadline> {}
 
     /**
      * What this compilation allows one row's evaluation: the steps and the depth that decide it, and
@@ -116,9 +116,9 @@ public final class Front {
      * a setting was written for is not the one that reads it. Held as an input, it belongs to the
      * compilation, and two of them in one JVM may differ.
      *
-     * <p>Absent means {@link souther.compiler.EvaluationPolicy#DEFAULT}.
+     * <p>Absent means {@link souther.compiler.examples.EvaluationPolicy#DEFAULT}.
      */
-    public record Policy() implements Input<souther.compiler.EvaluationPolicy> {}
+    public record Policy() implements Input<souther.compiler.examples.EvaluationPolicy> {}
 
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
      * what comes back names this source, so a writing that later joins another file's module still

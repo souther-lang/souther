@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.examples;
 
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;

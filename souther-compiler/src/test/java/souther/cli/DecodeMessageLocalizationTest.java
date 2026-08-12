@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.cli;
 
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Issues;

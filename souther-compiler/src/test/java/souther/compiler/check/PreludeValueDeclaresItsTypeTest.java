@@ -1,8 +1,7 @@
-package souther.compiler;
+package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
-import souther.compiler.check.Symbols;
 import souther.compiler.diag.SourcePos;
 
 import org.junit.jupiter.api.Test;

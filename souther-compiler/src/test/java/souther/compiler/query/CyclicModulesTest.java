@@ -1,7 +1,7 @@
 package souther.compiler.query;
 
-import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 

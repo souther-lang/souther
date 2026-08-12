@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Located;
+import souther.compiler.examples.Deadline;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Adequacy;

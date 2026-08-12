@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.cli.Runner;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.TypeMessage;

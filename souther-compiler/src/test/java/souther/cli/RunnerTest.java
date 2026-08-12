@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -242,7 +242,8 @@ class RunnerTest {
         Runner.RunException e = assertThrows(Runner.RunException.class,
                 () -> Runner.run(file, "hidden", "\"x\""));
         assertTrue(e.getMessage().contains("not exposed"), e.getMessage());
-        assertFalse(e.getMessage().contains("souther.compiler"), e.getMessage());
+        assertFalse(e.getMessage().contains("souther.compiler")
+                || e.getMessage().contains("souther.cli"), e.getMessage());
     }
 
     @Test
@@ -258,7 +259,8 @@ class RunnerTest {
         Runner.RunException e = assertThrows(Runner.RunException.class,
                 () -> Runner.run(file, null, "{\"body\":\"b\"}"));
         assertTrue(e.getMessage().contains("exposes"), e.getMessage());
-        assertFalse(e.getMessage().contains("souther.compiler"), e.getMessage());
+        assertFalse(e.getMessage().contains("souther.compiler")
+                || e.getMessage().contains("souther.cli"), e.getMessage());
     }
 
     @Test

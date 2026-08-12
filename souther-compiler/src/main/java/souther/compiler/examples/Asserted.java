@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.examples;
 
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeName;

@@ -1,14 +1,10 @@
-package souther.compiler;
+package souther.compiler.check;
 
-import souther.compiler.check.Registry;
-import souther.compiler.check.Resolve;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
-import souther.compiler.check.TypeOps;
 import souther.compiler.frontend.CstFrontend;
 
 import java.io.IOException;

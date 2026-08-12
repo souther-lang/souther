@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.examples;
 
 /**
  * Evaluating a row did not finish: a `partial` recursion it reaches may not terminate. Reported as its

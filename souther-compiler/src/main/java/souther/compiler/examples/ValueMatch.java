@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.examples;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.observe.ObservedValue;

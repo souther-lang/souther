@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.examples.FixtureShape;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.query.Compilation;

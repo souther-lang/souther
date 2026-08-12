@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.cli;
 
 import souther.compiler.query.Compilation;
 

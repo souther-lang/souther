@@ -1,6 +1,6 @@
 package souther.compiler.doc;
 
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 
 import org.junit.jupiter.api.Test;
 

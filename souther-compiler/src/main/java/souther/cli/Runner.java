@@ -1,5 +1,7 @@
-package souther.compiler;
+package souther.cli;
 
+import souther.compiler.Compiler;
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
@@ -88,7 +90,7 @@ public final class Runner {
      * the catalog for the locale the command line selected. The runner is a user surface, so its
      * failures are read in the same language as the compiler's diagnostics.
      */
-    static final class RunException extends RuntimeException {
+    public static final class RunException extends RuntimeException {
         final int exitCode;
         private final String messageKey;
         private final Object[] args;

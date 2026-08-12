@@ -1,8 +1,8 @@
 package souther.compiler.fmt;
 
+import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.Main;
 import souther.compiler.fmt.Deviations;
 
 import java.io.IOException;

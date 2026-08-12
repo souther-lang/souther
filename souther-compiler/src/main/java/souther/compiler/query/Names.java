@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.check.HelperInliner;

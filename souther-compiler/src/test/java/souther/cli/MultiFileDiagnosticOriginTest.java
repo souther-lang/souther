@@ -1,5 +1,6 @@
-package souther.compiler;
+package souther.cli;
 
+import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.HumanRenderer;

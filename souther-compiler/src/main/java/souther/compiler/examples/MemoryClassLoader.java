@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.compiler.examples;
 
 import java.util.Map;
 import java.util.function.Supplier;

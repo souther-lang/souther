@@ -1,5 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.examples.Deadline;
+import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.examples.ExampleStatements;
 import java.time.Duration;
 import java.util.function.Predicate;
 

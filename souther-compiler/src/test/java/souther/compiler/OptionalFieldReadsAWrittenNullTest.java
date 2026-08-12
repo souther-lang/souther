@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.cli.Runner;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;

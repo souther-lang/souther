@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.TypeName;
 

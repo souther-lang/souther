@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Compilation;

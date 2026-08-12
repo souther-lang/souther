@@ -5,6 +5,9 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.msg.DeclarationMessage;
 import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.diag.Located;
+import souther.compiler.examples.Deadline;
+import souther.compiler.examples.EvaluationPolicy;
+import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -32,7 +35,7 @@ public final class Compiler {
 
     /** Compiles a single self-contained module (no imports) into binary class name → bytecode.
      * A source that omits the {@code module} header is named {@code Main} (the string API has no
-     * file name to derive from; {@link Runner} passes the file-name stem instead). */
+     * file name to derive from; {@code souther run} passes the file-name stem instead). */
     public static Map<String, byte[]> compile(String source) {
         return compile(source, "Main");
     }
@@ -145,9 +148,11 @@ public final class Compiler {
         return compiled(source, defaultModuleName, warningsOut, Adequacy.Asked.NOTHING);
     }
 
-    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
-    static Compilation compiled(String source, String defaultModuleName,
-                                List<Located> warningsOut, Adequacy.Asked measure) {
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about.
+     *  Public for the same reason {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}
+     *  is: a caller outside this package compiles one source and measures it. */
+    public static Compilation compiled(String source, String defaultModuleName,
+                                       List<Located> warningsOut, Adequacy.Asked measure) {
         return compiled(source, defaultModuleName, warningsOut, measure, null, null);
     }
 
@@ -184,8 +189,8 @@ public final class Compiler {
      * The compilation of one source, resolving an import that names no module in it against
      * {@code path} — what {@code run} asks for, holding one file and a class path.
      */
-    static Compilation compiled(String source, String defaultModuleName,
-                                List<Located> warningsOut, ModulePath path) {
+    public static Compilation compiled(String source, String defaultModuleName,
+                                       List<Located> warningsOut, ModulePath path) {
         return driven(() -> compilingSource(source, defaultModuleName, warningsOut,
                 Adequacy.Asked.NOTHING, null, null, null, path));
     }

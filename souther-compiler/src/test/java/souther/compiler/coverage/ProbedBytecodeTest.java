@@ -2,7 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.MemoryClassLoader;
+import souther.compiler.examples.MemoryClassLoader;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 

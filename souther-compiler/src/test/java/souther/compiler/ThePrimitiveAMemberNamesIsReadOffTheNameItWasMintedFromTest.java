@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.cli.Runner;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;

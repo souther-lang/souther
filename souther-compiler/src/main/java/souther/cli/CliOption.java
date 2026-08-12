@@ -1,4 +1,4 @@
-package souther.compiler;
+package souther.cli;
 
 import java.util.EnumMap;
 import java.util.EnumSet;

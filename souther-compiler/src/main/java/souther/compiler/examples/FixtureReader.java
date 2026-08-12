@@ -1,8 +1,9 @@
-package souther.compiler;
+package souther.compiler.examples;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.Elaborator;
+import souther.compiler.check.Prelude;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.observe.Limits;

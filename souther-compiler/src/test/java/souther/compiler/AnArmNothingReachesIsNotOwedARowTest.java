@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 import souther.compiler.types.CoverageOrigin;
 
