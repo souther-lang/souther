@@ -226,6 +226,27 @@ final class Terms {
     }
 
     /**
+     * The form of {@code e} as the atom it is itself, where {@link #affineOf} would instead read it
+     * through to what it was given — and {@code null} everywhere else, since everywhere else the two
+     * readings are already the same form.
+     *
+     * <p>The name and what it was given are one value, so the two forms say the same thing of the
+     * same thing. Which of them a clause meets is not this expression's to decide: a field read off
+     * the name keys as the name ({@link #pathKey}), so a construction over {@code gross.value} is
+     * asked about the atom, while the arithmetic {@code gross} was given is what reading through
+     * answers with. Nothing relates the two once they are apart — a name's atom is given the bounds
+     * of the form it was assigned and not the form itself — so whatever states one has to state the
+     * other.
+     */
+    LinearForm namedForm(Core e, Denotations at, Known k) {
+        if (givenForm(e, at, k) == null) {
+            return null;
+        }
+        String atom = atomOf(e, at);
+        return atom == null ? null : LinearForm.atom(atom);
+    }
+
+    /**
      * How many elements a size call over a list written out counts, or {@code null} where its
      * argument is not one.
      *

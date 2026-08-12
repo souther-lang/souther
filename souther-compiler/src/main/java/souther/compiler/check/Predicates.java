@@ -348,6 +348,19 @@ final class Predicates {
             if (la != null && ra != null) {
                 LinearForm compared = la.minus(ra);
                 out = out.taking(compared, eff, Known.Held.ON_THE_PATH, terms.kindsOf(compared));
+                // The same comparison over the names it was written over, where reading a side
+                // through a name is what gave the form above. Both are one statement about one pair
+                // of values, and which of them a clause meets is decided where the clause is read —
+                // a construction over the name's field reads the name's own atom, and a guard does
+                // not know that when it states what it states. Left to the one reading, the other is
+                // a guard the author wrote about the very values being built and the check does not
+                // see (#676).
+                LinearForm ln = terms.namedForm(b.left(), at, out);
+                LinearForm rn = terms.namedForm(b.right(), at, out);
+                if (ln != null || rn != null) {
+                    LinearForm named = (ln == null ? la : ln).minus(rn == null ? ra : rn);
+                    out = out.taking(named, eff, Known.Held.ON_THE_PATH, terms.kindsOf(named));
+                }
             }
             // What the comparison named, recorded as spoken about: a construction from one of these
             // is one the author has said something about, whichever route ends up carrying it.
