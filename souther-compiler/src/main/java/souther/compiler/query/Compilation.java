@@ -4,11 +4,14 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -441,30 +444,78 @@ public final class Compilation {
     }
 
     /**
-     * The first error among {@code found}, as the exception the pass raised, tagged with the source
-     * it belongs to — or null when nothing there is an error.
+     * The errors among {@code found} as one exception, the first of them leading — or null when
+     * nothing there is an error.
      *
-     * <p>First means first in the order the sources were given, not first worked out. A question is
-     * answered when something asks it, and what asks first is an implementation detail: resolving one
-     * module's names reaches another module's, so moving a report earlier in the compiler would
-     * otherwise change which file a batch compile sends the author to. A report about no source in
-     * particular comes before all of them.
+     * <p>Every error, not the first. A compilation answers each of its questions and files what it
+     * found, so by the time anything asks for the failure they are all in hand; handing back one of
+     * them sends the author to fix that one and compile again to be told the next, which the
+     * compiler already knew. The exception carries a list, and the command line and
+     * {@code --format json} render each of them, so nothing between here and the author needs them
+     * to be one.
+     *
+     * <p>Leading matters because a caller reading {@link CompileException#code()} or its message
+     * reads the first, and that is the error a reader is sent to first. First means first in the
+     * order the sources were given, then where in the source it is — not first worked out. A
+     * question is answered when something asks it, and what asks first is an implementation detail:
+     * resolving one module's names reaches another module's, so ordering by that would let moving a
+     * report earlier in the compiler change which file a batch compile sends the author to. A report
+     * about no source in particular comes before all of them, and one about no position before the
+     * rest of its source.
+     *
+     * <p>Two reports at one position keep the order the checker produced them in — a stable sort is
+     * what that takes. A check that reports each of its own violations puts them all at the
+     * declaration it is about, so this is the ordinary case rather than a tie to break arbitrarily.
+     *
+     * <p>Where a diagnostic is says where to look, and nothing about what caused what. An error a
+     * checker reports off a value another error produced — a name that resolved to nothing, a body
+     * that could not be typed — can be written to the left of the error it came from, and then it
+     * leads. That is not this order failing to find the cause: a cause is not recoverable from two
+     * positions, and a secondary diagnostic is the checker's to withhold where it should not be said
+     * at all. This decides how the errors are presented; whether one of them should have been
+     * reported is the checker's own question.
      */
     public CompileException firstError(List<Db.Found> found) {
-        Db.Found first = null;
-        int at = Integer.MAX_VALUE;
+        List<Db.Found> errors = new ArrayList<>();
         for (Db.Found f : found) {
-            if (!f.report().isError()) {
-                continue;
-            }
-            int index = indexOf(f);
-            int order = index < 0 ? -1 : index;
-            if (order < at) {
-                first = f;
-                at = order;
+            if (f.report().isError()) {
+                errors.add(f);
             }
         }
-        return first == null ? null : first.report().asException().inSource(sourceIdOf(first));
+        if (errors.isEmpty()) {
+            return null;
+        }
+        errors.sort(Comparator.comparingInt(this::orderOf)
+                .thenComparingInt(f -> lineOf(f.report().diagnostic()))
+                .thenComparingInt(f -> columnOf(f.report().diagnostic())));
+        Db.Found first = errors.get(0);
+        List<Diagnostic> rest = new ArrayList<>();
+        List<String> restSources = new ArrayList<>();
+        for (Db.Found f : errors.subList(1, errors.size())) {
+            rest.add(f.report().diagnostic());
+            restSources.add(sourceIdOf(f));
+        }
+        return first.report().asException()
+                .alsoReporting(rest, restSources)
+                .inSource(sourceIdOf(first));
+    }
+
+    /** Where a report sits among the sources for ordering, with the one naming none before them all. */
+    private int orderOf(Db.Found found) {
+        int index = indexOf(found);
+        return index < 0 ? -1 : index;
+    }
+
+    /** A report with no position comes before the ones in its source that have one: it is about the
+     *  source rather than about a line of it. */
+    private static int lineOf(Diagnostic diagnostic) {
+        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        return pos == null ? -1 : pos.line();
+    }
+
+    private static int columnOf(Diagnostic diagnostic) {
+        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        return pos == null ? -1 : pos.column();
     }
 
     /**
