@@ -106,12 +106,12 @@ final class NeutralForm {
                 return caseName.name();
             }
             Map<String, Object> unit = new LinkedHashMap<>();
-            tagged(caseName, unit);
+            tagged(position, caseName, unit);
             return unit;
         }
         if (data.newtype()) {
             Type base = shapeOf(newtypeBaseType(caseName));
-            return newtypeAt(position, caseName, name,
+            return newtypeAt(position, caseName,
                     shaped(of(field(live, "value", helper), base, helper), base));
         }
         Map<String, Ast.TypeRef> declared = fieldTypes(caseName);
@@ -124,7 +124,7 @@ final class NeutralForm {
                 out.put(f.getKey(), value);
             }
         }
-        tagged(caseName, out);
+        tagged(position, caseName, out);
         return out;
     }
 
@@ -144,29 +144,22 @@ final class NeutralForm {
     // --- the form itself, read by both directions -------------------------------------------------
 
     /**
-     * A newtype case read through its sum decodes from the adjacent form that sum's decoder reads —
-     * the inner value under {@code value}, next to the discriminator (spec §sum-discrimination) — while a fixture
-     * names the case the way the domain constructs it,
-     * {@code アクティベート済み(メールアドレス("a@example.com"))}. Wrap it here, as a product case's
-     * field map and a unit case's name are wrapped; a newtype no sum lists is its bare inner value,
-     * unchanged.
-     */
-    private Object adjacentlyTagged(String caseName, Object inner) {
-        Map<String, Object> tagged = new LinkedHashMap<>();
-        tagged(caseName, tagged);
-        if (tagged.isEmpty()) {
-            return inner;   // not a case of any sum: the newtype's own form is its inner value
-        }
-        tagged.put("value", inner);
-        return tagged;
-    }
-
-    /**
-     * Writes the discriminator a sum's decoder reads, when the data is a case of one.
-     * A fixture names the case it means — `予算枠 = 未定予算`, or a whole `プロジェクト依頼 { … }` where
-     * the parameter is the sum `依頼` — the same way the domain writes a construction, while the
-     * decoder that reads it wants a tag on a key. Where the case is read as itself rather than
-     * through its sum, the tag is a field the decoder does not look at.
+     * Writes the discriminator the type declared at this position reads the case under, where it
+     * reads it through a sum at all.
+     *
+     * <p>What is written is decided by the type the position declares (spec §encode-law): a case's own
+     * decoder reads no discriminator and its sum's reads one, so `承認 { id = 1 }` is `{"id":1}` where
+     * `承認` is what is declared and `{"id":1,"type":"承認"}` where `承認 | 却下` is. A fixture names the
+     * case it means — `予算枠 = 未定予算`, or a whole `プロジェクト依頼 { … }` where the parameter is the
+     * sum `依頼` — the same way the domain writes a construction, and the sum it is read through is
+     * what puts the tag on a key beside it.
+     *
+     * <p>The key and the tag are the sum's own, read off the decoder {@link souther.compiler.derive.Deriver}
+     * derived for it and {@code CodecGen} emits — not decided again here. A derived decoder dispatches
+     * over the leaves of the sums it names (spec §sum-discrimination), so a case reached through a
+     * nested sum is listed by the position's own decoder and there is nothing to walk. Issue #683 was
+     * this being answered by searching every visible sum for one that lists the case, which is a
+     * question about the case rather than about the position it stands at.
      *
      * <p>A field the fixture wrote itself is never replaced. A case whose own field is named like its
      * sum's discriminator is already ambiguous at the boundary — the case encoder and the sum encoder
@@ -174,14 +167,42 @@ final class NeutralForm {
      * decoding something the author did not write. Leaving the written value in place makes the row
      * fail on the tag it cannot match, which is the honest outcome.
      */
-    void tagged(String written, Map<String, Object> map) {
-        TypeName caseName = symbols.resolve(written);
-        if (caseName != null) {
-            tagged(caseName, map);
+    void tagged(Type declaredType, TypeName caseName, Map<String, Object> map) {
+        if (caseName == null) {
+            return;
+        }
+        if (declaredType == null) {
+            taggedWithoutADeclaredType(caseName, map);
+            return;
+        }
+        // Anything but a sum reads the case as itself: its own type, and — since a union is written
+        // only as a behavior's own answer, where it arrives with no declared type below — nothing else.
+        if (!(open(declaredType) instanceof Type.Ref ref)
+                || !(symbols.get(ref.name()) instanceof Ast.SumData sum)
+                || sum.decoder().isEmpty()) {
+            return;
+        }
+        Ast.Discriminate reads = sum.decoder().get();
+        for (Ast.Variant variant : reads.variants()) {
+            if (caseName.equals(variant.caseType().denotes())) {
+                map.putIfAbsent(reads.key(), variant.tag());
+                return;
+            }
         }
     }
 
-    void tagged(TypeName caseName, Map<String, Object> map) {
+    /**
+     * The same, where the position has no declared type to read the case through: an answer of
+     * several types, which admission and not a decoder decides ({@code FixtureReader}), and a value
+     * written where nothing says what it stands at.
+     *
+     * <p>Nothing here can be asked of the position, so the sums that list the case answer instead.
+     * That is right for as long as they agree, and today they cannot disagree: every discriminator is
+     * derived — keyed {@code "type"} and tagged with the case's own name — and a sum's cases are
+     * declared in its own module, so one case has one tag however many sums list it (issue #683
+     * measured this). A written discriminator would end the agreement and this fallback with it.
+     */
+    private void taggedWithoutADeclaredType(TypeName caseName, Map<String, Object> map) {
         for (Ast.Def def : symbols.visible()) {
             if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
                 continue;
@@ -236,34 +257,28 @@ final class NeutralForm {
         return v;
     }
 
-    /** Whether the position names this type itself rather than a sum that lists it. Read as itself, a
-     *  newtype's form is its inner value — what its own decoder reads — and what some other
-     *  declaration does with the type does not reach here. */
-    private boolean readsAsItself(Type position, TypeName caseName) {
-        return open(position) instanceof Type.Ref r && caseName.equals(r.name());
-    }
-
     /**
      * A newtype's neutral form at the position it is written in: its inner value, wearing the envelope
      * only where the position reads it through a sum that lists it.
      *
+     * <p>A newtype case read through its sum decodes from the adjacent form that sum's decoder reads —
+     * the inner value under {@code value}, next to the discriminator (spec §sum-discrimination) — while
+     * a fixture names the case the way the domain constructs it,
+     * {@code アクティベート済み(メールアドレス("a@example.com"))}.
+     *
      * <p>The {@code "value"} envelope is not part of a newtype's representation — it is what
-     * membership adds, which is why a standalone newtype is bare (spec §sum-discrimination). So the position decides
-     * it, the way it decides whether a unit case travels as a bare name, and what some other
-     * declaration does with the type does not reach a fixture written at the type itself.
-     */
-    /**
-     * As below, for a case already resolved. A name spelled here would have to be one
+     * membership adds, which is why a standalone newtype is bare (spec §sum-discrimination). So the
+     * position decides it, the way it decides whether a unit case travels as a bare name, and what
+     * some other declaration does with the type does not reach a fixture written at the type itself.
+     *
+     * <p>Takes a case already resolved: a name spelled here would have to be one
      * {@link Symbols#resolve} answers to, which an imported type's declared name is not.
      */
     Object newtypeAt(Type position, TypeName caseName, Object inner) {
-        if (readsAsItself(position, caseName)) {
-            return inner;
-        }
         Map<String, Object> envelope = new LinkedHashMap<>();
-        tagged(caseName, envelope);
+        tagged(position, caseName, envelope);
         if (envelope.isEmpty()) {
-            return inner;   // not a case of any sum: the newtype's own form is its inner value
+            return inner;   // read as itself: the newtype's own form is its inner value
         }
         envelope.put("value", inner);
         return envelope;
@@ -329,7 +344,7 @@ final class NeutralForm {
                     return written;
                 }
                 Map<String, Object> unit = new LinkedHashMap<>();
-                tagged(caseName, unit);
+                tagged(to, caseName, unit);
                 return unit;
             }
         }
@@ -343,13 +358,9 @@ final class NeutralForm {
                 : type instanceof Type.SetOf s ? s.element() : null;
     }
 
-    Object newtypeAt(Type position, TypeName caseName, String written, Object inner) {
-        return readsAsItself(position, caseName) ? inner : adjacentlyTagged(written, inner);
-    }
-
     /** As above, for a construction written as a call, where the name is what the row spelled. */
     Object newtypeAt(Type position, String written, Object inner) {
-        return newtypeAt(position, symbols.resolve(written), written, inner);
+        return newtypeAt(position, symbols.resolve(written), inner);
     }
 
     /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,
