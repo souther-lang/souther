@@ -470,6 +470,105 @@ class CompileFixtureProjectsAFieldTest {
                 """));
     }
 
+    /**
+     * A unit case is a bare name where its position reads one and carries its sum's discriminator
+     * where it does not, so a case standing at an enumeration stops being a name the moment it is
+     * admitted into a sum that also lists a product. The same defect the newtype rows above cover,
+     * in the other thing whose form a position decides.
+     */
+    @Test
+    void aProjectedUnitCaseIsReadTheWayItsPositionReadsIt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Ready
+                data Pending
+                data Other = { note: String }
+                data State = Ready | Pending
+                data Wider = Ready | Pending | Other
+                data Box = { state: State }
+
+                let box = Box { state = Ready }
+
+                behavior tell : (w: Wider) -> Wider
+                let tell (w) = w
+
+                example tell
+                    | "an enumeration's case at a sum that lists a product" : (box.state) -> Ready
+                """));
+    }
+
+    /** The control: the same case written out rather than taken off a field. */
+    @Test
+    void aWrittenUnitCaseIsReadTheWayItsPositionReadsIt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Ready
+                data Pending
+                data Other = { note: String }
+                data Wider = Ready | Pending | Other
+
+                behavior tell : (w: Wider) -> Wider
+                let tell (w) = w
+
+                example tell
+                    | "a case written at a sum that lists a product" : (Ready) -> Ready
+                """));
+    }
+
+    /**
+     * The walk that says what a projection supplies enters a `let` as the reading that takes the
+     * value does. It did not, so the name a `let` bound was in scope for one and not the other, and
+     * a target reached through one stated nothing — which is admitted by nobody rather than by the
+     * declaration.
+     */
+    @Test
+    void aTargetReachedThroughALetIsHeldToItsDeclaration() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Basket = { total: AmountN }
+
+                let basket = {
+                    let inner = Basket { total = AmountN(100) }
+                    inner
+                }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a let-bound target" : (basket.total) -> true
+                """));
+        assertTrue(e.getMessage().contains("declaring `AmountN`")
+                && e.getMessage().contains("`Int`"), e.getMessage());
+    }
+
+    /** The control: an implementation that refused every let-bound target would satisfy the row
+     *  above without admitting anything. */
+    @Test
+    void aTargetReachedThroughALetIsAdmittedAtItsOwnDeclaration() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Basket = { total: AmountN }
+
+                let basket = {
+                    let inner = Basket { total = AmountN(100) }
+                    inner
+                }
+
+                behavior isHundred : (a: AmountN) -> Bool
+                let isHundred (a) = a.value == 100
+
+                example isHundred
+                    | "a let-bound target at its own declaration" : (basket.total) -> true
+                """));
+    }
+
     /** A cycle through a field is reported as the cycle it is. The value graph is checked before a
      *  fixture reads it, so this is E1022's to say and never reaches the reader — the reader's own
      *  check stands behind it, and is one check for both the reading that takes the value and the

@@ -27,6 +27,7 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1592,6 +1593,16 @@ public final class FixtureReader {
      * costs no helper a second application against the row's one budget.
      */
     private Type declaredTypeOf(Ast.Expr e, Set<ValueName> seen) {
+        return declaredTypeOf(e, seen, new HashMap<>());
+    }
+
+    /**
+     * As above. {@code bound} is this walk's own binding environment: a {@code let} the walk enters
+     * has to be in force for the name it binds, and the reading that takes the value keeps its
+     * bindings in a table of its own. Two walks over one expression that disagree about what is in
+     * scope disagree about what is admitted, and the one that answers nothing admits nothing.
+     */
+    private Type declaredTypeOf(Ast.Expr e, Set<ValueName> seen, Map<BindingId, Ast.Expr> bound) {
         return switch (e) {
             case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
             // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
@@ -1600,19 +1611,37 @@ public final class FixtureReader {
                 yield named == null ? null : Type.ref(named);
             }
             case Ast.FieldAccess fa -> {
-                Type target = declaredTypeOf(fa.target(), seen);
+                Type target = declaredTypeOf(fa.target(), seen, bound);
                 yield target == null ? null : fieldTypeOf(target, fa.field());
             }
-            case Ast.LetIn let -> declaredTypeOf(let.body(), seen);
+            case Ast.LetIn let -> {
+                BindingId binding = let.binder().id();
+                Ast.Expr outer = bound.put(binding, let.value());
+                try {
+                    yield declaredTypeOf(let.body(), seen, bound);
+                } finally {
+                    if (outer == null) {
+                        bound.remove(binding);
+                    } else {
+                        bound.put(binding, outer);
+                    }
+                }
+            }
             case Ast.Var v -> {
                 ValueName denotes = v.denotes();
                 // A name reached twice is the cycle the reading itself reports; this walk only stops.
                 if (denotes == null || !seen.add(denotes)) {
                     yield null;
                 }
-                Ast.Expr body = denotes instanceof ValueName.Local local
-                        ? bindings.get(local.id()) : valueBody(v.name());
-                yield body == null ? null : declaredTypeOf(body, seen);
+                Ast.Expr body;
+                if (denotes instanceof ValueName.Local local) {
+                    // What this walk bound, then what the reading around it has in force.
+                    body = bound.containsKey(local.id()) ? bound.get(local.id())
+                            : bindings.get(local.id());
+                } else {
+                    body = valueBody(v.name());
+                }
+                yield body == null ? null : declaredTypeOf(body, seen, bound);
             }
             case null, default -> null;
         };

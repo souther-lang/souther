@@ -311,6 +311,21 @@ final class NeutralForm {
             // Bare here, because `from` is the newtype's own reference and reads it as itself.
             return newtypeAt(to, r.name(), value);
         }
+        // A unit case travels as a bare name where its position reads one — an enumeration — and
+        // carries its sum's discriminator where it does not. So a case standing at an enumeration
+        // stops being a name the moment it is admitted into a sum that also lists a product.
+        if (value instanceof String written && from instanceof Type.Ref r
+                && !r.name().isPrimitive()) {
+            TypeName caseName = symbols.resolve(written);
+            if (caseName != null && !(symbols.get(caseName) instanceof Ast.Data)) {
+                if (readsABareName(to, caseName)) {
+                    return written;
+                }
+                Map<String, Object> unit = new LinkedHashMap<>();
+                tagged(caseName, unit);
+                return unit;
+            }
+        }
         return value;
     }
 
