@@ -33,13 +33,21 @@ final class HelperInvoker {
     }
 
     /**
-     * Applies {@code name} to {@code args}, which are live values.
+     * Applies {@code helper} to {@code args}, which are live values, by calling the method emitted
+     * under {@code emittedAs}.
+     *
+     * <p>The two are apart because only one of them is the function. {@code emittedAs} is where the
+     * method went and is the module's own business — a kernel's wrapper is emitted under a name no
+     * source could spell — while {@code helper} is what the row applied, and it is what every report
+     * from here names and what {@link #running()} answers with. Handed one name for both, the wrapper's
+     * address would reach the author the moment a helper failed or ran out of time, which is the same
+     * kind of leak as refusing a call for how it happens to be compiled.
      *
      * <p>A helper this module only expands has no method — which is what a helper whose body produces
      * a function is — and that is said as itself, so the rule that a fixture may apply a helper does
      * not appear to have exceptions nothing explains.
      */
-    Object invoke(String name, Object[] args) {
+    Object invoke(String helper, String emittedAs, Object[] args) {
         Method method;
         try {
             Class<?> fns = loader.loadClass(module + ".$Fns");
@@ -47,13 +55,13 @@ final class HelperInvoker {
             Arrays.fill(params, Object.class);
             // Every emitted helper boxes its parameters and its result across the method boundary, so
             // the descriptor is Object-shaped whatever the helper's declared types are.
-            method = fns.getDeclaredMethod(Backend.helperMethod(name), params);
+            method = fns.getDeclaredMethod(Backend.helperMethod(emittedAs), params);
             method.setAccessible(true);   // `$Fns` is package-private in every module (ADR-0075)
         } catch (ClassNotFoundException | NoSuchMethodException _) {
-            throw FixtureException.cannotBeCalled(name);
+            throw FixtureException.cannotBeCalled(helper);
         }
         String outer = running.get();   // a helper applied to a helper's argument nests
-        running.set(name);
+        running.set(helper);
         try {
             return method.invoke(null, args);
         } catch (InvocationTargetException ite) {
@@ -69,12 +77,12 @@ final class HelperInvoker {
             if (cause instanceof StackOverflowError) {
                 // Named while the name is still in hand. What decides is the boundary that reads
                 // everything an evaluation ends with; this only puts the helper into the report.
-                throw new StackExhaustedException("`" + name + "` overflowed the stack");
+                throw new StackExhaustedException("`" + helper + "` overflowed the stack");
             }
-            throw new FixtureException("`" + name + "` did not produce a value: "
+            throw new FixtureException("`" + helper + "` did not produce a value: "
                     + (cause == null ? ite : cause.getMessage()));
         } catch (ReflectiveOperationException e) {
-            throw new FixtureException("`" + name + "` could not be called: " + e.getMessage());
+            throw new FixtureException("`" + helper + "` could not be called: " + e.getMessage());
         } finally {
             running.set(outer);
         }

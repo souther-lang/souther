@@ -352,17 +352,49 @@ class ExampleCallsHelperTest {
      */
     @Test
     void aRowAppliesAKernelTheBackendWritesOutInPlace() {
-        assertDoesNotThrow(() -> Compiler.compile("""
+        assertDoesNotThrow(() -> Compiler.compile(INT_ROW + "  | (Int.divide(7, 2)) -> 3\n"));
+    }
+
+    /** The other arm of that branch, which is the half that makes these three kernels different from
+     * the rest: the zero divisor answers a case, and the branch answering it is written inside the
+     * emitted method like any other lowering. */
+    @Test
+    void theZeroDivisorBranchIsWrittenInsideTheEmittedMethodToo() {
+        CompileException e = err(INT_ROW + "  | (Int.divide(7, 0)) -> 0\n");
+        assertTrue(e.getMessage().contains("answered with a `DivisionByZero`"), e.getMessage());
+    }
+
+    /**
+     * A kernel's method is emitted under a name no source can spell, and that name is where the method
+     * went — not what the row applied. A report about a helper that did not answer names the helper,
+     * so the wrapper's address does not reach the author (#680).
+     */
+    @Test
+    void aKernelThatDoesNotAnswerIsNamedAsTheKernel() {
+        CompileException e = err("""
                 module demo
 
-                behavior echoInt : (n: Int) -> Int
+                behavior echoStr : (s: String) -> String
 
-                let echoInt (n) = n
+                let echoStr (s) = s
 
-                example echoInt
-                  | (Int.divide(7, 2)) -> 3
-                """));
+                example echoStr
+                  | (String.slice(0, 99, "ab")) -> "ab"
+                """);
+        assertTrue(e.getMessage().contains("`String.slice` did not produce a value"), e.getMessage());
+        assertTrue(!e.getMessage().contains("$intrinsic"),
+                "the emitted method's name is not the helper's identity: " + e.getMessage());
     }
+
+    private static final String INT_ROW = """
+            module demo
+
+            behavior echoInt : (n: Int) -> Int
+
+            let echoInt (n) = n
+
+            example echoInt
+            """;
 
     /**
      * A library function whose parameter type is decided by each call is refused for that, whether it

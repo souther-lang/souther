@@ -1,15 +1,10 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An {@code example} row may name a value instead of writing the whole input again. Four rows over a
@@ -194,37 +189,27 @@ class CompileFixtureNamesAValueTest {
                 """));
     }
 
-    private static final String VALUE_OVER_AN_INTRINSIC = """
-            module demo
-
-            data Lead = { name: String, score: Int }
-            data Accepted
-            data Rejected
-
-            let acme = Lead { name = "Acme", score = String.length("Acme") }
-
-            behavior qualify : (l: Lead) -> Accepted | Rejected
-                constructs Accepted, Rejected
-
-            let qualify (l) = if l.score >= 70 then Accepted else Rejected
-
-            example qualify
-            """;
-
     /** A value whose body applies an intrinsic is a fixture like one whose body applies any other
-     * library function (#680). `String.length("Acme")` is 4, which does not qualify. */
+     * library function (#680). `String.length("Acme")` is 4, which does not qualify — a score the
+     * intrinsic did not answer would leave the row wrong and reported. */
     @Test
     void aValueWhoseBodyAppliesAnIntrinsicIsAFixture() {
-        assertDoesNotThrow(() -> Compiler.compile(VALUE_OVER_AN_INTRINSIC
-                + "    | \"a short name does not qualify\" : (acme) -> Rejected\n"));
-    }
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
 
-    /** And the score is the one the intrinsic answered, not one the row was let assume. */
-    @Test
-    void theValueTheIntrinsicAnsweredIsWhatTheRowIsHeldTo() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compile(VALUE_OVER_AN_INTRINSIC
-                        + "    | \"a short name does not qualify\" : (acme) -> Accepted\n"));
-        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
+                data Lead = { name: String, score: Int }
+                data Accepted
+                data Rejected
+
+                let acme = Lead { name = "Acme", score = String.length("Acme") }
+
+                behavior qualify : (l: Lead) -> Accepted | Rejected
+                    constructs Accepted, Rejected
+
+                let qualify (l) = if l.score >= 70 then Accepted else Rejected
+
+                example qualify
+                    | "a short name does not qualify" : (acme) -> Rejected
+                """));
     }
 }

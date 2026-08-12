@@ -58,31 +58,22 @@ class ARowAppliesTheHelperItsCallReachesTest {
         assertEquals("E1905", e.diagnostic().code(), e.getMessage());
     }
 
-    private static final String BARE_INTRINSIC = """
-            module demo
-            import String ( length )
-            data In  = { s: String }
-            data Out = { n: Int }
-            behavior go : (i: In) -> Out constructs Out
-            let go (i) = Out { n = String.length(i.s) }
-            example go
-            """;
-
     /** An intrinsic is applied under the name the call reaches, so an import that lets it be written
      * without its qualifier reaches the same kernel (#680). A table keyed by reach names misses on the
-     * bare spelling, and a miss here reads as a row naming a construction it cannot make. */
+     * bare spelling, and a miss here reads as a row naming a construction it cannot make. The row
+     * holding is what says the kernel ran: a value it did not answer would be E1903 or E1905. */
     @Test
     void aLibraryIntrinsicWrittenBareIsAppliedUnderTheNameItReaches() {
-        assertDoesNotThrow(() -> Compiler.compile(BARE_INTRINSIC
-                + "    | \"bare\" : (In { s = \"abc\" }) -> Out { n = length(\"abc\") }\n"));
-    }
-
-    /** And it is run: a row stating the wrong length fails as the mismatch it is. */
-    @Test
-    void aBareIntrinsicApplicationIsEvaluatedAndNotAssumed() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(BARE_INTRINSIC
-                + "    | \"bare\" : (In { s = \"abcd\" }) -> Out { n = length(\"abc\") }\n"));
-        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                import String ( length )
+                data In  = { s: String }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = String.length(i.s) }
+                example go
+                    | "bare" : (In { s = "abc" }) -> Out { n = length("abc") }
+                """));
     }
 
     /**

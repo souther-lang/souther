@@ -427,41 +427,55 @@ public final class HelperInliner {
      * decided from calls between bodies that have one; an intrinsic has no body and belongs to
      * neither that question nor that answer.
      *
-     * <p>A kernel whose declaration leaves a type to each call is not collected. What a fixture does
-     * with one is decided where a fixture is built — the row's arguments are read there and the reason
-     * is the row's (#692) — but a method emitted for it here would have to be emitted before there is
-     * a call to say what it holds, and there is no such method to emit.
+     * <p>A kernel a fixture may not apply is not collected, and which those are is {@link
+     * #decidedByEachCall} — the same reading that refuses one where a fixture is built. Asked once,
+     * because a kernel one reading admitted and the other missed would be admitted by the fixture and
+     * then told it has no method, which is the representation-shaped refusal this removes.
      */
     private static void intrinsicCallsIn(Ast.Expr e, Set<String> out) {
         if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Stdlib) {
             Prelude.PreludeEntry entry = Prelude.entry(call.reaches());
             if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic
-                    && !entry.declaration().params().isEmpty() && settled(entry.signature())) {
-                out.add(fixtureIntrinsicName(call.reaches()));
+                    && !entry.declaration().params().isEmpty()
+                    && appliableInAFixture(entry.signature().params())) {
+                out.add(intrinsicWrapperName(call.reaches()));
             }
         }
         Ast.forEachChild(e, c -> intrinsicCallsIn(c, out));
     }
 
-    /** Whether every type in {@code signature} stands on its own, with nothing a call decides. */
-    private static boolean settled(Prelude.Signature signature) {
-        for (Type t : signature.params()) {
-            if (Type.mentions(t, x -> x instanceof Type.Var)) {
+    /** Whether a declaration taking {@code paramTypes} is one a fixture may apply. */
+    private static boolean appliableInAFixture(List<Type> paramTypes) {
+        for (Type t : paramTypes) {
+            if (decidedByEachCall(t)) {
                 return false;
             }
         }
-        return !Type.mentions(signature.result(), x -> x instanceof Type.Var);
+        return true;
     }
 
     /**
-     * The method name a fixture applies an intrinsic under.
+     * Whether {@code t} leaves something for each call to decide, which a fixture has no call to do:
+     * it is built before there is a call that could settle it.
      *
-     * <p>Not the intrinsic's own name. Under that name the emitted method would be a helper the table
+     * <p>The one reading of that question. It decides which kernels a method is emitted for and which
+     * calls a fixture may apply, and those are the same question — a second reading of it is a second
+     * set, free to come apart from the first.
+     */
+    public static boolean decidedByEachCall(Type t) {
+        return Type.mentions(t, x -> x instanceof Type.Var);
+    }
+
+    /**
+     * The name a kernel's wrapper is emitted under: where its method goes, and not what the function
+     * is. A report names the kernel the row applied; only a method lookup takes this.
+     *
+     * <p>Not the kernel's own name. Under that name the emitted method would be a helper the table
      * reaches, and a body calling {@code String.length} would expand into it — into a body whose one
      * call is to {@code String.length}, which is the same call again. The name is written nowhere a
      * source could spell, so what is emitted here is reached from a fixture and from nothing else.
      */
-    public static String fixtureIntrinsicName(String reached) {
+    public static String intrinsicWrapperName(String reached) {
         return INTRINSIC_PREFIX + reached;
     }
 
@@ -489,7 +503,7 @@ public final class HelperInliner {
         ValueName.Stdlib target = Prelude.operation(reached);
         Ast.Expr body = new Ast.Apply(reached, target, new ReachName.OfLibrary(target), args,
                 ConstructionOrigin.own(), kernel.pos(), null);
-        return kernel.reachedAs(fixtureIntrinsicName(reached))
+        return kernel.reachedAs(intrinsicWrapperName(reached))
                 .withBody(new Ast.FnBody.Written(body));
     }
 

@@ -1961,9 +1961,9 @@ public final class FixtureReader {
      * emitted method is keyed. The types come from there rather than from the written module because
      * that table is settled (ADR-0066), and an argument is decoded against the parameter's settled type.
      *
-     * <p>The standard library is not in that table and is under every module, so it is read from the
-     * library itself where the table misses. Both readings answer the same question, which is what the
-     * declaration says a call to it takes.
+     * <p>A library function this module did not take on to emit is not in that table — one it did take
+     * on is there like any other — so where the table misses, the library itself is asked. Both
+     * readings answer the same question, which is what the declaration says a call to it takes.
      *
      * <p>Asked with what the call reaches and never with what it spells. An import lets a library name
      * be written without its qualifier and nothing rewrites that spelling — the pass that writes
@@ -1974,11 +1974,11 @@ public final class FixtureReader {
     private Ast.FnDef helperDef(String reached) {
         Ast.FnDef helper = values.get(reached);
         if (helper == null) {
-            // A library function is under every module and is written into none of them, so the table
-            // above misses on one this module did not take on to emit. Its declaration is what says
-            // whether a fixture may apply it — the arity it takes, whether a call has to settle one of
-            // its types — and that is the same question here as for a helper written in the module.
-            // Read from the library rather than answered by the table's silence (#680).
+            // A library function this module did not take on to emit is written into no module, so
+            // the table above misses on it. Its declaration is what says whether a fixture may apply
+            // it — the arity it takes, whether a call has to settle one of its types — and that is the
+            // same question here as for a helper written in the module. Read from the library rather
+            // than answered by the table's silence (#680).
             Prelude.PreludeEntry entry = Prelude.entry(reached);
             helper = entry == null ? null : entry.declaration();
         }
@@ -2036,23 +2036,26 @@ public final class FixtureReader {
             Type paramType = TypeOps.resolveParamType(p.type(), symbols);
             // A parameter whose element each call decides has no one type here. A call settles it
             // from the argument it is given; a fixture is built before there is a call to settle it,
-            // so the order is what refuses this rather than the type being unsupported.
-            if (Type.mentions(paramType, t -> t instanceof Type.Var)) {
+            // so the order is what refuses this rather than the type being unsupported. Asked of the
+            // reading that also decides which kernels a method is emitted for, so a call this admits
+            // is one there is a method for (#680).
+            if (HelperInliner.decidedByEachCall(paramType)) {
                 throw new FixtureException("`" + c.written() + "` parameter `" + p.name() + "` is "
                         + Type.show(paramType) + "; what it holds is decided by each call, and a"
                         + " fixture is built before a call can decide it");
             }
             args[i] = built(c.args().get(i), paramType);
         }
-        return helpers.invoke(invokedAs(helper), args);
+        return helpers.invoke(helper.reached(), emittedAs(helper), args);
     }
 
-    /** The method name {@code helper} was emitted under. A kernel is emitted for the row that applies
-     * it, under a name of its own so that nothing else reaches it (#680); everything else is emitted
-     * under the name this module reaches it by. */
-    private static String invokedAs(Applied helper) {
+    /** Where {@code helper}'s method went. A kernel's wrapper is emitted under a name of its own so
+     * that nothing else reaches it (#680); everything else is emitted under the name this module
+     * reaches it by. What the helper <em>is</em> stays {@link Applied#reached()}, which is what a
+     * report about it names. */
+    private static String emittedAs(Applied helper) {
         return helper.def().body() instanceof Ast.FnBody.Intrinsic
-                ? HelperInliner.fixtureIntrinsicName(helper.reached())
+                ? HelperInliner.intrinsicWrapperName(helper.reached())
                 : helper.reached();
     }
 
