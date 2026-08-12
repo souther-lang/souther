@@ -362,6 +362,114 @@ class CompileFixtureProjectsAFieldTest {
         assertTrue(e.getMessage().contains("declares no field `missing`"), e.getMessage());
     }
 
+    /**
+     * What reads a field off a helper's answer is reflection over a no-arg method, and a fixture is
+     * not elaborated, so the value's Java surface would be reachable as though it were the data's.
+     * Which field may be taken is the declaration's to say, here as everywhere.
+     */
+    @Test
+    void aJavaMethodOnAnAnswerIsNotAField() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                let makeString (s: String) = s
+
+                behavior isSo : (b: Bool) -> Bool
+                let isSo (b) = b
+
+                example isSo
+                    | "a java method is not a field" : (makeString("").isEmpty) -> true
+                """));
+        assertTrue(e.getMessage().contains("declares no field `isEmpty`"), e.getMessage());
+    }
+
+    /** An optional takes a value of itself as well as what it holds. Unwrapping the position before
+     *  asking refused the field that declares the same optional the position does. */
+    @Test
+    void anOptionalFieldIsAdmittedAtAnOptionalPosition() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Basket = { total: AmountN? }
+                data Order = { total: AmountN? }
+
+                let one = Basket { total = AmountN(100) }
+
+                behavior hasTotal : (o: Order) -> Bool
+                let hasTotal (o) = true
+
+                example hasTotal
+                    | "an optional field at an optional position" : (Order { total = one.total }) -> true
+                """));
+    }
+
+    /**
+     * A neutral form is decided by a position and not only by a type: a newtype is bare where the
+     * position reads it as itself and wears the envelope where the position is a sum listing it. A
+     * field built at its own declaration and then admitted into a sum reached the decoder the first
+     * way, so the row that the same value written out satisfies did not build.
+     */
+    @Test
+    void aProjectedNewtypeIsReadTheWayASumPositionReadsIt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Missing
+                data Choice = AmountN | Missing
+                data Box = { amount: AmountN }
+
+                let box = Box { amount = AmountN(100) }
+
+                behavior tell : (c: Choice) -> Choice
+                let tell (c) = c
+
+                example tell
+                    | "a field projected into a sum position" : (box.amount) -> AmountN(100)
+                """));
+    }
+
+    /** The control: the same value written out rather than taken off a field. */
+    @Test
+    void aWrittenNewtypeIsReadTheWayASumPositionReadsIt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Missing
+                data Choice = AmountN | Missing
+
+                behavior tell : (c: Choice) -> Choice
+                let tell (c) = c
+
+                example tell
+                    | "a newtype written at a sum position" : (AmountN(100)) -> AmountN(100)
+                """));
+    }
+
+    /** The same, under a collection: assignability descends, so the representation must too. */
+    @Test
+    void aProjectedCollectionOfNewtypesIsReadTheWayItsPositionReadsIt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Missing
+                data Choice = AmountN | Missing
+                data Box = { amounts: List<AmountN> }
+
+                let box = Box { amounts = [ AmountN(100), AmountN(200) ] }
+
+                behavior tell : (cs: List<Choice>) -> List<Choice>
+                let tell (cs) = cs
+
+                example tell
+                    | "a list of fields at a list of the sum" :
+                        (box.amounts) -> [ AmountN(100), AmountN(200) ]
+                """));
+    }
+
     /** A cycle through a field is reported as the cycle it is. The value graph is checked before a
      *  fixture reads it, so this is E1022's to say and never reaches the reader — the reader's own
      *  check stands behind it, and is one check for both the reading that takes the value and the

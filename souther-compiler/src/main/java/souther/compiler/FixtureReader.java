@@ -1330,6 +1330,16 @@ public final class FixtureReader {
     private Projected takeField(Projected target, Ast.FieldAccess fa) {
         return switch (target) {
             case Projected.Live(Object value, String written) -> {
+                // Which field may be taken is the declaration's to say, and it is asked before
+                // anything is read off the value. What reads it is reflection over a no-arg method,
+                // and a fixture is not elaborated, so a value's Java surface would otherwise be
+                // reachable as though it were the data's — `.isEmpty` on a `String` is a method
+                // here and a field nowhere.
+                TypeName answered = symbols.resolve(NeutralForm.simpleName(value));
+                if (answered == null || fieldTypeOf(Type.ref(answered), fa.field()) == null) {
+                    throw new FixtureException("`" + written + "` answered with a value that"
+                            + " declares no field `" + fa.field() + "`");
+                }
                 // A Souther value never answers a Java null — an absent optional is a value of its
                 // own — so a null here is an accessor this value does not have.
                 Object taken = ObservedValues.readOrNull(value, fa.field());
@@ -1372,8 +1382,11 @@ public final class FixtureReader {
      */
     private Object rawProjection(Ast.FieldAccess fa, Type expected, Admission admission) {
         return switch (projectTarget(fa, admission)) {
-            // A declared chain was held by `states` before this frame was read.
-            case Projected.Declared(Type _, Object value) -> value;
+            // Held by `states` before this frame was read, but built at the position the field
+            // declares rather than at this one. A neutral form is decided by a position and not
+            // only by a type, so a newtype admitted into a sum that lists it is written the way
+            // that position reads before it reaches a decoder.
+            case Projected.Declared(Type type, Object value) -> neutral.reread(value, type, expected);
             case Projected.Live(Object value, String written) -> {
                 // What the answer says is read off the answer, so a field holding an empty
                 // collection names no element type here — the limit every helper's answer is read
@@ -1502,10 +1515,14 @@ public final class FixtureReader {
             // elements would say nothing where there are none. An optional makes room for what it
             // holds, so the position it holds is the one this stands at.
             case Stated.Declared(Type supplied) -> {
-                Type at = expected instanceof Type.OptionOf o ? o.element() : expected;
-                if (!TypeOps.assignable(supplied, at, symbols)) {
+                // The whole position first. An optional takes what it holds as well as a value of
+                // itself, so unwrapping it before asking would refuse the field that declares the
+                // same optional the position does.
+                if (!TypeOps.assignable(supplied, expected, symbols)
+                        && !(expected instanceof Type.OptionOf o
+                                && TypeOps.assignable(supplied, o.element(), symbols))) {
                     throw new FixtureException("a field declaring `" + Type.show(supplied)
-                            + "` states no value of `" + Type.show(at) + "`");
+                            + "` states no value of `" + Type.show(expected) + "`");
                 }
             }
             case Stated.NoName _ -> {
