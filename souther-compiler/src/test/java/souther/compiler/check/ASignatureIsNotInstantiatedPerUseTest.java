@@ -1,6 +1,5 @@
 package souther.compiler.check;
 
-import souther.compiler.Prelude;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 

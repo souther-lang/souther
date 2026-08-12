@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.core.Core;

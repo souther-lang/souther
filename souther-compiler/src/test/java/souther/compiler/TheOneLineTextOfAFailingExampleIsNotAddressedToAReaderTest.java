@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.diag.msg.ExampleMessage;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.Diagnostic;

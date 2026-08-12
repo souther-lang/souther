@@ -360,7 +360,7 @@ class EverySchemaWordIsAccountedForTest {
     }
 
     private static JsonNode schema() {
-        try (InputStream in = Main.class.getResourceAsStream(SCHEMA)) {
+        try (InputStream in = AdequacyReport.class.getResourceAsStream(SCHEMA)) {
             assertNotNull(in, "adequacy-schema-1.json ships beside the compiler");
             return JSON.readTree(new String(in.readAllBytes(), StandardCharsets.UTF_8));
         } catch (java.io.IOException e) {

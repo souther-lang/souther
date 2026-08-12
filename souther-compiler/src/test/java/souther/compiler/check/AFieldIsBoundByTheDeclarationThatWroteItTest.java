@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Diagnostic;

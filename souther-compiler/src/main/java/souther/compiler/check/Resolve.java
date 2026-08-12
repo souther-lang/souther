@@ -16,7 +16,6 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
-import souther.compiler.Prelude;
 import souther.compiler.Reserved;
 
 import java.util.ArrayList;

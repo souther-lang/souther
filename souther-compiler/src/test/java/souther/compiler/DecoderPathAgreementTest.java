@@ -1,10 +1,8 @@
 package souther.compiler;
 
+import souther.compiler.generated.JsonBoundary;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -12,13 +10,12 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Three separate implementations answer "read a value of type T from the outside": the derived codec
  * a data field crosses through, the fixture builder an {@code example} uses, and
- * {@code Runner.decoderFor} behind {@code souther run}. They are written independently, so they drift
+ * {@link JsonBoundary} behind {@code souther run}. They are written independently, so they drift
  * — issue #97 was exactly that, a collection argument the boundary read and the fixture builder did
  * not.
  *
@@ -32,9 +29,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code TypeOps} for the rule and {@link EncoderPathAgreementTest} for the writing side.
  */
 class DecoderPathAgreementTest {
-
-    @TempDir
-    Path dir;
 
     // === what all three read ===
 
@@ -137,13 +131,12 @@ class DecoderPathAgreementTest {
     void aStringKeyIsCanonicalWhicheverWayItWasWritten() throws Exception {
         String composed = "\u304c";              // one code point
         String decomposed = "\u304b\u3099";      // the base and the combining mark, the same text
-        Path file = dir.resolve("key.sou");
-        Files.writeString(file, """
+        String source = """
                 module demo
                 behavior at : (m: Map<String, Int>) -> Int
                 let at (m) = Option.withDefault(0, Map.get("%s", m))
-                """.formatted(composed));
-        assertEquals("7", Runner.run(file, "at", "{\"" + decomposed + "\": 7}").trim(),
+                """.formatted(composed);
+        assertEquals("7", Crossing.of(source, "demo", "at", "{\"" + decomposed + "\": 7}"),
                 "the key the module looks up is the key the input carried");
     }
 
@@ -166,20 +159,21 @@ class DecoderPathAgreementTest {
         both.put(decomposed, 2L);
         assertFalse(boundaryReads("Map<String, Int>", both), "the derived codec refuses it");
 
-        Runner.RunException refused = assertThrows(Runner.RunException.class,
-                () -> runReads("Map<String, Int>",
-                        "{\"" + composed + "\": 1, \"" + decomposed + "\": 2}"));
-        assertTrue(refused.getMessage().contains("same key once decoded"), refused.getMessage());
+        JsonBoundary.Read.Refused refused = Crossing.refusalOf(sourceTaking("Map<String, Int>"),
+                "demo", "take", "{\"" + composed + "\": 1, \"" + decomposed + "\": 2}");
+        List<String> said = Crossing.messagesOf(refused);
+        assertTrue(said.stream().anyMatch(m -> m.contains("same key once decoded")), said.toString());
     }
 
     /** A key the key type refuses is refused at that key's own path, and every key is read before
      *  the map is given up on, so a map with two bad keys is answered about both at once. */
     @Test
-    void aBadKeyIsRefusedWhereItStands() {
-        Runner.RunException refused = assertThrows(Runner.RunException.class,
-                () -> runReads("Map<Bounded, Int>", "{\"ab\": 1, \"cd\": 2}"));
-        assertTrue(refused.getMessage().contains("/ab"), refused.getMessage());
-        assertTrue(refused.getMessage().contains("/cd"), refused.getMessage());
+    void aBadKeyIsRefusedWhereItStands() throws Exception {
+        JsonBoundary.Read.Refused refused = Crossing.refusalOf(sourceTaking("Map<Bounded, Int>"),
+                "demo", "take", "{\"ab\": 1, \"cd\": 2}");
+        List<String> at = Crossing.pointersOf(refused);
+        assertTrue(at.contains("/ab"), at.toString());
+        assertTrue(at.contains("/cd"), at.toString());
     }
 
     // === the three paths ===
@@ -248,17 +242,20 @@ class DecoderPathAgreementTest {
         return true;
     }
 
-    /** The same type as a behavior input, driven through {@code souther run}. */
+    /** The same type as a behavior input, read and applied through {@link JsonBoundary} — what
+     *  {@code souther run} drives, without the command line around it. */
     private String runReads(String type, String json) throws Exception {
-        Path file = dir.resolve("run" + Math.abs(type.hashCode()) + ".sou");
-        Files.writeString(file, """
+        return Crossing.of(sourceTaking(type), "demo", "take", json);
+    }
+
+    private static String sourceTaking(String type) {
+        return """
                 module demo
                 %s
                 behavior take : (v: %s) -> Int%s
                 let take (v) = %s
                 """.formatted(DECLS, type, constructsIn(type).replace(", ", " constructs "),
-                        probeFor(type)));
-        return Runner.run(file, "take", json);
+                        probeFor(type));
     }
 
     /**

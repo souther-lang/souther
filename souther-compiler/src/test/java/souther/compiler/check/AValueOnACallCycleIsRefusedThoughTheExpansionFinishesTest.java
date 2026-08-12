@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.Compiler;
+import souther.compiler.diag.msg.NameMessage;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;

@@ -1,8 +1,8 @@
 package souther.compiler.fmt;
 
+import souther.compiler.doc.LibraryDocs;
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.Main;
 import souther.compiler.fmt.Deviations;
 
 import java.io.IOException;
@@ -34,7 +34,7 @@ class EveryWordTheFormatReportUsesIsWrittenDownTest {
     private static final String SECTION = "<!-- souther-section: fmt-report-vocabulary -->";
 
     private static String doc() throws IOException {
-        try (InputStream in = Main.class.getResourceAsStream(DOC)) {
+        try (InputStream in = LibraryDocs.class.getResourceAsStream(DOC)) {
             assertTrue(in != null, "the shipped documentation is not on the classpath: " + DOC);
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }

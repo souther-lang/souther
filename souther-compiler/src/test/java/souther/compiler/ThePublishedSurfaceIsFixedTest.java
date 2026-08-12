@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Prelude;
 import souther.compiler.types.Type;
 
 import org.junit.jupiter.api.Test;

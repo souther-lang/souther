@@ -42,7 +42,7 @@ public final class Compilation {
         // Read now, so this compilation is held to what the settings said when it started rather than
         // to what the first compile in this JVM happened to read. A caller with a reason of its own
         // says so with withEvaluationPolicy.
-        db.set(new Front.Policy(), souther.compiler.EvaluationPolicy.fromSettings());
+        db.set(new Front.Policy(), souther.compiler.examples.EvaluationPolicy.fromSettings());
     }
 
     /** A compile of several sources identified by their position, the way a build hands them over.
@@ -323,7 +323,7 @@ public final class Compilation {
      * work that finished as work that did not. A deadline that decides by what the work is says the
      * same thing as a fact. A build has no reason to set one; see {@link #withExampleBudget}.
      */
-    public Compilation withDeadline(souther.compiler.Deadline deadline) {
+    public Compilation withDeadline(souther.compiler.examples.Deadline deadline) {
         db.set(new Front.ExampleDeadline(), deadline);
         return this;
     }
@@ -336,7 +336,7 @@ public final class Compilation {
      * What a caller says here is said about this compilation alone, so a test holding a row to a few
      * steps does not hold every other compile in the same JVM to them.
      */
-    public Compilation withEvaluationPolicy(souther.compiler.EvaluationPolicy policy) {
+    public Compilation withEvaluationPolicy(souther.compiler.examples.EvaluationPolicy policy) {
         db.set(new Front.Policy(), policy);
         return this;
     }

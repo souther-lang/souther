@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.BindingId;

@@ -1,7 +1,7 @@
 package souther.compiler.core;
 
-import org.junit.jupiter.api.Test;
 import souther.compiler.Compiler;
+import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.StructuralCost;

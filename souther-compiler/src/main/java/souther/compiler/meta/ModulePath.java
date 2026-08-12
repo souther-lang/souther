@@ -31,7 +31,7 @@ public interface ModulePath {
 
     /** A loader over these classes, under {@code parent}. The compile's own generated classes go on
      * top of this, and what makes a module being compiled win over one of the same name here is that
-     * {@link souther.compiler.MemoryClassLoader} looks in itself first for the names it holds — a
+     * {@link souther.compiler.generated.MemoryClassLoader} looks in itself first for the names it holds — a
      * loader that delegated first would answer with these, whatever was put on top. */
     default ClassLoader loader(ClassLoader parent) {
         return new ClassLoader(parent) {

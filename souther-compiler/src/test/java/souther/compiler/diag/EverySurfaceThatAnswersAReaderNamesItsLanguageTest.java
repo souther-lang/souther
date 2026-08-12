@@ -76,7 +76,7 @@ class EverySurfaceThatAnswersAReaderNamesItsLanguageTest {
      * asked, so the language is written where the text is made and no caller can pass one.
      */
     private static final Set<String> NAMED = Set.of(
-            "souther/compiler/Main.java picks Messages.resolveLocale(",
+            "souther/cli/Main.java picks Messages.resolveLocale(",
             "souther/compiler/apt/SoutherProcessor.java picks Messages.resolveLocale(",
             "souther/lsp/analysis/Analyzer.java picks Locale.ENGLISH",
             "souther/compiler/diag/DiagnosticRenderer.java picks Locale.ENGLISH");

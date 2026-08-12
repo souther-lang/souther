@@ -1,6 +1,6 @@
 package souther.compiler.diag;
 
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;

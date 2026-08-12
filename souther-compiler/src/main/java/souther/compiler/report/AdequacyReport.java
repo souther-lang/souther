@@ -1,6 +1,6 @@
 package souther.compiler.report;
 
-import souther.compiler.ExampleVerifier;
+import souther.compiler.examples.ExampleVerifier;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.SourceNameResolver;
 import souther.compiler.diag.SourceRef;

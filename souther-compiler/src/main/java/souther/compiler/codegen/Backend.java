@@ -1022,6 +1022,13 @@ public final class Backend {
         return CodegenContext.behaviorClass(name);
     }
 
+    /** The class carrying a behavior's no-argument constructor and its erased {@code apply} — what a
+     * caller entering a compiled behavior loads (spec §jvm-behavior). Public for the same reason
+     * {@link #behaviorClass} is: the name is decided here. */
+    public static String behaviorImplClass(String name) {
+        return CodegenContext.behaviorImplClass(name);
+    }
+
     /** The class a behavior's anonymous union output is emitted under (spec §jvm-anonymous-union), for the same
      * reason {@link #behaviorClass} is public: the name is decided here. */
     public static String behaviorResultClass(String name) {

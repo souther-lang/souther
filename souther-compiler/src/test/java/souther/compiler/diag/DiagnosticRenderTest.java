@@ -1,8 +1,8 @@
 package souther.compiler.diag;
 
+import souther.compiler.Compiler;
 
 import souther.compiler.diag.msg.DeclarationMessage;
-import souther.compiler.Compiler;
 import org.junit.jupiter.api.Test;
 
 import java.util.Locale;

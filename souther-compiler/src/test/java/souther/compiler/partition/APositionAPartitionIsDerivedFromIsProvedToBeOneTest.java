@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.Compiler;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Shape;

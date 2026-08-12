@@ -1,6 +1,6 @@
 package souther.bench;
 
-import souther.compiler.MemoryClassLoader;
+import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.query.Compilation;
 import souther.runtime.Behavior;
 import souther.runtime.PersistentVector;

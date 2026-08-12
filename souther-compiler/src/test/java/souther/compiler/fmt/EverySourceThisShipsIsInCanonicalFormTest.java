@@ -1,7 +1,7 @@
 package souther.compiler.fmt;
 
-import org.junit.jupiter.api.Test;
 import souther.compiler.Reserved;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.InputStream;

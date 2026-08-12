@@ -1,7 +1,7 @@
 package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.Prelude;
+import souther.compiler.check.Prelude;
 import souther.compiler.types.Type;
 
 import java.io.IOException;
