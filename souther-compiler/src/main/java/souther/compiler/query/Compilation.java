@@ -4,11 +4,14 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,10 +22,10 @@ import java.util.Set;
  * One compile, as a set of questions that can be asked of it.
  *
  * <p>A caller sets the sources and then asks: for the classes, for a module's errors, for what a
- * name denotes. What it does with an error is its own — the batch compiler raises the first, an
- * editor publishes them all per file — and that decision is the only thing that differs between
- * them. Nothing here runs a pipeline; asking a question is what makes the work that answers it
- * happen, and only that work.
+ * name denotes. What it does with an error is its own — the batch compiler raises them together and
+ * stops, an editor publishes them all per file and carries on — and that decision is the only thing
+ * that differs between them. Nothing here runs a pipeline; asking a question is what makes the work
+ * that answers it happen, and only that work.
  */
 public final class Compilation {
 
@@ -441,30 +444,84 @@ public final class Compilation {
     }
 
     /**
-     * The first error among {@code found}, as the exception the pass raised, tagged with the source
-     * it belongs to — or null when nothing there is an error.
+     * The errors among {@code found} as one exception, the first of them leading — or null when
+     * nothing there is an error.
      *
-     * <p>First means first in the order the sources were given, not first worked out. A question is
-     * answered when something asks it, and what asks first is an implementation detail: resolving one
-     * module's names reaches another module's, so moving a report earlier in the compiler would
-     * otherwise change which file a batch compile sends the author to. A report about no source in
-     * particular comes before all of them.
+     * <p>Every error, not the first. A compilation answers each of its questions and files what it
+     * found, so by the time anything asks for the failure they are all in hand; handing back one of
+     * them sends the author to fix that one and compile again to be told the next, which the
+     * compiler already knew. The exception carries a list, and the command line and
+     * {@code --format json} render each of them, so nothing between here and the author needs them
+     * to be one.
+     *
+     * <p>Leading matters because a caller reading {@link CompileException#code()} or its message
+     * reads the first, and that is the error a reader is sent to first. First means first in the
+     * order the sources were given, then where in the source it is — not first worked out. A
+     * question is answered when something asks it, and what asks first is an implementation detail:
+     * resolving one module's names reaches another module's, so ordering by that would let moving a
+     * report earlier in the compiler change which file a batch compile sends the author to. A report
+     * about no source in particular comes before all of them, and one about no position before the
+     * rest of its source.
+     *
+     * <p>The order the sources were given is the index a compile of a list of them assigns
+     * ({@link #ofSources}). A compile of documents assigns none — a workspace has no first file —
+     * and there the reports fall together and are ordered by position alone. What asks this is a
+     * batch compile; an editor reads {@link #diagnostics()}, which files each report under the
+     * source it is in and never has the question.
+     *
+     * <p>Two reports at one position keep the order the checker produced them in — a stable sort is
+     * what that takes. A check that reports each of its own violations puts them all at the
+     * declaration it is about, so this is the ordinary case rather than a tie to break arbitrarily.
+     *
+     * <p>Where a diagnostic is says where to look, and nothing about what caused what. An error a
+     * checker reports off a value another error produced — a name that resolved to nothing, a body
+     * that could not be typed — can be written to the left of the error it came from, and then it
+     * leads. That is not this order failing to find the cause: a cause is not recoverable from two
+     * positions, and a secondary diagnostic is the checker's to withhold where it should not be said
+     * at all. This decides how the errors are presented; whether one of them should have been
+     * reported is the checker's own question.
      */
-    public CompileException firstError(List<Db.Found> found) {
-        Db.Found first = null;
-        int at = Integer.MAX_VALUE;
+    public CompileException failure(List<Db.Found> found) {
+        List<Db.Found> errors = new ArrayList<>();
         for (Db.Found f : found) {
-            if (!f.report().isError()) {
-                continue;
-            }
-            int index = indexOf(f);
-            int order = index < 0 ? -1 : index;
-            if (order < at) {
-                first = f;
-                at = order;
+            if (f.report().isError()) {
+                errors.add(f);
             }
         }
-        return first == null ? null : first.report().asException().inSource(sourceIdOf(first));
+        if (errors.isEmpty()) {
+            return null;
+        }
+        errors.sort(Comparator.comparingInt(this::orderOf)
+                .thenComparingInt(f -> lineOf(f.report().diagnostic()))
+                .thenComparingInt(f -> columnOf(f.report().diagnostic())));
+        Db.Found first = errors.get(0);
+        List<Diagnostic> rest = new ArrayList<>();
+        List<String> restSources = new ArrayList<>();
+        for (Db.Found f : errors.subList(1, errors.size())) {
+            rest.add(f.report().diagnostic());
+            restSources.add(sourceIdOf(f));
+        }
+        return first.report().asException()
+                .alsoReporting(rest, restSources)
+                .inSource(sourceIdOf(first));
+    }
+
+    /** Where a report sits among the sources for ordering, with the one naming none before them all. */
+    private int orderOf(Db.Found found) {
+        int index = indexOf(found);
+        return index < 0 ? -1 : index;
+    }
+
+    /** A report with no position comes before the ones in its source that have one: it is about the
+     *  source rather than about a line of it. */
+    private static int lineOf(Diagnostic diagnostic) {
+        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        return pos == null ? -1 : pos.line();
+    }
+
+    private static int columnOf(Diagnostic diagnostic) {
+        SourcePos pos = diagnostic == null ? null : diagnostic.pos();
+        return pos == null ? -1 : pos.column();
     }
 
     /**
@@ -536,7 +593,7 @@ public final class Compilation {
 
     /**
      * The warnings among {@code found}, in order, each tagged with the source its primary region is
-     * in — the same tag {@link #firstError} puts on an error, so a warning can be quoted where it is.
+     * in — the same tag {@link #failure} puts on an error, so a warning can be quoted where it is.
      *
      * <p>One entry per warning, never one per file it is said at. A problem written in two files is
      * one thing to be told about on a terminal; the second telling is what an editor needs, and that
@@ -555,7 +612,7 @@ public final class Compilation {
     /**
      * The errors among {@code found}, tagged as {@link #warnings} tags a warning.
      *
-     * <p>All of them, where {@link #firstError} answers with one. A caller that stops at the first
+     * <p>All of them, where {@link #failure} answers with one. A caller that stops at the first
      * error wants the first; one that goes on to say something about the whole compilation has
      * already read past it, and showing a reader one error beside an account of everything else
      * would leave them to wonder what the rest of the errors were.

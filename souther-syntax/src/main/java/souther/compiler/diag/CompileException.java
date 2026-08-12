@@ -145,6 +145,34 @@ public class CompileException extends RuntimeException {
     }
 
     /**
+     * This error, also carrying {@code more} — what a caller that collected several errors and has
+     * one of them as the exception a pass raised answers with.
+     *
+     * <p>Built from this one rather than from its diagnostic, so the message stays the message this
+     * error was raised with. A pass that words its own summary — the one that reports every failing
+     * {@code example} row — words it over what it found, and rendering the leading diagnostic again
+     * here would answer with a sentence about one row instead.
+     *
+     * @param moreSources one entry per added diagnostic, {@link Located#NO_SOURCE} for one that
+     *                    names no source
+     */
+    public CompileException alsoReporting(List<Diagnostic> more, List<String> moreSources) {
+        if (more.isEmpty()) {
+            return this;
+        }
+        if (more.size() != moreSources.size()) {
+            throw new IllegalArgumentException("one source per diagnostic");
+        }
+        List<Diagnostic> all = new java.util.ArrayList<>(diagnostics);
+        all.addAll(more);
+        List<String> allSources = new java.util.ArrayList<>(sources);
+        allSources.addAll(moreSources);
+        CompileException joined = new CompileException(all, getMessage(), allSources);
+        joined.setStackTrace(getStackTrace());
+        return joined;
+    }
+
+    /**
      * The same error, tagged with the source being compiled when it was thrown. The first tag wins:
      * an inner phase that already named its source keeps it, so a surrounding loop may tag freely.
      */
