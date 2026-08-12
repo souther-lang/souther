@@ -37,6 +37,10 @@ public final class Compilation {
     private boolean saysWhichSource = true;
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
     private final Set<String> held = new LinkedHashSet<>();
+    /** The loader over the classes as they were when it was made, and those classes — held so that
+     *  {@link #loader()} can tell whether the one it has is still a loader over what there is. */
+    private ClassLoader loader;
+    private Map<String, byte[]> loadedClasses;
 
     private Compilation() {
         // Read now, so this compilation is held to what the settings said when it started rather than
@@ -183,9 +187,36 @@ public final class Compilation {
      * have to be under the map rather than beside it. Which order that is, and why a loader that
      * delegates first would answer with a stale build instead, is settled once for every caller —
      * the same composition the compile-time evaluation runs against.
+     *
+     * <p>The same loader for as long as the classes are the same classes. A class is its binary name
+     * and the loader that defined it, so two loaders over one compilation are two definitions of
+     * every type it generated, and a value made under the first is not a value of the second's
+     * classes. What that looks like is a model answering wrongly: a decoded key stops equalling the
+     * key a behavior looks up, so the lookup misses and the behavior answers with its default. There
+     * is no exception and nothing that mentions loading. The path's classes divide the same way —
+     * {@link ModulePath#loader} defines them afresh each time it is asked — so it is the composed
+     * loader that is kept and not one layer of it.
+     *
+     * <p>Kept against the classes rather than for the life of this compilation, because an edit
+     * makes a different program. {@link #classes()} answers with the map it answered with before
+     * until something a generation reads changes, and with a new one after, so this follows that
+     * answer rather than deciding for itself when a compilation is settled — which it never has to
+     * be, nothing here running until something asks. A loader held across an edit would be one that
+     * cannot see it, which is the first fault the other way round.
      */
     public ClassLoader loader() {
-        return Output.loader(db, classes());
+        Map<String, byte[]> classes = classes();
+        if (loader == null || loadedClasses != classes) {
+            // Built before either field is written, so a build that threw leaves this holding what it
+            // held before rather than the classes it did not manage to make a loader for. Recording
+            // them first would leave the two saying different things, and the next ask would read
+            // that as a loader it already has — handing out the one from before the edit, which is
+            // this whole method's fault with an exception in front of it.
+            ClassLoader built = Output.loader(db, classes);
+            loadedClasses = classes;
+            loader = built;
+        }
+        return loader;
     }
 
     /** A module as everything below the check reads it — derived, desugared, and carrying the
