@@ -893,7 +893,10 @@ public final class FixtureReader {
             return new Asserted.Elements(live instanceof Set<?> ? Asserted.Container.SET
                     : Asserted.Container.LIST, out);
         }
-        TypeName type = symbols.resolve(name);
+        // The type the value is, and not this module's reading of its spelling: a helper a fixture
+        // applies may be one another module published, and what it answered with is that module's
+        // type however this module spells the same name.
+        TypeName type = answeredType(live);
         if (type != null && symbols.get(type) instanceof Ast.Data data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             if (data.newtype()) {

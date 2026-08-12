@@ -635,6 +635,36 @@ class CompileFixtureProjectsAFieldTest {
     }
 
     /**
+     * The pair of the row above, on the side that re-materialises what a helper answered. The
+     * closure this change states holds of an expected value too, and reaching a field there goes
+     * through that re-materialisation, so a foreign answer read as this module's same-named type
+     * loses the field it has.
+     */
+    @Test
+    void aForeignAnswerIsReadAsItsOwnModulesTypeInAnExpectation() {
+        String lib = """
+                module demo.lib exposing ( Remote, makeRemote )
+
+                data Remote = { amount: Int }
+
+                let makeRemote (n: Int) = Remote { amount = n }
+                """;
+        String app = """
+                module demo.app
+                import demo.lib ( makeRemote )
+
+                data Remote = { other: Int }
+
+                behavior same : (n: Int) -> Int
+                let same (n) = n
+
+                example same
+                    | "a foreign helper is projected in an expectation" : (100) -> makeRemote(100).amount
+                """;
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(lib, app)));
+    }
+
+    /**
      * The same rule where a case's form is moved. Which case a bare name stands for is the type it
      * stands at saying so, not this module's scope: a same-named declaration here is a record, and
      * reading the name through it would leave the case as a name where its position wants the tag.
