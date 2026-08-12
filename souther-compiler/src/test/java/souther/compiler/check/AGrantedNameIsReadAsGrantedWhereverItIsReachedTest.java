@@ -98,6 +98,37 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 """, "Bad", "Holding");
     }
 
+    /**
+     * And through a name that wrote no rule of its own, what it wraps having written one.
+     *
+     * <p>The row that tells the two questions apart. Leaving a granted declaration's own clauses out
+     * is not enough where it wrote none: what says it has no value is written under it, and reading
+     * that is the supposing undone by the walk that honoured it. Held with the one underneath left
+     * as it is, so nothing passes by granting more than was asked.
+     */
+    @Test
+    void throughANameThatWroteNoRuleOfItsOwn() {
+        String source = """
+                module demo
+
+                data Bad = Int
+                    invariant no = value >= 2 && value <= 1
+
+                data Granted = Bad
+
+                data Holder = { g: Granted }
+                """;
+        grantingLeaves(source, "Granted", "Holder");
+
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        Symbols symbols = compilation.symbols("demo");
+        assertEquals(Cardinality.NO_VALUE,
+                TypeCardinality.solve(compilation.module("demo"), symbols)
+                        .granting(Set.of(symbols.own("Granted"))).get(symbols.own("Bad")),
+                "and what it wraps was not granted anything");
+    }
+
     /** And through a count: what is absent leaves one value, and one is too few to fill a set. */
     @Test
     void throughHowManyValuesSomethingBesideItHas() {

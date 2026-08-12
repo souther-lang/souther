@@ -46,16 +46,17 @@ public final class OccurrenceValues {
     }
 
     /**
-     * The same, with the clauses of the declarations {@code without} names left out.
+     * The same, with the declarations {@code granted} names supposed to hold values.
      *
-     * <p>Read this way by whatever is asking what would be true if some declaration had
-     * values. Its rules are what say it has none, and they reach every position that holds
-     * one, so supposing it has a value is supposing those rules away.
+     * <p>Read this way by whatever is asking what would be true if some declaration had values. Its
+     * rules are what say it has none — its own, and the ones under whatever it wraps — so supposing
+     * it has a value is not reading it at all.
      */
     static OccurrenceValues of(TypeName named, Ast.Data data, Symbols symbols,
-                                 java.util.function.Predicate<TypeName> without) {
+                                 java.util.function.Predicate<TypeName> granted) {
         return new OccurrenceValues(
-                InvariantChecker.seedFields(named, data, symbols, java.util.Map.of(), without));
+                InvariantChecker.seedFields(named, data, symbols, java.util.Map.of(),
+                        InvariantChecker.Reach.stoppingAt(granted)));
     }
 
     /**

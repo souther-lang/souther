@@ -81,7 +81,7 @@ final class CardinalityTransfer {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses.
-        if (FieldDomains.without(named, data, symbols, granted).infeasible()) {
+        if (FieldDomains.granting(named, data, symbols, granted).infeasible()) {
             return Cardinality.NO_VALUE;
         }
         OccurrenceCounts counts = OccurrenceCounts.of(named, data, symbols, granted);
