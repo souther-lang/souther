@@ -5,7 +5,6 @@ import souther.compiler.check.Combinators.Handed;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.NumericDomain;
-import souther.compiler.numeric.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -1592,31 +1591,23 @@ public final class InvariantChecker {
      * recorded under that denotation and not under the binding. Recording it under the binding is
      * what made a named subexpression a term of its own, answering differently from the very
      * expression it was given.
+     *
+     * <p>Nothing is recorded of the name itself. A name is read as the expression it was given —
+     * {@link Terms#affine} reads through it, and reads through a field taken off it the same way —
+     * so there is no second reading for a fact about the name to be needed by. Recording one meant
+     * giving the name's own atom the bounds of the form it was given, which is what a guard read one
+     * way and a construction read the other had between them, and a bound is not a relation: it left
+     * the guard settling nothing about the construction (#676).
      */
     private Entered bindLet(Core.LetIn li, Known k, Denotations at) {
         // Entering a binding the walk is already inside is not a second binding of it. A branch is
         // read from where its conditional stood, which is inside these, over a tree that still holds
-        // them; running the transition again would assign the name its form a second time, and an
-        // assignment forgets what was known of what it assigns to — including what the branch had
-        // just established.
+        // them.
         if (at.valueOf(li.binder().id()) == li.value()) {
             return new Entered(k, at);
         }
         Denotes what = terms.denotationOf(li.value(), at, k);
-        Known out = k;
-        // A binding that denotes what it was given is an alias and introduces no value, so there is
-        // nothing to record of it: what holds of what it names already holds. Recording it anyway
-        // assigns that name its own form, and an assignment drops what was known of what it assigns
-        // to — the bound on it would be lost to the copy. A location is always this; a term is where
-        // the form is that term's own atom.
-        if (what instanceof Denotes.Term term && terms.affineScalarBase(li.value().type()) != null) {
-            LinearForm vf = terms.affineOf(li.value(), at, k);
-            if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
-                out = out.assigning(term.key(), vf,
-                        terms.kindsOf(vf, term.key(), li.value().type()));
-            }
-        }
-        return new Entered(out, at.binding(li.binder().id(), li.value(), what));
+        return new Entered(k, at.binding(li.binder().id(), li.value(), what));
     }
 
     /** Where {@code site}'s conditional stands: {@code k} and {@code at} with every binder it is

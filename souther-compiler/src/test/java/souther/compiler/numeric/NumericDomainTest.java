@@ -325,14 +325,4 @@ class NumericDomainTest {
         assertTrue(NumericDomain.top().assume(num(1), Rel.LE, Map.of()).isBottom());
         assertFalse(NumericDomain.top().assume(num(-1), Rel.LE, Map.of()).isBottom());
     }
-
-    @Test
-    void anAssignmentTakesTheSpacingOfWhatIsAssigned() {
-        NumericDomain d = NumericDomain.top()
-                .assume(atom(A).minus(num(3)), Rel.LE, whole(A))
-                .assign(B, atom(A), whole(A, B));
-
-        assertTrue(provesAtMost(d, B, 3), "b was given a, whose bound it takes");
-        assertEquals(false, d.isBottom());
-    }
 }

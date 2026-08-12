@@ -558,61 +558,6 @@ public final class NumericDomain {
         return next == null ? losses : Map.copyOf(next);
     }
 
-    // --- assignment ----------------------------------------------------------------------------
-
-    /** The domain after {@code atom := f}: drop every prior fact about {@code atom}, then record its
-     * new interval bounds from {@code f} (relational facts about {@code f} are not re-derived). */
-    public NumericDomain assign(String atom, LinearForm f, Map<String, Granularity> atomKinds) {
-        Set<String> named = new HashSet<>(f.coefs().keySet());
-        named.add(atom);
-        NumericDomain known = knowing(named, atomKinds);
-        if (known.bottom) {
-            return known;
-        }
-        NumericDomain d = known.forget(atom);
-        Endpoint up = d.upperBound(f);
-        Endpoint down = negOrNull(d.upperBound(f.negate()));
-        NumericDomain r = d;
-        if (up != null) {
-            r = r.withHi(atom, up);
-        }
-        if (down != null) {
-            r = r.withLo(atom, down);
-        }
-        return r;
-    }
-
-    /** An upper bound on {@code -f} read as a lower bound on {@code f}. Turning it around moves the
-     * value and not whether it is reached. */
-    private static Endpoint negOrNull(Endpoint v) {
-        return v == null ? null : new Endpoint(at(v).negate(), v.inclusive());
-    }
-
-    /** The domain with every fact about {@code atom} dropped — what an assignment leaves behind of
-     * what it assigns to. */
-    private NumericDomain forget(String atom) {
-        if (bottom) {
-            return this;
-        }
-        Map<String, Endpoint> nlo = new HashMap<>(lo);
-        Map<String, Endpoint> nhi = new HashMap<>(hi);
-        nlo.remove(atom);
-        nhi.remove(atom);
-        Map<String, Map<String, Endpoint>> nd = new HashMap<>();
-        diff.forEach((a, row) -> {
-            if (!a.equals(atom)) {
-                Map<String, Endpoint> nr = new HashMap<>(row);
-                nr.remove(atom);
-                if (!nr.isEmpty()) {
-                    nd.put(a, nr);
-                }
-            }
-        });
-        List<Asserted> nk = new ArrayList<>(kept);
-        nk.removeIf(a -> a.f().coefs().containsKey(atom));
-        return new NumericDomain(false, nlo, nhi, nd, List.copyOf(nk), kinds, losses);
-    }
-
     // --- immutable updates ---------------------------------------------------------------------
 
     private NumericDomain bottom() {
