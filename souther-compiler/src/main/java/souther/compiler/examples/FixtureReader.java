@@ -1322,15 +1322,24 @@ public final class FixtureReader {
                         : denotes instanceof ValueName.Helper ? valueBody(v.name()) : null;
                 // A name standing for no value is not one a field can be taken off; the ordinary
                 // reading below says what it is instead of this one guessing.
-                yield body == null ? new Projected.Declared(declaredTypeOf(v, new HashSet<>()),
-                                raw(v, null, below))
+                // Read at the type the name is declared with, which is the position it stands at:
+                // the same type this hands on as the evidence of what was projected. Reading it at
+                // no position would leave the form to be worked out from the case rather than from
+                // where the value is (issue #683).
+                yield body == null ? projectedAtItsDeclaredType(v, below)
                         : expanding(denotes, () -> projectTarget(body, admission));
             }
             case Ast.Apply c when appliedHelper(c) instanceof Applied helper ->
                     new Projected.Live(answered(c, helper), c.written());
-            default -> new Projected.Declared(declaredTypeOf(e, new HashSet<>()),
-                    raw(e, null, below));
+            default -> projectedAtItsDeclaredType(e, below);
         };
+    }
+
+    /** What a projection takes a field off, read at the type it is declared with — the one type the
+     *  evidence it carries is stated in, so the value and the type it is read at come from one place. */
+    private Projected projectedAtItsDeclaredType(Ast.Expr e, Admission below) {
+        Type declared = declaredTypeOf(e, new HashSet<>());
+        return new Projected.Declared(declared, raw(e, declared, below));
     }
 
     /** One step of a chain: evidence in, evidence out. */
@@ -1794,7 +1803,6 @@ public final class FixtureReader {
      * stands in. */
     private Object unitInput(TypeName caseName, Type expected) {
         {
-            String name = caseName.name();
             // A fixture is built in the neutral form the boundary reads, so a case of an enumeration
             // is written the way that sum travels: its name, bare (issue #161). The same unit data may
             // be a case of an enumeration and of a sum that has a field-bearing case, and those travel
@@ -1804,7 +1812,8 @@ public final class FixtureReader {
                 return caseName.name();
             }
             Map<String, Object> unit = new LinkedHashMap<>();
-            neutral.tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
+            // a unit case read through a sum still needs the tag that sum's decoder reads
+            neutral.tagged(expected, caseName, unit);
             return unit;
         }
     }
@@ -2103,7 +2112,7 @@ public final class FixtureReader {
         TypeName built = nd.typeName().denotes();
         if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return neutral.newtypeAt(expected, built, nd.typeName().written(),
+            return neutral.newtypeAt(expected, built,
                     neutral.shaped(raw(nd.inits().get(0).value(),
                                     neutral.shapeOf(neutral.newtypeBaseType(built)), below(admission)),
                             neutral.shapeOf(neutral.newtypeBaseType(built))));
@@ -2161,7 +2170,7 @@ public final class FixtureReader {
             }
             map.put(fi.name(), v);
         }
-        neutral.tagged(nd.typeName().denotes(), map);
+        neutral.tagged(expected, nd.typeName().denotes(), map);
         return map;
     }
 
