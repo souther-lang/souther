@@ -160,6 +160,27 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         reads("Span", Verdict.PROVED, m);
     }
 
+    /**
+     * And only that way round. The guard puts {@code hi} at or above {@code lo}, so the difference
+     * taken the other way is at or below zero and a {@code Span} built from it is not proved. A row
+     * read backwards proves it, from a relation between the two the program never states — which is
+     * the one failure of this table that reaches a construction rather than only losing one.
+     */
+    @Test
+    void theDifferenceTakenTheOtherWayIsNotProved() {
+        String m = INTS + """
+
+                behavior settle : (hi: Int, lo: Int) -> Held | TooSmall
+                    constructs Held, Span, TooSmall
+
+                let settle (hi, lo) = {
+                    guard Int.compare(hi, lo) >= 0 else TooSmall
+                    Held { span = Span(lo - hi) }
+                }
+                """;
+        reads("Span", Verdict.UNKNOWN, m);
+    }
+
     /** A comparison against something other than zero is not one relation between the arguments —
      * the sign is what the order decides, and a bound on the sign is not a bound on the values. */
     @Test
@@ -201,6 +222,29 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                 }
                 """;
         reads("Period", Verdict.PROVED, m);
+    }
+
+    /** The other side of that direction: the same guard says nothing about {@code from} being the
+     * later, and a row read the way {@code compare} is read would say it does. */
+    @Test
+    void aCountForwardSaysNothingOfTheFirstBeingTheGreater() {
+        String m = """
+                module demo
+
+                data Period = { from: Date, to: Date }
+                    invariant notAfter = from >= to
+
+                data Backwards
+
+                behavior span : (from: Date, to: Date) -> Period | Backwards
+                    constructs Period, Backwards
+
+                let span (from, to) = {
+                    guard Date.daysBetween(from, to) >= 0 else Backwards
+                    Period { from = from, to = to }
+                }
+                """;
+        reads("Period", Verdict.UNKNOWN, m);
     }
 
     /**
