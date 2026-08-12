@@ -6,6 +6,8 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.msg.InvariantMessage;
+import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
@@ -117,13 +119,29 @@ class ACompileAnswersWithEveryErrorItFoundTest {
             """;
 
     private static Db.Found errorAt(int line, int column, String says) {
-        return new Db.Found("m.c", "a.sou",
-                Report.of(Diagnostic.literal(new SourcePos(line, column, "a.sou"), says)));
+        return errorIn("a.sou", line, column, says);
+    }
+
+    private static Db.Found errorIn(String sourceId, int line, int column, String says) {
+        return new Db.Found("m.c", sourceId,
+                Report.of(Diagnostic.literal(new SourcePos(line, column, sourceId), says)));
+    }
+
+    /** A warning, which is not what a compile fails with however many of them there are. */
+    private static Db.Found warningAt(int line, String says) {
+        return new Db.Found("m.c", "a.sou", Report.of(Diagnostic
+                .say(new InvariantMessage.TheGuardsDoNotEstablishTheInvariant(says))
+                .at(new SourcePos(line, 1, "a.sou")).build()));
     }
 
     private static Compilation ofOneSource() {
         return Compilation.ofDocuments(java.util.Map.of("a.sou", ONE_SOURCE), java.util.Set.of(),
-                souther.compiler.meta.ModulePath.EMPTY);
+                ModulePath.EMPTY);
+    }
+
+    /** Two sources handed over as a list, so each has the index its order in that list gives it. */
+    private static Compilation ofTwoSources() {
+        return Compilation.ofSources(List.of(ONE_SOURCE, ONE_SOURCE), ModulePath.EMPTY);
     }
 
     @Test
@@ -158,8 +176,20 @@ class ACompileAnswersWithEveryErrorItFoundTest {
     }
 
     @Test
+    void aSourceGivenFirstLeadsHoweverFarDownItsErrorIs() {
+        CompileException e = ofTwoSources().failure(List.of(
+                errorIn(Compilation.idOfSourceIndex(1), 1, 1, "at the top of the second"),
+                errorIn(Compilation.idOfSourceIndex(0), 20, 1, "far down the first")));
+
+        assertEquals(List.of("far down the first", "at the top of the second"), bodiesOf(e),
+                "a file is read through before the next one is opened");
+    }
+
+    @Test
     void nothingAmongThemIsNotAnError() {
         assertEquals(null, ofOneSource().failure(List.of()));
+        assertEquals(null, ofOneSource().failure(List.of(warningAt(3, "A"), warningAt(5, "B"))),
+                "a warning is not a reason to fail");
     }
 
     @Test

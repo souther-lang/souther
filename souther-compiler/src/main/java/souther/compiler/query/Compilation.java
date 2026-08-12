@@ -22,10 +22,10 @@ import java.util.Set;
  * One compile, as a set of questions that can be asked of it.
  *
  * <p>A caller sets the sources and then asks: for the classes, for a module's errors, for what a
- * name denotes. What it does with an error is its own — the batch compiler raises the first, an
- * editor publishes them all per file — and that decision is the only thing that differs between
- * them. Nothing here runs a pipeline; asking a question is what makes the work that answers it
- * happen, and only that work.
+ * name denotes. What it does with an error is its own — the batch compiler raises them together and
+ * stops, an editor publishes them all per file and carries on — and that decision is the only thing
+ * that differs between them. Nothing here runs a pipeline; asking a question is what makes the work
+ * that answers it happen, and only that work.
  */
 public final class Compilation {
 
@@ -462,6 +462,12 @@ public final class Compilation {
      * report earlier in the compiler change which file a batch compile sends the author to. A report
      * about no source in particular comes before all of them, and one about no position before the
      * rest of its source.
+     *
+     * <p>The order the sources were given is the index a compile of a list of them assigns
+     * ({@link #ofSources}). A compile of documents assigns none — a workspace has no first file —
+     * and there the reports fall together and are ordered by position alone. What asks this is a
+     * batch compile; an editor reads {@link #diagnostics()}, which files each report under the
+     * source it is in and never has the question.
      *
      * <p>Two reports at one position keep the order the checker produced them in — a stable sort is
      * what that takes. A check that reports each of its own violations puts them all at the
