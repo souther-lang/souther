@@ -295,16 +295,8 @@ public final class FieldDomains {
      */
     public static boolean mayHoldNothingAt(TypeName named, Ast.Data data, String path,
                                            Symbols symbols) {
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols);
-        String counted = seeded.held().get(path);
-        if (counted == null) {
-            return true;   // nothing counts what is there, so no rule here is about how much it holds
-        }
-        NumericDomain.LinearForm none = NumericDomain.LinearForm.atom(counted);
         // A count is never below none, so leaving it no room above none is leaving it at none.
-        return !seeded.numbers()
-                .assume(none, NumericDomain.Rel.LE, Map.of(counted, Granularity.DISCRETE))
-                .isBottom();
+        return OccurrenceCounts.of(named, data, symbols).mayHoldAtMost(path, 0);
     }
 
     /**

@@ -1,0 +1,266 @@
+package souther.compiler.check;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.numeric.Cardinality;
+import souther.compiler.numeric.CardinalityCuts;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * How many values every type has at most, over the declarations a module reaches.
+ *
+ * <p>An upper bound throughout, and the answer it exists to give is the one at the bottom: a type
+ * this puts at none is a type nothing can build. Everything else it says is what makes that answer
+ * reachable — a set cannot be filled from an element with fewer values than it holds, and knowing
+ * that means counting the element.
+ *
+ * <p>Rising from none rather than narrowing from anything. A value of a type is built, and a type
+ * written in terms of itself with nowhere to stop is one no building ever finishes — so the reading
+ * starts by granting nothing and grants a value only where one is shown. Each round bounds the values
+ * built in one more step than the last, and where nothing moves, nothing further can be built.
+ *
+ * <p>Two kinds of place, told apart because only one of them needs the rising. Declarations written
+ * in terms of each other are answered together and their answers are rounded to the counts some rule
+ * asks about, which is what makes the rising stop. Everywhere else the order of the declarations
+ * settles the answers one at a time, and nothing is rounded: a sum of two values is two, and rounding
+ * it up to the next count anybody asked about would leave a set drawing on it unable to say it is too
+ * small.
+ *
+ * <p>This says nothing about which declaration is at fault for an answer of none. That is a question
+ * about the graph rather than about any one type, and it is asked of these answers rather than while
+ * they are found.
+ */
+public final class TypeCardinality {
+
+    private TypeCardinality() {}
+
+    /** How many values each declaration the module reaches has at most. */
+    public static Cardinalities solve(Ast.Module module, Symbols symbols) {
+        Map<TypeName, Ast.Def> declared = reached(module, symbols);
+        Map<TypeName, Set<TypeName>> edges = new LinkedHashMap<>();
+        declared.forEach((name, def) -> edges.put(name, read(def, symbols, declared.keySet())));
+        // Fixed before the rising starts. What makes it stop is that there are finitely many answers
+        // to rise through, and a count discovered part way would give it somewhere new to go.
+        CardinalityCuts cuts = CardinalityCuts.keeping(asked(declared, symbols));
+        Map<TypeName, Cardinality> solution = new HashMap<>();
+        for (List<TypeName> component : TypeComponents.of(edges)) {
+            if (TypeComponents.recurses(component, edges)) {
+                rise(component, declared, symbols, cuts, solution);
+            } else {
+                TypeName one = component.get(0);
+                solution.put(one,
+                        CardinalityTransfer.upperOf(one, declared.get(one), symbols, solution));
+            }
+        }
+        return new Cardinalities(Map.copyOf(solution), declared, edges, cuts, symbols);
+    }
+
+    /**
+     * What every declaration came to, and what it would take to ask again.
+     *
+     * <p>The second is here because one question is asked of these answers afterwards and cannot be
+     * asked of the numbers alone: whether a declaration came to none of its own or came to none
+     * because something it reads did. Answering it means reading the same declarations again under a
+     * different assumption, which is this reading and not another one.
+     */
+    public static final class Cardinalities {
+
+        private final Map<TypeName, Cardinality> upper;
+        private final Map<TypeName, Ast.Def> declared;
+        private final Map<TypeName, Set<TypeName>> edges;
+        private final CardinalityCuts cuts;
+        private final Symbols symbols;
+
+        private Cardinalities(Map<TypeName, Cardinality> upper, Map<TypeName, Ast.Def> declared,
+                              Map<TypeName, Set<TypeName>> edges, CardinalityCuts cuts,
+                              Symbols symbols) {
+            this.upper = upper;
+            this.declared = declared;
+            this.edges = edges;
+            this.cuts = cuts;
+            this.symbols = symbols;
+        }
+
+        /** How many values every declaration reached has at most. */
+        public Map<TypeName, Cardinality> all() {
+            return upper;
+        }
+
+        /** How many values {@code name} has at most, nothing being known of a name not reached. */
+        public Cardinality of(TypeName name) {
+            return upper.getOrDefault(name, Cardinality.UNKNOWN);
+        }
+
+        /** The declarations, in the order they were reached. */
+        Map<TypeName, Ast.Def> declared() {
+            return declared;
+        }
+
+        /** What each declaration reads. */
+        Map<TypeName, Set<TypeName>> edges() {
+            return edges;
+        }
+
+        /**
+         * Whether {@code component} still comes to none once everything outside it that comes to none
+         * is granted anything at all.
+         *
+         * <p>Asked by reading the component again rather than by keeping a record of what led where.
+         * A component that comes to none whatever it is handed came to none of its own; one that
+         * stops doing so was answering for something else, and saying so of it would name a
+         * declaration nothing is the matter with.
+         */
+        boolean noValueOfItsOwn(List<TypeName> component) {
+            Map<TypeName, Cardinality> granted = new HashMap<>(upper);
+            for (TypeName each : component) {
+                for (TypeName read : edges.getOrDefault(each, Set.of())) {
+                    if (!component.contains(read) && of(read).none()) {
+                        granted.put(read, Cardinality.UNKNOWN);
+                    }
+                }
+            }
+            for (TypeName each : component) {
+                granted.put(each, Cardinality.NO_VALUE);
+            }
+            boolean moved = true;
+            while (moved) {
+                moved = false;
+                for (TypeName each : component) {
+                    Cardinality next = cuts.round(CardinalityTransfer.upperOf(
+                            each, declared.get(each), symbols, granted));
+                    if (!next.equals(granted.get(each))) {
+                        granted.put(each, next);
+                        moved = true;
+                    }
+                }
+            }
+            for (TypeName each : component) {
+                if (!granted.get(each).none()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /**
+     * The component answered by granting its declarations nothing and granting only what is shown.
+     *
+     * <p>What it reads outside itself is already answered and is read as it stands. Rounding those
+     * too would put the loss of precision at every edge of the graph rather than at the one place the
+     * rising needs it.
+     */
+    private static void rise(List<TypeName> component, Map<TypeName, Ast.Def> declared,
+                             Symbols symbols, CardinalityCuts cuts,
+                             Map<TypeName, Cardinality> solution) {
+        for (TypeName each : component) {
+            solution.put(each, Cardinality.NO_VALUE);
+        }
+        boolean moved = true;
+        while (moved) {
+            moved = false;
+            for (TypeName each : component) {
+                Cardinality next = cuts.round(
+                        CardinalityTransfer.upperOf(each, declared.get(each), symbols, solution));
+                if (!next.equals(solution.get(each))) {
+                    solution.put(each, next);
+                    moved = true;
+                }
+            }
+        }
+    }
+
+    /**
+     * Every declaration the module's own reach, itself included.
+     *
+     * <p>A type of another module is one of these. What a declaration comes to is settled by what it
+     * is written in terms of wherever that was declared, and stopping at the edge of the module would
+     * answer a record by the module its field's type happens to sit in.
+     */
+    private static Map<TypeName, Ast.Def> reached(Ast.Module module, Symbols symbols) {
+        Map<TypeName, Ast.Def> declared = new LinkedHashMap<>();
+        List<TypeName> left = new ArrayList<>();
+        for (Ast.Def def : module.defs()) {
+            left.add(symbols.own(def.name()));
+        }
+        while (!left.isEmpty()) {
+            TypeName name = left.remove(left.size() - 1);
+            if (declared.containsKey(name) || !(symbols.get(name) instanceof Ast.Def def)) {
+                continue;
+            }
+            declared.put(name, def);
+            left.addAll(read(def, symbols, null));
+        }
+        return declared;
+    }
+
+    /**
+     * The declarations {@code def} is written in terms of.
+     *
+     * <p>Every name written anywhere in its types, at whatever depth. A record naming another record
+     * reads that one's answer and no further, but what that one reads it reads in turn, so a name
+     * gathered from a depth this one does not itself descend to adds no edge the graph did not have.
+     *
+     * @param among the names to keep, or null to keep them all
+     */
+    private static Set<TypeName> read(Ast.Def def, Symbols symbols, Set<TypeName> among) {
+        Set<TypeName> named = new LinkedHashSet<>();
+        switch (def) {
+            case Ast.UnitData _ -> { }
+            case Ast.SumData sum -> sum.cases().forEach(each -> named.add(each.denotes()));
+            case Ast.Data data ->
+                    TypeOps.fieldTypes(data, symbols).values().forEach(each -> names(each, named));
+        }
+        if (among != null) {
+            named.retainAll(among);
+        }
+        return named;
+    }
+
+    private static void names(Type type, Set<TypeName> into) {
+        if (type instanceof Type.Ref ref) {
+            into.add(ref.name());
+            return;
+        }
+        if (type instanceof Type.Union union) {
+            into.addAll(union.members());
+            return;
+        }
+        Type.forEachChild(type, each -> names(each, into));
+    }
+
+    /**
+     * The counts the rules ask collections to hold, which is what decides the answers worth telling
+     * apart.
+     *
+     * <p>Read off the domain rather than the clauses. A floor arrives in more ways than a number
+     * written at the position, and a count missed here is precision lost and nothing else: the
+     * answers still tell apart everything the questions found.
+     */
+    private static Set<Long> asked(Map<TypeName, Ast.Def> declared, Symbols symbols) {
+        Set<Long> counts = new HashSet<>();
+        declared.forEach((name, def) -> {
+            if (!(def instanceof Ast.Data data)) {
+                return;
+            }
+            OccurrenceCounts held = OccurrenceCounts.of(name, data, symbols);
+            for (String path : data.newtype() ? Set.of(FieldDomains.THE_VALUE)
+                    : TypeOps.fieldTypes(data, symbols).keySet()) {
+                long least = held.leastHeldAt(path);
+                if (least > 0) {
+                    counts.add(least);
+                }
+            }
+        });
+        return counts;
+    }
+}
