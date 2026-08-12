@@ -6,7 +6,12 @@ import java.util.function.Supplier;
 /**
  * Loads freshly generated classes from an in-memory binary-name → bytecode map, delegating anything
  * unknown to the parent loader. Used to run generated code without writing {@code .class} files:
- * the compiler's compile-time {@code $Ctfe.check} evaluation and {@link Runner}'s behavior driving.
+ * the compiler's compile-time {@code $Ctfe.check} evaluation, the rows an {@code example} states,
+ * and the behavior {@code souther run} drives.
+ *
+ * <p>The package it sits in says less than it should. Running an {@code example} is one of the three
+ * and not the reason this exists — {@code query.Output} builds one to evaluate a constant newtype
+ * check, which has nothing to do with examples.
  */
 public final class MemoryClassLoader extends ClassLoader {
 

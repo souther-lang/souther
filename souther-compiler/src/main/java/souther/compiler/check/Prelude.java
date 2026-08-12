@@ -32,6 +32,12 @@ import java.util.Set;
  * — {@code List.map}, {@code String.trim}. A module that imports a name writes it without the
  * qualifier; what it reaches is this same entry, since an import elides the qualifier where the call
  * is written and settles nothing else.
+ *
+ * <p>This is part of the check, not a layer under it. Loading an entry resolves and types the
+ * declaration through {@link Resolve}, {@link TypeChecker} and {@link TypeOps}, and the check reads
+ * entries back whenever a call names a library operation. The two are one component and are one
+ * package for that reason — the dependency between them runs both ways and there is no ordering of
+ * them that makes it run one way.
  */
 public final class Prelude {
 

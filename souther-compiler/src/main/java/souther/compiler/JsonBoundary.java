@@ -350,15 +350,9 @@ public final class JsonBoundary {
         return c.getMethod("apply", paramTypes).invoke(instance, args);
     }
 
-    /** The generated class carrying a behavior's no-arg constructor and its erased {@code apply}.
-     *  The public name is an interface; both live on the {@code $Impl}. */
+    /** Where a compiled behavior is entered. Codegen decides that name and is asked for it — the
+     *  rule was written here once, and a second statement of a name is a second name. */
     public static String implClass(String pkg, String behavior) {
-        return pkg + "." + behaviorClass(behavior) + "$Impl";
-    }
-
-    /** The generated class capitalizes a behavior's first character (a Japanese name is unchanged),
-     * matching {@code CodegenContext.behaviorClass}. */
-    public static String behaviorClass(String name) {
-        return Character.toUpperCase(name.charAt(0)) + name.substring(1);
+        return pkg + "." + Backend.behaviorImplClass(behavior);
     }
 }
