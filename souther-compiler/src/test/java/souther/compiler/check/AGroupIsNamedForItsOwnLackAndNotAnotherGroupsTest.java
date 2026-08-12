@@ -221,6 +221,55 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 """));
     }
 
+    /**
+     * A recursion is answered beside what reads it, and the reading says who lacks with whom.
+     *
+     * <p>{@code C} holds an {@code A} and {@code A} may hold a {@code C}, so all three are answered
+     * together. Only {@code A} and {@code B} have nowhere to stop: grant {@code C} and they are where
+     * they were, grant them and {@code C} comes right. Said of all three, the first of them in the
+     * module is where the report sits, and that is {@code C}.
+     */
+    @Test
+    void aReaderAnsweredBesideARecursionIsNotPartOfIt() {
+        assertEquals(List.of(List.of("A", "B")), reported("""
+                module demo
+
+                data C = { a: A }
+
+                data A =
+                    { b: B
+                    , c: C?
+                    }
+
+                data B = { a: A }
+                """));
+    }
+
+    /**
+     * And two recursions answered together are two things to say.
+     *
+     * <p>Each may hold the other's, so the four are one reading. Neither pair needs the other: grant
+     * one pair and the other is where it was, which is what makes them two.
+     */
+    @Test
+    void twoRecursionsAnsweredTogetherAreTwoThingsToSay() {
+        assertEquals(List.of(List.of("A", "B"), List.of("C", "D")), reported("""
+                module demo
+
+                data A =
+                    { b: B
+                    , c: C?
+                    }
+                data B = { a: A }
+
+                data C =
+                    { d: D
+                    , a: A?
+                    }
+                data D = { c: C }
+                """));
+    }
+
     /** A set that cannot be filled is its own group, its element having a value of its own. */
     @Test
     void aSetThatCannotBeFilledIsNamedAndItsElementIsNot() {

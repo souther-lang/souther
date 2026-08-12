@@ -5,7 +5,6 @@ import souther.compiler.numeric.Cardinality;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,28 +20,29 @@ import java.util.Set;
  * is the matter with. Said of all of them, the one thing the author has to change is somewhere in a
  * list of things that will come right when it does.
  *
- * <p>What separates them is asked by granting: take every other declaration that has no value to have
- * one, read them all again, and see which are left with none. A declaration that has none whatever
- * else is granted has none of its own; one that stops is a declaration that was answering for
- * something else.
+ * <p>What separates them is granting. A set of declarations <em>holds</em> when taking every other
+ * lack to be a value and reading them all again leaves every one of that set with none: nothing
+ * outside accounts for what they lack, so whatever accounts for it is among them. What is reported is
+ * the smallest sets that hold. A set with a smaller one inside it that holds was two questions asked
+ * as one, and the smaller is the answer; a set with none inside it is a lack every member of which
+ * needs the others, and there is no first among them to name.
  *
  * <p>Read again rather than followed along edges. What a count was is not what it would have been:
  * a record whose only field is an absent value has one value because what the field would hold has
  * none, and one is too few to fill a set of two — so a set with no value can be one nothing is the
- * matter with, with no declaration between them having no value for an edge to run through. Only
- * granting and reading afresh finds that.
+ * matter with, with no declaration between them having no value for an edge to run through.
  *
- * <p>Asked of one declaration first. A declaration that has no value with every other lack granted
- * has one nobody else can account for, and it is said on its own — whatever else it happens to be
- * read together with. Being read together is about a recursion and says nothing about whose lack it
- * is: two written in terms of each other have nothing outside them to grant, and one of them can
- * still be the only one with a rule of its own.
+ * <p>Being answered together is where the search starts and not what it answers. Declarations are
+ * read in one rising because they are written in terms of each other, which is about the recursion:
+ * two recursions that may each hold the other's values are one reading and two lacks, and a
+ * declaration that merely reads one is neither. A set that holds does lie inside one such reading —
+ * a set spanning two of them has a part in the one the other does not read, and granting that part
+ * leaves the rest where it was — so that is as far as the search has to look.
  *
- * <p>What is left over lacks in company. Two that have no value only through each other are one
- * thing to say, since neither is what the author changes, and they are said as the declarations they
- * are read together with — less whichever of them was already said on its own. A group of those is
- * reported where granting every lack outside it leaves all of them with none, and dropped where it
- * does not, which is what takes out a record holding a recursion that has nowhere to stop.
+ * <p>Taking one away at a time finds every smallest one. Where a set that holds has a smaller one
+ * inside it, every member outside the smaller one can be taken away with the smaller one left whole,
+ * so some single removal leaves something holding; and where no single removal does, there is
+ * nothing smaller to find.
  */
 public final class UninhabitableTypes {
 
@@ -65,20 +65,13 @@ public final class UninhabitableTypes {
         if (none.isEmpty()) {
             return List.of();   // nothing to tell apart, and nothing to read again to do it
         }
-        List<List<TypeName>> found = new ArrayList<>();
-        Set<TypeName> alone = new LinkedHashSet<>();
-        for (TypeName each : none) {
-            if (leftWithNone(List.of(each), none, solved).size() == 1) {
-                alone.add(each);
-                found.add(List.of(each));
-            }
-        }
+        Set<List<TypeName>> found = new LinkedHashSet<>();
         for (List<TypeName> together : solved.components()) {
-            List<TypeName> sharing = new ArrayList<>(together);
-            sharing.removeIf(each -> !none.contains(each) || alone.contains(each));
-            if (!sharing.isEmpty()
-                    && leftWithNone(sharing, none, solved).size() == sharing.size()) {
-                found.add(List.copyOf(sharing));
+            // Reading them all again is what answers this, so it is asked only where there is
+            // something to ask about: a module whose declarations all have values would otherwise be
+            // read once more for every group of them.
+            if (together.stream().anyMatch(none::contains)) {
+                smallestThatHold(together, none, solved, found);
             }
         }
         List<List<TypeName>> reported = new ArrayList<>();
@@ -96,12 +89,59 @@ public final class UninhabitableTypes {
     }
 
     /**
-     * Which of {@code these} still have no value once every lack outside them is granted.
+     * The smallest sets inside {@code these} that hold, collected into {@code found}.
      *
-     * <p>All of them is the answer that names them: nothing outside accounts for it, so whatever
-     * accounts for it is here. Fewer than all is a set that was two questions asked as one, and the
-     * ones that dropped out were answering for the ones that did not.
+     * <p>What is left of a set once everything else is granted is the largest part of it that holds,
+     * and where nothing is left, every one of them was answering for something else. Where something
+     * is left, each of its members is taken away in turn and the question asked of what remains: a
+     * removal that leaves something holding says the set was not the smallest, and where no removal
+     * does, it is.
      */
+    private static void smallestThatHold(List<TypeName> these, Set<TypeName> none,
+                                         TypeCardinality.Cardinalities solved,
+                                         Set<List<TypeName>> found) {
+        List<TypeName> holds = whatHoldsIn(these, none, solved);
+        if (holds.isEmpty()) {
+            return;
+        }
+        Set<List<TypeName>> smaller = new LinkedHashSet<>();
+        for (TypeName one : holds) {
+            List<TypeName> rest = new ArrayList<>(holds);
+            rest.remove(one);
+            List<TypeName> inside = whatHoldsIn(rest, none, solved);
+            if (!inside.isEmpty()) {
+                smaller.add(inside);
+            }
+        }
+        if (smaller.isEmpty()) {
+            found.add(List.copyOf(holds));
+            return;
+        }
+        for (List<TypeName> each : smaller) {
+            smallestThatHold(each, none, solved, found);
+        }
+    }
+
+    /**
+     * The largest part of {@code these} that holds.
+     *
+     * <p>What falls out is granted to what is left, so the question is asked again until nothing more
+     * falls out. What remains is a set every member of which has no value with everything outside it
+     * granted, which is the whole of what holding is.
+     */
+    private static List<TypeName> whatHoldsIn(List<TypeName> these, Set<TypeName> none,
+                                              TypeCardinality.Cardinalities solved) {
+        List<TypeName> now = these;
+        while (true) {
+            List<TypeName> next = leftWithNone(now, none, solved);
+            if (next.size() == now.size()) {
+                return next;
+            }
+            now = next;
+        }
+    }
+
+    /** Which of {@code these} still have no value once every lack outside them is granted. */
     private static List<TypeName> leftWithNone(List<TypeName> these, Set<TypeName> none,
                                                TypeCardinality.Cardinalities solved) {
         Set<TypeName> elsewhere = new LinkedHashSet<>(none);
@@ -115,5 +155,4 @@ public final class UninhabitableTypes {
         }
         return still;
     }
-
 }
