@@ -100,7 +100,7 @@ final class Terms {
      * what made {@code a * b} name nothing where it is written and something where it is bound —
      * which is a name changing what can be said of an expression.
      */
-    LinearForm affine(Core raw, java.util.function.Function<Core, LinearForm> leaf) {
+    LinearForm affine(Core raw, Denotations at, java.util.function.Function<Core, LinearForm> leaf) {
         Core e = asOperator(raw);
         if (e instanceof Core.PreservedCall) {
             // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
@@ -112,39 +112,46 @@ final class Terms {
                 return LinearForm.constant(folded);
             }
         }
-        LinearForm composed = composed(e, leaf);
+        LinearForm composed = composed(e, at, leaf);
         return composed != null ? composed : leaf.apply(e);
     }
 
     /** {@code e} read as arithmetic over what {@code leaf} answers, or {@code null} where this has no
      * rule for it or the rule it has does not compose. */
-    private LinearForm composed(Core e, java.util.function.Function<Core, LinearForm> leaf) {
+    private LinearForm composed(Core e, Denotations at,
+                                java.util.function.Function<Core, LinearForm> leaf) {
         return switch (e) {
             case Core.Int i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Core.Decimal d -> LinearForm.constant(d.value());
-            case Core.Neg n -> negate(affine(n.operand(), leaf));
+            case Core.Neg n -> negate(affine(n.operand(), at, leaf));
             case Core.Binary b when b.op() == Ast.BinOp.ADD ->
-                    add(affine(b.left(), leaf), affine(b.right(), leaf), false);
+                    add(affine(b.left(), at, leaf), affine(b.right(), at, leaf), false);
             case Core.Binary b when b.op() == Ast.BinOp.SUB ->
-                    add(affine(b.left(), leaf), affine(b.right(), leaf), true);
+                    add(affine(b.left(), at, leaf), affine(b.right(), at, leaf), true);
             // scalar multiply by a constant (Amount * 2) is linear; `/` and a variable product are not
             // (a divide truncates for Int, and a variable factor is non-linear), so those come back
             // here as one value rather than as arithmetic over two.
             case Core.Binary b when b.op() == Ast.BinOp.MUL ->
-                    scale(affine(b.left(), leaf), affine(b.right(), leaf));
+                    scale(affine(b.left(), at, leaf), affine(b.right(), at, leaf));
             // A newtype's `.value` read off something that is not a place: what it wraps is what it
             // is, which is the rule a location is keyed by ({@link #pathKey}) read of a computed
             // value too. Without it `f(x).value` is one value where the same call given a name is
             // the arithmetic its body wrote — a name deciding what can be said of an expression.
-            case Core.FieldAccess fa when rootBinding(fa.target()) == null
+            //
+            // Whether the target is a place is asked of what it denotes and not of how it is spelled.
+            // A name given a computed value is no more a place than the call it was given, and asked
+            // by the spelling it came out one: `gross` was read through to the arithmetic behind it
+            // and `gross.value` was an atom of its own, so a guard over the one settled nothing about
+            // a construction over the other (#676).
+            case Core.FieldAccess fa when locationOf(fa.target(), at) == null
                     && !Location.isStep(fa.target().type(), fa.field(), symbols) ->
-                    affine(fa.target(), leaf);
+                    affine(fa.target(), at, leaf);
             // A binding an expansion introduced (`let $0_n = n.value in $0_n * 2`) is what an
             // arithmetic helper becomes, so reading through it is reading the arithmetic the author
             // wrote.
             case Core.LetIn li -> {
-                LinearForm bound = affine(li.value(), leaf);
-                yield bound == null ? null : affine(li.body(),
+                LinearForm bound = affine(li.value(), at, leaf);
+                yield bound == null ? null : affine(li.body(), at,
                         n -> n instanceof Core.Read r && r.binding().equals(li.binder().id())
                                 ? bound : leaf.apply(n));
             }
@@ -183,7 +190,7 @@ final class Terms {
     /** The affine form of an expression: a numeric atom, a newtype construct's wrapped value, or
      * {@code null}. */
     LinearForm affineOf(Core e, Denotations at, Known k) {
-        return affine(e, n -> {
+        return affine(e, at, n -> {
             if (n instanceof Core.NewData nd && nd.spreads().isEmpty() && nd.inits().size() == 1
                     && nd.inits().get(0).name().equals("value")
                     && affineScalarBase(Type.ref(nd.typeName())) != null) {

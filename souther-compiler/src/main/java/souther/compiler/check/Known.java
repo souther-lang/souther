@@ -40,10 +40,6 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
         Unguarded taking(String key, boolean positive) {
             return new Unguarded(numbers, facts.assume(key, positive));
         }
-
-        Unguarded assigning(String atom, LinearForm f, Map<String, Granularity> kinds) {
-            return new Unguarded(numbers.assign(atom, f, kinds), facts);
-        }
     }
 
     /** How far a fact reaches: a value's type and a name's binding say something wherever that value
@@ -66,13 +62,6 @@ record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quant
     Known taking(String key, boolean positive, Held held) {
         return new Known(numbers, facts.assume(key, positive), quantified, spoken,
                 held == Held.OF_THE_VALUE ? unguarded.taking(key, positive) : unguarded);
-    }
-
-    /** This, with {@code atom} standing for {@code f}. A name is an alias for what it was given
-     * wherever it is named, so this reaches both readings. */
-    Known assigning(String atom, LinearForm f, Map<String, Granularity> kinds) {
-        return new Known(numbers.assign(atom, f, kinds), facts, quantified, spoken,
-                unguarded.assigning(atom, f, kinds));
     }
 
     /**
