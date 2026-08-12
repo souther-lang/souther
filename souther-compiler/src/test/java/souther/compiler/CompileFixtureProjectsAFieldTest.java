@@ -4,6 +4,8 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -567,6 +569,103 @@ class CompileFixtureProjectsAFieldTest {
                 example isHundred
                     | "a let-bound target at its own declaration" : (basket.total) -> true
                 """));
+    }
+
+    // --- a declaration is its own module's, whatever this one spells the same way -----------------
+
+    /**
+     * A fixture may apply a helper another module published, so what it answers with is that
+     * module's type. Reading the answer's simple name in this module's scope would answer for the
+     * type this module declares under the same spelling, which is a different type.
+     *
+     * <p>The same-named declaration here is the point: without it, an implementation that resolved
+     * the spelling would answer null and refuse, which is indistinguishable from refusing for the
+     * right reason until somebody adds an import.
+     */
+    @Test
+    void aForeignAnswerIsReadAsItsOwnModulesType() {
+        String lib = """
+                module demo.lib exposing ( Remote, makeRemote )
+
+                data Remote = { amount: Int }
+
+                let makeRemote (n: Int) = Remote { amount = n }
+                """;
+        String app = """
+                module demo.app
+                import demo.lib ( makeRemote )
+
+                data Remote = { other: Int }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a foreign answer's own field" : (makeRemote(100).amount) -> true
+                """;
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(lib, app)));
+    }
+
+    /** The other side of it: a field only this module's same-named type declares is not one the
+     *  answer has. */
+    @Test
+    void aFieldOfThisModulesSameNamedTypeIsNotTheAnswers() {
+        String lib = """
+                module demo.lib exposing ( Remote, makeRemote )
+
+                data Remote = { amount: Int }
+
+                let makeRemote (n: Int) = Remote { amount = n }
+                """;
+        String app = """
+                module demo.app
+                import demo.lib ( makeRemote )
+
+                data Remote = { other: Int }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a field of the local type of the same name" : (makeRemote(100).other) -> true
+                """;
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(lib, app)));
+        assertTrue(e.getMessage().contains("declares no field `other`"), e.getMessage());
+    }
+
+    /**
+     * The same rule where a case's form is moved. Which case a bare name stands for is the type it
+     * stands at saying so, not this module's scope: a same-named declaration here is a record, and
+     * reading the name through it would leave the case as a name where its position wants the tag.
+     */
+    @Test
+    void aForeignCaseIsMovedAsItsOwnSumsCase() {
+        String lib = """
+                module demo.lib exposing ( Ready, Pending, Other, State, Wider, Box, box )
+
+                data Ready
+                data Pending
+                data Other = { note: String }
+                data State = Ready | Pending
+                data Wider = Ready | Pending | Other
+                data Box = { state: State }
+
+                let box = Box { state = Ready }
+                """;
+        String app = """
+                module demo.app
+                import demo.lib ( Wider, box )
+
+                data Ready = { mine: Int }
+
+                behavior tell : (w: Wider) -> Bool
+                let tell (w) = true
+
+                example tell
+                    | "a foreign case at a foreign sum" : (box.state) -> true
+                """;
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(lib, app)));
     }
 
     /** A cycle through a field is reported as the cycle it is. The value graph is checked before a

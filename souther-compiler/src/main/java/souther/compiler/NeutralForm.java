@@ -316,8 +316,15 @@ final class NeutralForm {
         // stops being a name the moment it is admitted into a sum that also lists a product.
         if (value instanceof String written && from instanceof Type.Ref r
                 && !r.name().isPrimitive()) {
-            TypeName caseName = symbols.resolve(written);
-            if (caseName != null && !(symbols.get(caseName) instanceof Ast.Data)) {
+            // Which case this is, is `from`'s to say. Resolving the name here would answer for
+            // whatever this module declares under that spelling, and the type the value stands at
+            // may be one another module published — the reason the overload above takes a resolved
+            // name rather than one spelled at the call.
+            for (TypeName caseName : TypeOps.leafCases(from, symbols)) {
+                if (!caseName.name().equals(written)
+                        || symbols.get(caseName) instanceof Ast.Data) {
+                    continue;
+                }
                 if (readsABareName(to, caseName)) {
                     return written;
                 }

@@ -1336,7 +1336,7 @@ public final class FixtureReader {
                 // and a fixture is not elaborated, so a value's Java surface would otherwise be
                 // reachable as though it were the data's — `.isEmpty` on a `String` is a method
                 // here and a field nowhere.
-                TypeName answered = symbols.resolve(NeutralForm.simpleName(value));
+                TypeName answered = answeredType(value);
                 if (answered == null || fieldTypeOf(Type.ref(answered), fa.field()) == null) {
                     throw new FixtureException("`" + written + "` answered with a value that"
                             + " declares no field `" + fa.field() + "`");
@@ -1564,6 +1564,26 @@ public final class FixtureReader {
             }
             case null, default -> STATES_NO_NAME;
         };
+    }
+
+    /**
+     * The data a live value is, read off the class it was generated as. A binary name is a
+     * {@link TypeName}'s qualified form, so this answers the type the value is.
+     *
+     * <p>Not its simple name resolved here. A helper a fixture applies may be one another module
+     * published, and resolving the spelling in this module's scope would answer for a type this
+     * module happens to declare under the same name rather than for the one the value is — the
+     * same reason {@link #represents} compares a class against a candidate's qualified form
+     * instead of resolving what came out.
+     */
+    private TypeName answeredType(Object value) {
+        String binary = value.getClass().getName();
+        int dot = binary.lastIndexOf('.');
+        if (dot < 0) {
+            return null;
+        }
+        TypeName named = new TypeName(binary.substring(0, dot), binary.substring(dot + 1));
+        return symbols.contains(named) ? named : null;
     }
 
     /**
