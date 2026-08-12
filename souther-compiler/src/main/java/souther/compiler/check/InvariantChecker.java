@@ -257,6 +257,41 @@ public final class InvariantChecker {
      * nothing about, which is the same answer as a declaration with no rules — so nothing about the
      * declaration throws. {@link Terms.OneKeyTwoKinds} is not about the declaration and is not
      * caught ({@link #gaveUp}). */
+    /**
+     * How far a seeding reads at each name it meets.
+     *
+     * <p>Two questions and not one. Leaving a declaration's own clauses out is what a reader asking
+     * which declaration moved an end does: everything under that name still guarantees what it
+     * guarantees, and only the one clause is taken away. Stopping at a name is what a reader
+     * supposing that name has values does: nothing under it is read at all, because what is under it
+     * is exactly what leaves it without them.
+     *
+     * <p>Told apart because one of them was doing for both. A name whose own clauses were skipped
+     * was still descended into, so a value supposed to exist came back impossible by the rules of
+     * what it wraps — the supposing undone one step in, by the same walk that honoured it.
+     *
+     * @param withoutClauses which declarations' own clauses are left out, what is under them still
+     *                       being read
+     * @param stopAt         which declarations are not read at all
+     */
+    record Reach(java.util.function.Predicate<TypeName> withoutClauses,
+                 java.util.function.Predicate<TypeName> stopAt) {
+
+        /** Every rule, wherever it is written. */
+        static final Reach EVERYTHING = new Reach(_ -> false, _ -> false);
+
+        /** Every rule but the ones {@code these} names wrote. */
+        static Reach withoutClausesOf(java.util.function.Predicate<TypeName> these) {
+            return new Reach(these, _ -> false);
+        }
+
+        /** Every rule that is not reached through one of {@code these}, they being supposed to hold
+         * values whatever is written under them. */
+        static Reach stoppingAt(java.util.function.Predicate<TypeName> these) {
+            return new Reach(_ -> false, these);
+        }
+    }
+
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols) {
         return seedFields(named, data, symbols, Map.of());
     }
@@ -270,21 +305,21 @@ public final class InvariantChecker {
      */
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
                              Map<String, Count> settled) {
-        return seedFields(named, data, symbols, settled, _ -> false);
+        return seedFields(named, data, symbols, settled, Reach.EVERYTHING);
     }
 
     /**
-     * The same, with one declaration's own clauses left out.
+     * The same, reading only as far as {@code reach} says at each name it meets.
      *
      * <p>What a rule did is read by asking what happens without it. Which clause moved an edge is not
      * something the closure records — it answers with a number and not with how it got there — and
      * this is that question put to the same reader rather than answered by a second one: seed the
-     * value again without the clauses of {@code without}, and an end that moves is an end that
-     * declaration was holding.
+     * value again without one declaration's clauses, and an end that moves is an end that
+     * declaration was holding. Supposing a declaration has values is the other thing {@code reach}
+     * says, and it is not that one — see {@link Reach}.
      */
     static Seeded seedFields(TypeName named, Ast.Data data, Symbols symbols,
-                             Map<String, Count> settled,
-                             java.util.function.Predicate<TypeName> without) {
+                             Map<String, Count> settled, Reach reach) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         Map<String, Type> fields = c.clauses.fieldsOf(data);
         Map<String, BindingId> bindings = c.clauses.bindingsOf(named, data);
@@ -293,8 +328,9 @@ public final class InvariantChecker {
         boolean read = true;
         List<Written> written = new ArrayList<>();
         try {
-            for (Ast.InvariantClause clause : without.test(named) ? List.<Ast.InvariantClause>of()
-                    : c.clauses.of(named, data)) {
+            for (Ast.InvariantClause clause :
+                    reach.withoutClauses().test(named) || reach.stopAt().test(named)
+                            ? List.<Ast.InvariantClause>of() : c.clauses.of(named, data)) {
                 Core stated = c.clauses.typed(clause.expr(), named, data);
                 if (stated == null) {
                     read = false;
@@ -315,7 +351,7 @@ public final class InvariantChecker {
                     // rule the construction must satisfy is a rule wherever in the value it sits.
                     k = c.seedAt(new Core.Read(field.getKey(), field.getValue(), type, NOWHERE),
                             k, at, 1, Integer.MAX_VALUE, new HashSet<>(),
-                            (from, clause) -> written.add(new Written(from, clause)), without);
+                            (from, clause) -> written.add(new Written(from, clause)), reach);
                 }
             }
         } catch (RuntimeException why) {
@@ -1622,7 +1658,8 @@ public final class InvariantChecker {
      * only in direction.
      */
     Known seedAt(Core root, Known k, Denotations at, int depth) {
-        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>(), null, _ -> false);
+        return seedAt(root, k, at, depth, FIELDS_SEEDED, new HashSet<>(), null,
+                Reach.EVERYTHING);
     }
 
     /**
@@ -1647,11 +1684,17 @@ public final class InvariantChecker {
      */
     private Known seedAt(Core root, Known k, Denotations at, int depth, int limit,
                          Set<TypeName> onPath,
-                         java.util.function.BiConsumer<TypeName, Core> onClause,
-                         java.util.function.Predicate<TypeName> without) {
+                         java.util.function.BiConsumer<TypeName, Core> onClause, Reach reach) {
+        // Read before the path is entered, so that the one name and the other stay paired: a stop
+        // taken after entering would leave the name on the path with nothing to take it off, and the
+        // next field of the same type would be passed over as one already read. Supposed to hold
+        // values, so nothing written under it is read: what is under it is what would say it holds
+        // none, and reading it here is the supposing undone one step in.
         if (depth > limit || !(root.type() instanceof Type.Ref ref)
-                || !(symbols.get(ref.name()) instanceof Ast.Data data)
-                || !onPath.add(ref.name())) {
+                || reach.stopAt().test(ref.name())) {
+            return k;
+        }
+        if (!(symbols.get(ref.name()) instanceof Ast.Data data) || !onPath.add(ref.name())) {
             return k;
         }
         Map<String, Type> fields = clauses.fieldsOf(data);
@@ -1665,8 +1708,8 @@ public final class InvariantChecker {
         });
         Known out = k;
         List<Quantified> quantified = new ArrayList<>();
-        for (Clauses.Stated stated : without.test(ref.name()) ? List.<Clauses.Stated>of()
-                : clauses.statedAt(ref.name(), data, given)) {
+        for (Clauses.Stated stated : reach.withoutClauses().test(ref.name())
+                ? List.<Clauses.Stated>of() : clauses.statedAt(ref.name(), data, given)) {
             if (onClause != null) {
                 onClause.accept(ref.name(), stated.expr());
             }
@@ -1680,10 +1723,10 @@ public final class InvariantChecker {
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
             Core value = given.get(bindings.get("value"));
             out = value == null ? out
-                    : seedAt(value, out, at, depth + 1, limit, onPath, onClause, without);
+                    : seedAt(value, out, at, depth + 1, limit, onPath, onClause, reach);
         } else {
             for (Core value : given.values()) {
-                out = seedAt(value, out, at, depth + 1, limit, onPath, onClause, without);
+                out = seedAt(value, out, at, depth + 1, limit, onPath, onClause, reach);
             }
         }
         onPath.remove(ref.name());

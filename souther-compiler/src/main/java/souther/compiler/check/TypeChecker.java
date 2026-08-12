@@ -250,13 +250,16 @@ public final class TypeChecker {
                 }
             });
         }
-        // Asked only where every declaration stated rules this checker could read. The walk decides
-        // that no value exists from what the rules say, and a rule reported as wrong says nothing --
-        // a count read off one refuses a type on the strength of a clause the author has already been
-        // told to fix. Only the declarations have been checked at this point, so a mistake in a body
-        // further down does not silence this.
+        // Asked only where every declaration stated rules this checker could read. The reading
+        // decides that no value exists from what the rules say, and a rule reported as wrong says
+        // nothing -- a count read off one refuses a type on the strength of a clause the author has
+        // already been told to fix. Only the declarations have been checked at this point, so a
+        // mistake in a body further down does not silence this.
         if (errors.isEmpty()) {
-            collect(errors, abandoned, () -> DataChecker.checkNoUninhabitableCycle(module, symbols));
+            List<CompileException> withNoValue = new ArrayList<>();
+            collect(errors, abandoned,
+                    () -> withNoValue.addAll(DataChecker.typesWithNoValue(module, symbols)));
+            errors.addAll(withNoValue);
         }
         Map<String, Ast.FnDef> fns = new HashMap<>();
         for (Ast.FnDef fn : module.fns()) {
