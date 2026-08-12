@@ -230,4 +230,99 @@ class CompileFixtureProjectsAFieldTest {
         assertTrue(e.getMessage().contains("AmountN") && e.getMessage().contains("Int"),
                 e.getMessage());
     }
+
+    // --- a newtype declares one field, and it is what it wraps -----------------------------------
+
+    @Test
+    void aNewtypeWrappedValueIsReadAsItsField() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+
+                let listed = AmountN(100)
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "what a newtype wraps is a field" : (listed.value) -> true
+                """));
+    }
+
+    @Test
+    void aNewtypeAnsweredByAHelperIsReadAsItsField() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+
+                let makeAmount (n: Int) = AmountN(n)
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "project a newtype returned by a helper" : (makeAmount(100).value) -> true
+                """));
+    }
+
+    @Test
+    void aNamedNewtypeAnswerIsStillANewtypeWhenProjected() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+
+                let makeAmount (n: Int) = AmountN(n)
+                let amount = makeAmount(100)
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a named helper answer is still a newtype when projected" : (amount.value) -> true
+                """));
+    }
+
+    /** What `.value` supplies is the base, so it does not supply the newtype. Without this, a walk
+     *  that never recognised the construction at all would satisfy the three above. */
+    @Test
+    void aNewtypeFieldStatesItsBaseType() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+
+                behavior takesAmount : (n: AmountN) -> Bool
+                let takesAmount (n) = true
+
+                example takesAmount
+                    | "a newtype value field is its declared base" : (AmountN(100).value) -> true
+                """));
+        // The reason and not the code: a fixture that could not be read at all is E1903 too.
+        assertTrue(e.getMessage().contains("declaring `Int`")
+                && e.getMessage().contains("`AmountN`"), e.getMessage());
+    }
+
+    /** The chain that crosses both kinds of evidence: a helper's answer, a field, and the base. */
+    @Test
+    void aProjectionChainReachesWhatANewtypeWraps() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Inner = { total: AmountN }
+                data Outer = { inner: Inner }
+
+                let makeOuter (n: Int) = Outer { inner = Inner { total = AmountN(n) } }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "the chain reaches what the newtype wraps" :
+                        (makeOuter(100).inner.total.value) -> true
+                """));
+    }
 }
