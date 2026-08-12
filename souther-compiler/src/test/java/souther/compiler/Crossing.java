@@ -33,9 +33,6 @@ final class Crossing {
         Ast.Module written = compilation.module(compilation.modules().get(0));
         Sig sig = compilation.signatures(written.name()).get(behavior);
 
-        // One loader for the whole crossing, as `souther run` holds one: asked twice, a compilation
-        // answers with two, and a value the first one's classes made is not a value the second one's
-        // classes are — a decoded key stops equalling the key the behavior looks up.
         ClassLoader loader = compilation.loader();
         JsonBoundary.Read read = JsonBoundary.read(loader, sig.ins().get(0), JSON.readTree(json));
         Object argument = assertInstanceOf(JsonBoundary.Read.Value.class, read, json).value();
