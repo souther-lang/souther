@@ -362,6 +362,40 @@ final class DischargeRules {
             op("Int", "min"), op("Int", "max"), op("Int", "floorMod"), op("Int", "compare"),
             op("Decimal", "min"), op("Decimal", "max"));
 
+    /**
+     * The operations answering the order of their two arguments as the sign of a number, and the
+     * relation between the first argument and the second that a positive answer states. Zero states
+     * the equality, and a negative answer the relation the other way, so one row is the whole of what
+     * such an operation says.
+     *
+     * <p>Which relation a guard writing one states then follows from where the sign stands against
+     * zero and from nothing else, so the six relations and the two operand orders are one account
+     * rather than twelve rows ({@link Predicates#asOrderComparison}). The direction is not the same
+     * for all of them: {@code compare(a, b)} is positive where {@code a} is the greater, and
+     * {@code daysBetween(from, to)} counts forward from its first argument, so it is positive where
+     * the second one is.
+     */
+    private static final Map<ValueName, Ast.BinOp> ORDERS = Map.of(
+            op("Int", "compare"), Ast.BinOp.GT,
+            op("Decimal", "compare"), Ast.BinOp.GT,
+            op("Date", "daysBetween"), Ast.BinOp.LT);
+
+    /**
+     * The operations answering a number from two values of one type whose sign is not their order.
+     *
+     * <p>Arithmetic and a choice between two values are not orders at all: what {@code Int.subtract}
+     * answers has the sign of one and says how far apart they are as well, which is what a term
+     * already reads it as, and {@code min} answers one of the two rather than anything about the
+     * pair. {@code DateTime.minutesBetween} is the one that has to be told apart: it counts whole
+     * minutes, so a zero says the two are less than a minute apart rather than that they are equal,
+     * and a non-negative count does not say the second is not the earlier. Its strict signs do state
+     * the order, and a rule that holds for four of the six relations is not this one.
+     */
+    static final Set<ValueName> DECIDES_NO_ORDER = Set.of(
+            op("Int", "add"), op("Int", "subtract"), op("Int", "multiply"),
+            op("Int", "min"), op("Int", "max"), op("Int", "floorMod"),
+            op("DateTime", "minutesBetween"));
+
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool", "not");
 
@@ -427,6 +461,10 @@ final class DischargeRules {
 
     static Set<ValueName> operatorForms() {
         return OPERATOR_CALLS.keySet();
+    }
+
+    static Set<ValueName> orderings() {
+        return ORDERS.keySet();
     }
 
     /** Those of them the building table has, by name, for the test that holds each to a construction
@@ -592,6 +630,17 @@ final class DischargeRules {
     /** The operator {@code operation} is, where it is one written as a function, else null. */
     static Ast.BinOp operator(ValueName operation) {
         return OPERATOR_CALLS.get(operation);
+    }
+
+    /** The relation a positive answer from {@code operation} states between its first argument and
+     * its second, or null where its sign is not an order. */
+    static Ast.BinOp orderStatedBy(ValueName operation) {
+        return ORDERS.get(operation);
+    }
+
+    /** Whether {@code operation} answers the order of its two arguments as a sign. */
+    static boolean decidesOrder(ValueName operation) {
+        return ORDERS.containsKey(operation);
     }
 
     /** Whether the check has a rule about what a call answers, rather than only about how to render

@@ -215,19 +215,19 @@ public final class Compiler {
         compilation.measure(measure);
         Db db = compilation.db();
 
-        CompileException structural = compilation.firstError(compilation.structuralReports());
+        CompileException structural = compilation.failure(compilation.structuralReports());
         if (structural != null) {
             throw structural;
         }
 
         db.ask(new Output.All());
-        CompileException failed = compilation.firstError(db.allReports());
+        CompileException failed = compilation.failure(db.allReports());
         if (failed != null) {
             throw failed;
         }
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.firstError(db.allReports());
+                CompileException bad = compilation.failure(db.allReports());
                 if (bad != null) {
                     throw bad;
                 }
@@ -424,13 +424,13 @@ public final class Compiler {
         compilation.measure(measure);
         Db db = compilation.db();
 
-        CompileException structural = compilation.firstError(compilation.structuralReports());
+        CompileException structural = compilation.failure(compilation.structuralReports());
         if (structural != null) {
             throw structural;
         }
 
         db.ask(new Output.All());
-        CompileException failed = compilation.firstError(db.allReports());
+        CompileException failed = compilation.failure(db.allReports());
         if (failed != null) {
             throw failed;
         }
@@ -442,7 +442,7 @@ public final class Compiler {
         List<String> exampleSources = new ArrayList<>();
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
-                CompileException bad = compilation.firstError(db.allReports());
+                CompileException bad = compilation.failure(db.allReports());
                 if (bad != null) {
                     throw bad;
                 }

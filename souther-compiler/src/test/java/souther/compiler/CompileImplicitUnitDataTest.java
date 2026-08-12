@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.DiagnosticRenderer;
 
 import org.junit.jupiter.api.Test;
 
@@ -152,7 +153,12 @@ class CompileImplicitUnitDataTest {
                         let f (a) = Out { n = a.value }
                         """)));
 
-        assertTrue(e.getMessage().contains("Refused"), e.getMessage());
+        // Among what the compile answers with, not necessarily leading it: the name is reported
+        // unknown where it is written, and what its recovery value goes on to be refused for sits a
+        // few columns to the left of that.
+        assertTrue(e.diagnostics().stream()
+                        .anyMatch(d -> DiagnosticRenderer.legacyBody(d).contains("Refused")),
+                e.getMessage());
     }
 
     /** An imported name is declared — by the module it came from. Introducing one here would give a

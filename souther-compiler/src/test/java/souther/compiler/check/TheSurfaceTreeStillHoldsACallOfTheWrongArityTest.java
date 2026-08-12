@@ -2,8 +2,11 @@ package souther.compiler.check;
 
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.DiagnosticRenderer;
 
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -119,8 +122,15 @@ class TheSurfaceTreeStillHoldsACallOfTheWrongArityTest {
     private static void besideAnotherError(String src) {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileWithWarnings(src));
-        assertTrue(e.getMessage().contains("argument(s)") || e.getMessage().contains("nosuchthing")
-                        || e.getMessage().contains("List.fold"),
-                "one of the two errors, and not an internal failure: " + e.getMessage());
+        // Both, rather than whichever leads. A compile answers with every error it found, so the
+        // arity being reported is not a claim about which of the two the author is sent to first.
+        assertTrue(said(e).stream().anyMatch(d -> d.contains("argument(s)") || d.contains("parameter(s)")),
+                "the arity is reported, and not an internal failure: " + said(e));
+        assertTrue(said(e).stream().anyMatch(d -> d.contains("nosuchthing")),
+                "and so is the error beside it: " + said(e));
+    }
+
+    private static List<String> said(CompileException e) {
+        return e.diagnostics().stream().map(DiagnosticRenderer::legacyBody).toList();
     }
 }
