@@ -5,6 +5,9 @@ import souther.compiler.check.InvariantChecker.Said;
 import souther.compiler.check.InvariantChecker.Verdict;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,6 +56,9 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         InvariantChecker.WATCHING = said;
         try {
             Compiler.compileWithWarnings(source);
+        } catch (souther.compiler.diag.CompileException refused) {
+            // A construction the guards refute is an error, and the verdict that says so was reached
+            // before it was raised. What is asked here is which verdict, not whether it compiles.
         } finally {
             InvariantChecker.WATCHING = null;
         }
@@ -68,23 +74,44 @@ class AComparisonCallStatesTheOrderItDecidesTest {
         }
     }
 
-    /** A guard over decimals, written both ways, settles the same construction. */
-    @Test
-    void aDecimalComparisonAgainstZeroSettlesWhatTheOperatorSettles() {
-        String written = DECIMALS + """
-
-                behavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
-
-                let settle (paid, fee) = {
-                    guard Decimal.compare(paid, fee) >= 0 else FeeTooHigh
-                    Refund { net = Net(paid - fee) }
-                }
-                """;
-        reads("Net", Verdict.PROVED, written);
+    /**
+     * The six relations, each written with the call on either side of the zero.
+     *
+     * <p>What is held is the whole account at once: the relation the guard states is the one written,
+     * taken between the two arguments, and writing the zero on the other side states the same fact
+     * mirrored. So the two spellings of a row answer alike, and what they answer is what that
+     * relation gives a construction of `paid - fee` — settled where the guard puts `paid` at or above
+     * `fee`, refuted where it puts it below, and unsettled where it leaves both open.
+     */
+    @ParameterizedTest(name = "{0} 0 and 0 {1}")
+    @MethodSource("relations")
+    void eachRelationOnEitherSideOfTheZero(String written, String mirrored, Verdict expected) {
+        reads("Net", expected, guarded("Decimal.compare(paid, fee) " + written + " 0"));
+        reads("Net", expected, guarded("0 " + mirrored + " Decimal.compare(paid, fee)"));
     }
 
-    /** And settles no more than it says. */
+    private static List<Arguments> relations() {
+        return List.of(
+                Arguments.of(">=", "<=", Verdict.PROVED),
+                Arguments.of(">", "<", Verdict.PROVED),
+                Arguments.of("==", "==", Verdict.PROVED),
+                Arguments.of("/=", "/=", Verdict.UNKNOWN),
+                Arguments.of("<=", ">=", Verdict.UNKNOWN),
+                Arguments.of("<", ">", Verdict.REFUTED_NOT_ALONE));
+    }
+
+    /** The model those are read in: a difference the guard is what settles. */
+    private static String guarded(String condition) {
+        return DECIMALS
+                + "\nbehavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh\n"
+                + "    constructs Refund, Net, FeeTooHigh\n\n"
+                + "let settle (paid, fee) = {\n"
+                + "    guard " + condition + " else FeeTooHigh\n"
+                + "    Refund { net = Net(paid - fee) }\n"
+                + "}\n";
+    }
+
+    /** What the table above settles, it settles no more of. */
     @Test
     void aDecimalComparisonAgainstZeroSettlesNoMore() {
         String m = DECIMALS + """
@@ -98,55 +125,6 @@ class AComparisonCallStatesTheOrderItDecidesTest {
                 }
                 """;
         reads("Net", Verdict.UNKNOWN, m);
-    }
-
-    /** The zero on the left is the same guard mirrored. */
-    @Test
-    void theCallOnTheRightOfTheZero() {
-        String m = DECIMALS + """
-
-                behavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
-
-                let settle (paid, fee) = {
-                    guard 0 <= Decimal.compare(paid, fee) else FeeTooHigh
-                    Refund { net = Net(paid - fee) }
-                }
-                """;
-        reads("Net", Verdict.PROVED, m);
-    }
-
-    /** A strict order states the strict relation: `> 0` is `paid > fee`, which settles the
-     * difference as `>= 0` does. */
-    @Test
-    void aStrictComparison() {
-        String m = DECIMALS + """
-
-                behavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
-
-                let settle (paid, fee) = {
-                    guard Decimal.compare(paid, fee) > 0 else FeeTooHigh
-                    Refund { net = Net(paid - fee) }
-                }
-                """;
-        reads("Net", Verdict.PROVED, m);
-    }
-
-    /** Equality: the two are one value, so their difference is zero. */
-    @Test
-    void anEqualityComparison() {
-        String m = DECIMALS + """
-
-                behavior settle : (paid: Decimal, fee: Decimal) -> Refund | FeeTooHigh
-                    constructs Refund, Net, FeeTooHigh
-
-                let settle (paid, fee) = {
-                    guard Decimal.compare(paid, fee) == 0 else FeeTooHigh
-                    Refund { net = Net(paid - fee) }
-                }
-                """;
-        reads("Net", Verdict.PROVED, m);
     }
 
     /** The relation the guard denies is the one its departure carries: `< 0` sends the smaller case
