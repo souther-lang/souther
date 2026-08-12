@@ -36,59 +36,20 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * CLI entry point with two subcommands: {@code souther compile <file.sou>... -d <outdir>} writes
- * {@code .class} files, and {@code souther run <file.sou> [-cp <path>] [--behavior <name>] [--input
- * <json>]} drives one behavior and prints its output (see {@link Runner}).
+ * The command line's entry point: it resolves the command a line names, holds the line against what
+ * that command takes, and runs it.
  *
- * <p>Both accept {@code --format human|json}, {@code --lang <tag>}, and {@code --color auto|always|never}
- * to control how a compile error is rendered (an Elm-style snippet or a JSON object, in the chosen
- * locale). These are pulled off before the subcommand's own arguments are parsed.
+ * <p>Which commands there are and what each takes is not written here. {@link CliCommand} is the
+ * table of commands and {@link CliOption} of options, and both {@link Usage} — what
+ * {@code souther help} writes — and the check above the dispatch are read off them. What this class
+ * holds is each command's own reading of its arguments, and the one boundary the whole run sits
+ * inside.
  */
 public final class Main {
 
-    private static final String USAGE = """
-            usage: souther <command> [args]
-            commands:
-              compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
-              run <file.sou> [-cp <path>] [--behavior <name>] [--input <json>]  run a behavior, print its output
-              fmt <file.sou>... [-w|--write] [--check]             format source (stdout, or -w in place)
-              examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
-              doc [<anchor> | <error-code> | <set>/<topic> | --search <term>]  read the language specification
-              api [<Module>[.<name>] | --search <term>]            the stdlib surface and its signatures
-              japi <class-or-package>[#<member>] [-cp <path>]      a dependency jar's public API, with javadoc
-            options (doc):
-              --search <term>           sections and topics that say the term, best answer first
-              --limit <n>               with --search, how many hits to show (default 20; 0 for all)
-            options (api):
-              --source <Module>         a stdlib module's own source, design comments included
-              mcp                                                  serve doc/api/japi over MCP stdio
-            options (examples):
-              --module <name>           report only this module
-              --behavior <name>         report only this behavior
-              --generate                print commented rows for what nothing covers
-              --boundaries              with --generate, add rows at the untried boundaries
-              --strict                  exit non-zero on a gap the report names
-            options (compile):
-              --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
-              --warnings report|error   refuse a compile that warns (default report)
-            options (compile/run/examples/japi):
-              -cp, --class-path <path>  where to find modules another project compiled
-
-            options (compile/run/examples):
-              --format human|json      how to render a compile error (default: human)
-              --lang <tag>             message locale as a language tag, e.g. ja or en
-                                       (overrides SOUTHER_LANG; with neither, en)
-              --color auto|always|never  color the human output (default: auto)
-                                       (not written with --format json, which reads no color)""";
-
-    /** Every option this compiler knows, for the test that holds the table against the usage text. */
+    /** Every option this compiler knows, for the test that holds the table against the parsers. */
     static java.util.Set<String> knownOptions() {
-        return CliOption.spellings();
-    }
-
-    /** The usage text, for the test that holds it against the table. */
-    static String usage() {
-        return USAGE;
+        return CliOption.everySpelling();
     }
 
     /** The commands that take {@code option}, or null where this compiler has no such option. */
@@ -134,51 +95,62 @@ public final class Main {
      * here, each of those is an ordinary result.
      */
     static int dispatch(String[] args) {
-        String command = args.length == 0 ? "" : args[0];
+        String named = args.length == 0 ? "" : args[0];
         String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);
-        java.util.function.IntSupplier asked = commandNamed(command, rest);
-        if (asked == null) {
-            String hint = command.endsWith(".sou")
-                    ? "no command given — did you mean `souther compile " + command
-                            + " …` or `souther run " + command + " …`?"
-                    : command.isEmpty() ? "no command given" : "unknown command `" + command + "`";
+        // Written where a command goes, `--help` asks what `help` asks. Read as an option it would
+        // be an option of no command, since which command's options are read is what has not been
+        // said yet; read as its own shape it would be a line whose remaining arguments nothing
+        // looks at, and `souther --help compile` would answer with the listing.
+        CliCommand command = CliOption.isHelp(named) ? CliCommand.HELP : CliCommand.named(named);
+        if (command == null) {
+            String hint = named.endsWith(".sou")
+                    ? "no command given — did you mean `souther compile " + named
+                            + " …` or `souther run " + named + " …`?"
+                    : named.isEmpty() ? "no command given" : "unknown command `" + named + "`";
             System.err.println(hint);
-            System.err.println(USAGE);
+            System.err.println(Usage.all());
             return 2;
         }
         // Before the command, and the same check whichever one was named. What each parser used to
         // ask for itself — is this token mine — three of them asked and two did not, and none of
         // them could ask the question the tokens cannot answer one at a time: whether an option
         // written here is one this line ever reads.
-        CliOption.Reading read = CliOption.read(command, rest);
+        CliOption.Reading read = CliOption.read(command.spelling(), rest);
+        // Before the refusal. A line that asks what the command takes is asking because it does not
+        // know, so answering it with what is wrong with the line — and then not answering it — is
+        // the one reply that leaves its author where they started.
+        if (read.help()) {
+            System.out.println(Usage.of(command));
+            return 0;
+        }
         if (read.refusal() != null) {
             System.err.println(Messages.get(read.refusal().key(),
                     RenderOptions.asking(read.lang()).locale(), read.refusal().args()));
-            System.err.println(USAGE);
+            System.err.println(Usage.of(command));
             return 2;
         }
-        return asked.getAsInt();
+        return work(command, rest).getAsInt();
     }
 
     /**
-     * The command this line names, or null where it names none.
+     * What the command does, kept unrun until everything said above about the line holds.
      *
-     * <p>Resolved before its arguments are checked and kept unrun, so which commands there are is
-     * said once. A list of the names beside this one is a second statement of it, and the check
-     * above reads a command name — a name missing from that list is a command whose options nothing
-     * looks at, which is the shape of the defect the check exists for.
+     * <p>A {@code switch} over the table and not over the name, and an expression with no default
+     * arm: a command written into {@link CliCommand} and left out here is a compile error. The
+     * names used to be matched a second time in this method, which made the table and the dispatch
+     * two lists to keep in step — the drift a test would then have to go looking for.
      */
-    private static java.util.function.IntSupplier commandNamed(String command, String[] rest) {
+    private static java.util.function.IntSupplier work(CliCommand command, String[] rest) {
         return switch (command) {
-            case "run" -> () -> runSubcommand(rest);
-            case "compile" -> () -> compileSubcommand(rest);
-            case "fmt" -> () -> fmtSubcommand(rest);
-            case "examples" -> () -> examplesSubcommand(rest);
-            case "doc" -> () -> DocCommand.run(rest, System.out, System.err);
-            case "api" -> () -> ApiCommand.run(rest, System.out, System.err);
-            case "japi" -> () -> JapiCommand.run(rest, System.out, System.err);
-            case "mcp" -> () -> mcpSubcommand(rest);
-            default -> null;
+            case RUN -> () -> runSubcommand(rest);
+            case COMPILE -> () -> compileSubcommand(rest);
+            case FMT -> () -> fmtSubcommand(rest);
+            case EXAMPLES -> () -> examplesSubcommand(rest);
+            case DOC -> () -> DocCommand.run(rest, System.out, System.err);
+            case API -> () -> ApiCommand.run(rest, System.out, System.err);
+            case JAPI -> () -> JapiCommand.run(rest, System.out, System.err);
+            case MCP -> () -> mcpSubcommand(rest);
+            case HELP -> () -> helpSubcommand(rest);
         };
     }
 
@@ -241,7 +213,7 @@ public final class Main {
         }
         if (sources.isEmpty()) {
             System.err.println("compile takes at least one .sou file");
-            System.err.println(USAGE);
+            System.err.println(Usage.of(CliCommand.COMPILE));
             return 2;
         }
         List<Located> warnings = new ArrayList<>();
@@ -320,7 +292,7 @@ public final class Main {
         }
         if (sources.isEmpty()) {
             System.err.println("examples takes at least one .sou file");
-            System.err.println(USAGE);
+            System.err.println(Usage.of(CliCommand.EXAMPLES));
             return 2;
         }
         List<Located> warnings = new ArrayList<>();
@@ -412,10 +384,55 @@ public final class Main {
         if (args.length > 0) {
             System.err.println(Messages.get("cli.mcp.arguments",
                     RenderOptions.asking(null).locale(), String.join(", ", args)));
-            System.err.println(USAGE);
+            System.err.println(Usage.of(CliCommand.MCP));
             return 2;
         }
         return McpServer.serve(System.in, System.out);
+    }
+
+    /**
+     * {@code souther help [<command>]}: what this command line takes, asked rather than refused.
+     *
+     * <p>On stdout under a zero exit code, which is the whole point of it being a command. What it
+     * writes was reachable only from a failure before — no command, an unknown one, a missing
+     * argument — so it went to stderr every time and the exit code said the line was wrong. An
+     * author who wanted to read it had to write a line they knew this compiler would refuse, and a
+     * reader piping the answer anywhere got an empty pipe.
+     */
+    private static int helpSubcommand(String[] args) {
+        Locale locale = RenderOptions.asking(null).locale();
+        if (args.length == 0) {
+            System.out.println(Usage.all());
+            return 0;
+        }
+        if (args.length > 1) {
+            System.err.println(Messages.get("cli.help.arguments", locale,
+                    String.join(", ", args)));
+            System.err.println(Usage.of(CliCommand.HELP));
+            return 2;
+        }
+        CliCommand about = helpTarget(args);
+        if (about == null) {
+            // Not answered with the listing as though nothing had been asked: a word that is no
+            // command of this compiler's is a thing its author believes exists, and being shown
+            // every command without being told that is not one of them leaves them looking for it.
+            System.err.println(Messages.get("cli.help.command", locale, args[0]));
+            System.err.println(Usage.all());
+            return 2;
+        }
+        System.out.println(Usage.of(about));
+        return 0;
+    }
+
+    /**
+     * The command {@code souther help} was asked about, or null where its argument names none.
+     *
+     * <p>Of a line that names one: the argument is a command name, and a line that wrote no name or
+     * wrote two has not named a command to answer about. Which of those it is stays with the
+     * command that has to say so.
+     */
+    static CliCommand helpTarget(String[] args) {
+        return args.length == 1 ? CliCommand.named(args[0]) : null;
     }
 
     /** The level {@code --adequacy} names, or null where it names none. */
@@ -458,7 +475,7 @@ public final class Main {
         }
         if (files.isEmpty()) {
             System.err.println("fmt takes at least one .sou file");
-            System.err.println(USAGE);
+            System.err.println(Usage.of(CliCommand.FMT));
             return 2;
         }
         if (!write && !check && files.size() > 1) {

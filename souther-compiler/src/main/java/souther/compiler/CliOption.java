@@ -29,60 +29,123 @@ import java.util.Set;
  */
 enum CliOption {
 
-    FORMAT("compile/run/examples", Value.TAKEN, "--format"),
-    LANG("compile/run/examples", Value.TAKEN, "--lang"),
-    COLOR("compile/run/examples", Value.TAKEN, "--color"),
-    CLASS_PATH("compile/run/examples/japi", Value.TAKEN, "-cp", "--class-path"),
-    OUT_DIR("compile", Value.TAKEN, "-d"),
-    ADEQUACY("compile", Value.TAKEN, "--adequacy"),
-    WARNINGS("compile", Value.TAKEN, "--warnings"),
-    BEHAVIOR("run/examples", Value.TAKEN, "--behavior"),
-    INPUT("run", Value.TAKEN, "--input"),
-    WRITE("fmt", Value.NONE, "-w", "--write"),
-    CHECK("fmt", Value.NONE, "--check"),
-    MODULE("examples", Value.TAKEN, "--module"),
-    GENERATE("examples", Value.NONE, "--generate"),
-    BOUNDARIES("examples", Value.NONE, "--boundaries"),
-    STRICT("examples", Value.NONE, "--strict"),
-    SEARCH("doc/api", Value.TAKEN, "--search"),
-    LIMIT("doc", Value.TAKEN, "--limit"),
-    SOURCE("api", Value.TAKEN, "--source");
-
-    /** Whether the token after this one is its value or the next argument. */
-    enum Value { NONE, TAKEN }
+    OUT_DIR("compile", "<outdir>", "where the generated .class files are written", "-d"),
+    ADEQUACY("compile", "off|witness|all",
+            "warn about what the `example`s do not cover (default off)", "--adequacy"),
+    WARNINGS("compile", "report|error", "refuse a compile that warns (default report)",
+            "--warnings"),
+    BEHAVIOR("run/examples", "<name>", "report only this behavior", "--behavior"),
+    INPUT("run", "<json>", "the behavior's input, as JSON", "--input"),
+    WRITE("fmt", null, "write the formatted source back in place", "-w", "--write"),
+    CHECK("fmt", null, "write no file; exit non-zero on a file that is not formatted", "--check"),
+    MODULE("examples", "<name>", "report only this module", "--module"),
+    GENERATE("examples", null, "print commented rows for what nothing covers", "--generate"),
+    BOUNDARIES("examples", null, "with --generate, add rows at the untried boundaries",
+            "--boundaries"),
+    STRICT("examples", null, "exit non-zero on a gap the report names", "--strict"),
+    SEARCH("doc/api", "<term>", "sections and topics that say the term, best answer first",
+            "--search"),
+    LIMIT("doc", "<n>", "with --search, how many hits to show (default 20; 0 for all)", "--limit"),
+    SOURCE("api", "<Module>", "a stdlib module's own source, design comments included", "--source"),
+    CLASS_PATH("compile/run/examples/japi", "<path>",
+            "where to find modules another project compiled", "-cp", "--class-path"),
+    FORMAT("compile/run/examples", "human|json",
+            "how to render a compile error (default human)", "--format"),
+    LANG("compile/run/examples", "<tag>",
+            "message locale as a language tag, e.g. ja or en; overrides SOUTHER_LANG, and with "
+                    + "neither, en", "--lang"),
+    COLOR("compile/run/examples", "auto|always|never",
+            "color the human output (default auto); not read under --format json", "--color"),
+    /** Every command's, which is what the null owner means. */
+    HELP(null, null, "what this command takes, and what its options mean", "--help", "-h");
 
     /** Why a command line is refused: a catalog key and what fills it. */
     record Refusal(String key, Object... args) {}
 
     /**
-     * What one reading of a command line found: why it is refused, if it is, and the language it is
-     * to be answered in.
+     * What one reading of a command line found: why it is refused, if it is, the language it is to
+     * be answered in, and whether it asks what the command takes.
      *
-     * <p>The two come from the same walk because they are answers about the same tokens. Reading the
-     * line twice — once to find {@code --lang}, once to check it — is two rules for what a token is,
-     * and they part company on the lines that need them most: a value that is spelt like an option
-     * is a value to one walk and an option to the other.
+     * <p>The three come from the same walk because they are answers about the same tokens. Reading
+     * the line twice — once to find {@code --lang}, once to check it — is two rules for what a token
+     * is, and they part company on the lines that need them most: a value that is spelt like an
+     * option is a value to one walk and an option to the other.
+     *
+     * <p>{@code help} is that same reading and not a search for the word. {@code run --input --help}
+     * hands {@code run} the input {@code --help}; a line scanned for the token finds a request for
+     * help in it, and answers a question its author did not ask instead of running what they wrote.
+     * So this is true where the walk recognised {@link #HELP} in a position an option is read in,
+     * and there is no other way for it to become true.
      */
-    record Reading(Refusal refusal, String lang) {}
+    record Reading(Refusal refusal, String lang, boolean help) {}
 
     /**
-     * The commands that take the option, in the form a refusal names them.
+     * The commands that take the option, in the form a refusal names them, or null for an option
+     * every command takes.
      *
      * <p>Not the commands it is documented under. The usage text groups an option under one heading
      * — {@code --behavior} under {@code examples} — and {@code run} takes it too; a refusal built
      * from the heading would send an author to the wrong command line.
+     *
+     * <p>Null rather than the commands written out, where the answer is all of them. Writing them
+     * out is a copy of {@link CliCommand} with nothing holding the two together, and the copy goes
+     * wrong exactly where it matters: a command added to that table and missed here would be the one
+     * command that cannot be asked what it takes, and every check on this table would still pass.
      */
     private final String owners;
 
-    private final Value value;
+    /**
+     * How this option's value is written where it takes one, and null where it takes none.
+     *
+     * <p>Also what says which of the two it is. These were two statements — a {@code Value} in this
+     * table beside a value spelling written in the usage text — and an option's value is one fact: a
+     * token follows it exactly where there is something for that token to be.
+     */
+    private final String valueSpelling;
+
+    /**
+     * What the option does, in the words a reader is shown beside it.
+     *
+     * <p>The option's own, which is not always the whole of it: what {@code --behavior} selects
+     * differs between the command that drives one and the command that reports on one. A command
+     * that reads it differently says so itself (see {@code CliCommand}), and this is the reading
+     * every other command takes.
+     */
+    private final String description;
 
     /** Every spelling of the option, the first of which is the one a refusal names it by. */
     private final List<String> spellings;
 
-    CliOption(String owners, Value value, String... spellings) {
+    CliOption(String owners, String valueSpelling, String description, String... spellings) {
         this.owners = owners;
-        this.value = value;
+        this.valueSpelling = valueSpelling;
+        this.description = description;
         this.spellings = List.of(spellings);
+    }
+
+    /** The spelling a refusal names this option by, and the one a section lists it under. */
+    String spelling() {
+        return spellings.get(0);
+    }
+
+    /** Every spelling of this option, in the order a section writes them. */
+    List<String> spellings() {
+        return spellings;
+    }
+
+    /** How this option's value is written, or null where it takes none. */
+    String valueSpelling() {
+        return valueSpelling;
+    }
+
+    /** What this option does, where the command reading it has nothing of its own to say. */
+    String description() {
+        return description;
+    }
+
+    /** Whether the token after this one is read as its value. */
+    boolean takesAValue() {
+        return valueSpelling != null;
     }
 
     /**
@@ -116,17 +179,39 @@ enum CliOption {
     }
 
     /** Every spelling this compiler knows, in the order the table writes them. */
-    static Set<String> spellings() {
+    static Set<String> everySpelling() {
         return new LinkedHashSet<>(BY_SPELLING.keySet());
     }
 
     /** The commands that take the option written this way, or null where this compiler has none. */
     static String owners(String spelling) {
         CliOption option = BY_SPELLING.get(spelling);
-        return option == null ? null : option.owners;
+        return option == null ? null : option.owners();
     }
 
-    private boolean ownedBy(String command) {
+    /**
+     * The commands that take this option, in the form a refusal names them.
+     *
+     * <p>Asked of {@link CliCommand} where the answer is all of them, and asked when it is asked
+     * rather than when this table is built: an enum whose constants read another enum's constants
+     * while both are being initialised sees whichever of them got there first.
+     */
+    String owners() {
+        if (owners != null) {
+            return owners;
+        }
+        StringBuilder every = new StringBuilder();
+        for (CliCommand command : CliCommand.values()) {
+            every.append(every.isEmpty() ? "" : "/").append(command.spelling());
+        }
+        return every.toString();
+    }
+
+    /** Whether the named command is one of this option's, which is what a section lists it under. */
+    boolean ownedBy(String command) {
+        if (owners == null) {
+            return true;   // every command's, whichever commands there turn out to be
+        }
         for (String owner : owners.split("/")) {
             if (owner.equals(command)) {
                 return true;
@@ -152,6 +237,7 @@ enum CliOption {
         Map<CliOption, String> asWritten = new EnumMap<>(CliOption.class);
         Refusal token = null;
         String lang = null;
+        boolean help = false;
         for (int i = 0; i < args.length; i++) {
             String word = args[i];
             CliOption option = BY_SPELLING.get(word);
@@ -169,7 +255,10 @@ enum CliOption {
             }
             written.add(option);
             asWritten.put(option, word);
-            if (option.value == Value.TAKEN) {
+            if (option == HELP) {
+                help = true;   // recognised where an option is read, which is the whole of the rule
+            }
+            if (option.takesAValue()) {
                 // Whatever follows is this option's value, option-shaped or not: `--module
                 // --generate` names a module, which is what the command's own parser reads it as.
                 if (++i >= args.length) {
@@ -187,7 +276,19 @@ enum CliOption {
                 }
             }
         }
-        return new Reading(token != null ? token : unmet(written, asWritten), lang);
+        return new Reading(token != null ? token : unmet(written, asWritten), lang, help);
+    }
+
+    /**
+     * Whether this token is a spelling of {@link #HELP}.
+     *
+     * <p>For the one position no walk reaches: the command name. {@code souther --help} writes it
+     * where a command goes, and there is no command yet whose options could be read. Asked of the
+     * same table the walk asks, so that how help is spelt is stated once — a command line matching
+     * the two strings for itself is the second rule this class exists to stop there being.
+     */
+    static boolean isHelp(String token) {
+        return BY_SPELLING.get(token) == HELP;
     }
 
     /** The first constraint between options this line does not meet, or null where it meets them. */
@@ -212,7 +313,7 @@ enum CliOption {
     /** Whether the token after this one is read as its value. */
     static boolean takesValue(String spelling) {
         CliOption option = BY_SPELLING.get(spelling);
-        return option != null && option.value == Value.TAKEN;
+        return option != null && option.takesAValue();
     }
 
     /** What the option needs written beside it, or null where it stands on its own. */

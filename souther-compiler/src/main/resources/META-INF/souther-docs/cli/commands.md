@@ -1,8 +1,12 @@
 # The `souther` command
 
 ```
-souther <command> [args]
+souther <command> [options] [args]
 ```
+
+`souther help` lists the commands, and `souther help <command>` writes one command's arguments and
+every option it takes. That listing is generated from the same table the compiler resolves an option
+against, so it says what this build does rather than what a text was last edited to say.
 
 <!-- souther-section: compile -->
 ## compile
@@ -379,6 +383,34 @@ The cursor is this server's to read, so it goes out as it came in: where it poin
 against the answer it is carried back to, and one measured against a different answer is refused
 rather than resumed at.
 
+<!-- souther-section: help -->
+## help
+
+```
+souther help [<command>]
+```
+
+What this command line takes. With no argument it lists every command with a line saying what it is
+for; with a command it writes that command's arguments and every option the command takes, each with
+what the option means there. `souther <command> --help` asks the same thing and is answered the same
+way, and so is `-h`.
+
+The answer goes to stdout under a zero exit code. Everything this writes used to be reachable only
+from a failure — no command, an unknown one, a missing argument — so it went to stderr and the exit
+code said the line was wrong. Reading it meant writing a line you knew would be refused, and piping
+it anywhere gave you an empty pipe.
+
+A section lists the options the compiler will resolve against that command, so an option two
+commands take is written under both. `--behavior` is `run`'s and `examples`', and what it selects is
+not the same question in the two of them: it chooses which behavior `run` drives, and narrows what
+`examples` reports on. Each section says the one that holds there.
+
+`--help` outranks what is wrong with the line. `souther compile --nonsense --help` writes compile's
+section and exits zero rather than refusing the option, because a line asking what a command takes is
+asking for the reason it is wrong. What does not ask is a line where the token stands in an option's
+value: `souther run m.sou --input --help` hands `run` the input `--help`, and that is read as the
+value it is, not as a request.
+
 <!-- souther-section: shared-options -->
 ## Options every command shares
 
@@ -387,8 +419,14 @@ rather than resumed at.
 | `--format human\|json` | how to render a compile error (default `human`) |
 | `--lang <tag>` | message locale, e.g. `ja` or `en`. Overrides `SOUTHER_LANG`; with neither, `en`, which is what the shipped documents are written in |
 | `--color auto\|always\|never` | color the human output (default `auto`) |
+| `--help`, `-h` | what this command takes, and what its options mean |
 
-These apply to `compile`, `run` and `examples`. Passing them to another command is an error.
+`--help` and `-h` are taken by every command, including `help` itself. The other three apply to
+`compile`, `run` and `examples`, and passing one of them to another command is an error.
+
+Because every command takes `-h`, no command reads that token as a file name. A single dash is
+otherwise read as a path by any command that has no such option — a file may be named `-d` — and
+this is the one short option that rule no longer reaches.
 
 `--format` and `--color` take the values written above and no others. A value outside the set is
 refused rather than read as the default: a caller that asked for `--format jsn` was answered with a
