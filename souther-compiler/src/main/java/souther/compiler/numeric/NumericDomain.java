@@ -206,6 +206,14 @@ public final class NumericDomain {
      * own. A form of neither shape keeps its strictness as written.
      */
     private NumericDomain addLe(LinearForm g, boolean strict) {
+        if (bottom) {
+            // Nothing holds here, so nothing asserted of it holds either. Read again rather than
+            // built on: a bottom domain keeps no bounds, and the sisters below derive feasibility
+            // from the bounds they are handed, so one more assertion would come back a domain in
+            // which only that assertion is known. An equality is two of these in a row, which is
+            // where a contradicted one came back satisfiable.
+            return this;
+        }
         Map<String, BigDecimal> c = g.coefs();
         if (c.isEmpty()) {
             boolean ok = strict ? g.constant().signum() < 0 : g.constant().signum() <= 0;
@@ -456,6 +464,18 @@ public final class NumericDomain {
      */
     public Bounds boundsOf(String atom) {
         return bottom ? new Bounds(null, null) : new Bounds(bestLo(atom), bestHi(atom));
+    }
+
+    /**
+     * How the values of {@code atom} are spaced here, or null where nothing said.
+     *
+     * <p>Asked by a reader counting the values between two ends, which only a spacing makes a number:
+     * the same pair of ends holds finitely many whole numbers and unboundedly many of anything
+     * denser. Read off what was recorded rather than off the ends, because ends that happen to be
+     * whole are what a dense value between two of them has as well.
+     */
+    public Granularity spacingOf(String atom) {
+        return kinds.get(atom);
     }
 
     /**
