@@ -729,7 +729,7 @@ final class Predicates {
                 || !isZero(zero)) {
             return e;
         }
-        Ast.BinOp positive = DischargeRules.orderStatedBy(call.operation());
+        DischargeRules.PositiveOrder positive = DischargeRules.orderStatedBy(call.operation());
         if (positive == null
                 || terms.bodyKey(call.args().get(0), at) == null
                 || terms.bodyKey(call.args().get(1), at) == null) {
@@ -738,9 +738,7 @@ final class Predicates {
         // The relation the source wrote, read from the sign's side of the zero, and between the
         // arguments in the order this operation counts them.
         Ast.BinOp written = callFirst ? b.op() : mirrored(b.op());
-        Core greater = call.args().get(positive == Ast.BinOp.GT ? 0 : 1);
-        Core lesser = call.args().get(positive == Ast.BinOp.GT ? 1 : 0);
-        return comparison(written, greater, lesser, b);
+        return comparison(written, positive.greaterOf(call), positive.lesserOf(call), b);
     }
 
     /** Whether {@code e} is the number zero as written. */

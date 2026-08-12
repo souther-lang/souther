@@ -363,10 +363,41 @@ final class DischargeRules {
             op("Decimal", "min"), op("Decimal", "max"));
 
     /**
-     * The operations answering the order of their two arguments as the sign of a number, and the
-     * relation between the first argument and the second that a positive answer states. Zero states
-     * the equality, and a negative answer the relation the other way, so one row is the whole of what
-     * such an operation says.
+     * Which of the two arguments a positive answer names as the greater. That is the whole of what a
+     * row of {@link #ORDERS} says, and it is two cases, so it is written as a type with two — not as
+     * one of the language's operators, which would say the same thing in a type where most of the
+     * values say nothing and the ones that do have to be agreed on somewhere else.
+     *
+     * <p>Each case carries the two positions itself, since which argument is the lesser is settled by
+     * which is the greater and there is no reading where the two are chosen apart.
+     */
+    enum PositiveOrder {
+        FIRST_ARGUMENT_GREATER(0, 1),
+        SECOND_ARGUMENT_GREATER(1, 0);
+
+        private final int greater;
+        private final int lesser;
+
+        PositiveOrder(int greater, int lesser) {
+            this.greater = greater;
+            this.lesser = lesser;
+        }
+
+        /** The argument of {@code call} a positive answer names as the greater. */
+        Core greaterOf(Core.PreservedCall call) {
+            return call.args().get(greater);
+        }
+
+        /** The other one. */
+        Core lesserOf(Core.PreservedCall call) {
+            return call.args().get(lesser);
+        }
+    }
+
+    /**
+     * The operations answering the order of their two arguments as the sign of a number, and which
+     * argument a positive answer names as the greater. Zero states the equality, and a negative
+     * answer the relation the other way, so one row is the whole of what such an operation says.
      *
      * <p>Which relation a guard writing one states then follows from where the sign stands against
      * zero and from nothing else, so the six relations and the two operand orders are one account
@@ -375,10 +406,10 @@ final class DischargeRules {
      * {@code daysBetween(from, to)} counts forward from its first argument, so it is positive where
      * the second one is.
      */
-    private static final Map<ValueName, Ast.BinOp> ORDERS = Map.of(
-            op("Int", "compare"), Ast.BinOp.GT,
-            op("Decimal", "compare"), Ast.BinOp.GT,
-            op("Date", "daysBetween"), Ast.BinOp.LT);
+    private static final Map<ValueName, PositiveOrder> ORDERS = Map.of(
+            op("Int", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
+            op("Decimal", "compare"), PositiveOrder.FIRST_ARGUMENT_GREATER,
+            op("Date", "daysBetween"), PositiveOrder.SECOND_ARGUMENT_GREATER);
 
     /**
      * The operations answering a number from two values of one type whose sign is not their order.
@@ -632,9 +663,9 @@ final class DischargeRules {
         return OPERATOR_CALLS.get(operation);
     }
 
-    /** The relation a positive answer from {@code operation} states between its first argument and
-     * its second, or null where its sign is not an order. */
-    static Ast.BinOp orderStatedBy(ValueName operation) {
+    /** Which argument a positive answer from {@code operation} names as the greater, or null where
+     * its sign is not an order. */
+    static PositiveOrder orderStatedBy(ValueName operation) {
         return ORDERS.get(operation);
     }
 
