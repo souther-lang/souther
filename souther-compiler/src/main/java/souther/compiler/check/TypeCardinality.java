@@ -160,11 +160,11 @@ public final class TypeCardinality {
             }
             if (asked.size() == 1 && !TypeComponents.recurses(component, edges)) {
                 TypeName one = asked.get(0);
-                solution.put(one,
-                        CardinalityTransfer.upperOf(one, declared.get(one), symbols, solution));
+                solution.put(one, CardinalityTransfer.upperOf(
+                        one, declared.get(one), symbols, solution, granted::contains));
                 continue;
             }
-            rise(asked, declared, symbols, cuts, solution);
+            rise(asked, declared, symbols, cuts, solution, granted);
         }
         return solution;
     }
@@ -178,7 +178,7 @@ public final class TypeCardinality {
      */
     private static void rise(List<TypeName> component, Map<TypeName, Ast.Def> declared,
                              Symbols symbols, CardinalityCuts cuts,
-                             Map<TypeName, Cardinality> solution) {
+                             Map<TypeName, Cardinality> solution, Set<TypeName> granted) {
         for (TypeName each : component) {
             solution.put(each, Cardinality.NO_VALUE);
         }
@@ -186,8 +186,8 @@ public final class TypeCardinality {
         while (moved) {
             moved = false;
             for (TypeName each : component) {
-                Cardinality next = cuts.round(
-                        CardinalityTransfer.upperOf(each, declared.get(each), symbols, solution));
+                Cardinality next = cuts.round(CardinalityTransfer.upperOf(
+                        each, declared.get(each), symbols, solution, granted::contains));
                 if (!next.equals(solution.get(each))) {
                     solution.put(each, next);
                     moved = true;

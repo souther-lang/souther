@@ -148,6 +148,29 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 """));
     }
 
+    /**
+     * And where the lack travels through a value-bearing member of the very group it is asked of.
+     *
+     * <p>{@code A}, {@code B} and {@code C} are answered together, and {@code B} has a value because
+     * an absent one is a value. So granting what the group reads changes nothing — it reads nothing
+     * outside itself — and both {@code A} and {@code C} are left with none. They are not one thing to
+     * say: grant {@code A} and {@code C} comes right, which is only found by asking again once the
+     * two have been told apart.
+     */
+    @Test
+    void aLackTravellingThroughAValueBearingMemberOfItsOwnGroupIsStillTheFirstsLack() {
+        assertEquals(List.of(List.of("A")), reported("""
+                module demo
+
+                data A = { b: B, n: Int }
+                    invariant no = n >= 2 && n <= 1
+
+                data B = { c: C? }
+
+                data C = { a: A }
+                """));
+    }
+
     /** A set that cannot be filled is its own group, its element having a value of its own. */
     @Test
     void aSetThatCannotBeFilledIsNamedAndItsElementIsNot() {

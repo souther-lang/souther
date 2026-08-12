@@ -48,7 +48,20 @@ public final class OccurrenceCounts {
      * clauses.
      */
     public static OccurrenceCounts of(TypeName named, Ast.Data data, Symbols symbols) {
-        return new OccurrenceCounts(InvariantChecker.seedFields(named, data, symbols));
+        return of(named, data, symbols, _ -> false);
+    }
+
+    /**
+     * The same, with the clauses of the declarations {@code without} names left out.
+     *
+     * <p>Read this way by whatever is asking what would be true if some declaration had
+     * values. Its rules are what say it has none, and they reach every position that holds
+     * one, so supposing it has a value is supposing those rules away.
+     */
+    static OccurrenceCounts of(TypeName named, Ast.Data data, Symbols symbols,
+                                 java.util.function.Predicate<TypeName> without) {
+        return new OccurrenceCounts(
+                InvariantChecker.seedFields(named, data, symbols, java.util.Map.of(), without));
     }
 
     /** Whether the value at {@code path} may hold no more than {@code count}. */

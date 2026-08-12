@@ -44,7 +44,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
         }
         for (Ast.Def def : compilation.module("demo").defs()) {
             if (def.name().equals(name)) {
-                return CardinalityTransfer.upperOf(symbols.own(name), def, symbols, solution);
+                return CardinalityTransfer.upperOf(symbols.own(name), def, symbols, solution, _ -> false);
             }
         }
         throw new IllegalArgumentException("no such declaration: " + name);

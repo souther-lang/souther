@@ -120,6 +120,19 @@ public final class FieldDomains {
         return of(named, data, symbols, settled, _ -> false);
     }
 
+    /**
+     * The same, with the clauses of the declarations {@code without} names left out.
+     *
+     * <p>What a reader asking "would this hold anything if that one did" needs. A value said to have
+     * none because its rules contradict is a value whose rules are read wherever it is reached, so
+     * supposing it has one is supposing those rules away — and a record holding it is otherwise told
+     * it holds nothing by the very rules the supposing was about.
+     */
+    static FieldDomains without(TypeName named, Ast.Data data, Symbols symbols,
+                                java.util.function.Predicate<TypeName> without) {
+        return of(named, data, symbols, Map.of(), without);
+    }
+
     /** The same, with one declaration's own clauses left out — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
                                    Map<String, Count> settled,

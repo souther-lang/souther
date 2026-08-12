@@ -6,6 +6,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
 import java.util.HashSet;
+import java.util.function.Predicate;
 import java.util.Map;
 import java.util.Set;
 
@@ -47,9 +48,17 @@ final class CardinalityTransfer {
 
     private CardinalityTransfer() {}
 
-    /** What {@code def}, declared as {@code named}, comes to under {@code solution}. */
+    /**
+     * What {@code def}, declared as {@code named}, comes to under {@code solution}.
+     *
+     * @param granted the declarations taken to have values whatever their own rules say. Their
+     *                clauses are left out of every reading here, because a declaration said to have
+     *                no value is one whose rules say so, and those rules are read wherever it is
+     *                reached: a record holding it would otherwise be told it holds nothing by the
+     *                very rules the supposing was about.
+     */
     static Cardinality upperOf(TypeName named, Ast.Def def, Symbols symbols,
-                               Map<TypeName, Cardinality> solution) {
+                               Map<TypeName, Cardinality> solution, Predicate<TypeName> granted) {
         return switch (def) {
             case Ast.UnitData _ -> Cardinality.atMost(1);
             case Ast.SumData sum -> {
@@ -62,20 +71,21 @@ final class CardinalityTransfer {
                 }
                 yield across;
             }
-            case Ast.Data data -> ofData(named, data, symbols, solution);
+            case Ast.Data data -> ofData(named, data, symbols, solution, granted);
         };
     }
 
     private static Cardinality ofData(TypeName named, Ast.Data data, Symbols symbols,
-                                      Map<TypeName, Cardinality> solution) {
+                                      Map<TypeName, Cardinality> solution,
+                                      Predicate<TypeName> granted) {
         // Rules that cannot all hold leave nothing to count, and the ends they would have been
         // counted between are gone with them. Asked before the positions, which have nothing to say
         // about a value the declaration as a whole refuses.
-        if (FieldDomains.of(named, data, symbols).infeasible()) {
+        if (FieldDomains.without(named, data, symbols, granted).infeasible()) {
             return Cardinality.NO_VALUE;
         }
-        OccurrenceCounts counts = OccurrenceCounts.of(named, data, symbols);
-        OccurrenceValues values = OccurrenceValues.of(named, data, symbols);
+        OccurrenceCounts counts = OccurrenceCounts.of(named, data, symbols, granted);
+        OccurrenceValues values = OccurrenceValues.of(named, data, symbols, granted);
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
         if (data.newtype()) {
             // A newtype is one value under a name, so its value sits where it sits: the rules written
@@ -83,12 +93,12 @@ final class CardinalityTransfer {
             Type representation = fields.get("value");
             return representation == null ? Cardinality.UNKNOWN
                     : upperAt(representation, FieldDomains.THE_VALUE, counts, values, symbols,
-                            solution, new HashSet<>(Set.of(named)));
+                            solution, granted, new HashSet<>(Set.of(named)));
         }
         Cardinality across = Cardinality.atMost(1);   // a record of no fields is one value
         for (Map.Entry<String, Type> each : fields.entrySet()) {
             across = across.times(upperAt(each.getValue(), each.getKey(), counts, values, symbols,
-                    solution, new HashSet<>()));
+                    solution, granted, new HashSet<>()));
             if (across.none()) {
                 return Cardinality.NO_VALUE;   // one field with no value settles the record
             }
@@ -106,7 +116,8 @@ final class CardinalityTransfer {
      */
     static Cardinality upperAt(Type type, String path, OccurrenceCounts counts,
                                OccurrenceValues values, Symbols symbols,
-                               Map<TypeName, Cardinality> solution, Set<TypeName> worn) {
+                               Map<TypeName, Cardinality> solution, Predicate<TypeName> granted,
+                               Set<TypeName> worn) {
         return switch (type) {
             case Type.Prim prim -> switch (prim) {
                 case BOOL -> Cardinality.atMost(2);
@@ -116,21 +127,21 @@ final class CardinalityTransfer {
                 // it would take is a reading of each carrier's own values, and nothing asks yet.
                 case STRING, DECIMAL, DATE, TIME, DATETIME, INSTANT, RAW -> Cardinality.UNKNOWN;
             };
-            case Type.Ref ref -> ofRef(ref, path, counts, values, symbols, solution, worn);
+            case Type.Ref ref -> ofRef(ref, path, counts, values, symbols, solution, granted, worn);
             // A `None` is a value of it whatever it wraps, so this is the one position that is never
             // empty. What it wraps is a value of its own type and nothing was written about it here.
             case Type.OptionOf option -> Cardinality.atMost(1)
-                    .plus(ofType(option.element(), symbols, solution, worn));
-            case Type.ListOf list -> ofList(list.element(), path, counts, symbols, solution, worn);
-            case Type.SetOf set -> ofSet(set.element(), path, counts, symbols, solution, worn);
-            case Type.MapOf map -> ofMap(map, path, counts, symbols, solution, worn);
+                    .plus(ofType(option.element(), symbols, solution, granted, worn));
+            case Type.ListOf list -> ofList(list.element(), path, counts, symbols, solution, granted, worn);
+            case Type.SetOf set -> ofSet(set.element(), path, counts, symbols, solution, granted, worn);
+            case Type.MapOf map -> ofMap(map, path, counts, symbols, solution, granted, worn);
             // Several values carried together, which is a product like a record's fields. Written only
             // inside a computation — a field of one is refused — so nothing in a declaration reaches
             // this.
             case Type.TupleOf tuple -> {
                 Cardinality across = Cardinality.atMost(1);
                 for (Type each : tuple.elements()) {
-                    across = across.times(ofType(each, symbols, solution, worn));
+                    across = across.times(ofType(each, symbols, solution, granted, worn));
                 }
                 yield across;
             }
@@ -154,7 +165,8 @@ final class CardinalityTransfer {
     /** A name, unwrapped while it is one this value is not already wearing. */
     private static Cardinality ofRef(Type.Ref ref, String path, OccurrenceCounts counts,
                                      OccurrenceValues values, Symbols symbols,
-                                     Map<TypeName, Cardinality> solution, Set<TypeName> worn) {
+                                     Map<TypeName, Cardinality> solution,
+                                     Predicate<TypeName> granted, Set<TypeName> worn) {
         Cardinality named = known(solution, ref.name());
         if (!(symbols.get(ref.name()) instanceof Ast.Data data) || !data.newtype()
                 || !worn.add(ref.name())) {
@@ -166,14 +178,15 @@ final class CardinalityTransfer {
         Type representation = TypeOps.fieldTypes(data, symbols).get("value");
         return representation == null ? named
                 : Cardinality.narrower(named,
-                        upperAt(representation, path, counts, values, symbols, solution, worn));
+                        upperAt(representation, path, counts, values, symbols, solution, granted, worn));
     }
 
     /** A value a collection holds, which no rule of the collection's own was written about. */
     private static Cardinality ofType(Type type, Symbols symbols,
-                                      Map<TypeName, Cardinality> solution, Set<TypeName> worn) {
+                                      Map<TypeName, Cardinality> solution,
+                                      Predicate<TypeName> granted, Set<TypeName> worn) {
         return upperAt(type, FieldDomains.THE_VALUE, OccurrenceCounts.NOTHING_READ,
-                OccurrenceValues.NOTHING_READ, symbols, solution, worn);
+                OccurrenceValues.NOTHING_READ, symbols, solution, granted, worn);
     }
 
     /**
@@ -194,11 +207,11 @@ final class CardinalityTransfer {
 
     private static Cardinality ofSet(Type element, String path, OccurrenceCounts counts,
                                      Symbols symbols, Map<TypeName, Cardinality> solution,
-                                     Set<TypeName> worn) {
+                                     Predicate<TypeName> granted, Set<TypeName> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return withNothingToHold(counts, path);
         }
-        Cardinality each = ofType(element, symbols, solution, worn);
+        Cardinality each = ofType(element, symbols, solution, granted, worn);
         if (each.none()) {
             return withNothingToHold(counts, path);
         }
@@ -226,11 +239,11 @@ final class CardinalityTransfer {
 
     private static Cardinality ofList(Type element, String path, OccurrenceCounts counts,
                                       Symbols symbols, Map<TypeName, Cardinality> solution,
-                                      Set<TypeName> worn) {
+                                      Predicate<TypeName> granted, Set<TypeName> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return withNothingToHold(counts, path);
         }
-        Cardinality each = ofType(element, symbols, solution, worn);
+        Cardinality each = ofType(element, symbols, solution, granted, worn);
         if (each.none()) {
             return withNothingToHold(counts, path);
         }
@@ -250,7 +263,7 @@ final class CardinalityTransfer {
 
     private static Cardinality ofMap(Type.MapOf map, String path, OccurrenceCounts counts,
                                      Symbols symbols, Map<TypeName, Cardinality> solution,
-                                     Set<TypeName> worn) {
+                                     Predicate<TypeName> granted, Set<TypeName> worn) {
         if (!counts.mayHoldAtLeast(path, 1)) {
             return withNothingToHold(counts, path);
         }
@@ -260,7 +273,7 @@ final class CardinalityTransfer {
         // A key is a string and there is no end of those, so a map holding anything at all holds it
         // under more keys than can be counted. Only a map with nothing to hold is finite here, and
         // one that must hold something has no value.
-        return ofType(map.value(), symbols, solution, worn).none()
+        return ofType(map.value(), symbols, solution, granted, worn).none()
                 ? withNothingToHold(counts, path) : Cardinality.UNKNOWN;
     }
 

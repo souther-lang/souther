@@ -276,6 +276,28 @@ class ATypeWithNoValueIsRefusedHoweverItCameToHaveNoneTest {
                 """);
     }
 
+    /**
+     * And where the lack travels through a member of its own group that has values.
+     *
+     * <p>{@code B} has a value because an absent one is a value, so nothing between {@code A} and
+     * {@code C} has none. All three are answered together, so granting what the group reads changes
+     * nothing about it, and telling {@code A} from {@code C} takes asking again once they have been
+     * separated.
+     */
+    @Test
+    void aRecordReachedThroughAValueBearingMemberOfItsOwnGroupIsNotReportedBesideIt() {
+        refuses("A", """
+                module demo
+
+                data A = { b: B, n: Int }
+                    invariant no = n >= 2 && n <= 1
+
+                data B = { c: C? }
+
+                data C = { a: A }
+                """);
+    }
+
     /** And where the group reading it has nowhere to stop of its own, both are said. */
     @Test
     void aGroupWithNoValueOfItsOwnIsReportedBesideTheOneItReads() {
