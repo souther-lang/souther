@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.generated.GeneratedBehavior;
+import souther.compiler.generated.JsonBoundary;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.query.Compilation;
@@ -37,7 +39,7 @@ final class Crossing {
         ClassLoader loader = compilation.loader();
         JsonBoundary.Read read = JsonBoundary.read(loader, sig.ins().get(0), JSON.readTree(json));
         Object argument = assertInstanceOf(JsonBoundary.Read.Value.class, read, json).value();
-        Object result = JsonBoundary.apply(loader, written.name(), behavior,
+        Object result = GeneratedBehavior.apply(loader, written.name(), behavior,
                 new Object[] {argument});
         return JSON.writeValueAsString(
                 JsonBoundary.write(loader, written.name(), behavior, sig.out(), result));

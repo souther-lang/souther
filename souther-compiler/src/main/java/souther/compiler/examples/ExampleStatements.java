@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.BoundaryInput;

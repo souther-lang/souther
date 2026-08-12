@@ -1,4 +1,4 @@
-package souther.compiler.examples;
+package souther.compiler.generated;
 
 import java.util.Map;
 import java.util.function.Supplier;
@@ -7,11 +7,8 @@ import java.util.function.Supplier;
  * Loads freshly generated classes from an in-memory binary-name → bytecode map, delegating anything
  * unknown to the parent loader. Used to run generated code without writing {@code .class} files:
  * the compiler's compile-time {@code $Ctfe.check} evaluation, the rows an {@code example} states,
- * and the behavior {@code souther run} drives.
- *
- * <p>The package it sits in says less than it should. Running an {@code example} is one of the three
- * and not the reason this exists — {@code query.Output} builds one to evaluate a constant newtype
- * check, which has nothing to do with examples.
+ * and the behavior {@code souther run} drives. None of the three is the reason it exists — it is
+ * how a compilation's classes become classes at all.
  */
 public final class MemoryClassLoader extends ClassLoader {
 
@@ -73,8 +70,12 @@ public final class MemoryClassLoader extends ClassLoader {
 
     /** Defines {@code name} once, generating the bytes lazily only on the first (cache-miss) call — a
      * second call with the same name returns the already-defined class without rebuilding the bytecode
-     * (the bytes are identical; the fake body is injected at construction, not baked into the class). */
-    Class<?> define(String name, Supplier<byte[]> bytes) {
+     * (the bytes are identical; the fake body is injected at construction, not baked into the class).
+     *
+     * <p>Public for the caller that needs it: a multi-argument fake's base subclass is built while an
+     * {@code example} runs, which is in another package. Everything this package publishes is public
+     * for that kind of reason and none of it is a supported API (see {@code package-info}). */
+    public Class<?> define(String name, Supplier<byte[]> bytes) {
         return defined.computeIfAbsent(name, n -> {
             byte[] b = bytes.get();
             return defineClass(n, b, 0, b.length);

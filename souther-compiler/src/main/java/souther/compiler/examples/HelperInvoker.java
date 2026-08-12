@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.codegen.Backend;
 
 import java.lang.reflect.InvocationTargetException;

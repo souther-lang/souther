@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.generated.JsonBoundary;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;

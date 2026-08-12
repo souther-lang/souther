@@ -1,7 +1,8 @@
 package souther.cli;
 
 import souther.compiler.Compiler;
-import souther.compiler.JsonBoundary;
+import souther.compiler.generated.GeneratedBehavior;
+import souther.compiler.generated.JsonBoundary;
 import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
@@ -520,13 +521,13 @@ public final class Runner {
      */
     private static Object invoke(ClassLoader loader, String pkg, String behavior, Object[] args) {
         try {
-            return JsonBoundary.apply(loader, pkg, behavior, args);
+            return GeneratedBehavior.apply(loader, pkg, behavior, args);
         } catch (java.lang.reflect.InvocationTargetException e) {
             Throwable cause = e.getCause();
             throw fail("run.behavior.failed", "`" + behavior + "` failed: " + cause,
                     behavior, String.valueOf(cause));
         } catch (ReflectiveOperationException e) {
-            String className = JsonBoundary.implClass(pkg, behavior);
+            String className = GeneratedBehavior.implClass(pkg, behavior);
             throw fail("run.behavior.unreachable",
                     "`" + behavior + "` could not be started — the compiled `" + className
                             + "` is not reachable: " + e + ". This is a defect in the compiler,"

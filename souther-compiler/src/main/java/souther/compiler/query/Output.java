@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.examples.MemoryClassLoader;
+import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;

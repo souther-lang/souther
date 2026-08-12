@@ -1,5 +1,6 @@
 package souther.compiler.examples;
 
+import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
