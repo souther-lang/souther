@@ -10,4 +10,24 @@ final class FixtureException extends RuntimeException {
     FixtureException(String message) {
         super(message);
     }
+
+    /**
+     * A call a fixture cannot run. Two different things reach here and a row is told which: a
+     * standard-library function, which a fixture may not apply however it is implemented, and a
+     * helper of this module that no method was emitted for.
+     *
+     * <p>Written once because three readings refuse the same call — the two that build a fixture and
+     * the one that applies a helper — and three copies of a sentence are three sentences that can
+     * come to say different things about one rule.
+     *
+     * @param written  the call as the row spelled it, which is what a report underlines
+     * @param reached  the name the callee was looked up by, which is what decides the reason
+     */
+    static FixtureException cannotBeCalled(String written, String reached) {
+        return new FixtureException("`" + written + "` cannot be called from an example fixture: "
+                + (Prelude.isLibraryFunction(reached)
+                        ? "a standard-library function is not one a fixture may apply. Compute the"
+                                + " value in a `let` helper and apply that instead"
+                        : "no method was emitted for it, so there is nothing here to run"));
+    }
 }

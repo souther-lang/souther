@@ -252,6 +252,97 @@ final class NeutralForm {
      * it, the way it decides whether a unit case travels as a bare name, and what some other
      * declaration does with the type does not reach a fixture written at the type itself.
      */
+    /**
+     * As below, for a case already resolved. A name spelled here would have to be one
+     * {@link Symbols#resolve} answers to, which an imported type's declared name is not.
+     */
+    Object newtypeAt(Type position, TypeName caseName, Object inner) {
+        if (readsAsItself(position, caseName)) {
+            return inner;
+        }
+        Map<String, Object> envelope = new LinkedHashMap<>();
+        tagged(caseName, envelope);
+        if (envelope.isEmpty()) {
+            return inner;   // not a case of any sum: the newtype's own form is its inner value
+        }
+        envelope.put("value", inner);
+        return envelope;
+    }
+
+    /**
+     * A value already in the neutral form of {@code from}, read at {@code to}.
+     *
+     * <p>A neutral form is decided by a position and not only by a type: a newtype is bare where the
+     * position reads it as itself and wears the envelope where the position is a sum that lists it
+     * (<<sum-discrimination>>). So a value that was built at one position and now stands at another
+     * is written the way the second one reads, and a collection's elements move with it.
+     *
+     * <p>Only the widening direction has to be answered, because it is the only one admission lets
+     * through: a case reaches a position typed by a sum that lists it, never the other way.
+     */
+    Object reread(Object value, Type from, Type to) {
+        if (value == null || from == null || to == null || from.equals(to)) {
+            return value;
+        }
+        if (from instanceof Type.OptionOf a) {
+            return reread(value, a.element(), to instanceof Type.OptionOf b ? b.element() : to);
+        }
+        if (to instanceof Type.OptionOf b) {
+            return reread(value, from, b.element());
+        }
+        if (sequenceElementOf(from) instanceof Type a && sequenceElementOf(to) instanceof Type b
+                && value instanceof List<?> elements) {
+            List<Object> out = new ArrayList<>(elements.size());
+            for (Object each : elements) {
+                out.add(reread(each, a, b));
+            }
+            return out;
+        }
+        if (from instanceof Type.MapOf a && to instanceof Type.MapOf b
+                && value instanceof Map<?, ?> entries) {
+            Map<Object, Object> out = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> each : entries.entrySet()) {
+                out.put(reread(each.getKey(), a.key(), b.key()),
+                        reread(each.getValue(), a.value(), b.value()));
+            }
+            return out;
+        }
+        if (from instanceof Type.Ref r && isNewtype(r.name())) {
+            // Bare here, because `from` is the newtype's own reference and reads it as itself.
+            return newtypeAt(to, r.name(), value);
+        }
+        // A unit case travels as a bare name where its position reads one — an enumeration — and
+        // carries its sum's discriminator where it does not. So a case standing at an enumeration
+        // stops being a name the moment it is admitted into a sum that also lists a product.
+        if (value instanceof String written && from instanceof Type.Ref r
+                && !r.name().isPrimitive()) {
+            // Which case this is, is `from`'s to say. Resolving the name here would answer for
+            // whatever this module declares under that spelling, and the type the value stands at
+            // may be one another module published — the reason the overload above takes a resolved
+            // name rather than one spelled at the call.
+            for (TypeName caseName : TypeOps.leafCases(from, symbols)) {
+                if (!caseName.name().equals(written)
+                        || symbols.get(caseName) instanceof Ast.Data) {
+                    continue;
+                }
+                if (readsABareName(to, caseName)) {
+                    return written;
+                }
+                Map<String, Object> unit = new LinkedHashMap<>();
+                tagged(caseName, unit);
+                return unit;
+            }
+        }
+        return value;
+    }
+
+    /** The element a list or a set holds, or null where the type holds neither. Narrower than
+     *  {@link #elementOf}, which opens an optional and reads a map's entry as a pair. */
+    private static Type sequenceElementOf(Type type) {
+        return type instanceof Type.ListOf l ? l.element()
+                : type instanceof Type.SetOf s ? s.element() : null;
+    }
+
     Object newtypeAt(Type position, TypeName caseName, String written, Object inner) {
         return readsAsItself(position, caseName) ? inner : adjacentlyTagged(written, inner);
     }

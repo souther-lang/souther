@@ -27,11 +27,14 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Reads a written fixture as the value it states, against the type of the position it is written in.
@@ -408,9 +411,29 @@ public final class FixtureReader {
             case Ast.NewData nd -> assertedRecord(nd, position);
             case Ast.Apply c -> assertedApply(c, position);
             case Ast.ListLit l -> assertedCollection(l, position);
+            case Ast.FieldAccess fa -> assertedProjection(fa);
             default -> throw new FixtureException(
                     "an example fixture must be a literal or a construction");
         };
+    }
+
+    /**
+     * A field taken off a value this row can already build. The walk that built the value it is taken
+     * off is the one walk — a helper inside it runs where it is written and not again here — and what
+     * that walk answers with already carries the field under the name its construction gave it, so a
+     * value written out and one a helper answered with are read the same way.
+     */
+    private Asserted assertedProjection(Ast.FieldAccess fa) {
+        if (!(asserted(fa.target(), null) instanceof Asserted.Built built)) {
+            throw new FixtureException("`" + fa.field()
+                    + "` is read off a value that is not a record, so it has no field to take");
+        }
+        Asserted taken = built.fields().get(fa.field());
+        if (taken == null) {
+            throw new FixtureException("`" + built.type().name() + "` declares no field `"
+                    + fa.field() + "`");
+        }
+        return taken;
     }
 
     private Asserted assertedName(Ast.Var v, Type position) {
@@ -579,8 +602,7 @@ public final class FixtureReader {
         if (!neutral.isNewtype(c.written())) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
-                throw new FixtureException("`" + c.written() + "` cannot be called from an example fixture:"
-                        + " it has no executable helper method");
+                throw FixtureException.cannotBeCalled(c.written(), reached);
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
@@ -871,7 +893,10 @@ public final class FixtureReader {
             return new Asserted.Elements(live instanceof Set<?> ? Asserted.Container.SET
                     : Asserted.Container.LIST, out);
         }
-        TypeName type = symbols.resolve(name);
+        // The type the value is, and not this module's reading of its spelling: a helper a fixture
+        // applies may be one another module published, and what it answered with is that module's
+        // type however this module spells the same name.
+        TypeName type = answeredType(live);
         if (type != null && symbols.get(type) instanceof Ast.Data data) {
             Map<String, Asserted> fields = new LinkedHashMap<>();
             if (data.newtype()) {
@@ -1245,7 +1270,136 @@ public final class FixtureReader {
                 }
                 yield out;
             }
+            case Ast.FieldAccess fa -> rawProjection(fa, expected, admission);
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
+        };
+    }
+
+    /**
+     * A value a field is taken off, and what says what that value is.
+     *
+     * <p>This is not a type for reading a target and throwing away. Projection consumes one of these
+     * and produces one, so a chain stays in this domain: what a helper answered is still its answer
+     * at the second field and at the third. A value that has been through {@link NeutralForm#of} no
+     * longer says what it is — a newtype is read there as what it wraps — so anything that turned a
+     * step of a chain back into an ordinary value would lose the evidence the next step is held by.
+     */
+    private sealed interface Projected {
+
+        /** Built by this reader, under the type a declaration gives it. */
+        record Declared(Type type, Object value) implements Projected {}
+
+        /** A helper's answer, before it became a form: the value itself says what it is. */
+        record Live(Object value, String written) implements Projected {}
+    }
+
+    /**
+     * The value a field is taken off. A name and a {@code let} stand for what they hold, as they do
+     * anywhere, so a helper's answer is its answer whether the row wrote the call or a name for it.
+     *
+     * <p>The answer is taken before it becomes a form, and the helper runs once — here, at the foot
+     * of however long the chain above it is.
+     */
+    private Projected projectTarget(Ast.Expr e, Admission admission) {
+        Admission below = admission == Admission.UNHELD ? admission : Admission.HELD_BELOW;
+        return switch (e) {
+            case Ast.FieldAccess inner -> takeField(projectTarget(inner.target(), admission), inner);
+            case Ast.LetIn let -> {
+                BindingId binding = let.binder().id();
+                bindings.put(binding, let.value());
+                try {
+                    yield projectTarget(let.body(), admission);
+                } finally {
+                    bindings.remove(binding);
+                }
+            }
+            case Ast.Var v -> {
+                ValueName denotes = v.denotes();
+                Ast.Expr body = denotes instanceof ValueName.Local local ? bindings.get(local.id())
+                        : denotes instanceof ValueName.Helper ? valueBody(v.name()) : null;
+                // A name standing for no value is not one a field can be taken off; the ordinary
+                // reading below says what it is instead of this one guessing.
+                yield body == null ? new Projected.Declared(declaredTypeOf(v, new HashSet<>()),
+                                raw(v, null, below))
+                        : expanding(denotes, () -> projectTarget(body, admission));
+            }
+            case Ast.Apply c when appliedHelper(c) instanceof Applied helper ->
+                    new Projected.Live(answered(c, helper), c.written());
+            default -> new Projected.Declared(declaredTypeOf(e, new HashSet<>()),
+                    raw(e, null, below));
+        };
+    }
+
+    /** One step of a chain: evidence in, evidence out. */
+    private Projected takeField(Projected target, Ast.FieldAccess fa) {
+        return switch (target) {
+            case Projected.Live(Object value, String written) -> {
+                // Which field may be taken is the declaration's to say, and it is asked before
+                // anything is read off the value. What reads it is reflection over a no-arg method,
+                // and a fixture is not elaborated, so a value's Java surface would otherwise be
+                // reachable as though it were the data's — `.isEmpty` on a `String` is a method
+                // here and a field nowhere.
+                TypeName answered = answeredType(value);
+                if (answered == null || fieldTypeOf(Type.ref(answered), fa.field()) == null) {
+                    throw new FixtureException("`" + written + "` answered with a value that"
+                            + " declares no field `" + fa.field() + "`");
+                }
+                // A Souther value never answers a Java null — an absent optional is a value of its
+                // own — so a null here is an accessor this value does not have.
+                Object taken = ObservedValues.readOrNull(value, fa.field());
+                if (taken == null) {
+                    throw new FixtureException("`" + written + "` answered with a value that has no"
+                            + " field `" + fa.field() + "`");
+                }
+                yield new Projected.Live(taken, written + "." + fa.field());
+            }
+            case Projected.Declared(Type type, Object value) -> {
+                Type taken = type == null ? null : fieldTypeOf(type, fa.field());
+                if (taken == null) {
+                    // A value that has no fields at all and a record that has not this one are two
+                    // mistakes, and a row is told which of them it made.
+                    throw new FixtureException(
+                            type instanceof Type.Ref r && !r.name().isPrimitive()
+                                    ? "`" + Type.show(type) + "` declares no field `" + fa.field() + "`"
+                                    : "`" + fa.field() + "` is read off a value that is not a record,"
+                                            + " so it has no field to take");
+                }
+                // A newtype is read as what it wraps (ADR-0032), so there is no field map to ask
+                // for it. What makes this one is the declaration and not the shape the value
+                // happens to have — a bare number is not a newtype for having reached here.
+                if (type instanceof Type.Ref r && neutral.isNewtype(r.name())) {
+                    yield new Projected.Declared(taken, value);
+                }
+                if (!(value instanceof Map<?, ?> fields)) {
+                    throw new FixtureException("`" + fa.field()
+                            + "` is read off a value that is not a record, so it has no field to take");
+                }
+                // A `?` field holding nothing leaves its key out, which is the absent optional itself.
+                yield new Projected.Declared(taken, fields.get(fa.field()));
+            }
+        };
+    }
+
+    /**
+     * A field taken off a value, in the neutral form the decoder reads. Only the outermost step
+     * stands at a position, so only it admits and only it becomes a form.
+     */
+    private Object rawProjection(Ast.FieldAccess fa, Type expected, Admission admission) {
+        return switch (projectTarget(fa, admission)) {
+            // Held by `states` before this frame was read, but built at the position the field
+            // declares rather than at this one. A neutral form is decided by a position and not
+            // only by a type, so a newtype admitted into a sum that lists it is written the way
+            // that position reads before it reaches a decoder.
+            case Projected.Declared(Type type, Object value) -> neutral.reread(value, type, expected);
+            case Projected.Live(Object value, String written) -> {
+                // What the answer says is read off the answer, so a field holding an empty
+                // collection names no element type here — the limit every helper's answer is read
+                // under, and not one taking a field off it introduces.
+                if (admission == Admission.HELD) {
+                    admitBuilt(value, expected, written);
+                }
+                yield neutral.of(value, expected, written);
+            }
         };
     }
 
@@ -1311,6 +1465,12 @@ public final class FixtureReader {
         /** A construction, or a name denoting a case: this name, said here. */
         record Name(TypeName name) implements Stated {}
 
+        /** A field taken: its declaration says the whole of what was supplied, and the value found
+         *  there is not read. This is the one frame that states a complete type, which is why it is
+         *  held by assignability rather than by a name — a field declaring a {@code List<AmountN>}
+         *  supplies one while it is empty, and no value there could have said so. */
+        record Declared(Type type) implements Stated {}
+
         /** A value under no name: a literal, a written collection, a temporal, an arithmetic fold. */
         record NoName() implements Stated {}
 
@@ -1354,6 +1514,21 @@ public final class FixtureReader {
                     throw wrongName(named, held, expected);
                 }
             }
+            // A complete type against a complete position, at every depth in one answer: the name a
+            // collection's elements wear is part of what the position is, and reading it off the
+            // elements would say nothing where there are none. An optional makes room for what it
+            // holds, so the position it holds is the one this stands at.
+            case Stated.Declared(Type supplied) -> {
+                // The whole position first. An optional takes what it holds as well as a value of
+                // itself, so unwrapping it before asking would refuse the field that declares the
+                // same optional the position does.
+                if (!TypeOps.assignable(supplied, expected, symbols)
+                        && !(expected instanceof Type.OptionOf o
+                                && TypeOps.assignable(supplied, o.element(), symbols))) {
+                    throw new FixtureException("a field declaring `" + Type.show(supplied)
+                            + "` states no value of `" + Type.show(expected) + "`");
+                }
+            }
             case Stated.NoName _ -> {
                 if (held instanceof Admits.OneOf(Set<TypeName> names)) {
                     throw noName(names, expected);
@@ -1386,7 +1561,112 @@ public final class FixtureReader {
                     || "Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches()) ->
                     STATES_NO_NAME;
             case Ast.Apply _ -> ELSEWHERE;
+            case Ast.FieldAccess fa -> {
+                Type declared = declaredTypeOf(fa, new HashSet<>());
+                yield declared == null ? ELSEWHERE : new Stated.Declared(declared);
+            }
             case null, default -> STATES_NO_NAME;
+        };
+    }
+
+    /**
+     * The data a live value is, read off the class it was generated as. A binary name is a
+     * {@link TypeName}'s qualified form, so this answers the type the value is.
+     *
+     * <p>Not its simple name resolved here. A helper a fixture applies may be one another module
+     * published, and resolving the spelling in this module's scope would answer for a type this
+     * module happens to declare under the same name rather than for the one the value is — the
+     * same reason {@link #represents} compares a class against a candidate's qualified form
+     * instead of resolving what came out.
+     */
+    private TypeName answeredType(Object value) {
+        String binary = value.getClass().getName();
+        int dot = binary.lastIndexOf('.');
+        if (dot < 0) {
+            return null;
+        }
+        TypeName named = new TypeName(binary.substring(0, dot), binary.substring(dot + 1));
+        return symbols.contains(named) ? named : null;
+    }
+
+    /**
+     * The type a field is declared to be, one step. Both the walk that answers what a projection
+     * states and the reading that takes the field go through this, so the two cannot come to
+     * different answers about which field of what is being read.
+     */
+    private Type fieldTypeOf(Type record, String field) {
+        if (!(record instanceof Type.Ref r)) {
+            return null;
+        }
+        TypeName named = r.name();
+        if (neutral.isNewtype(named)) {
+            // A newtype declares one field, and it is what it wraps (ADR-0032).
+            return "value".equals(field) ? neutral.shapeOf(neutral.newtypeBaseType(named)) : null;
+        }
+        Ast.TypeRef declared = neutral.fieldTypes(named).get(field);
+        return declared == null ? null : neutral.shapeOf(declared);
+    }
+
+    /**
+     * What a fixture expression is declared to be, or null where no declaration of this module's
+     * says — which is where a helper stands, since what a helper was declared to answer with is not
+     * read and what it supplied is its answer's to say.
+     *
+     * <p>Nothing is run here. This walk reads names {@code Resolve} already settled, so asking it
+     * costs no helper a second application against the row's one budget.
+     */
+    private Type declaredTypeOf(Ast.Expr e, Set<ValueName> seen) {
+        return declaredTypeOf(e, seen, new HashMap<>());
+    }
+
+    /**
+     * As above. {@code bound} is this walk's own binding environment: a {@code let} the walk enters
+     * has to be in force for the name it binds, and the reading that takes the value keeps its
+     * bindings in a table of its own. Two walks over one expression that disagree about what is in
+     * scope disagree about what is admitted, and the one that answers nothing admits nothing.
+     */
+    private Type declaredTypeOf(Ast.Expr e, Set<ValueName> seen, Map<BindingId, Ast.Expr> bound) {
+        return switch (e) {
+            case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
+            // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
+            case Ast.Apply c when neutral.isNewtype(c.written()) -> {
+                TypeName named = symbols.resolve(c.written());
+                yield named == null ? null : Type.ref(named);
+            }
+            case Ast.FieldAccess fa -> {
+                Type target = declaredTypeOf(fa.target(), seen, bound);
+                yield target == null ? null : fieldTypeOf(target, fa.field());
+            }
+            case Ast.LetIn let -> {
+                BindingId binding = let.binder().id();
+                Ast.Expr outer = bound.put(binding, let.value());
+                try {
+                    yield declaredTypeOf(let.body(), seen, bound);
+                } finally {
+                    if (outer == null) {
+                        bound.remove(binding);
+                    } else {
+                        bound.put(binding, outer);
+                    }
+                }
+            }
+            case Ast.Var v -> {
+                ValueName denotes = v.denotes();
+                // A name reached twice is the cycle the reading itself reports; this walk only stops.
+                if (denotes == null || !seen.add(denotes)) {
+                    yield null;
+                }
+                Ast.Expr body;
+                if (denotes instanceof ValueName.Local local) {
+                    // What this walk bound, then what the reading around it has in force.
+                    body = bound.containsKey(local.id()) ? bound.get(local.id())
+                            : bindings.get(local.id());
+                } else {
+                    body = valueBody(v.name());
+                }
+                yield body == null ? null : declaredTypeOf(body, seen, bound);
+            }
+            case null, default -> null;
         };
     }
 
@@ -1582,6 +1862,15 @@ public final class FixtureReader {
 
     private Object expandedValue(ValueName named, Ast.Expr body, Type expected,
                                  Admission admission) {
+        return expanding(named, () -> raw(body, expected, admission));
+    }
+
+    /**
+     * The cycle check every expansion of a name goes through, whatever reading is doing the
+     * expanding. One check, so a cycle reached through a field taken off a value is reported as the
+     * cycle it is rather than as whatever the second walk happened to make of it.
+     */
+    private <T> T expanding(ValueName named, Supplier<T> read) {
         if (expanding.contains(named)) {
             List<String> cycle = new ArrayList<>();
             expanding.forEach(open -> cycle.add(open.name()));
@@ -1591,7 +1880,7 @@ public final class FixtureReader {
         }
         expanding.addLast(named);
         try {
-            return raw(body, expected, admission);
+            return read.get();
         } finally {
             expanding.removeLast();
         }
@@ -1762,8 +2051,7 @@ public final class FixtureReader {
                 // A function this module cannot run: an intrinsic implemented in Java, or a helper
                 // whose body produces a function. Said as that, so the rule that a fixture may apply a
                 // helper does not appear to have exceptions nothing explains (ADR-0077).
-                throw new FixtureException("`" + c.written() + "` cannot be called from an example fixture:"
-                        + " it has no executable helper method");
+                throw FixtureException.cannotBeCalled(c.written(), reached);
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
