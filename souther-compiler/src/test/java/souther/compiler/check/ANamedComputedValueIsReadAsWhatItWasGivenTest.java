@@ -16,22 +16,26 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A guard states what it states of the names it is written over, and not only of the values those
- * names were given.
+ * A name given a computed value is read as the value it was given, and so is a field taken off it.
  *
- * <p>A name given a computed value is read through to the arithmetic behind it, so a guard over two
- * such names lands over the fields their bodies read. A field taken off one of those names is keyed
- * as the name, so the construction that takes the difference asks about the names themselves. Both
- * readings are of the same two values and nothing relates them — a name's own atom carries the
- * bounds of the form it was given and not the form — so a guard the author wrote about the very
- * values being built settled nothing, and the same two expressions written out where they stand
- * settled it (#676).
+ * <p>Whether a newtype's {@code .value} is the value it wraps was once asked of how the target was
+ * written: a call was read through it and a name given that call was not. So {@code gross} was the
+ * arithmetic behind it and {@code gross.value} was an atom of its own, and a guard over the one
+ * settled nothing about a construction over the other — while the same two expressions written out
+ * where they stand settled it (#676). Asked instead of what the target denotes, a name given a
+ * computed value is no more a place than the call it was given, and the two are one reading.
  *
- * <p>Every route below is held to two answers: the difference the guard bounds is proved, and one
- * step past that difference is not. A route silent on both is a route the check never read, which is
- * the silence this file would otherwise be satisfied by, so the verdicts are what these assert.
+ * <p>Which is why the routes below are a matrix and not a list. A guard and a construction are
+ * written by different hands and there is no spelling they have to agree on: either may name a
+ * total or write it out, and either may compare the newtypes or their {@code .value}s. Under one
+ * reading they meet whichever pair they are; under two they met only where the two spellings
+ * happened to line up, which is a check an author cannot predict.
+ *
+ * <p>Every route is held to two answers: the difference the guard bounds is proved, and one step
+ * past that difference is not. A route silent on both is a route the check never read, which is the
+ * silence this file would otherwise be satisfied by, so the verdicts are what these assert.
  */
-class AGuardIsAboutTheNamesItIsWrittenOverTest {
+class ANamedComputedValueIsReadAsWhatItWasGivenTest {
 
     /**
      * Two totals over a monthly remuneration, and the net taken off them. {@code Net} is built only
@@ -266,8 +270,8 @@ class AGuardIsAboutTheNamesItIsWrittenOverTest {
                 """);
     }
 
-    /** One side a name given a computed value and the other a parameter: the comparison is stated
-     * over the name on the side that has one, and over what it was given on the side that does. */
+    /** One side a name given a computed value and the other a parameter: a place is read as the
+     * place it is, and a name as what it was given, in one comparison. */
     @Test
     void oneNameGivenACallAndOneParameter() {
         bounds("""
