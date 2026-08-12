@@ -1,25 +1,28 @@
 package souther.compiler;
 
-import souther.cli.Runner;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import souther.compiler.ast.Ast;
+import souther.compiler.check.Sig;
+import souther.compiler.query.Compilation;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
+import net.unit8.raoh.Issue;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Three separate implementations answer "read a value of type T from the outside": the derived codec
  * a data field crosses through, the fixture builder an {@code example} uses, and
- * {@code Runner.decoderFor} behind {@code souther run}. They are written independently, so they drift
+ * {@link JsonBoundary} behind {@code souther run}. They are written independently, so they drift
  * — issue #97 was exactly that, a collection argument the boundary read and the fixture builder did
  * not.
  *
@@ -33,9 +36,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code TypeOps} for the rule and {@link EncoderPathAgreementTest} for the writing side.
  */
 class DecoderPathAgreementTest {
-
-    @TempDir
-    Path dir;
 
     // === what all three read ===
 
@@ -138,13 +138,12 @@ class DecoderPathAgreementTest {
     void aStringKeyIsCanonicalWhicheverWayItWasWritten() throws Exception {
         String composed = "\u304c";              // one code point
         String decomposed = "\u304b\u3099";      // the base and the combining mark, the same text
-        Path file = dir.resolve("key.sou");
-        Files.writeString(file, """
+        String source = """
                 module demo
                 behavior at : (m: Map<String, Int>) -> Int
                 let at (m) = Option.withDefault(0, Map.get("%s", m))
-                """.formatted(composed));
-        assertEquals("7", Runner.run(file, "at", "{\"" + decomposed + "\": 7}").trim(),
+                """.formatted(composed);
+        assertEquals("7", crossing(source, "at", "{\"" + decomposed + "\": 7}"),
                 "the key the module looks up is the key the input carried");
     }
 
@@ -167,20 +166,21 @@ class DecoderPathAgreementTest {
         both.put(decomposed, 2L);
         assertFalse(boundaryReads("Map<String, Int>", both), "the derived codec refuses it");
 
-        Runner.RunException refused = assertThrows(Runner.RunException.class,
-                () -> runReads("Map<String, Int>",
-                        "{\"" + composed + "\": 1, \"" + decomposed + "\": 2}"));
-        assertTrue(refused.getMessage().contains("same key once decoded"), refused.getMessage());
+        JsonBoundary.Read.Refused refused = refusalOf("Map<String, Int>",
+                "{\"" + composed + "\": 1, \"" + decomposed + "\": 2}");
+        assertTrue(messagesOf(refused).stream().anyMatch(m -> m.contains("same key once decoded")),
+                messagesOf(refused).toString());
     }
 
     /** A key the key type refuses is refused at that key's own path, and every key is read before
      *  the map is given up on, so a map with two bad keys is answered about both at once. */
     @Test
-    void aBadKeyIsRefusedWhereItStands() {
-        Runner.RunException refused = assertThrows(Runner.RunException.class,
-                () -> runReads("Map<Bounded, Int>", "{\"ab\": 1, \"cd\": 2}"));
-        assertTrue(refused.getMessage().contains("/ab"), refused.getMessage());
-        assertTrue(refused.getMessage().contains("/cd"), refused.getMessage());
+    void aBadKeyIsRefusedWhereItStands() throws Exception {
+        JsonBoundary.Read.Refused refused = refusalOf("Map<Bounded, Int>",
+                "{\"ab\": 1, \"cd\": 2}");
+        List<String> at = pointersOf(refused);
+        assertTrue(at.contains("/ab"), at.toString());
+        assertTrue(at.contains("/cd"), at.toString());
     }
 
     // === the three paths ===
@@ -249,17 +249,61 @@ class DecoderPathAgreementTest {
         return true;
     }
 
-    /** The same type as a behavior input, driven through {@code souther run}. */
+    /** The same type as a behavior input, read and applied through {@link JsonBoundary} — what
+     *  {@code souther run} drives, without the command line around it. */
     private String runReads(String type, String json) throws Exception {
-        Path file = dir.resolve("run" + Math.abs(type.hashCode()) + ".sou");
-        Files.writeString(file, """
+        return crossing(sourceTaking(type), "take", json);
+    }
+
+    private static String sourceTaking(String type) {
+        return """
                 module demo
                 %s
                 behavior take : (v: %s) -> Int%s
                 let take (v) = %s
                 """.formatted(DECLS, type, constructsIn(type).replace(", ", " constructs "),
-                        probeFor(type)));
-        return Runner.run(file, "take", json);
+                        probeFor(type));
+    }
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /**
+     * One input across the boundary and back: compiled, read from JSON, applied, and written.
+     *
+     * <p>This is what {@code souther run} does between parsing its arguments and printing, and it is
+     * driven here rather than through the command line so that the reading stays testable beside the
+     * two implementations it has to agree with.
+     */
+    private static String crossing(String source, String behavior, String json) throws Exception {
+        Compilation compilation = Compiler.compiled(source, "demo", new ArrayList<>());
+        Ast.Module module = compilation.module(compilation.modules().get(0));
+        Sig sig = compilation.signatures(module.name()).get(behavior);
+        ClassLoader loader = compilation.loader();
+
+        JsonBoundary.Read read = JsonBoundary.read(loader, sig.ins().get(0), JSON.readTree(json));
+        Object argument = assertInstanceOf(JsonBoundary.Read.Value.class, read, json).value();
+        Object result = JsonBoundary.apply(loader, module.name(), behavior,
+                new Object[] {argument});
+        return String.valueOf(
+                JsonBoundary.write(loader, module.name(), behavior, sig.out(), result));
+    }
+
+    /** The refusal reading {@code json} as the sole input of a behavior taking {@code type}. */
+    private static JsonBoundary.Read.Refused refusalOf(String type, String json) throws Exception {
+        Compilation compilation = Compiler.compiled(sourceTaking(type), "demo", new ArrayList<>());
+        Ast.Module module = compilation.module(compilation.modules().get(0));
+        Sig sig = compilation.signatures(module.name()).get("take");
+        JsonBoundary.Read read =
+                JsonBoundary.read(compilation.loader(), sig.ins().get(0), JSON.readTree(json));
+        return assertInstanceOf(JsonBoundary.Read.Refused.class, read, json);
+    }
+
+    private static List<String> messagesOf(JsonBoundary.Read.Refused refused) {
+        return refused.issues().asList().stream().map(Issue::message).toList();
+    }
+
+    private static List<String> pointersOf(JsonBoundary.Read.Refused refused) {
+        return refused.issues().asList().stream().map(i -> i.path().toJsonPointer()).toList();
     }
 
     /**
