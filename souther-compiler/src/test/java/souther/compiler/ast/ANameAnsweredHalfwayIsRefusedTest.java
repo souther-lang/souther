@@ -27,14 +27,19 @@ class ANameAnsweredHalfwayIsRefusedTest {
 
     private static final ValueName.Helper DECLARED = new ValueName.Helper("demo", "spin");
 
-    /** A name the parser read: nothing has been answered about it yet, and that is a state. */
+    /**
+     * A name the parser read: nothing has been answered about it yet, and that is a state. It says
+     * what it is written as, and refuses both questions that are about a declaration rather than
+     * about the characters — the answer either wants is the one that is missing, and handing back
+     * the spelling is what a table keyed by declarations misses on.
+     */
     @Test
-    void aNameNothingHasAnsweredYetIsFine() {
+    void aNameNothingHasAnsweredYetSaysOnlyWhatItIsWrittenAs() {
         Ast.Var written = new Ast.Var("spin", POS);
 
         assertEquals("spin", written.name());
-        assertEquals("spin", written.reaches(),
-                "nothing resolved it, so what it reaches is what it is written as");
+        assertThrows(IllegalStateException.class, written::bare);
+        assertThrows(IllegalStateException.class, written::reaches);
     }
 
     /** What it denotes without how it is reached is not a state a rewrite may leave behind. */
@@ -44,15 +49,6 @@ class ANameAnsweredHalfwayIsRefusedTest {
                 () -> new Ast.Var(WrittenName.of("spin", POS), DECLARED, null));
 
         assertEquals(true, refused.getMessage().contains("spin"), refused.getMessage());
-    }
-
-    /** And a reader asking what a name is declared as, of one nothing answered, is told so rather
-     * than handed the spelling — the answer it wanted is the one that is missing. */
-    @Test
-    void theDeclaredNameOfSomethingNothingAnsweredIsRefused() {
-        Ast.Var written = new Ast.Var("spin", POS);
-
-        assertThrows(IllegalStateException.class, written::bare);
     }
 
     /** Answered, it says both. */

@@ -572,6 +572,25 @@ public final class FixtureReader {
                 neutral.shaped(raw(nd, Type.ref(built), Admission.HELD), Type.ref(built)));
     }
 
+    /**
+     * The type an application constructs, or null where what it applies is not a type.
+     *
+     * <p>Read off what the callee denotes, which resolution settled and every producer of a tree
+     * carries (ADR-0067). Asked of the spelling instead, an import that let a name be written bare
+     * missed the table, a module declaring its own type of the same spelling answered with that one,
+     * and a row generated for an aliased type resolved to nothing at all (issue #696) — all three
+     * silently, since a miss is what a table keyed by names does with a key it has not got.
+     */
+    private static TypeName constructs(Ast.Apply c) {
+        return c.denotes() instanceof ValueName.OfType named ? named.type() : null;
+    }
+
+    /** Whether an application is a newtype's construction written in call form (ADR-0032). */
+    private boolean constructsANewtype(Ast.Apply c) {
+        TypeName built = constructs(c);
+        return built != null && neutral.isNewtype(built);
+    }
+
     private Asserted assertedApply(Ast.Apply c, Type position) {
         Type.Prim written = Type.Prim.named(c.reaches());
         if (written != null && written.temporal()) {
@@ -602,7 +621,7 @@ public final class FixtureReader {
             // what the position holds. Nothing about the position enters.
             return assertedLive(answered(c, helper));
         }
-        if (!neutral.isNewtype(c.written())) {
+        if (!constructsANewtype(c)) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
                 throw FixtureException.cannotBeCalled(c.written());
@@ -612,7 +631,7 @@ public final class FixtureReader {
         if (c.args().size() != 1) {
             throw new FixtureException("`" + c.written() + "` takes one argument");
         }
-        return assertedNewtype(symbols.resolve(c.written()), c.args().get(0), c.written());
+        return assertedNewtype(constructs(c), c.args().get(0), c.written());
     }
 
     /**
@@ -953,7 +972,7 @@ public final class FixtureReader {
         if (expected instanceof Ast.NewData nd) {
             return nd.typeName().written();
         }
-        if (expected instanceof Ast.Apply c && neutral.isNewtype(c.written())) {
+        if (expected instanceof Ast.Apply c && constructsANewtype(c)) {
             return c.written();
         }
         return null;   // a literal expected (a primitive output)
@@ -1011,8 +1030,8 @@ public final class FixtureReader {
     private TypeName constructedCase(Ast.Expr e, Set<String> followed, List<TypeName> worn) {
         return switch (e) {
             case Ast.NewData nd -> nd.typeName().denotes();
-            case Ast.Apply c when neutral.isNewtype(c.written()) -> {
-                TypeName named = symbols.resolveCase(c.written());
+            case Ast.Apply c when constructsANewtype(c) -> {
+                TypeName named = constructs(c);
                 yield wears(named, c, worn)
                         ? constructedCase(c.args().get(0), followed, worn.subList(1, worn.size()))
                         : named;
@@ -1566,8 +1585,7 @@ public final class FixtureReader {
             case Ast.NewData nd -> new Stated.Name(nd.typeName().denotes());
             case Ast.Var v -> statedByName(v);
             case Ast.Apply c when appliedHelper(c) != null -> ELSEWHERE;
-            case Ast.Apply c when neutral.isNewtype(c.written()) ->
-                    caseNamed(symbols.resolveCase(c.written()));
+            case Ast.Apply c when constructsANewtype(c) -> caseNamed(constructs(c));
             // `Date("…")` is a temporal, and `Set.fromList([…])` a collection: values under no name.
             case Ast.Apply c when Type.Prim.named(c.reaches()) != null
                     || "Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches()) ->
@@ -1641,10 +1659,7 @@ public final class FixtureReader {
         return switch (e) {
             case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
             // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
-            case Ast.Apply c when neutral.isNewtype(c.written()) -> {
-                TypeName named = symbols.resolve(c.written());
-                yield named == null ? null : Type.ref(named);
-            }
+            case Ast.Apply c when constructsANewtype(c) -> Type.ref(constructs(c));
             case Ast.FieldAccess fa -> {
                 Type target = declaredTypeOf(fa.target(), seen, bound);
                 yield target == null ? null : fieldTypeOf(target, fa.field());
@@ -1936,7 +1951,7 @@ public final class FixtureReader {
      * so the two readers of a call cannot come to different answers. */
     private Applied appliedHelper(Ast.Apply c) {
         if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())
-                || neutral.isNewtype(c.written())) {
+                || constructsANewtype(c)) {
             return null;
         }
         String reached = helperKey(c);
@@ -2078,7 +2093,7 @@ public final class FixtureReader {
             }
             return CallElaborator.parseTemporal(c.written(), lit.value(), lit.reportedAt());
         }
-        if (!neutral.isNewtype(c.written())) {
+        if (!constructsANewtype(c)) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
                 // A function this module cannot run: a helper whose body produces a function, which
@@ -2088,6 +2103,7 @@ public final class FixtureReader {
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
+        TypeName built = constructs(c);
         if (c.args().size() != 1) {
             throw new FixtureException("`" + c.written() + "` takes one argument");
         }
@@ -2099,10 +2115,10 @@ public final class FixtureReader {
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe
-        return neutral.newtypeAt(expected, c.written(),
+        return neutral.newtypeAt(expected, built,
                 neutral.shaped(raw(c.args().get(0),
-                                neutral.shapeOf(neutral.newtypeBaseType(c.written())), below(admission)),
-                        neutral.shapeOf(neutral.newtypeBaseType(c.written()))));
+                                neutral.shapeOf(neutral.newtypeBaseType(built)), below(admission)),
+                        neutral.shapeOf(neutral.newtypeBaseType(built))));
     }
 
     private Object record(Ast.NewData nd, Type expected, Admission admission) {

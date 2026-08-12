@@ -27,6 +27,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * reads. Asked of the leaf's own spelling, the answer is what the reading module has under that
  * spelling — nothing here — and the value went out with no discriminator on it and was refused for
  * the key it was missing (issue #683).
+ *
+ * <p>Being a case of the position is not being writable at it. {@code domain} exposes the sum and
+ * not its cases, so no spelling here reaches {@code 事業主都合}'s leaves — not the bare name, and not
+ * the qualified one either. The class is still a class and a row already sitting in it still covers
+ * it; what cannot be offered is a new row, and the reason belongs to the model rather than to this
+ * generator. Offered anyway, the row was a name out of scope wherever it was pasted (issue #696).
  */
 class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
 
@@ -70,14 +76,17 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
     }
 
     @Test
-    void aLeafThisModuleDoesNotNameIsStillBuiltAtThePositionThatListsIt() {
+    void aLeafThisModuleCanNameGetsARowAndTheOthersGetTheirReason() {
         Generator.GenerationResult filled = filled();
 
-        assertEquals(List.of(), filled.unresolved(),
-                "every case of the position has a value, including the ones spelled nowhere here");
-        assertEquals(List.of("BusinessClosure", "Dismissal", "Resignation { note = \"x\" }"),
+        assertEquals(List.of("Resignation { note = \"x\" }"),
                 filled.rows().stream()
                         .map(r -> String.join(", ", r.inputs().stream().map(i -> i.text()).toList()))
                         .toList());
+        assertEquals(List.of(
+                        "`domain` does not expose `BusinessClosure`, so nothing here can name it",
+                        "`domain` does not expose `Dismissal`, so nothing here can name it"),
+                filled.unresolved().stream().map(u -> u.said().orElseThrow()).toList(),
+                "each case of the position that has no name here says so");
     }
 }

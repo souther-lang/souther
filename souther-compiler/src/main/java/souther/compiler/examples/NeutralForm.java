@@ -359,10 +359,6 @@ final class NeutralForm {
     }
 
     /** As above, for a construction written as a call, where the name is what the row spelled. */
-    Object newtypeAt(Type position, String written, Object inner) {
-        return newtypeAt(position, symbols.resolve(written), inner);
-    }
-
     /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,
      * or it is untyped here and every sum that lists the case is one. */
     boolean readsABareName(Type expected, TypeName caseName) {
@@ -421,26 +417,15 @@ final class NeutralForm {
         return declaredType == null ? null : declaredType.denotes();
     }
 
-    boolean isNewtype(String name) {
-        return symbols.declaration(name) instanceof Ast.Data d && d.newtype();
-    }
-
-    /** As above, for a name that has already been resolved — an imported value's body names its own
-     * module's types, which the module reading the row need not have imported. */
+    /** Whether {@code name} is a newtype — asked of a name resolution settled, never of a spelling:
+     * an imported value's body names its own module's types, which the module reading the row need
+     * not have imported, and a module of its own may declare something else of that spelling. */
     boolean isNewtype(TypeName name) {
         return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype();
     }
 
     /** The written form of what a newtype wraps, kept whole so a generic base
      * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
-    Ast.TypeRef newtypeBaseType(String name) {
-        return symbols.declaration(name) instanceof Ast.Data d && d.newtype() && d.fields().size() == 1
-                && d.fields().get(0).type() instanceof Ast.TypeRef base
-                ? base
-                : null;
-    }
-
-    /** As above, for a name that has already been resolved. */
     Ast.TypeRef newtypeBaseType(TypeName name) {
         return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype()
                 && d.fields().size() == 1 && d.fields().get(0).type() instanceof Ast.TypeRef base

@@ -307,7 +307,11 @@ class CompilePostfixApplicationTest {
     @Test
     void anApplicationSaysWhetherItAppliesAName() {
         SourcePos at = new SourcePos(1, 1);
-        Ast.Apply named = new Ast.Apply("List.map", java.util.List.of(), at, null);
+        souther.compiler.types.ValueName.Stdlib map =
+                new souther.compiler.types.ValueName.Stdlib("List", "map");
+        Ast.Apply named = new Ast.Apply("List.map", map,
+                new ReachName.OfLibrary(map), java.util.List.of(),
+                souther.compiler.types.ConstructionOrigin.own(), at, null);
         Ast.Apply nameless = new Ast.Apply(new Ast.Block(java.util.List.of(),
                 new Ast.IntLit(1, at, null), at, null), java.util.List.of(),
                 souther.compiler.types.ConstructionOrigin.own(), at, null);

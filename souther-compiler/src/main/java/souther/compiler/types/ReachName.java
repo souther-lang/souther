@@ -92,13 +92,21 @@ public sealed interface ReachName {
      * is what decides the answer for a helper: the module's own is reached bare and another's under
      * the module that declares it, and neither the declaration nor the spelling says which case this
      * is on its own.
+     *
+     * <p>A name that denotes nothing is {@link ValueName.Unresolved}, which is an answer and is
+     * reached by its spelling like anything else. No denotation at all is not a third kind of name:
+     * it is a caller that has not resolved one yet, and answering it with the spelling would put a
+     * reference into the tree that reaches whatever the spelling happens to mean downstream.
      */
     static ReachName of(ValueName denotes, String written, String self) {
         if (self == null) {
             throw new IllegalArgumentException("which module is reading decides this: " + written);
         }
+        if (denotes == null) {
+            throw new IllegalArgumentException("`" + written
+                    + "` has not been resolved, so nothing here says how it is reached");
+        }
         return switch (denotes) {
-            case null -> new Bare(written);
             case ValueName.Helper helper -> helper.module().equals(self)
                     ? new Bare(helper.name()) : new OfModule(helper.module(), helper.name());
             case ValueName.Stdlib library -> new OfLibrary(library);

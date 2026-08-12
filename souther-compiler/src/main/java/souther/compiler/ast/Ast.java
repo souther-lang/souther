@@ -11,6 +11,7 @@ import souther.compiler.types.CoverageOrigin;
 import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeReachName;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
@@ -184,9 +185,21 @@ public interface Ast {
         }
 
         /** A name a pass synthesized, already knowing what it denotes. It is written nowhere;
-         * {@code pos} is what a complaint about it points at. */
+         * {@code pos} is what a complaint about it points at. The spelling is the declaration's own,
+         * which is what a reference internal to a module reaches it by. */
         public static Name resolved(TypeName denotes, SourcePos pos) {
             return new Name(WrittenName.synthetic(denotes.name(), pos), denotes);
+        }
+
+        /**
+         * The same, spelled as the module this is being written into reaches it.
+         *
+         * <p>For a pass whose output a person reads back: the declaration's own name is not what
+         * every module writes, so a name synthesized with it quotes a spelling the reader cannot
+         * write. What it denotes is the same either way.
+         */
+        public static Name reached(TypeReachName.Written type, SourcePos pos) {
+            return new Name(WrittenName.synthetic(type.rendered(), pos), type.denotes());
         }
 
         /** The bare name this reaches its declaration by, whatever the source spelled. */
@@ -1520,17 +1533,24 @@ public interface Ast {
         }
 
         /**
-         * The name of the declaration this reference reaches, or the name written where nothing has
-         * been resolved. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is the
-         * name the source writes, which an import may have let go without its qualifier.
+         * The name of the declaration this reference reaches — what a table keyed by a declaration's
+         * name is looked up with. The reading counterpart of {@link Apply#reaches()}:
+         * {@link #name()} is the name the source writes, which an import may have let go without its
+         * qualifier.
          *
-         * <p>The spelling is answered only for a tree resolution never saw — one a pass built for
-         * itself, which {@code FixtureTemplate} does and the example reader asks this of. It is not
-         * what a rewrite that dropped the reach name would get: a name that denotes something and
-         * says nothing about how it is reached cannot be built at all (see the constructor).
+         * <p>Never the spelling. A name that reached a reader without being resolved has no answer
+         * to this, and it says so rather than handing back the characters — which is the same rule
+         * {@link #bare()} is under, and for the same reason: an import lets a name be written
+         * without its qualifier, so the spelling misses in the very table this is asked for, and a
+         * table answers a key it has not got with silence. Every pass that writes a reference of its
+         * own says what it means (ADR-0067), so there is no tree downstream of resolution for the
+         * fallback to have been for.
          */
         public String reaches() {
-            return reachedAs == null ? name() : reachedAs.rendered();
+            if (reachedAs == null) {
+                throw new IllegalStateException("`" + name() + "` was never resolved");
+            }
+            return reachedAs.rendered();
         }
 
         /**
@@ -1619,7 +1639,8 @@ public interface Ast {
         }
 
         /**
-         * Applying a name a pass chose, at the form it stands in.
+         * Applying a name a pass chose, at the form it stands in, saying what that name means and
+         * how the body being written into reaches it.
          *
          * <p>{@code fn} is a spelling and not an occurrence — a library name a rewrite reached for,
          * a fixture's constructor, a value rendered back out of what was computed — so the applied
@@ -1628,18 +1649,17 @@ public interface Ast {
          * occurrence is; building one from a spelling and a position measures the spelling at the
          * anchor, and the two are the same number only until they are not.
          *
+         * <p>The denotation and the reach name are taken and not optional. A pass writing an
+         * application either has them or is writing a name it has not resolved, and the second is
+         * what ADR-0067 rules out: the spelling would be read back downstream by whatever the
+         * reading module happens to mean by it. Only the parser leaves a callee unanswered, and it
+         * builds the {@link Var} for itself.
+         *
          * <p>{@code region} is the application's and is not handed to the callee. What the callee
          * covers is its own — a rewrite that puts another name in a call leaves the arguments where
          * they are, so a report about what is applied would otherwise underline them too. A caller
          * that has the callee's extent builds the {@link Var} itself and passes it.
          */
-        public Apply(String fn, List<Expr> args, SourcePos pos, Region region) {
-            this(Var.respelled(fn, null, null, pos, null), args, ConstructionOrigin.own(), pos,
-                    region);
-        }
-
-        /** The same, for a pass that already knows what the name means and how the body it is
-         * writing into reaches it. */
         public Apply(String fn, ValueName denotes, ReachName reachedAs, List<Expr> args,
                      ConstructionOrigin origin, SourcePos pos, Region region) {
             this(Var.respelled(fn, denotes, reachedAs, pos, null), args, origin, pos, region);

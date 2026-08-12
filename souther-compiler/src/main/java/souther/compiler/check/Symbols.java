@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.TypeReachName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -154,6 +155,45 @@ public final class Symbols {
         }
         TypeName candidate = new TypeName(target, written.substring(dot + 1));
         return contains(candidate) && exposes(target, candidate.name()) ? candidate : null;
+    }
+
+    /**
+     * How this module writes {@code type} — the other direction of {@link #resolve}, and the one
+     * thing a writer of surface text cannot work out from the type itself.
+     *
+     * <p>Bare only where the bare spelling means this very declaration. Asked as "is the name in
+     * scope" instead, a module that declares an {@code Amount} of its own and reaches another
+     * module's under an alias would write the imported one bare, and the reference would name the
+     * declaration it is not — silently, since both spellings resolve.
+     *
+     * <p>An alias is chosen by name where a module has more than one, so that two runs of the same
+     * compilation write one reference. Nothing here picks the alias for being better than the
+     * others; it picks it for being the same one every time.
+     *
+     * <p>A qualified name reaches only what its module exposes, so a type another module keeps to
+     * itself has no name here at all. That happens without anything being wrong with the model: a
+     * sum is reached through its module and its cases through the sum, so a case a module does not
+     * expose is a value a reader takes and cannot write. It is answered as
+     * {@link TypeReachName.Unnameable} rather than as the qualified spelling, which would resolve to
+     * nothing wherever it was put.
+     */
+    public TypeReachName reach(TypeName type) {
+        if (type.isPrimitive() || TypeName.RUNTIME.equals(type.module())
+                || type.equals(scope.get(type.name()))) {
+            return new TypeReachName.Bare(type);
+        }
+        if (!exposes(type.module(), type.name())) {
+            return new TypeReachName.Unnameable(type);
+        }
+        String alias = null;
+        for (Map.Entry<String, String> each : aliases.entrySet()) {
+            if (each.getValue().equals(type.module())
+                    && (alias == null || each.getKey().compareTo(alias) < 0)) {
+                alias = each.getKey();
+            }
+        }
+        return alias != null ? new TypeReachName.ViaAlias(alias, type)
+                : new TypeReachName.ViaModule(type);
     }
 
     /**
