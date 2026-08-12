@@ -388,9 +388,9 @@ public final class HelperInliner {
      * such a helper reaches is expanded into it before it is emitted, so this is what a row names and
      * not its transitive closure; a recursive helper it reaches is a method already.
      *
-     * <p>A helper with no body to emit is not here: an intrinsic is implemented in Java, and one whose
-     * body produces a function has no value to hand back. A row applying either is refused where it is
-     * evaluated, by that reason.
+     * <p>A helper whose body produces a function is not here: it has no value to hand back, and a row
+     * applying one is refused where it is evaluated, by that reason. An intrinsic has no body either,
+     * and is collected below rather than here — it is emitted from a body written for it (#680).
      */
     public static Set<String> exampleHelpers(Ast.Module module, Map<String, Ast.FnDef> table) {
         Set<String> called = new LinkedHashSet<>();
@@ -407,7 +407,104 @@ public final class HelperInliner {
                 out.add(name);
             }
         }
+        // The intrinsics a row applies, collected on their own because the table has none of them:
+        // it holds what may be expanded into a body, and an intrinsic is lowered at its call site
+        // instead. That is a fact about the backend, and a row that applies one is asking the same
+        // thing of it as a row applying any other library function (#680).
+        Deque<Ast.Expr> kernels = new ArrayDeque<>();
+        forEachExampleExpr(module, kernels::add);
+        // Named as they are emitted, not as they are written. This set is what decides which fns
+        // survive lowering, and what has to survive for a kernel is the wrapper — the kernel's own
+        // name belongs to the call the wrapper makes.
+        followingValues(kernels, table, e -> intrinsicCallsIn(e, out));
         return out;
+    }
+
+    /**
+     * Adds the intrinsic each application in {@code e} reaches, where a fixture could apply it.
+     *
+     * <p>Kept apart from {@link #helperCallsIn}, which feeds the recursion graph. What recurses is
+     * decided from calls between bodies that have one; an intrinsic has no body and belongs to
+     * neither that question nor that answer.
+     *
+     * <p>A kernel a fixture may not apply is not collected, and which those are is {@link
+     * #decidedByEachCall} — the same reading that refuses one where a fixture is built. Asked once,
+     * because a kernel one reading admitted and the other missed would be admitted by the fixture and
+     * then told it has no method, which is the representation-shaped refusal this removes.
+     */
+    private static void intrinsicCallsIn(Ast.Expr e, Set<String> out) {
+        if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Stdlib) {
+            Prelude.PreludeEntry entry = Prelude.entry(call.reaches());
+            if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic
+                    && !entry.declaration().params().isEmpty()
+                    && appliableInAFixture(entry.signature().params())) {
+                out.add(intrinsicWrapperName(call.reaches()));
+            }
+        }
+        Ast.forEachChild(e, c -> intrinsicCallsIn(c, out));
+    }
+
+    /** Whether a declaration taking {@code paramTypes} is one a fixture may apply. */
+    private static boolean appliableInAFixture(List<Type> paramTypes) {
+        for (Type t : paramTypes) {
+            if (decidedByEachCall(t)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Whether {@code t} leaves something for each call to decide, which a fixture has no call to do:
+     * it is built before there is a call that could settle it.
+     *
+     * <p>The one reading of that question. It decides which kernels a method is emitted for and which
+     * calls a fixture may apply, and those are the same question — a second reading of it is a second
+     * set, free to come apart from the first.
+     */
+    public static boolean decidedByEachCall(Type t) {
+        return Type.mentions(t, x -> x instanceof Type.Var);
+    }
+
+    /**
+     * The name a kernel's wrapper is emitted under: where its method goes, and not what the function
+     * is. A report names the kernel the row applied; only a method lookup takes this.
+     *
+     * <p>Not the kernel's own name. Under that name the emitted method would be a helper the table
+     * reaches, and a body calling {@code String.length} would expand into it — into a body whose one
+     * call is to {@code String.length}, which is the same call again. The name is written nowhere a
+     * source could spell, so what is emitted here is reached from a fixture and from nothing else.
+     */
+    public static String intrinsicWrapperName(String reached) {
+        return INTRINSIC_PREFIX + reached;
+    }
+
+    /** The kernel {@code emitted} wraps, or null where it is not one of these at all. */
+    private static String intrinsicWrapped(String emitted) {
+        return emitted.startsWith(INTRINSIC_PREFIX)
+                ? emitted.substring(INTRINSIC_PREFIX.length()) : null;
+    }
+
+    private static final String INTRINSIC_PREFIX = "$intrinsic.";
+
+    /**
+     * {@code kernel} as a helper with a body: it applies the intrinsic to its own parameters.
+     *
+     * <p>What the module could not take on before. An intrinsic has no body to emit, so nothing was
+     * emitted and a row applying one was told a rule about the standard library; the eta-expansion is
+     * a body, and the backend lowers the one call in it exactly as it lowers that call anywhere else.
+     * So this materialises a method without teaching anything a second way to run a kernel.
+     */
+    private static Ast.FnDef fixtureWrapper(String reached, Ast.FnDef kernel) {
+        List<Ast.Expr> args = new ArrayList<>();
+        for (Ast.FnParam p : kernel.params()) {
+            args.add(Ast.Var.local(p.binder(), kernel.pos()));
+        }
+        ValueName.Stdlib target = Prelude.operation(reached);
+        Ast.Expr body = new Ast.Apply(reached, target, new ReachName.OfLibrary(target), args,
+                ConstructionOrigin.own(), kernel.pos(), null);
+        return kernel.reachedAs(intrinsicWrapperName(reached))
+                .withBody(new Ast.FnBody.Written(body));
     }
 
     /** As {@link #exampleHelpers(Ast.Module, Map)}, for the module this inliner reads: the ones it must
@@ -425,8 +522,13 @@ public final class HelperInliner {
             if (table.held().containsKey(name)) {
                 continue;
             }
-            Ast.FnDef def = table.reached(name);
-            out.put(name, def.reachedAs(name));
+            if (intrinsicWrapped(name) instanceof String kernel) {
+                // A kernel, which the table does not reach: it has no body to expand into a caller,
+                // which is the only thing that table holds. Its wrapper is written here.
+                out.put(name, fixtureWrapper(kernel, Prelude.entry(kernel).declaration()));
+                continue;
+            }
+            out.put(name, table.reached(name).reachedAs(name));
         }
         return out;
     }

@@ -58,12 +58,13 @@ class ARowAppliesTheHelperItsCallReachesTest {
         assertEquals("E1905", e.diagnostic().code(), e.getMessage());
     }
 
-    /** Which library function a row applied decides what it is told about it, so that question is
-     * asked with the name the call reaches too: an intrinsic has no method for a fixture to run, and
-     * saying so is not the same as saying the call was not a construction. */
+    /** An intrinsic is applied under the name the call reaches, so an import that lets it be written
+     * without its qualifier reaches the same kernel (#680). A table keyed by reach names misses on the
+     * bare spelling, and a miss here reads as a row naming a construction it cannot make. The row
+     * holding is what says the kernel ran: a value it did not answer would be E1903 or E1905. */
     @Test
-    void aLibraryIntrinsicWrittenBareIsRefusedAsTheIntrinsicItIs() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void aLibraryIntrinsicWrittenBareIsAppliedUnderTheNameItReaches() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
                 import String ( length )
                 data In  = { s: String }
@@ -73,7 +74,6 @@ class ARowAppliesTheHelperItsCallReachesTest {
                 example go
                     | "bare" : (In { s = "abc" }) -> Out { n = length("abc") }
                 """));
-        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"), e.getMessage());
     }
 
     /**

@@ -1,14 +1,10 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An {@code example} row may name a value instead of writing the whole input again. Four rows over a
@@ -193,12 +189,12 @@ class CompileFixtureNamesAValueTest {
                 """));
     }
 
+    /** A value whose body applies an intrinsic is a fixture like one whose body applies any other
+     * library function (#680). `String.length("Acme")` is 4, which does not qualify — a score the
+     * intrinsic did not answer would leave the row wrong and reported. */
     @Test
-    void aValueThatReachesNoRunnableFunctionCannotBeNamedByARow() {
-        // A standard-library intrinsic is implemented in Java and has no helper method to apply, so a
-        // value whose body calls one is not a fixture — and says that rather than being refused for
-        // being a call at all.
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void aValueWhoseBodyAppliesAnIntrinsicIsAFixture() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 data Lead = { name: String, score: Int }
@@ -213,9 +209,7 @@ class CompileFixtureNamesAValueTest {
                 let qualify (l) = if l.score >= 70 then Accepted else Rejected
 
                 example qualify
-                    | "an intrinsic is not a fixture" : (acme) -> Rejected
+                    | "a short name does not qualify" : (acme) -> Rejected
                 """));
-
-        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"), e.getMessage());
     }
 }

@@ -301,11 +301,15 @@ class ExampleCallsHelperTest {
                 """));
     }
 
+    /**
+     * An intrinsic a row applies is emitted as a method like any other helper the row applies
+     * (issue #680). Which function a fixture may run is decided by the fixture's own rules, and not
+     * by whether the backend happened to lower the function at its call sites.
+     */
     @Test
-    void anIntrinsicIsRefusedByThatReason() {
-        CompileException e = err("""
+    void aRowAppliesAnIntrinsic() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
-                import String ( length )
 
                 data Amount = Int
                 data Receipt = { total: Amount }
@@ -317,10 +321,106 @@ class ExampleCallsHelperTest {
 
                 example bill
                   | (Amount(String.length("abc"))) -> Receipt { total = Amount(3) }
+                """));
+    }
+
+    /** And the value is the one the intrinsic answers, not one the row was let state for itself. */
+    @Test
+    void aRowApplyingAnIntrinsicStillCatchesAMismatch() {
+        CompileException e = err("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+
+                example bill
+                  | (Amount(String.length("abc"))) -> Receipt { total = Amount(4) }
+                """);
+        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
+    }
+
+    /**
+     * A kernel the backend writes out as instructions rather than as a call to a runtime method is
+     * applied too. What is emitted for the row is a method whose body is the one call, so whatever the
+     * backend lowers that call to is what the row runs — a division writes a branch on a zero divisor,
+     * and it writes it inside the method.
+     */
+    @Test
+    void aRowAppliesAKernelTheBackendWritesOutInPlace() {
+        assertDoesNotThrow(() -> Compiler.compile(INT_ROW + "  | (Int.divide(7, 2)) -> 3\n"));
+    }
+
+    /** The other arm of that branch, which is the half that makes these three kernels different from
+     * the rest: the zero divisor answers a case, and the branch answering it is written inside the
+     * emitted method like any other lowering. */
+    @Test
+    void theZeroDivisorBranchIsWrittenInsideTheEmittedMethodToo() {
+        CompileException e = err(INT_ROW + "  | (Int.divide(7, 0)) -> 0\n");
+        assertTrue(e.getMessage().contains("answered with a `DivisionByZero`"), e.getMessage());
+    }
+
+    /**
+     * A kernel's method is emitted under a name no source can spell, and that name is where the method
+     * went — not what the row applied. A report about a helper that did not answer names the helper,
+     * so the wrapper's address does not reach the author (#680).
+     */
+    @Test
+    void aKernelThatDoesNotAnswerIsNamedAsTheKernel() {
+        CompileException e = err("""
+                module demo
+
+                behavior echoStr : (s: String) -> String
+
+                let echoStr (s) = s
+
+                example echoStr
+                  | (String.slice(0, 99, "ab")) -> "ab"
+                """);
+        assertTrue(e.getMessage().contains("`String.slice` did not produce a value"), e.getMessage());
+        assertTrue(!e.getMessage().contains("$intrinsic"),
+                "the emitted method's name is not the helper's identity: " + e.getMessage());
+    }
+
+    private static final String INT_ROW = """
+            module demo
+
+            behavior echoInt : (n: Int) -> Int
+
+            let echoInt (n) = n
+
+            example echoInt
+            """;
+
+    /**
+     * A library function whose parameter type is decided by each call is refused for that, whether it
+     * is an intrinsic or written in Souther. The rule is the fixture's and reads the declaration, so
+     * how the function is compiled does not enter (#692).
+     */
+    @Test
+    void aPolymorphicIntrinsicIsRefusedForItsTypeVariable() {
+        CompileException e = err("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+
+                example bill
+                  | (Amount(List.length([ 1, 2 ]))) -> Receipt { total = Amount(2) }
                 """);
         assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"),
-                "a helper with no method says so rather than 'is not a newtype': " + e.getMessage());
+        assertTrue(e.getMessage().contains("decided by each call"),
+                "the type variable is the reason, not how `List.length` is compiled: " + e.getMessage());
+        assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
     }
 
     /**
