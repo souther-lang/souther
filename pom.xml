@@ -50,8 +50,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>25</maven.compiler.release>
         <raoh.version>0.7.2</raoh.version>
-        <jspecify.version>1.0.0</jspecify.version>
-        <junit.version>6.1.2</junit.version>
+        <jspecify.version>1.0.1</jspecify.version>
+        <junit.version>6.1.3</junit.version>
         <!-- A JVM per two cores. Named here so -DforkCount=N reaches it: a literal in the plugin's
              configuration outranks the property surefire declares, so the override the comment
              below offers was not one, and a fork count could not be measured until it was.
