@@ -319,8 +319,31 @@ class ExampleCallsHelperTest {
                   | (Amount(String.length("abc"))) -> Receipt { total = Amount(3) }
                 """);
         assertTrue(e.getMessage().contains("E1903"), e.getMessage());
-        assertTrue(e.getMessage().contains("no executable helper method"),
+        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"),
                 "a helper with no method says so rather than 'is not a newtype': " + e.getMessage());
+    }
+
+    /**
+     * The other thing that reaches the same refusal. A helper whose body produces a function is not a
+     * standard-library function, so it is not told to write the helper it already is — the sentence
+     * this row holds is the one the intrinsic row above must not be given.
+     */
+    @Test
+    void aHelperWhoseBodyProducesAFunctionIsRefusedByItsOwnReason() {
+        CompileException e = err("""
+                module demo
+
+                let adder (n: Int) = m -> n + m
+
+                behavior isThree : (n: Int) -> Bool
+
+                let isThree (n) = n == 3
+
+                example isThree
+                  | (adder(1)) -> true
+                """);
+        assertTrue(e.getMessage().contains("no method was emitted for it"), e.getMessage());
+        assertTrue(!e.getMessage().contains("standard-library"), e.getMessage());
     }
 
     @Test

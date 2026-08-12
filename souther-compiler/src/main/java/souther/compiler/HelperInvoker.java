@@ -49,8 +49,7 @@ final class HelperInvoker {
             method = fns.getDeclaredMethod(Backend.helperMethod(name), params);
             method.setAccessible(true);   // `$Fns` is package-private in every module (ADR-0075)
         } catch (ClassNotFoundException | NoSuchMethodException _) {
-            throw new FixtureException("`" + name + "` cannot be called from an example fixture:"
-                    + " it has no executable helper method");
+            throw FixtureException.cannotBeCalled(name, name);
         }
         String outer = running.get();   // a helper applied to a helper's argument nests
         running.set(name);

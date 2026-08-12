@@ -73,7 +73,7 @@ class ARowAppliesTheHelperItsCallReachesTest {
                 example go
                     | "bare" : (In { s = "abc" }) -> Out { n = length("abc") }
                 """));
-        assertTrue(e.getMessage().contains("no executable helper method"), e.getMessage());
+        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"), e.getMessage());
     }
 
     /**

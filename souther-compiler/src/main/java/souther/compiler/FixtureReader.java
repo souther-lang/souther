@@ -601,8 +601,7 @@ public final class FixtureReader {
         if (!neutral.isNewtype(c.written())) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
-                throw new FixtureException("`" + c.written() + "` cannot be called from an example fixture:"
-                        + " it has no executable helper method");
+                throw FixtureException.cannotBeCalled(c.written(), reached);
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
@@ -1983,8 +1982,7 @@ public final class FixtureReader {
                 // A function this module cannot run: an intrinsic implemented in Java, or a helper
                 // whose body produces a function. Said as that, so the rule that a fixture may apply a
                 // helper does not appear to have exceptions nothing explains (ADR-0077).
-                throw new FixtureException("`" + c.written() + "` cannot be called from an example fixture:"
-                        + " it has no executable helper method");
+                throw FixtureException.cannotBeCalled(c.written(), reached);
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
