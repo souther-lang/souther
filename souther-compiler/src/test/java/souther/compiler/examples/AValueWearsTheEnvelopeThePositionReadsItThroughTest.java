@@ -39,6 +39,9 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
             data Yen = Int
             data Paid = Yen
             data Settlement = Paid | Draft
+
+            data Withdrawn = { id: Int }
+            data Appeal = Decision | Withdrawn
             """;
 
     private final Compilation compilation = compiled();
@@ -87,12 +90,25 @@ class AValueWearsTheEnvelopeThePositionReadsItThroughTest {
                 neutral.of(approved(), at("Decision"), "h"));
     }
 
-    /** Two sums may list one case, and each position reads it through its own decoder. What they
-     *  read it under agrees for as long as every discriminator is derived (issue #683). */
+    /**
+     * Two sums may list one case. That they read it under the same key and tag is a fact about
+     * derivation and not about either position: every discriminator is derived, keyed {@code "type"}
+     * and tagged with the case's own name, so there is nothing here for a position to disagree about
+     * yet. Held so that #698 — a written discriminator — has to come past it.
+     */
     @Test
-    void eachSumThatListsTheCaseReadsItThroughItsOwnDecoder() throws Exception {
+    void twoDerivedSumsThatListOneCaseCurrentlyAgreeOnItsDiscriminator() throws Exception {
         assertEquals(neutral.of(approved(), at("Decision"), "h"),
                 neutral.of(approved(), at("Outcome"), "h"));
+    }
+
+    /** A derived decoder dispatches over the leaves of the sums it names, so a case reached through
+     *  a nested sum is listed by the outer position's own decoder and is read there without walking
+     *  to the sum that names it directly. */
+    @Test
+    void aCaseReachedThroughANestedSumIsReadAtTheOuterPosition() throws Exception {
+        assertEquals(Map.of("id", 1L, "type", "Approved"),
+                neutral.of(approved(), at("Appeal"), "h"));
     }
 
     /** A unit case travels as its bare name where the position is an enumeration, and wears the tag
