@@ -408,9 +408,29 @@ public final class FixtureReader {
             case Ast.NewData nd -> assertedRecord(nd, position);
             case Ast.Apply c -> assertedApply(c, position);
             case Ast.ListLit l -> assertedCollection(l, position);
+            case Ast.FieldAccess fa -> assertedProjection(fa);
             default -> throw new FixtureException(
                     "an example fixture must be a literal or a construction");
         };
+    }
+
+    /**
+     * A field taken off a value this row can already build. The walk that built the value it is taken
+     * off is the one walk — a helper inside it runs where it is written and not again here — and what
+     * that walk answers with already carries the field under the name its construction gave it, so a
+     * value written out and one a helper answered with are read the same way.
+     */
+    private Asserted assertedProjection(Ast.FieldAccess fa) {
+        if (!(asserted(fa.target(), null) instanceof Asserted.Built built)) {
+            throw new FixtureException("`" + fa.field()
+                    + "` is read off a value that is not a record, so it has no field to take");
+        }
+        Asserted taken = built.fields().get(fa.field());
+        if (taken == null) {
+            throw new FixtureException("`" + built.type().name() + "` declares no field `"
+                    + fa.field() + "`");
+        }
+        return taken;
     }
 
     private Asserted assertedName(Ast.Var v, Type position) {
