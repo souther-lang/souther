@@ -207,8 +207,14 @@ public final class Compilation {
     public ClassLoader loader() {
         Map<String, byte[]> classes = classes();
         if (loader == null || loadedClasses != classes) {
+            // Built before either field is written, so a build that threw leaves this holding what it
+            // held before rather than the classes it did not manage to make a loader for. Recording
+            // them first would leave the two saying different things, and the next ask would read
+            // that as a loader it already has — handing out the one from before the edit, which is
+            // this whole method's fault with an exception in front of it.
+            ClassLoader built = Output.loader(db, classes);
             loadedClasses = classes;
-            loader = Output.loader(db, classes);
+            loader = built;
         }
         return loader;
     }

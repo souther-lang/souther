@@ -20,6 +20,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A class is its binary name and the loader that defined it, so what a compilation answers when it
@@ -150,6 +151,55 @@ final class ACompilationAnswersWithOneLoaderForItsClassesTest {
         compilation.loader();
         compilation.update(Map.of("a.sou", SOURCE), Set.of());
         assertNotSame(first, compilation.loader(), "the loader after an edit that was undone");
+    }
+
+    /**
+     * A loader that could not be built claims nothing. The classes are recorded once there is a
+     * loader over them and not before, so an ask that threw is an ask that changed nothing.
+     *
+     * <p>The other order is worse than the throw. Recording the classes first leaves this holding a
+     * loader over the classes before the edit and the classes after it, and the next ask reads that
+     * as a loader it already has — so it answers with one whose types are a program the caller is no
+     * longer compiling, silently, which is what this method exists to stop. {@link ModulePath#loader}
+     * is a default method on an interface anyone may implement, so a path that throws is not
+     * something the type rules out.
+     */
+    @Test
+    void aLoaderThatCouldNotBeBuiltDoesNotClaimTheClasses() {
+        ThrowsOnceWhenAsked path = new ThrowsOnceWhenAsked(2);
+        Compilation compilation = Compilation.ofDocuments(
+                Map.of("a.sou", SOURCE), Set.of(), path);
+        ClassLoader beforeTheEdit = compilation.loader();
+
+        compilation.update(Map.of("a.sou", SOURCE.replace("Key(\"a\")", "Key(\"b\")")), Set.of());
+        assertThrows(IllegalStateException.class, compilation::loader, "the ask that could not build");
+
+        assertNotSame(beforeTheEdit, compilation.loader(),
+                "the ask after it, which must not be answered with the loader from before the edit");
+    }
+
+    /** A path that answers with a loader except on the {@code failsOn}-th time it is asked for one. */
+    private static final class ThrowsOnceWhenAsked implements ModulePath {
+
+        private final int failsOn;
+        private int asked;
+
+        ThrowsOnceWhenAsked(int failsOn) {
+            this.failsOn = failsOn;
+        }
+
+        @Override
+        public byte[] bytes(String binaryName) {
+            return null;
+        }
+
+        @Override
+        public ClassLoader loader(ClassLoader parent) {
+            if (++asked == failsOn) {
+                throw new IllegalStateException("this path cannot be read just now");
+            }
+            return ModulePath.super.loader(parent);
+        }
     }
 
     /**
