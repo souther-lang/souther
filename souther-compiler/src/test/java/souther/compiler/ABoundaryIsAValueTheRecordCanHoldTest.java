@@ -485,47 +485,6 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 () -> "and the top of the same range builds: " + owed);
     }
 
-    /**
-     * A type whose own rules contradict has no edges to reach.
-     *
-     * <p>Nothing is a value of it, so both ends of the range its rules describe are values nobody
-     * writes. What settles that is the domain those rules were read into, and a newtype taken
-     * straight as a parameter was not being read into one at all — its bounds were taken from the
-     * type and its feasibility from nowhere.
-     *
-     * <p>Asserted on the count and not on the findings: with no value of the type there can be no
-     * row either, so nothing was ever reported at these edges. What was wrong is that they were
-     * counted as measurements waiting for a row.
-     */
-    @Test
-    void aTypeWhoseRulesContradictHasNoEdgesToReach() throws Exception {
-        String report = reportOn("""
-                module example.impossible
-
-                data Impossible = Int
-                    invariant low = value >= 10
-                    invariant high = value <= 0
-
-                data Ok
-
-                behavior f : (n: Impossible) -> Ok
-                    constructs Ok
-
-                let f (n) = Ok
-                """);
-
-        // No row is owed here, which is the whole of it: 10 and 0 are not values this type holds.
-        assertFalse(report.contains("no row is at"),
-                () -> "10 and 0 are not rows anybody is owed:\n" + report);
-        // The measure says it derived nothing rather than showing a nought that reads as a
-        // measurement. `not applicable` would be the truer word — two rules that contradict leave
-        // no value to be at any line — and nothing here reads them together and says so, so the
-        // measure may only report what it observed. The proof exists inside the partitioning, where
-        // a position whose rules contradict is already known; carrying it out to the measure is
-        // what would let this say `not applicable` honestly.
-        assertTrue(report.contains("boundary    not measured"), () -> report);
-    }
-
     /** The same two fields with the rule removed keep the whole of their type's range, so the
      * narrowing above is read as that rule doing it. */
     @Test

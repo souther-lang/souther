@@ -11,6 +11,7 @@ import souther.compiler.types.ValueName;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -470,9 +471,9 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     private static final String UNMEETABLE = """
             module unmeetable
 
-            data FlagsN   = Set<Bool>       invariant Set.size(value) >= 3
+            data FlagsN   = Set<Bool>       invariant Set.size(value) >= 2
             data NumbersN = Set<Int>        invariant Set.size(value) >= 3
-            data FlagsR   = { s: Set<Bool> } invariant Set.size(s) >= 3
+            data FlagsR   = { s: Set<Bool> } invariant Set.size(s) >= 2
             data NumbersR = { s: Set<Int> }  invariant Set.size(s) >= 3
             data TextR    = { s: String }    invariant String.length(s) >= 3
 
@@ -499,15 +500,53 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             let onTextR (v) = Ok { size = String.length(v.s) }
             """;
 
+    /** The same rule past what a `Set<Bool>` can hold, written both ways. */
+    private static final String BEYOND = """
+            module beyond
+
+            data FlagsN   = Set<Bool>       invariant Set.size(value) >= 3
+            data FlagsR   = { s: Set<Bool> } invariant Set.size(s) >= 3
+
+            data Ok = { size: Int }
+
+            behavior onFlagsN : (v: FlagsN) -> Ok
+                constructs Ok
+            let onFlagsN (v) = Ok { size = Set.size(v.value) }
+
+            behavior onFlagsR : (v: FlagsR) -> Ok
+                constructs Ok
+            let onFlagsR (v) = Ok { size = Set.size(v.s) }
+            """;
+
+    /**
+     * A floor past what the element has is refused, and refused whichever way it is written.
+     *
+     * <p>The other half of the rule below, at the layer that decides it. There are two booleans, so a
+     * set of three of them is a value nobody can build — and it is one rule, so the record's spelling
+     * of it is refused beside the newtype's rather than left as a line somebody owes a row at.
+     */
+    @Test
+    void aFloorPastWhatTheElementHasIsRefusedWhicheverWayItIsWritten() {
+        Compilation compilation = Compilation.ofSource(BEYOND, "Main");
+        compilation.answerEverything();
+
+        assertEquals(List.of("E1013", "E1013"), compilation.diagnostics().values().stream()
+                        .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
+                        .toList(),
+                "one for each spelling of the one rule");
+    }
+
     /**
      * A line the record placed is settled the way one on a newtype is.
      *
-     * <p>The route an edge arrived by is not evidence about whether a row can be written at it, and
-     * this issue adds a second route. A floor of three on a `Set<Bool>` is not known to be writable
-     * and stays out of the denominator whichever way it is written; the same floor on a `Set<Int>`
-     * is a row somebody owes, also either way. Held because the whole of #649 is that the two
-     * spellings state one rule: a repair that made the record's line a counted obligation where the
-     * newtype's is not would have granted that rule two meanings again.
+     * <p>The route an edge arrived by is not evidence about whether a row can be written at it. Each
+     * of these floors is a row somebody owes, and the record's spelling has to come to that the same
+     * way the newtype's does: a repair that made the record's line a counted obligation where the
+     * newtype's is not would grant one rule two meanings again.
+     *
+     * <p>A floor past what its element has is the other half of that and is not here. It is refused
+     * before any of this is read, and refused either way it is written, which is the same claim at
+     * the layer that now decides it.
      */
     @Test
     void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
@@ -519,14 +558,14 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
                 .forEach((behavior, evidence) -> evidence.boundaries()
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
 
-        assertEquals(Set.of("onFlagsN/Set.size(v) = 3", "onNumbersN/Set.size(v) = 3",
-                        "onFlagsR/Set.size(v.s) = 3", "onNumbersR/Set.size(v.s) = 3",
+        assertEquals(Set.of("onFlagsN/Set.size(v) = 2", "onNumbersN/Set.size(v) = 3",
+                        "onFlagsR/Set.size(v.s) = 2", "onNumbersR/Set.size(v.s) = 3",
                         "onTextR/String.length(v.s) = 3"),
                 lines.keySet(), "one line each, and the record's is on the count of the field");
-        assertFalse(lines.get("onFlagsN/Set.size(v) = 3").writability().known(),
-                "two booleans are all there are");
-        assertFalse(lines.get("onFlagsR/Set.size(v.s) = 3").writability().known(),
-                "and writing the rule on the record does not add a third");
+        assertTrue(lines.get("onFlagsN/Set.size(v) = 2").writability().known(),
+                "two booleans are two booleans");
+        assertTrue(lines.get("onFlagsR/Set.size(v.s) = 2").writability().known(),
+                "and writing the rule on the record does not take one away");
         assertTrue(lines.get("onNumbersN/Set.size(v) = 3").writability().known(),
                 "three integers are three integers");
         assertTrue(lines.get("onNumbersR/Set.size(v.s) = 3").writability().known(),

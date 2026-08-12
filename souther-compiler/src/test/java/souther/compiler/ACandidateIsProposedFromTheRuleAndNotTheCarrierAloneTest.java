@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -548,25 +549,19 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
     }
 
     /**
-     * A type written in terms of itself is what the descent gives up on.
+     * A type written in terms of itself is descended into and comes back.
      *
-     * <p>No value of it exists, so the giving up is the right answer and not a limit reached. What
-     * matters is that it is reported the way any other refusal is, rather than descending forever.
+     * <p>A tree holds trees, so composing one is composing another, and what makes that stop is that
+     * a list may be empty. The descent has to find that rather than follow the name round again.
      *
-     * <p>Written through a sum, which is the shape of this the front end still admits: every case of
-     * {@code Shape} holds a {@code Shape}, so there is no first one, and whether a sum has a case that
-     * bottoms out is a judgement the construction check does not make. Written through a collection
-     * the rules will not let be empty, the model is refused before the descent is reached.
-     *
-     * <p>So this asks its question through the gap rather than around it, and holds only while the
-     * gap is open. Have the construction check decide a sum's inhabitance and no model reaching the
-     * descent is left to ask it with — at which point what this asserts has to be asked of a type the
-     * check still admits, or the question has stopped being one the generator can be posed.
+     * <p>This used to be asked of a type with no value at all — a sum every case of which held the
+     * sum — because that was the shape of a base-less recursion the front end admitted, and what came
+     * back was the refusal rather than a row. It is refused at the declaration now, so no model
+     * reaching the descent carries one, and the question left here is the one about descending: a
+     * recursion that does bottom out is walked and answered.
      */
     @Test
-    void aTypeWrittenInTermsOfItselfIsGivenUpOn() {
-        // No row of its own: no fixture anybody can write satisfies a rule about a type that has no
-        // values, and a model carrying one would not compile.
+    void aTypeWrittenInTermsOfItselfIsDescendedIntoAndComesBack() {
         Generator.GenerationResult filled = generated("""
                 module nd.gen
 
@@ -574,22 +569,18 @@ class ACandidateIsProposedFromTheRuleAndNotTheCarrierAloneTest {
                 data Overseas
                 data Kind = Domestic | Overseas
 
-                data Leaf = { s: Shape }
-                data Branch = { s: Shape }
-                data Shape = Leaf | Branch
+                data Tree = { kids: List<Tree> }
 
-                data T = { kind: Kind, shape: Shape }
+                data T = { kind: Kind, tree: Tree }
 
                 behavior look : (t: T) -> Int
 
                 let look (t) = 1
                 """);
 
-        assertEquals(List.of(), filled.rows(), "no value of it exists");
-        assertTrue(filled.unresolved().stream().allMatch(left ->
-                        left.reason() == Generator.UnresolvedCombination.Reason
-                                .NOTHING_COMPOSES_ONE),
-                "and the answer comes back rather than descending forever: "
+        assertFalse(filled.rows().isEmpty(), "a tree with no kids is a tree");
+        assertEquals(List.of(), filled.unresolved(),
+                "and the descent came back rather than following the name round again: "
                         + filled.unresolved());
     }
 

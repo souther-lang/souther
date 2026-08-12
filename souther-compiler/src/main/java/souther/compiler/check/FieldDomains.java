@@ -117,19 +117,33 @@ public final class FieldDomains {
      */
     public static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
                                   Map<String, Count> settled) {
-        return of(named, data, symbols, settled, _ -> false);
+        return of(named, data, symbols, settled, InvariantChecker.Reach.EVERYTHING);
     }
 
-    /** The same, with one declaration's own clauses left out — see {@link #narrowedBy}. */
+    /**
+     * The same, with the declarations {@code granted} names supposed to hold values.
+     *
+     * <p>What a reader asking "would this hold anything if that one did" needs. A value said to have
+     * none is one whose rules say so, and those rules are read wherever it is reached — its own and
+     * the ones under whatever it wraps — so supposing it has a value is not reading it at all. A
+     * record holding it is otherwise told it holds nothing by the very rules the supposing was
+     * about.
+     */
+    static FieldDomains granting(TypeName named, Ast.Data data, Symbols symbols,
+                                 java.util.function.Predicate<TypeName> granted) {
+        return of(named, data, symbols, Map.of(), InvariantChecker.Reach.stoppingAt(granted));
+    }
+
+    /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeName named, Ast.Data data, Symbols symbols,
                                    Map<String, Count> settled,
-                                   java.util.function.Predicate<TypeName> without) {
+                                   InvariantChecker.Reach reach) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the same position it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
         // answers were being given away by treating it as a value with nothing to say.
         InvariantChecker.Seeded seeded =
-                InvariantChecker.seedFields(named, data, symbols, settled, without);
+                InvariantChecker.seedFields(named, data, symbols, settled, reach);
         Map<String, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no path, and its range is the one thing not worth handing back:
@@ -258,7 +272,7 @@ public final class FieldDomains {
 
     /** This value read again without the clauses of the declarations {@code skip} names. */
     private FieldDomains without(java.util.function.Predicate<TypeName> skip) {
-        return of(named, data, symbols, settled, skip);
+        return of(named, data, symbols, settled, InvariantChecker.Reach.withoutClausesOf(skip));
     }
 
     /** Every end the rules place, wherever it is. */
@@ -295,16 +309,8 @@ public final class FieldDomains {
      */
     public static boolean mayHoldNothingAt(TypeName named, Ast.Data data, String path,
                                            Symbols symbols) {
-        InvariantChecker.Seeded seeded = InvariantChecker.seedFields(named, data, symbols);
-        String counted = seeded.held().get(path);
-        if (counted == null) {
-            return true;   // nothing counts what is there, so no rule here is about how much it holds
-        }
-        NumericDomain.LinearForm none = NumericDomain.LinearForm.atom(counted);
         // A count is never below none, so leaving it no room above none is leaving it at none.
-        return !seeded.numbers()
-                .assume(none, NumericDomain.Rel.LE, Map.of(counted, Granularity.DISCRETE))
-                .isBottom();
+        return OccurrenceCounts.of(named, data, symbols).mayHoldAtMost(path, 0);
     }
 
     /**

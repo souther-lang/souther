@@ -156,7 +156,7 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
                 invariant value >= 0.0m
 
             data Card = { holder: Amount }
-                invariant impossible = holder.value >= 10.0m && holder.value <= 5.0m
+                invariant notFree = holder.value /= 0.0m
             data Cash = { amount: Amount }
             data Payment = Card | Cash
 
@@ -233,6 +233,13 @@ class EveryGapTheBuildRefusesGetsAnAnswerTest {
      * <p>Not {@code NotSupported}: the strategy took this class and came back with a reason, which is
      * news of a different kind. Reading it as "no strategy for this" would say the generator will
      * never offer a row at a class it took and searched.
+     *
+     * <p>A card has values — any amount above none is one — and the search proposes the end of the
+     * range, which is the one amount the rule refuses. So this is what the search could not reach and
+     * not what has no value: a type with none is refused before any of this, and a fixture that had
+     * none would be asking the generator about a model that does not compile. Should the search learn
+     * to step off an end it was refused at, this becomes a row, which is the answer changing for the
+     * reason it should.
      */
     @Test
     void aCaseNothingComposedAValueForIsAnsweredByTheAttempt() {
