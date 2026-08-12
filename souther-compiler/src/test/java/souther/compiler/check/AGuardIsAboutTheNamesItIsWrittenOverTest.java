@@ -285,6 +285,116 @@ class AGuardIsAboutTheNamesItIsWrittenOverTest {
                 """);
     }
 
+    // --- the guard written one way and the construction the other -------------------------------
+
+    /**
+     * The two sides written the other way round from the guard, one at a time. Putting an
+     * initializer back where its name stands changes nothing about what is built, so a guard over
+     * the names reaches it — a reading that held only where both sides were spelled as the guard
+     * spelled them would be the same defect one step over, on a body an author is as likely to
+     * write.
+     */
+    @Test
+    void theGuardOverNamesAndTheConstructionOverOneInitializer() {
+        bounds("""
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= taken else TooMuch
+                    Net(gross.value - takenOf(r, si).value)
+                }
+                """, """
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= taken else TooMuch
+                    Net(gross.value - takenOf(r, si).value - 1.0m)
+                }
+                """);
+    }
+
+    @Test
+    void theGuardOverNamesAndTheConstructionOverTheOtherInitializer() {
+        bounds("""
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= taken else TooMuch
+                    Net(grossOf(r, uplift).value - taken.value)
+                }
+                """, """
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= taken else TooMuch
+                    Net(grossOf(r, uplift).value - taken.value - 1.0m)
+                }
+                """);
+    }
+
+    /** And the guard itself written over one name and one initializer. */
+    @Test
+    void theGuardOverOneNameAndOneInitializer() {
+        bounds("""
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= takenOf(r, si) else TooMuch
+                    Net(gross.value - taken.value)
+                }
+                """, """
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= takenOf(r, si) else TooMuch
+                    Net(gross.value - taken.value - 1.0m)
+                }
+                """);
+    }
+
+    // --- a name standing inside the comparison ---------------------------------------------------
+
+    /** A name inside an operand rather than being one: what the comparison is about is arithmetic
+     * over the name, and the construction takes the same arithmetic. */
+    @Test
+    void aNameStandingInsideTheComparison() {
+        bounds("""
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross + si >= taken else TooMuch
+                    Net(gross.value + si.value - taken.value)
+                }
+                """, """
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross + si >= taken else TooMuch
+                    Net(gross.value + si.value - taken.value - 1.0m)
+                }
+                """);
+    }
+
+    /** And the same where the arithmetic is on the side the guard bounds from below. */
+    @Test
+    void aNameStandingInsideTheOtherOperand() {
+        bounds("""
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= taken + si else TooMuch
+                    Net(gross.value - taken.value - si.value)
+                }
+                """, """
+                let boundFirst (r, uplift, si) = {
+                    let gross = grossOf(r, uplift)
+                    let taken = takenOf(r, si)
+                    guard gross >= taken + si else TooMuch
+                    Net(gross.value - taken.value - si.value - 1.0m)
+                }
+                """);
+    }
+
     /** And a guard states an order and not an equality: what is on the other side of the one the
      * author wrote is no more settled for having been named. */
     @Test
