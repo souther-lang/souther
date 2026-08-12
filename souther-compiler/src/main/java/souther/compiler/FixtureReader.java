@@ -1343,8 +1343,13 @@ public final class FixtureReader {
             case Projected.Declared(Type type, Object value) -> {
                 Type taken = type == null ? null : fieldTypeOf(type, fa.field());
                 if (taken == null) {
-                    throw new FixtureException("`" + fa.field()
-                            + "` is read off a value that declares no such field");
+                    // A value that has no fields at all and a record that has not this one are two
+                    // mistakes, and a row is told which of them it made.
+                    throw new FixtureException(
+                            type instanceof Type.Ref r && !r.name().isPrimitive()
+                                    ? "`" + Type.show(type) + "` declares no field `" + fa.field() + "`"
+                                    : "`" + fa.field() + "` is read off a value that is not a record,"
+                                            + " so it has no field to take");
                 }
                 // A newtype is read as what it wraps (ADR-0032), so there is no field map to ask
                 // for it. What makes this one is the declaration and not the shape the value

@@ -325,4 +325,63 @@ class CompileFixtureProjectsAFieldTest {
                         (makeOuter(100).inner.total.value) -> true
                 """));
     }
+
+    // --- what a field read off a fixture cannot be -----------------------------------------------
+
+    @Test
+    void aFieldIsNotTakenOffAValueThatIsNotARecord() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                let listed = 100
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a number has no field" : (listed.total) -> true
+                """));
+        assertTrue(e.getMessage().contains("is not a record"), e.getMessage());
+    }
+
+    @Test
+    void aFieldTheRecordDoesNotDeclareIsRefused() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data Basket = { total: Int }
+
+                let one = Basket { total = 100 }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "no such field" : (one.missing) -> true
+                """));
+        assertTrue(e.getMessage().contains("declares no field `missing`"), e.getMessage());
+    }
+
+    /** A cycle through a field is reported as the cycle it is. The value graph is checked before a
+     *  fixture reads it, so this is E1022's to say and never reaches the reader — the reader's own
+     *  check stands behind it, and is one check for both the reading that takes the value and the
+     *  walk that types it, so the two cannot report one cycle two ways. */
+    @Test
+    void aCycleReachedThroughAFieldIsReportedAsACycle() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data Basket = { total: Int }
+
+                let one = Basket { total = other.total }
+                let other = Basket { total = one.total }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a cycle through a field" : (one.total) -> true
+                """));
+        assertTrue(e.getMessage().contains("defined in terms of itself"), e.getMessage());
+    }
 }
