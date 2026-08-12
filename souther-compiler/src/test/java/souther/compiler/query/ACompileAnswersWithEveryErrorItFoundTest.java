@@ -28,8 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ACompileAnswersWithEveryErrorItFoundTest {
 
-    /** Three behaviors, each building a data its `constructs` clause does not name. Each is its own
-     *  question, so none of them hides another. */
+    /** Three behaviors, each short of exactly one `constructs` entry — the unit case its line
+     *  holds. One name each, so what is counted here is the behaviors and not the names within one:
+     *  a clause short of several is its own question (E1002 reports each of them). */
     private static final String THREE_UNDER_DECLARED = """
             module m.a exposing ( Ticket, CookLine, ItemCookState, Pending, InProgress, Done, start, finish, reopen )
 
@@ -38,15 +39,15 @@ class ACompileAnswersWithEveryErrorItFoundTest {
             data Ticket = { lines: List<CookLine> }
 
             behavior start : (t: Ticket) -> Ticket
-                constructs Ticket
+                constructs Ticket, CookLine
             let start (t) = Ticket { lines = [ CookLine { state = InProgress } ] }
 
             behavior finish : (t: Ticket) -> Ticket
-                constructs Ticket
+                constructs Ticket, CookLine
             let finish (t) = Ticket { lines = [ CookLine { state = Done } ] }
 
             behavior reopen : (t: Ticket) -> Ticket
-                constructs Ticket
+                constructs Ticket, CookLine
             let reopen (t) = Ticket { lines = [ CookLine { state = Pending } ] }
             """;
 
