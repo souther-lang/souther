@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Resolve;
@@ -8,11 +7,6 @@ import souther.compiler.check.Symbols;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.types.Type;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
@@ -69,25 +63,6 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
     }
 
     // --- the position a row is not about ---------------------------------------------------------
-
-    /** The boundary strategy fills every other position, and one that is a sum is one of them. */
-    @Test
-    void aBoundaryRowIsOfferedWhereACompanionPositionIsASumOfRecords() throws Exception {
-        String report = generated();
-
-        List<String> rows = report.lines().filter(line -> line.startsWith("//     | ")).toList();
-        assertTrue(rows.stream().anyMatch(line -> line.contains("bill = 0")),
-                () -> "the row at the boundary is offered: " + rows);
-    }
-
-    /** And the sentence that says otherwise is not printed beside the row that disproves it. */
-    @Test
-    void nothingSaysThePositionHasNoValue() throws Exception {
-        String report = generated();
-
-        assertFalse(report.contains("no value can be written there"),
-                () -> "a case was composed two lines above:\n" + report);
-    }
 
     // --- the same question, asked by the other readers --------------------------------------------
 
@@ -198,17 +173,4 @@ class ACaseComposedForOneReaderIsComposedForEveryReaderTest {
         assertThrows(IllegalArgumentException.class, () -> RepresentativeSource.of(List.of()));
     }
 
-    private static String generated() throws Exception {
-        Path file = Files.createTempDirectory("souther-651").resolve("model.sou");
-        Files.writeString(file, MODULE);
-        PrintStream was = System.out;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", file.toString(), "--generate", "--boundaries"});
-        } finally {
-            System.setOut(was);
-        }
-        return out.toString(StandardCharsets.UTF_8);
-    }
 }

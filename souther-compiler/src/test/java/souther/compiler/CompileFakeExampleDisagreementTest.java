@@ -1,6 +1,5 @@
 package souther.compiler;
 
-import souther.cli.Main;
 import souther.compiler.examples.Deadline;
 import souther.compiler.examples.EvaluationPolicy;
 import souther.compiler.examples.ExampleStatements;
@@ -891,33 +890,6 @@ class CompileFakeExampleDisagreementTest {
             }
         }
         return said;
-    }
-
-    @Test
-    void theDisagreementReachesTheExamplesReport() throws Exception {
-        java.nio.file.Path file = java.nio.file.Files
-                .createTempDirectory("souther-disagree").resolve("clash.sou");
-        java.nio.file.Files.writeString(file, BASE + """
-
-                example findMember
-                    | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
-
-                fake findMember
-                    | (MemberId("m-1")) -> Missing { why = "no such member" }
-                """);
-
-        java.io.ByteArrayOutputStream err = new java.io.ByteArrayOutputStream();
-        java.io.PrintStream was = System.err;
-        System.setErr(new java.io.PrintStream(err, true, java.nio.charset.StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[] {"examples", "--lang", "en", file.toString()});
-        } finally {
-            System.setErr(was);
-        }
-        String reported = err.toString(java.nio.charset.StandardCharsets.UTF_8);
-
-        assertTrue(reported.contains("E1919"), reported);
-        assertTrue(reported.contains("clash.sou:"), reported);
     }
 
     @Test

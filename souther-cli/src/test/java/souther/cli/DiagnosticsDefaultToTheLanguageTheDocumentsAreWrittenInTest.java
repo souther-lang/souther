@@ -1,5 +1,6 @@
-package souther.compiler.diag;
+package souther.cli;
 
+import souther.compiler.diag.Messages;
 import souther.cli.Main;
 import org.junit.jupiter.api.Test;
 
