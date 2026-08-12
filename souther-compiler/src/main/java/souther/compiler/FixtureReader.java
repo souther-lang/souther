@@ -33,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Reads a written fixture as the value it states, against the type of the position it is written in.
@@ -1266,25 +1267,119 @@ public final class FixtureReader {
                 }
                 yield out;
             }
-            case Ast.FieldAccess fa -> rawProjection(fa, expected, inside);
+            case Ast.FieldAccess fa -> rawProjection(fa, expected, admission);
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
     }
 
     /**
-     * A field taken off a value, in the neutral form the decoder reads. The target opens a frame of
-     * its own kind, as a spread does: it states no value of this position, while what stands under
-     * it stands at its own.
+     * A value a field is taken off, and what says what that value is.
+     *
+     * <p>This is not a type for reading a target and throwing away. Projection consumes one of these
+     * and produces one, so a chain stays in this domain: what a helper answered is still its answer
+     * at the second field and at the third. A value that has been through {@link NeutralForm#of} no
+     * longer says what it is — a newtype is read there as what it wraps — so anything that turned a
+     * step of a chain back into an ordinary value would lose the evidence the next step is held by.
      */
-    private Object rawProjection(Ast.FieldAccess fa, Type expected, Admission inside) {
-        Object target = raw(fa.target(), null,
-                inside == Admission.UNHELD ? inside : Admission.HELD_BELOW);
-        if (!(target instanceof Map<?, ?> fields)) {
-            throw new FixtureException("`" + fa.field()
-                    + "` is read off a value that is not a record, so it has no field to take");
-        }
-        // A `?` field holding nothing leaves its key out, which is the absent optional itself.
-        return fields.get(fa.field());
+    private sealed interface Projected {
+
+        /** Built by this reader, under the type a declaration gives it. */
+        record Declared(Type type, Object value) implements Projected {}
+
+        /** A helper's answer, before it became a form: the value itself says what it is. */
+        record Live(Object value, String written) implements Projected {}
+    }
+
+    /**
+     * The value a field is taken off. A name and a {@code let} stand for what they hold, as they do
+     * anywhere, so a helper's answer is its answer whether the row wrote the call or a name for it.
+     *
+     * <p>The answer is taken before it becomes a form, and the helper runs once — here, at the foot
+     * of however long the chain above it is.
+     */
+    private Projected projectTarget(Ast.Expr e, Admission admission) {
+        Admission below = admission == Admission.UNHELD ? admission : Admission.HELD_BELOW;
+        return switch (e) {
+            case Ast.FieldAccess inner -> takeField(projectTarget(inner.target(), admission), inner);
+            case Ast.LetIn let -> {
+                BindingId binding = let.binder().id();
+                bindings.put(binding, let.value());
+                try {
+                    yield projectTarget(let.body(), admission);
+                } finally {
+                    bindings.remove(binding);
+                }
+            }
+            case Ast.Var v -> {
+                ValueName denotes = v.denotes();
+                Ast.Expr body = denotes instanceof ValueName.Local local ? bindings.get(local.id())
+                        : denotes instanceof ValueName.Helper ? valueBody(v.name()) : null;
+                // A name standing for no value is not one a field can be taken off; the ordinary
+                // reading below says what it is instead of this one guessing.
+                yield body == null ? new Projected.Declared(declaredTypeOf(v, new HashSet<>()),
+                                raw(v, null, below))
+                        : expanding(denotes, () -> projectTarget(body, admission));
+            }
+            case Ast.Apply c when appliedHelper(c) instanceof Applied helper ->
+                    new Projected.Live(answered(c, helper), c.written());
+            default -> new Projected.Declared(declaredTypeOf(e, new HashSet<>()),
+                    raw(e, null, below));
+        };
+    }
+
+    /** One step of a chain: evidence in, evidence out. */
+    private Projected takeField(Projected target, Ast.FieldAccess fa) {
+        return switch (target) {
+            case Projected.Live(Object value, String written) -> {
+                // A Souther value never answers a Java null — an absent optional is a value of its
+                // own — so a null here is an accessor this value does not have.
+                Object taken = ObservedValues.readOrNull(value, fa.field());
+                if (taken == null) {
+                    throw new FixtureException("`" + written + "` answered with a value that has no"
+                            + " field `" + fa.field() + "`");
+                }
+                yield new Projected.Live(taken, written + "." + fa.field());
+            }
+            case Projected.Declared(Type type, Object value) -> {
+                Type taken = type == null ? null : fieldTypeOf(type, fa.field());
+                if (taken == null) {
+                    throw new FixtureException("`" + fa.field()
+                            + "` is read off a value that declares no such field");
+                }
+                // A newtype is read as what it wraps (ADR-0032), so there is no field map to ask
+                // for it. What makes this one is the declaration and not the shape the value
+                // happens to have — a bare number is not a newtype for having reached here.
+                if (type instanceof Type.Ref r && neutral.isNewtype(r.name())) {
+                    yield new Projected.Declared(taken, value);
+                }
+                if (!(value instanceof Map<?, ?> fields)) {
+                    throw new FixtureException("`" + fa.field()
+                            + "` is read off a value that is not a record, so it has no field to take");
+                }
+                // A `?` field holding nothing leaves its key out, which is the absent optional itself.
+                yield new Projected.Declared(taken, fields.get(fa.field()));
+            }
+        };
+    }
+
+    /**
+     * A field taken off a value, in the neutral form the decoder reads. Only the outermost step
+     * stands at a position, so only it admits and only it becomes a form.
+     */
+    private Object rawProjection(Ast.FieldAccess fa, Type expected, Admission admission) {
+        return switch (projectTarget(fa, admission)) {
+            // A declared chain was held by `states` before this frame was read.
+            case Projected.Declared(Type _, Object value) -> value;
+            case Projected.Live(Object value, String written) -> {
+                // What the answer says is read off the answer, so a field holding an empty
+                // collection names no element type here — the limit every helper's answer is read
+                // under, and not one taking a field off it introduces.
+                if (admission == Admission.HELD) {
+                    admitBuilt(value, expected, written);
+                }
+                yield neutral.of(value, expected, written);
+            }
+        };
     }
 
     // --- the name a position is written under ---------------------------------------------------
@@ -1694,6 +1789,15 @@ public final class FixtureReader {
 
     private Object expandedValue(ValueName named, Ast.Expr body, Type expected,
                                  Admission admission) {
+        return expanding(named, () -> raw(body, expected, admission));
+    }
+
+    /**
+     * The cycle check every expansion of a name goes through, whatever reading is doing the
+     * expanding. One check, so a cycle reached through a field taken off a value is reported as the
+     * cycle it is rather than as whatever the second walk happened to make of it.
+     */
+    private <T> T expanding(ValueName named, Supplier<T> read) {
         if (expanding.contains(named)) {
             List<String> cycle = new ArrayList<>();
             expanding.forEach(open -> cycle.add(open.name()));
@@ -1703,7 +1807,7 @@ public final class FixtureReader {
         }
         expanding.addLast(named);
         try {
-            return raw(body, expected, admission);
+            return read.get();
         } finally {
             expanding.removeLast();
         }

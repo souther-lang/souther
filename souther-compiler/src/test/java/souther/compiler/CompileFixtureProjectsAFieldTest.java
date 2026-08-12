@@ -100,4 +100,134 @@ class CompileFixtureProjectsAFieldTest {
                     | "an optional field holds what a field declares" : (Order { total = one.total }) -> true
                 """));
     }
+
+    @Test
+    void aFieldIsTakenOffWhatAHelperAnswered() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data Line = { done: Bool }
+                data Ticket = { lines: List<Line> }
+
+                let sample = Ticket { lines = [ Line { done = false } ] }
+                let markDone (t: Ticket) = Ticket { lines = List.map(l -> Line { ...l, done = true }, t.lines) }
+
+                behavior allDone : (ls: List<Line>) -> Bool
+                let allDone (ls) = List.all(l -> l.done, ls)
+
+                example allDone
+                    | "a field off a helper's answer" : (markDone(sample).lines) -> true
+                """));
+    }
+
+    /** No declaration of this module's says what a helper answered, so the answer must. */
+    @Test
+    void aFieldTakenOffAHelpersAnswerIsAdmittedAtItsPosition() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Basket = { total: AmountN }
+
+                let makeBasket (n: Int) = Basket { total = AmountN(n) }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a helper's field is held to the position it stands at" : (makeBasket(100).total) -> true
+                """));
+        assertTrue(e.getMessage().contains("AmountN") && e.getMessage().contains("Int"),
+                e.getMessage());
+    }
+
+    /** The same, reached through a name. A value whose body is a helper application is nameable, so
+     *  the closure rule covers it and the evidence must survive the name. */
+    @Test
+    void aFieldTakenOffANamedHelperAnswerIsAdmittedAtItsPosition() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Basket = { total: AmountN }
+
+                let makeBasket (n: Int) = Basket { total = AmountN(n) }
+                let basket = makeBasket(100)
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a field off a named helper answer keeps its runtime name" : (basket.total) -> true
+                """));
+        assertTrue(e.getMessage().contains("AmountN") && e.getMessage().contains("Int"),
+                e.getMessage());
+    }
+
+    /** The control for the two above: an implementation that refused every projection off a helper
+     *  answer would satisfy them both. */
+    @Test
+    void aFieldIsTakenOffANamedHelperAnswer() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Basket = { total: AmountN }
+
+                let makeBasket (n: Int) = Basket { total = AmountN(n) }
+                let basket = makeBasket(100)
+
+                behavior isHundred : (a: AmountN) -> Bool
+                let isHundred (a) = a.value == 100
+
+                example isHundred
+                    | "the same field at its own declaration" : (basket.total) -> true
+                """));
+    }
+
+    /** The rule is recursive on its own conclusion, so what a helper answered is still its answer at
+     *  the second field. A value that has been through a neutral form no longer says what it is. */
+    @Test
+    void aProjectionOfAProjectionKeepsTheAnswersName() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Inner = { total: AmountN }
+                data Outer = { inner: Inner }
+
+                let makeOuter (n: Int) = Outer { inner = Inner { total = AmountN(n) } }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "projection remains live through another projection" :
+                        (makeOuter(100).inner.total) -> true
+                """));
+        assertTrue(e.getMessage().contains("AmountN") && e.getMessage().contains("Int"),
+                e.getMessage());
+    }
+
+    /** The declared chain, which reaches no helper: each step must descend, not only the first. */
+    @Test
+    void aDeclaredProjectionChainIsHeldAtEachStep() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data AmountN = Int
+                data Inner = { total: AmountN }
+                data Outer = { inner: Inner }
+
+                let outer = Outer { inner = Inner { total = AmountN(100) } }
+
+                behavior isHundred : (n: Int) -> Bool
+                let isHundred (n) = n == 100
+
+                example isHundred
+                    | "a declared chain is held at its last step" : (outer.inner.total) -> true
+                """));
+        assertTrue(e.getMessage().contains("AmountN") && e.getMessage().contains("Int"),
+                e.getMessage());
+    }
 }
