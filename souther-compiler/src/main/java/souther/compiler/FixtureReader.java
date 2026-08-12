@@ -27,6 +27,7 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -1265,8 +1266,25 @@ public final class FixtureReader {
                 }
                 yield out;
             }
+            case Ast.FieldAccess fa -> rawProjection(fa, expected, inside);
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
+    }
+
+    /**
+     * A field taken off a value, in the neutral form the decoder reads. The target opens a frame of
+     * its own kind, as a spread does: it states no value of this position, while what stands under
+     * it stands at its own.
+     */
+    private Object rawProjection(Ast.FieldAccess fa, Type expected, Admission inside) {
+        Object target = raw(fa.target(), null,
+                inside == Admission.UNHELD ? inside : Admission.HELD_BELOW);
+        if (!(target instanceof Map<?, ?> fields)) {
+            throw new FixtureException("`" + fa.field()
+                    + "` is read off a value that is not a record, so it has no field to take");
+        }
+        // A `?` field holding nothing leaves its key out, which is the absent optional itself.
+        return fields.get(fa.field());
     }
 
     // --- the name a position is written under ---------------------------------------------------
@@ -1331,6 +1349,12 @@ public final class FixtureReader {
         /** A construction, or a name denoting a case: this name, said here. */
         record Name(TypeName name) implements Stated {}
 
+        /** A field taken: its declaration says the whole of what was supplied, and the value found
+         *  there is not read. This is the one frame that states a complete type, which is why it is
+         *  held by assignability rather than by a name — a field declaring a {@code List<AmountN>}
+         *  supplies one while it is empty, and no value there could have said so. */
+        record Declared(Type type) implements Stated {}
+
         /** A value under no name: a literal, a written collection, a temporal, an arithmetic fold. */
         record NoName() implements Stated {}
 
@@ -1374,6 +1398,17 @@ public final class FixtureReader {
                     throw wrongName(named, held, expected);
                 }
             }
+            // A complete type against a complete position, at every depth in one answer: the name a
+            // collection's elements wear is part of what the position is, and reading it off the
+            // elements would say nothing where there are none. An optional makes room for what it
+            // holds, so the position it holds is the one this stands at.
+            case Stated.Declared(Type supplied) -> {
+                Type at = expected instanceof Type.OptionOf o ? o.element() : expected;
+                if (!TypeOps.assignable(supplied, at, symbols)) {
+                    throw new FixtureException("a field declaring `" + Type.show(supplied)
+                            + "` states no value of `" + Type.show(at) + "`");
+                }
+            }
             case Stated.NoName _ -> {
                 if (held instanceof Admits.OneOf(Set<TypeName> names)) {
                     throw noName(names, expected);
@@ -1406,7 +1441,64 @@ public final class FixtureReader {
                     || "Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches()) ->
                     STATES_NO_NAME;
             case Ast.Apply _ -> ELSEWHERE;
+            case Ast.FieldAccess fa -> {
+                Type declared = declaredTypeOf(fa, new HashSet<>());
+                yield declared == null ? ELSEWHERE : new Stated.Declared(declared);
+            }
             case null, default -> STATES_NO_NAME;
+        };
+    }
+
+    /**
+     * The type a field is declared to be, one step. Both the walk that answers what a projection
+     * states and the reading that takes the field go through this, so the two cannot come to
+     * different answers about which field of what is being read.
+     */
+    private Type fieldTypeOf(Type record, String field) {
+        if (!(record instanceof Type.Ref r)) {
+            return null;
+        }
+        TypeName named = r.name();
+        if (neutral.isNewtype(named)) {
+            // A newtype declares one field, and it is what it wraps (ADR-0032).
+            return "value".equals(field) ? neutral.shapeOf(neutral.newtypeBaseType(named)) : null;
+        }
+        Ast.TypeRef declared = neutral.fieldTypes(named).get(field);
+        return declared == null ? null : neutral.shapeOf(declared);
+    }
+
+    /**
+     * What a fixture expression is declared to be, or null where no declaration of this module's
+     * says — which is where a helper stands, since what a helper was declared to answer with is not
+     * read and what it supplied is its answer's to say.
+     *
+     * <p>Nothing is run here. This walk reads names {@code Resolve} already settled, so asking it
+     * costs no helper a second application against the row's one budget.
+     */
+    private Type declaredTypeOf(Ast.Expr e, Set<ValueName> seen) {
+        return switch (e) {
+            case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
+            // `AmountN(100)` is the newtype's construction written in call form (ADR-0032).
+            case Ast.Apply c when neutral.isNewtype(c.written()) -> {
+                TypeName named = symbols.resolve(c.written());
+                yield named == null ? null : Type.ref(named);
+            }
+            case Ast.FieldAccess fa -> {
+                Type target = declaredTypeOf(fa.target(), seen);
+                yield target == null ? null : fieldTypeOf(target, fa.field());
+            }
+            case Ast.LetIn let -> declaredTypeOf(let.body(), seen);
+            case Ast.Var v -> {
+                ValueName denotes = v.denotes();
+                // A name reached twice is the cycle the reading itself reports; this walk only stops.
+                if (denotes == null || !seen.add(denotes)) {
+                    yield null;
+                }
+                Ast.Expr body = denotes instanceof ValueName.Local local
+                        ? bindings.get(local.id()) : valueBody(v.name());
+                yield body == null ? null : declaredTypeOf(body, seen);
+            }
+            case null, default -> null;
         };
     }
 
