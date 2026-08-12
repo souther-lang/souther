@@ -475,7 +475,7 @@ public final class Compilation {
      * at all. This decides how the errors are presented; whether one of them should have been
      * reported is the checker's own question.
      */
-    public CompileException firstError(List<Db.Found> found) {
+    public CompileException failure(List<Db.Found> found) {
         List<Db.Found> errors = new ArrayList<>();
         for (Db.Found f : found) {
             if (f.report().isError()) {
@@ -587,7 +587,7 @@ public final class Compilation {
 
     /**
      * The warnings among {@code found}, in order, each tagged with the source its primary region is
-     * in — the same tag {@link #firstError} puts on an error, so a warning can be quoted where it is.
+     * in — the same tag {@link #failure} puts on an error, so a warning can be quoted where it is.
      *
      * <p>One entry per warning, never one per file it is said at. A problem written in two files is
      * one thing to be told about on a terminal; the second telling is what an editor needs, and that
@@ -606,7 +606,7 @@ public final class Compilation {
     /**
      * The errors among {@code found}, tagged as {@link #warnings} tags a warning.
      *
-     * <p>All of them, where {@link #firstError} answers with one. A caller that stops at the first
+     * <p>All of them, where {@link #failure} answers with one. A caller that stops at the first
      * error wants the first; one that goes on to say something about the whole compilation has
      * already read past it, and showing a reader one error beside an account of everything else
      * would leave them to wonder what the rest of the errors were.

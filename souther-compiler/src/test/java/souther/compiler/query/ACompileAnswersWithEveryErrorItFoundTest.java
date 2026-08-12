@@ -128,7 +128,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
 
     @Test
     void theyAreOrderedByWhereTheyAreNotByWhenTheyWereFound() {
-        CompileException e = ofOneSource().firstError(List.of(
+        CompileException e = ofOneSource().failure(List.of(
                 errorAt(9, 1, "third"),
                 errorAt(3, 1, "first"),
                 errorAt(5, 7, "second")));
@@ -139,7 +139,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
 
     @Test
     void aColumnBreaksATieOnALine() {
-        CompileException e = ofOneSource().firstError(List.of(
+        CompileException e = ofOneSource().failure(List.of(
                 errorAt(4, 20, "later"),
                 errorAt(4, 3, "earlier")));
 
@@ -148,7 +148,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
 
     @Test
     void twoAtOnePositionKeepTheOrderTheyWereFoundIn() {
-        CompileException e = ofOneSource().firstError(List.of(
+        CompileException e = ofOneSource().failure(List.of(
                 errorAt(6, 1, "said first"),
                 errorAt(6, 1, "said second"),
                 errorAt(6, 1, "said third")));
@@ -159,7 +159,7 @@ class ACompileAnswersWithEveryErrorItFoundTest {
 
     @Test
     void nothingAmongThemIsNotAnError() {
-        assertEquals(null, ofOneSource().firstError(List.of()));
+        assertEquals(null, ofOneSource().failure(List.of()));
     }
 
     @Test

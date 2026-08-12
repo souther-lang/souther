@@ -179,7 +179,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                 """), name -> null);
         compilation.answerEverything();
 
-        assertNull(compilation.firstError(compilation.db().allReports()));
+        assertNull(compilation.failure(compilation.db().allReports()));
         assertTrue(compilation.db()
                         .ask(new Output.EvaluationLinked("app.alone", Output.CoverageMode.NONE))
                         .value() != null,
