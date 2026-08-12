@@ -1,22 +1,14 @@
 package souther.compiler;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.check.Sig;
-import souther.compiler.query.Compilation;
-
-import net.unit8.raoh.Issue;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -143,7 +135,7 @@ class DecoderPathAgreementTest {
                 behavior at : (m: Map<String, Int>) -> Int
                 let at (m) = Option.withDefault(0, Map.get("%s", m))
                 """.formatted(composed);
-        assertEquals("7", crossing(source, "at", "{\"" + decomposed + "\": 7}"),
+        assertEquals("7", Crossing.of(source, "demo", "at", "{\"" + decomposed + "\": 7}"),
                 "the key the module looks up is the key the input carried");
     }
 
@@ -166,19 +158,19 @@ class DecoderPathAgreementTest {
         both.put(decomposed, 2L);
         assertFalse(boundaryReads("Map<String, Int>", both), "the derived codec refuses it");
 
-        JsonBoundary.Read.Refused refused = refusalOf("Map<String, Int>",
-                "{\"" + composed + "\": 1, \"" + decomposed + "\": 2}");
-        assertTrue(messagesOf(refused).stream().anyMatch(m -> m.contains("same key once decoded")),
-                messagesOf(refused).toString());
+        JsonBoundary.Read.Refused refused = Crossing.refusalOf(sourceTaking("Map<String, Int>"),
+                "demo", "take", "{\"" + composed + "\": 1, \"" + decomposed + "\": 2}");
+        List<String> said = Crossing.messagesOf(refused);
+        assertTrue(said.stream().anyMatch(m -> m.contains("same key once decoded")), said.toString());
     }
 
     /** A key the key type refuses is refused at that key's own path, and every key is read before
      *  the map is given up on, so a map with two bad keys is answered about both at once. */
     @Test
     void aBadKeyIsRefusedWhereItStands() throws Exception {
-        JsonBoundary.Read.Refused refused = refusalOf("Map<Bounded, Int>",
-                "{\"ab\": 1, \"cd\": 2}");
-        List<String> at = pointersOf(refused);
+        JsonBoundary.Read.Refused refused = Crossing.refusalOf(sourceTaking("Map<Bounded, Int>"),
+                "demo", "take", "{\"ab\": 1, \"cd\": 2}");
+        List<String> at = Crossing.pointersOf(refused);
         assertTrue(at.contains("/ab"), at.toString());
         assertTrue(at.contains("/cd"), at.toString());
     }
@@ -252,7 +244,7 @@ class DecoderPathAgreementTest {
     /** The same type as a behavior input, read and applied through {@link JsonBoundary} — what
      *  {@code souther run} drives, without the command line around it. */
     private String runReads(String type, String json) throws Exception {
-        return crossing(sourceTaking(type), "take", json);
+        return Crossing.of(sourceTaking(type), "demo", "take", json);
     }
 
     private static String sourceTaking(String type) {
@@ -263,47 +255,6 @@ class DecoderPathAgreementTest {
                 let take (v) = %s
                 """.formatted(DECLS, type, constructsIn(type).replace(", ", " constructs "),
                         probeFor(type));
-    }
-
-    private static final JsonMapper JSON = JsonMapper.builder().build();
-
-    /**
-     * One input across the boundary and back: compiled, read from JSON, applied, and written.
-     *
-     * <p>This is what {@code souther run} does between parsing its arguments and printing, and it is
-     * driven here rather than through the command line so that the reading stays testable beside the
-     * two implementations it has to agree with.
-     */
-    private static String crossing(String source, String behavior, String json) throws Exception {
-        Compilation compilation = Compiler.compiled(source, "demo", new ArrayList<>());
-        Ast.Module module = compilation.module(compilation.modules().get(0));
-        Sig sig = compilation.signatures(module.name()).get(behavior);
-        ClassLoader loader = compilation.loader();
-
-        JsonBoundary.Read read = JsonBoundary.read(loader, sig.ins().get(0), JSON.readTree(json));
-        Object argument = assertInstanceOf(JsonBoundary.Read.Value.class, read, json).value();
-        Object result = JsonBoundary.apply(loader, module.name(), behavior,
-                new Object[] {argument});
-        return String.valueOf(
-                JsonBoundary.write(loader, module.name(), behavior, sig.out(), result));
-    }
-
-    /** The refusal reading {@code json} as the sole input of a behavior taking {@code type}. */
-    private static JsonBoundary.Read.Refused refusalOf(String type, String json) throws Exception {
-        Compilation compilation = Compiler.compiled(sourceTaking(type), "demo", new ArrayList<>());
-        Ast.Module module = compilation.module(compilation.modules().get(0));
-        Sig sig = compilation.signatures(module.name()).get("take");
-        JsonBoundary.Read read =
-                JsonBoundary.read(compilation.loader(), sig.ins().get(0), JSON.readTree(json));
-        return assertInstanceOf(JsonBoundary.Read.Refused.class, read, json);
-    }
-
-    private static List<String> messagesOf(JsonBoundary.Read.Refused refused) {
-        return refused.issues().asList().stream().map(Issue::message).toList();
-    }
-
-    private static List<String> pointersOf(JsonBoundary.Read.Refused refused) {
-        return refused.issues().asList().stream().map(i -> i.path().toJsonPointer()).toList();
     }
 
     /**

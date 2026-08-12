@@ -1,15 +1,13 @@
 package souther.compiler;
 
-import souther.cli.Runner;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.msg.TypeMessage;
 
-import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -204,8 +202,8 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
      */
     @Test
     void theRunnerReadsATopLevelArgumentUnderTheSameRules() throws Exception {
-        Path file = dir.resolve("toplevel.sou");
-        Files.writeString(file, """
+        String module = "demo";
+        String source = """
                 module demo
 
                 data Out = { n: Int }
@@ -221,18 +219,17 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
 
                 behavior keyedByTime : (m: Map<Time, Int>) -> Out constructs Out
                 let keyedByTime (m) = Out { n = Map.size(m) }
-                """);
+                """;
 
         for (String[] refused : new String[][] {
                 {"atATime", "\"09:00:00.5\"", "holds no fraction of a second"},
                 {"atAMoment", "\"2026-07-01T09:00:00.123\"", "holds no fraction of a second"},
                 {"atAnInstant", "\"2026-06-30T23:59:60Z\"", "names a leap second"},
                 {"keyedByTime", "{\"09:00:00.5\": 1}", "holds no fraction of a second"}}) {
-            Exception e = assertThrows(Exception.class,
-                    () -> Runner.run(file, refused[0], refused[1]),
-                    refused[0] + " must not take " + refused[1]);
-            assertTrue(String.valueOf(e.getMessage()).contains(refused[2]),
-                    refused[0] + ": " + e.getMessage());
+            List<String> said = Crossing.messagesOf(
+                    Crossing.refusalOf(source, module, refused[0], refused[1]));
+            assertTrue(said.stream().anyMatch(m -> m.contains(refused[2])),
+                    refused[0] + " must not take " + refused[1] + ": " + said);
         }
 
         for (String[] taken : new String[][] {
@@ -240,13 +237,11 @@ class ATemporalHoldsTheSameRuleAtEveryPathTest {
                 {"atAMoment", "\"2026-07-01T09:00:00\""},
                 {"atAnInstant", "\"2026-07-01T09:00:00Z\""},
                 {"keyedByTime", "{\"09:00:00\": 1}"}}) {
-            assertTrue(Runner.run(file, taken[0], taken[1]).contains("\"n\""),
+            assertTrue(Crossing.of(source, module, taken[0], taken[1]).contains("\"n\""),
                     taken[0] + " must still take " + taken[1]);
         }
     }
 
-    @TempDir
-    Path dir;
 
     private static final JsonMapper MAPPER = JsonMapper.builder().build();
 

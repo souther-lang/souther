@@ -1,15 +1,12 @@
 package souther.compiler;
 
-import souther.cli.Runner;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.math.BigDecimal;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 /**
  * What a boundary writes a {@code Set} and a {@code Map} out as, byte for byte. The members are put
@@ -23,45 +20,39 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class CompileEncodeOrderTest {
 
-    @TempDir
-    Path dir;
-
-    private Path write(String fileName, String source) throws Exception {
-        Path file = dir.resolve(fileName);
-        Files.writeString(file, source);
-        return file;
-    }
 
     @Test
     void aSetIsWrittenTheSameWhicheverOrderItsMembersArrivedIn() throws Exception {
         // "Aa" and "BB" share a full 32-bit hash, so they sit in one collision bucket, which holds
         // them in the order they were put — the order the input array gave.
-        Path file = write("tags.sou", """
+        String source = """
                 data In = { tags: Set<String> }
                 data Out = { tags: Set<String> }
                 behavior echo : (i: In) -> Out constructs Out
                 let echo (i) = Out { tags = i.tags }
-                """);
+                """;
+        String module = "tags";
         assertEquals("{\"tags\":[\"Aa\",\"BB\"]}",
-                Runner.run(file, "echo", "{\"tags\":[\"Aa\",\"BB\"]}"));
+                Crossing.of(source, module, "echo", "{\"tags\":[\"Aa\",\"BB\"]}"));
         assertEquals("{\"tags\":[\"Aa\",\"BB\"]}",
-                Runner.run(file, "echo", "{\"tags\":[\"BB\",\"Aa\"]}"));
+                Crossing.of(source, module, "echo", "{\"tags\":[\"BB\",\"Aa\"]}"));
     }
 
     @Test
     void aSetOfEnumerationCasesIsWrittenTheSameWhicheverOrderItsMembersArrivedIn() throws Exception {
         // A unit data has no fields, and the generated hashCode folds over the fields from 1, so
         // every unit data in the program hashes to 1. Any Set holding two of them is one bucket.
-        Path file = write("stages.sou", """
+        String source = """
                 data Stage = Won | Lost | Open
                 data In = { stages: Set<Stage> }
                 data Out = { stages: Set<Stage> }
                 behavior echo : (i: In) -> Out constructs Out
                 let echo (i) = Out { stages = i.stages }
-                """);
+                """;
+        String module = "stages";
         String written = "{\"stages\":[\"Lost\",\"Open\",\"Won\"]}";
-        assertEquals(written, Runner.run(file, "echo", "{\"stages\":[\"Won\",\"Lost\",\"Open\"]}"));
-        assertEquals(written, Runner.run(file, "echo", "{\"stages\":[\"Open\",\"Won\",\"Lost\"]}"));
+        assertEquals(written, Crossing.of(source, module, "echo", "{\"stages\":[\"Won\",\"Lost\",\"Open\"]}"));
+        assertEquals(written, Crossing.of(source, module, "echo", "{\"stages\":[\"Open\",\"Won\",\"Lost\"]}"));
     }
 
     @Test
@@ -72,7 +63,7 @@ class CompileEncodeOrderTest {
         // that class's SALT. So the two are the same map written two ways, no hash collision is
         // needed to tell them apart, and the decoded one is not even written the same way twice.
         // Six keys, so that a random permutation matching the order below is a 1-in-720 accident.
-        Path file = write("counts.sou", """
+        String source = """
                 module demo
 
                 import Map ( insert, remove )
@@ -87,23 +78,25 @@ class CompileEncodeOrderTest {
                     asIs = i.counts,
                     touched = remove("zz", insert("zz", 0, i.counts))
                 }
-                """);
+                """;
+        String module = "counts";
         String written = "{\"asIs\":{\"a\":1,\"b\":2,\"c\":3,\"d\":4,\"e\":5,\"f\":6},"
                 + "\"touched\":{\"a\":1,\"b\":2,\"c\":3,\"d\":4,\"e\":5,\"f\":6}}";
-        assertEquals(written, Runner.run(file, "echo",
+        assertEquals(written, Crossing.of(source, module, "echo",
                 "{\"counts\":{\"f\":6,\"d\":4,\"b\":2,\"e\":5,\"a\":1,\"c\":3}}"));
     }
 
     @Test
     void aNestedCollectionIsOrderedAtEveryDepth() throws Exception {
-        Path file = write("nested.sou", """
+        String source = """
                 data In = { byOwner: Map<String, Set<String>> }
                 data Out = { byOwner: Map<String, Set<String>> }
                 behavior echo : (i: In) -> Out constructs Out
                 let echo (i) = Out { byOwner = i.byOwner }
-                """);
+                """;
+        String module = "nested";
         assertEquals("{\"byOwner\":{\"a\":[\"y\",\"z\"],\"b\":[\"Aa\",\"BB\"]}}",
-                Runner.run(file, "echo",
+                Crossing.of(source, module, "echo",
                         "{\"byOwner\":{\"b\":[\"BB\",\"Aa\"],\"a\":[\"z\",\"y\"]}}"));
     }
 

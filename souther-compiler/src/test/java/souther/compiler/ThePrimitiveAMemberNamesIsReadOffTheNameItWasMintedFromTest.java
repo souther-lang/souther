@@ -1,14 +1,11 @@
 package souther.compiler;
 
-import souther.cli.Runner;
 import souther.compiler.types.LeafScalar;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,8 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class ThePrimitiveAMemberNamesIsReadOffTheNameItWasMintedFromTest {
 
-    @TempDir
-    Path dir;
 
     @Test
     void aNameMintedFromAPrimitiveReadsBackAsThatPrimitive() {
@@ -59,15 +54,14 @@ class ThePrimitiveAMemberNamesIsReadOffTheNameItWasMintedFromTest {
      */
     @Test
     void aPrimitiveMemberIsEmittedWithItsLeafCodec() throws Exception {
-        Path file = dir.resolve("p.sou");
-        Files.writeString(file, """
+        String source = """
                 data A = { x: Int }
                 behavior asInt : (n: Int) -> Int | A
                 let asInt (n) = n
                 behavior asA : (n: Int) -> Int | A constructs A
                 let asA (n) = A { x = n }
-                """);
-        assertEquals("{\"type\":\"Int\",\"value\":7}", Runner.run(file, "asInt", "7"));
-        assertEquals("{\"x\":7,\"type\":\"A\"}", Runner.run(file, "asA", "7"));
+                """;
+        assertEquals("{\"type\":\"Int\",\"value\":7}", Crossing.of(source, "p", "asInt", "7"));
+        assertEquals("{\"x\":7,\"type\":\"A\"}", Crossing.of(source, "p", "asA", "7"));
     }
 }

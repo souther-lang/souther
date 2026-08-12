@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.cli.Runner;
+import java.util.List;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
@@ -14,9 +14,7 @@ import org.jooq.SQLDialect;
 import org.jooq.impl.DSL;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,8 +39,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class OptionalFieldReadsAWrittenNullTest {
 
-    @TempDir
-    Path dir;
 
     private static final String MODULE = """
             module demo
@@ -133,8 +129,7 @@ class OptionalFieldReadsAWrittenNullTest {
 
     @Test
     void runReadsANullOptionalFromTheInput() throws Exception {
-        Path file = dir.resolve("opt.sou");
-        Files.writeString(file, """
+        String source = """
                 module opt
 
                 data Note = { body: String, tag: String? }
@@ -142,18 +137,21 @@ class OptionalFieldReadsAWrittenNullTest {
                 behavior echo : (n: Note) -> Note
 
                 let echo (n) = n
-                """);
+                """;
 
         assertEquals("{\"body\":\"b\"}",
-                Runner.run(file, "echo", "{\"body\":\"b\",\"tag\":null}").trim());
+                Crossing.of(source, "opt", "echo", "{\"body\":\"b\",\"tag\":null}"));
         assertEquals("{\"body\":\"b\"}",
-                Runner.run(file, "echo", "{\"body\":\"b\"}").trim(),
+                Crossing.of(source, "opt", "echo", "{\"body\":\"b\"}"),
                 "an absent key answers the same, which is what makes the two one case");
         assertEquals("{\"body\":\"b\",\"tag\":\"t\"}",
-                Runner.run(file, "echo", "{\"body\":\"b\",\"tag\":\"t\"}").trim());
+                Crossing.of(source, "opt", "echo", "{\"body\":\"b\",\"tag\":\"t\"}"));
 
-        RuntimeException e = assertThrows(Runner.RunException.class,
-                () -> Runner.run(file, "echo", "{\"body\":\"b\",\"tag\":42}"));
-        assertFalse(e.getMessage().contains("is required"), e.getMessage());
+        // A written value of the wrong type is a wrong value, not a missing one: `is required` is
+        // what an absent key would have been told, and telling it here would send the author looking
+        // for a key that is there.
+        List<String> said = Crossing.messagesOf(Crossing.refusalOf(source, "opt", "echo",
+                "{\"body\":\"b\",\"tag\":42}"));
+        assertFalse(said.stream().anyMatch(m -> m.contains("is required")), said.toString());
     }
 }
