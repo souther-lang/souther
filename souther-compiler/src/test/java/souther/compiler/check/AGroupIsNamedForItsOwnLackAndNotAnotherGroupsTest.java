@@ -171,6 +171,39 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 """));
     }
 
+    /**
+     * Answered together is not the same as lacking together.
+     *
+     * <p>{@code A} and {@code B} are written in terms of each other, so they are read together, and
+     * neither reads anything outside the two of them — there is nothing to grant that tells them
+     * apart. But {@code A} has no value by its own rule and {@code B} has none only because
+     * {@code A} has none: grant {@code B} and {@code A} stays where it is, grant {@code A} and
+     * {@code B} comes right. Being read together is about the recursion and says nothing about whose
+     * lack it is.
+     */
+    @Test
+    void aDependencyThatIsOptionalOnTheWayBackDoesNotMakeTheLackShared() {
+        assertEquals(List.of(List.of("A")), reported("""
+                module demo
+
+                data A = { b: B?, n: Int }
+                    invariant no = n >= 2 && n <= 1
+
+                data B = { a: A }
+                """));
+    }
+
+    /** And where neither of them has a rule of its own, they lack together and are said together. */
+    @Test
+    void twoThatLackOnlyThroughEachOtherAreSaidTogether() {
+        assertEquals(List.of(List.of("A", "B")), reported("""
+                module demo
+
+                data A = { b: B }
+                data B = { a: A }
+                """));
+    }
+
     /** A set that cannot be filled is its own group, its element having a value of its own. */
     @Test
     void aSetThatCannotBeFilledIsNamedAndItsElementIsNot() {

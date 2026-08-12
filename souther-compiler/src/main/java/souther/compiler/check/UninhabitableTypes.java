@@ -32,11 +32,17 @@ import java.util.Set;
  * matter with, with no declaration between them having no value for an edge to run through. Only
  * granting and reading afresh finds that.
  *
- * <p>And asked again of whatever it separates. Granting is asked of a set of declarations, so the
- * answer is only ever about that set: two told apart by one round are two sets nobody has yet asked
- * about, and one of them may be answering for the other. Each round either leaves its set whole — in
- * which case there is nothing further to tell apart and the set is what is said — or breaks it, and
- * every piece is asked the same question. The pieces are smaller each time, so this ends.
+ * <p>Asked of one declaration first. A declaration that has no value with every other lack granted
+ * has one nobody else can account for, and it is said on its own — whatever else it happens to be
+ * read together with. Being read together is about a recursion and says nothing about whose lack it
+ * is: two written in terms of each other have nothing outside them to grant, and one of them can
+ * still be the only one with a rule of its own.
+ *
+ * <p>What is left over lacks in company. Two that have no value only through each other are one
+ * thing to say, since neither is what the author changes, and they are said as the declarations they
+ * are read together with — less whichever of them was already said on its own. A group of those is
+ * reported where granting every lack outside it leaves all of them with none, and dropped where it
+ * does not, which is what takes out a record holding a recursion that has nowhere to stop.
  */
 public final class UninhabitableTypes {
 
@@ -56,9 +62,24 @@ public final class UninhabitableTypes {
             declaredAt.put(symbols.own(def.name()), declaredAt.size());
         }
         Set<TypeName> none = solved.withNoValue();
+        if (none.isEmpty()) {
+            return List.of();   // nothing to tell apart, and nothing to read again to do it
+        }
         List<List<TypeName>> found = new ArrayList<>();
+        Set<TypeName> alone = new LinkedHashSet<>();
+        for (TypeName each : none) {
+            if (leftWithNone(List.of(each), none, solved).size() == 1) {
+                alone.add(each);
+                found.add(List.of(each));
+            }
+        }
         for (List<TypeName> together : solved.components()) {
-            tellApart(together, none, solved, found);
+            List<TypeName> sharing = new ArrayList<>(together);
+            sharing.removeIf(each -> !none.contains(each) || alone.contains(each));
+            if (!sharing.isEmpty()
+                    && leftWithNone(sharing, none, solved).size() == sharing.size()) {
+                found.add(List.copyOf(sharing));
+            }
         }
         List<List<TypeName>> reported = new ArrayList<>();
         for (List<TypeName> group : found) {
@@ -75,56 +96,24 @@ public final class UninhabitableTypes {
     }
 
     /**
-     * What is left of {@code group} once every lack outside it is granted, told apart as far as it
-     * goes.
+     * Which of {@code these} still have no value once every lack outside them is granted.
      *
-     * <p>Whole and in one piece is the answer: nothing in it is answering for anything else that
-     * still has none, so it is one thing to say. Anything else is a set nobody asked about — the ones
-     * that dropped out were part of what the rest were asked beside — so each piece is asked again on
-     * its own, and what falls out of one round is granted in the next.
+     * <p>All of them is the answer that names them: nothing outside accounts for it, so whatever
+     * accounts for it is here. Fewer than all is a set that was two questions asked as one, and the
+     * ones that dropped out were answering for the ones that did not.
      */
-    private static void tellApart(List<TypeName> group, Set<TypeName> none,
-                                  TypeCardinality.Cardinalities solved, List<List<TypeName>> found) {
+    private static List<TypeName> leftWithNone(List<TypeName> these, Set<TypeName> none,
+                                               TypeCardinality.Cardinalities solved) {
         Set<TypeName> elsewhere = new LinkedHashSet<>(none);
-        elsewhere.removeAll(group);
+        elsewhere.removeAll(these);
         Map<TypeName, Cardinality> granted = solved.granting(elsewhere);
         List<TypeName> still = new ArrayList<>();
-        for (TypeName each : group) {
+        for (TypeName each : these) {
             if (none.contains(each) && granted.getOrDefault(each, Cardinality.UNKNOWN).none()) {
                 still.add(each);
             }
         }
-        if (still.isEmpty()) {
-            return;   // every one of them was answering for something else
-        }
-        List<List<TypeName>> pieces = TypeComponents.of(amongThemselves(still, solved));
-        if (still.size() == group.size() && pieces.size() == 1) {
-            found.add(pieces.get(0));
-            return;
-        }
-        for (List<TypeName> piece : pieces) {
-            tellApart(piece, none, solved, found);
-        }
+        return still;
     }
 
-    /**
-     * Which of these each of them reads.
-     *
-     * <p>Grouped among themselves rather than taken as the group they were answered in. Two answered
-     * together are one thing to say only while both are left with none, and the one that was
-     * answering for the other is out by the time this is asked.
-     */
-    private static Map<TypeName, Set<TypeName>> amongThemselves(
-            Collection<TypeName> these, TypeCardinality.Cardinalities solved) {
-        Map<TypeName, Set<TypeName>> among = new LinkedHashMap<>();
-        these.forEach(each -> among.put(each, new LinkedHashSet<>()));
-        among.forEach((name, reads) -> {
-            for (TypeName each : solved.edges().getOrDefault(name, Set.of())) {
-                if (among.containsKey(each)) {
-                    reads.add(each);
-                }
-            }
-        });
-        return among;
-    }
 }
