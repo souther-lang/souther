@@ -204,6 +204,23 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
                 """));
     }
 
+    /**
+     * And where the two of them are one name wrapping the other.
+     *
+     * <p>A name is the one thing that is opened rather than answered, so it is the one place a
+     * granted value can be taken back: opening {@code A} reaches the {@code B} that has none, and
+     * the supposing that {@code A} has values would be undone by the very shape it was about.
+     */
+    @Test
+    void aGrantedNameIsNotReadBackThroughWhatItWraps() {
+        assertEquals(List.of(List.of("A", "B")), reported("""
+                module demo
+
+                data A = B
+                data B = { a: A }
+                """));
+    }
+
     /** A set that cannot be filled is its own group, its element having a value of its own. */
     @Test
     void aSetThatCannotBeFilledIsNamedAndItsElementIsNot() {

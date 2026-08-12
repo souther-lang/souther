@@ -162,13 +162,22 @@ final class CardinalityTransfer {
         };
     }
 
-    /** A name, unwrapped while it is one this value is not already wearing. */
+    /**
+     * A name, unwrapped while it is one this value is not already wearing.
+     *
+     * <p>The one place anything is learned about a name beyond what the solution says of it. A sum
+     * reads its cases and a union its members, and both read the answer and nothing else; here the
+     * name is opened and what it wraps is read again. So this is where a name that was granted a
+     * value has to be left alone: opening it reaches the very rules and the very shape that leave it
+     * without one, and the granting would be undone one step in.
+     */
     private static Cardinality ofRef(Type.Ref ref, String path, OccurrenceCounts counts,
                                      OccurrenceValues values, Symbols symbols,
                                      Map<TypeName, Cardinality> solution,
                                      Predicate<TypeName> granted, Set<TypeName> worn) {
         Cardinality named = known(solution, ref.name());
-        if (!(symbols.get(ref.name()) instanceof Ast.Data data) || !data.newtype()
+        if (granted.test(ref.name())
+                || !(symbols.get(ref.name()) instanceof Ast.Data data) || !data.newtype()
                 || !worn.add(ref.name())) {
             return named;
         }
