@@ -57,21 +57,20 @@ The complete runnable example is [`businesstrip`](https://github.com/souther-lan
 Souther requires JDK 25 and Maven, at build time and at run time alike. Generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact, so an application consuming Souther's output runs on Java 25 and later. `SoutherProcessor` generates bytecode during the host build (see the [examples repository](https://github.com/souther-lang/examples)), so a project using it as an annotation processor needs JDK 25 for that too.
 
 ```sh
-# Build the runtime and compiler, and run the tests.
+# Build the runtime and compiler, run the tests, and produce
+# souther-cli/target/souther — a self-contained executable.
 mvn install
 
 # Compile a .sou file to .class files.
-java -cp souther-compiler/target/classes:souther-runtime/target/classes \
-     souther.compiler.Main \
-     compile hello.sou -d /tmp/out
+./souther-cli/target/souther compile hello.sou -d /tmp/out
 ```
+
+That executable is the `souther-cli` module: the compiler, the runtime, and their dependencies in one really-executable jar (a launcher stub prepended to an uber jar), so no classpath and no `java -jar` are needed.
 
 To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).
 
-The `souther-cli` module bundles the compiler, runtime, and their dependencies into one really-executable jar, so no classpath or `java -jar` is needed:
-
 ```sh
-# Build target/souther — a self-contained executable (a launcher stub prepended to an uber jar).
+# Building souther-cli alone is quicker than the whole reactor.
 mvn -pl souther-cli -am -DskipTests install
 
 # hello.sou  (no module header needed)
@@ -97,7 +96,7 @@ java -jar souther-bench/target/souther-bench.jar phase edit
 
 To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. The [examples repository](https://github.com/souther-lang/examples) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
 
-The Java API compiles a source string containing either one module or several linked modules:
+Embedding the compiler goes through `souther.compiler.Compiler`, the one class name a caller outside this repository is meant to write down. It compiles a source string containing either one module or several linked modules:
 
 ```java
 Map<String, byte[]> classes = Compiler.compile(source);
