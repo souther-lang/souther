@@ -12,6 +12,7 @@ import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.diag.msg.InjectionMessage;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.DiagnosticCode;
+import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -319,19 +320,38 @@ public final class SpecChecker {
             // and an `Amount` an import brings in are the same one. Each side keeps its own spelling
             // in whatever it has to report.
             Set<TypeName> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
+            // Every way this clause and this body disagree, and not the first of them. Both sides
+            // are worked out once and whole before any of it is said, so stopping at one left the
+            // author to fix that one, compile, and be told the next — a walk down the call graph,
+            // one build per name. One clause is one thing to rewrite, and a clause that is short of
+            // one name and carrying another it does not build is wrong in both directions at once:
+            // reporting the two separately is two builds to learn what one reading of the body
+            // already knows.
+            //
+            // One violation is one diagnostic. Each names the type it is about and carries the hint
+            // for that type, so an editor has one thing to act on per name rather than a sentence
+            // listing several. What is short comes before what is extra, in the order the body
+            // builds them (`originated` keeps the order it collected them in) and then the order the
+            // clause writes them — every one of them is at the declaration, so nothing reorders them
+            // afterwards.
+            List<Diagnostic> disagreements = new ArrayList<>();
             for (Map.Entry<TypeName, String> built : constructed.originated().entrySet()) {
                 if (!declared.contains(built.getKey())) {
                     String c = built.getValue();
-                    throw CompileException.of(Diagnostic.at(spec.pos())
+                    disagreements.add(Diagnostic.at(spec.pos())
                                     .hint(new DeclarationMessage.AddTheConstructsEntry(spec.name(), c)).say(new DeclarationMessage.ItConstructsWithoutDeclaringIt(spec.name(), c)).build());
                 }
             }
             for (Ast.Name declaredName : spec.constructs()) {
                 String name = declaredName.written();
                 if (!constructed.builds(declaredName.denotes())) {
-                    throw CompileException.of(Diagnostic.at(spec.pos())
+                    disagreements.add(Diagnostic.at(spec.pos())
                                     .hint(new DeclarationMessage.RemoveTheConstructsEntry(name)).say(new DeclarationMessage.ItDeclaresConstructsAndNeverBuilds(spec.name(), name)).build());
                 }
+            }
+            if (!disagreements.isEmpty()) {
+                throw CompileException.ofAll(disagreements,
+                        DiagnosticRenderer.legacyBody(disagreements.get(0)));
             }
         }
         // The `depends on` clause must match what the fn actually calls (spec §depends-on): missing -> E1602,
