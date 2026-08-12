@@ -5,11 +5,14 @@ import souther.compiler.codegen.Backend;
 /**
  * A behavior this compilation emitted, entered from Java.
  *
- * <p>Which class carries a behavior, that it has a no-argument constructor, and that its
- * {@code apply} is erased to {@code Object} are all codegen's decisions and none of them are
- * restated here — the name is asked of {@link Backend}, and the shape is what this reaches through.
- * A caller that wrote the sequence out for itself would be a second statement of the ABI, which is
- * how the CLI and the compiler came to spell one class name two ways.
+ * <p>Entering one means knowing that it has a no-argument constructor, that the method is called
+ * {@code apply}, and that its parameters are erased to {@code Object} — codegen's decisions, written
+ * out below because a caller has to act on them somewhere. This is that somewhere, and the only one:
+ * the ABI has a producer and it has a consumer, and each is one place.
+ *
+ * <p>The class name is not written out, because it does not have to be. {@link Backend} decides it
+ * and is asked, which is what the two of them being one rule looks like. Restating it here is exactly
+ * what happened before and how the CLI and the compiler came to spell one name two ways.
  */
 public final class GeneratedBehavior {
 
