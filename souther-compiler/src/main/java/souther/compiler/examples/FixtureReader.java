@@ -4,6 +4,7 @@ import souther.compiler.generated.MemoryClassLoader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.Elaborator;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Prelude;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -604,7 +605,7 @@ public final class FixtureReader {
         if (!neutral.isNewtype(c.written())) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
-                throw FixtureException.cannotBeCalled(c.written(), reached);
+                throw FixtureException.cannotBeCalled(c.written());
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
@@ -1955,10 +1956,14 @@ public final class FixtureReader {
 
     /**
      * The helper a fixture may apply under the reach name {@code reached}, or null where nothing there
-     * is one: a definition written with a parameter list, read from the table that keys every helper
-     * this module reaches — its own, the ones its imports publish, and the prelude's — as the emitted
-     * method is keyed. The types come from there rather than from the written module because that
-     * table is settled (ADR-0066), and an argument is decoded against the parameter's settled type.
+     * is one: a definition written with a parameter list, read from the table that keys what this
+     * module holds — its own, the ones its imports publish, and the ones it took on to emit — as the
+     * emitted method is keyed. The types come from there rather than from the written module because
+     * that table is settled (ADR-0066), and an argument is decoded against the parameter's settled type.
+     *
+     * <p>The standard library is not in that table and is under every module, so it is read from the
+     * library itself where the table misses. Both readings answer the same question, which is what the
+     * declaration says a call to it takes.
      *
      * <p>Asked with what the call reaches and never with what it spells. An import lets a library name
      * be written without its qualifier and nothing rewrites that spelling — the pass that writes
@@ -1968,18 +1973,23 @@ public final class FixtureReader {
      */
     private Ast.FnDef helperDef(String reached) {
         Ast.FnDef helper = values.get(reached);
+        if (helper == null) {
+            // A library function is under every module and is written into none of them, so the table
+            // above misses on one this module did not take on to emit. Its declaration is what says
+            // whether a fixture may apply it — the arity it takes, whether a call has to settle one of
+            // its types — and that is the same question here as for a helper written in the module.
+            // Read from the library rather than answered by the table's silence (#680).
+            Prelude.PreludeEntry entry = Prelude.entry(reached);
+            helper = entry == null ? null : entry.declaration();
+        }
         return helper != null && !helper.params().isEmpty() ? helper : null;
     }
 
     /** Whether the helper {@code reached} names is a function this example cannot run: nothing emitted
-     * a method for it. A helper that has one is applied; the ones that never do are the standard
-     * library's intrinsics and a helper whose body produces a function, and both read as this. The
-     * reach name for the reason {@link #helperDef} takes one: the library is keyed under its alias, and
-     * this module's fns under the names it reaches them by. */
+     * a method for it. A helper that has one is applied; the one that never does is a helper whose body
+     * produces a function, and that reads as this. The reach name for the reason {@link #helperDef}
+     * takes one: this module's fns are keyed by the names it reaches them by. */
     private boolean noMethod(String reached) {
-        if (Prelude.isLibraryFunction(reached)) {
-            return true;   // a standard-library function: an intrinsic, or one nothing emitted here
-        }
         for (List<Ast.FnDef> component : List.of(module.fns(), module.takenOn())) {
             for (Ast.FnDef fn : component) {
                 if (fn.name().equals(reached) && !fn.params().isEmpty()) {
@@ -2034,7 +2044,16 @@ public final class FixtureReader {
             }
             args[i] = built(c.args().get(i), paramType);
         }
-        return helpers.invoke(helper.reached(), args);
+        return helpers.invoke(invokedAs(helper), args);
+    }
+
+    /** The method name {@code helper} was emitted under. A kernel is emitted for the row that applies
+     * it, under a name of its own so that nothing else reaches it (#680); everything else is emitted
+     * under the name this module reaches it by. */
+    private static String invokedAs(Applied helper) {
+        return helper.def().body() instanceof Ast.FnBody.Intrinsic
+                ? HelperInliner.fixtureIntrinsicName(helper.reached())
+                : helper.reached();
     }
 
     private Object newtypeInner(Ast.Apply c, Type expected, Admission admission) {
@@ -2050,10 +2069,10 @@ public final class FixtureReader {
         if (!neutral.isNewtype(c.written())) {
             String reached = helperKey(c);
             if (reached != null && noMethod(reached)) {
-                // A function this module cannot run: an intrinsic implemented in Java, or a helper
-                // whose body produces a function. Said as that, so the rule that a fixture may apply a
+                // A function this module cannot run: a helper whose body produces a function, which
+                // nothing emitted a method for. Said as that, so the rule that a fixture may apply a
                 // helper does not appear to have exceptions nothing explains (ADR-0077).
-                throw FixtureException.cannotBeCalled(c.written(), reached);
+                throw FixtureException.cannotBeCalled(c.written());
             }
             throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }

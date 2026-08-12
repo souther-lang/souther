@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -193,29 +194,37 @@ class CompileFixtureNamesAValueTest {
                 """));
     }
 
+    private static final String VALUE_OVER_AN_INTRINSIC = """
+            module demo
+
+            data Lead = { name: String, score: Int }
+            data Accepted
+            data Rejected
+
+            let acme = Lead { name = "Acme", score = String.length("Acme") }
+
+            behavior qualify : (l: Lead) -> Accepted | Rejected
+                constructs Accepted, Rejected
+
+            let qualify (l) = if l.score >= 70 then Accepted else Rejected
+
+            example qualify
+            """;
+
+    /** A value whose body applies an intrinsic is a fixture like one whose body applies any other
+     * library function (#680). `String.length("Acme")` is 4, which does not qualify. */
     @Test
-    void aValueThatReachesNoRunnableFunctionCannotBeNamedByARow() {
-        // A standard-library intrinsic is implemented in Java and has no helper method to apply, so a
-        // value whose body calls one is not a fixture — and says that rather than being refused for
-        // being a call at all.
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
-                module demo
+    void aValueWhoseBodyAppliesAnIntrinsicIsAFixture() {
+        assertDoesNotThrow(() -> Compiler.compile(VALUE_OVER_AN_INTRINSIC
+                + "    | \"a short name does not qualify\" : (acme) -> Rejected\n"));
+    }
 
-                data Lead = { name: String, score: Int }
-                data Accepted
-                data Rejected
-
-                let acme = Lead { name = "Acme", score = String.length("Acme") }
-
-                behavior qualify : (l: Lead) -> Accepted | Rejected
-                    constructs Accepted, Rejected
-
-                let qualify (l) = if l.score >= 70 then Accepted else Rejected
-
-                example qualify
-                    | "an intrinsic is not a fixture" : (acme) -> Rejected
-                """));
-
-        assertTrue(e.getMessage().contains("a standard-library function is not one a fixture may apply"), e.getMessage());
+    /** And the score is the one the intrinsic answered, not one the row was let assume. */
+    @Test
+    void theValueTheIntrinsicAnsweredIsWhatTheRowIsHeldTo() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile(VALUE_OVER_AN_INTRINSIC
+                        + "    | \"a short name does not qualify\" : (acme) -> Accepted\n"));
+        assertEquals("E1905", e.diagnostic().code(), e.getMessage());
     }
 }

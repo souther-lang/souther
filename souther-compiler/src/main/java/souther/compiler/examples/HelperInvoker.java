@@ -35,9 +35,9 @@ final class HelperInvoker {
     /**
      * Applies {@code name} to {@code args}, which are live values.
      *
-     * <p>A helper this module only expands has no method — which is what a standard-library intrinsic
-     * implemented in Java and a helper whose body produces a function are — and that is said as itself,
-     * so the rule that a fixture may apply a helper does not appear to have exceptions nothing explains.
+     * <p>A helper this module only expands has no method — which is what a helper whose body produces
+     * a function is — and that is said as itself, so the rule that a fixture may apply a helper does
+     * not appear to have exceptions nothing explains.
      */
     Object invoke(String name, Object[] args) {
         Method method;
@@ -50,7 +50,7 @@ final class HelperInvoker {
             method = fns.getDeclaredMethod(Backend.helperMethod(name), params);
             method.setAccessible(true);   // `$Fns` is package-private in every module (ADR-0075)
         } catch (ClassNotFoundException | NoSuchMethodException _) {
-            throw FixtureException.cannotBeCalled(name, name);
+            throw FixtureException.cannotBeCalled(name);
         }
         String outer = running.get();   // a helper applied to a helper's argument nests
         running.set(name);
